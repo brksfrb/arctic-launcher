@@ -2,6 +2,7 @@
 //! window is up, and report the exit, all on background threads so the
 //! launcher UI never waits on the game.
 
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -13,7 +14,7 @@ use std::time::{Duration, SystemTime};
 use super::LaunchPlan;
 use super::logparse::{LogLine, LogParser};
 use super::session::GameSession;
-use super::{priority, runtime_repair};
+use super::{lwjgl, priority, runtime_repair};
 use crate::Result;
 use crate::error::IoContext;
 use crate::java;
@@ -108,6 +109,8 @@ pub(super) fn spawn_with_session(
     on_event: impl Fn(GameEvent) + Send + Sync + 'static,
 ) -> Result<GameHandle> {
     let spawn_started = std::time::Instant::now();
+    let (plan, lwjgl_lock) = with_lwjgl_retry(plan)?;
+    let plan = plan.as_ref();
     log::info!("launching: {}", plan.redacted_command());
     let runtime_lock = lock_launch_runtime(plan)?;
     if let Some(parent) = plan.log_file.parent() {
@@ -161,6 +164,13 @@ pub(super) fn spawn_with_session(
         }
     };
     drop(runtime_lock);
+    let lwjgl_retry = if let (Some(lwjgl), Some(lock)) = (&plan.lwjgl, lwjgl_lock) {
+        lwjgl.retry_started(lock);
+        writeln!(log.lock().unwrap(), "{}", crate::crash::LWJGL_DEBUG).ok();
+        Some(lwjgl)
+    } else {
+        None
+    };
     log::info!(
         "[startup] Java process started in {} ms (pid {})",
         spawn_started.elapsed().as_millis(),
@@ -197,10 +207,12 @@ pub(super) fn spawn_with_session(
     let tee = |stream: Box<dyn Read + Send>| {
         let (log, seen, on_event) = (log.clone(), window_seen.clone(), on_event.clone());
         let (ready, secrets) = (ready_seen.clone(), secrets.clone());
+        let lwjgl_retry = lwjgl_retry.cloned();
         std::thread::spawn(move || {
             let seen = Seen {
                 window: &seen,
                 ready: &ready,
+                lwjgl_retry: lwjgl_retry.as_ref(),
             };
             tee_output(stream, &log, seen, &secrets, &*on_event)
         })
@@ -217,6 +229,8 @@ pub(super) fn spawn_with_session(
     };
     let game_dir = plan.game_dir.clone();
     let managed_runtime = plan.managed_runtime.clone();
+    let lwjgl = plan.lwjgl.clone();
+    let lwjgl_retry = lwjgl_retry.cloned();
     let log_path = plan.log_file.clone();
     std::thread::spawn(move || {
         let mut killed = false;
@@ -250,6 +264,12 @@ pub(super) fn spawn_with_session(
         }
         drain_readers([out_reader, err_reader].into_iter().flatten().collect());
         killed |= kill.load(Ordering::Relaxed);
+        if code == Some(0)
+            && window_seen.load(Ordering::Relaxed)
+            && let Some(retry) = &lwjgl_retry
+        {
+            retry.finish_retry();
+        }
         if let Some(c) = code {
             let summary = format!(
                 "[Arctic diagnostics] process ended after {} ms; exit code {}",
@@ -304,6 +324,22 @@ pub(super) fn spawn_with_session(
         }
         if !killed && code.is_some_and(|c| c != 0) {
             super::startup_cache::drop_pack(&game_dir);
+            if let Some(lwjgl) = &lwjgl
+                && let Some(line) = runtime_repair::find_crash_line(
+                    &log_path,
+                    &game_dir,
+                    launched_at,
+                    crate::crash::lwjgl_missing,
+                )
+            {
+                lwjgl.request_retry();
+                let evidence = lwjgl.evidence();
+                writeln!(log.lock().unwrap(), "{evidence}").ok();
+                on_event(GameEvent::Output(vec![LogLine {
+                    level: super::logparse::Level::Error,
+                    text: line,
+                }]));
+            }
             if let Some(runtime) = &managed_runtime
                 && let Some(line) =
                     runtime_repair::mark_after_crash(runtime, &log_path, &game_dir, launched_at)
@@ -442,6 +478,8 @@ fn exit_code(status: &std::process::ExitStatus) -> Option<i32> {
 /// to `plan.log_file` (no pipes), so the game keeps running and logging
 /// after a short-lived caller (e.g. the CLI) exits. Returns the pid.
 pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
+    let (plan, lwjgl_lock) = with_lwjgl_retry(plan)?;
+    let plan = plan.as_ref();
     log::info!("launching (detached): {}", plan.redacted_command());
     let runtime_lock = lock_launch_runtime(plan)?;
     if let Some(parent) = plan.log_file.parent() {
@@ -485,6 +523,11 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     });
     drop(runtime_lock);
     if let Ok(child) = &spawned {
+        if let (Some(lwjgl), Some(lock)) = (&plan.lwjgl, lwjgl_lock) {
+            lwjgl.retry_started(lock);
+            // A detached process has no watcher to acknowledge startup.
+            lwjgl.finish_retry();
+        }
         // Grant foreground permission before waiting for Java to read its argument file.
         super::game_window::on_spawn(child.id(), plan.maximize_window);
     }
@@ -498,6 +541,17 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     }
     let child = spawned.at(&plan.java)?;
     Ok(child.id())
+}
+
+fn with_lwjgl_retry(plan: &LaunchPlan) -> Result<(Cow<'_, LaunchPlan>, Option<File>)> {
+    if let Some(lwjgl) = &plan.lwjgl
+        && let Some(lock) = lwjgl.start_retry()?
+    {
+        let mut plan = plan.clone();
+        lwjgl.add_debug_flags(&mut plan.args);
+        return Ok((Cow::Owned(plan), Some(lock)));
+    }
+    Ok((Cow::Borrowed(plan), None))
 }
 
 /// End process `pid` (and, on Windows, what it started).
@@ -748,6 +802,7 @@ struct Seen<'a> {
     window: &'a AtomicBool,
     /// The Arctic Client said the game is ready.
     ready: &'a AtomicBool,
+    lwjgl_retry: Option<&'a lwjgl::Launch>,
 }
 
 /// Copy a child stream into the log line by line, firing `WindowReady` the
@@ -784,10 +839,17 @@ fn tee_output(
         if is_window_marker(&line) && !seen.window.swap(true, Ordering::Relaxed) {
             on_event(GameEvent::WindowReady);
         }
-        if String::from_utf8_lossy(&line).contains(priority::READY_MARKER) {
+        let text = String::from_utf8_lossy(&line);
+        if text.contains(priority::READY_MARKER) {
             seen.ready.store(true, Ordering::Relaxed);
         }
-        let parsed = parser.feed(&String::from_utf8_lossy(&line));
+        if let Some(retry) = seen.lwjgl_retry
+            && (text.contains("Sound engine started")
+                || text.contains("[Arctic startup]") && text.contains(" ready "))
+        {
+            retry.finish_retry();
+        }
+        let parsed = parser.feed(&text);
         if !parsed.is_empty() {
             on_event(GameEvent::Output(parsed));
         }
@@ -832,6 +894,7 @@ mod tests {
             high_performance_gpu: false,
             maximize_window: false,
             managed_runtime: None,
+            lwjgl: None,
             custom_max_heap: false,
             secrets: Vec::new(),
         };
@@ -903,6 +966,142 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn lwjgl_crash_attaches_evidence_and_the_watched_retry_spends_debug_flags_once() {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let shared = dir.path().join("shared");
+        let version = shared.join("versions/fabric-loader-0.20.1-26.3");
+        let natives = version.join("natives");
+        let marker = version.join(".arctic-lwjgl-retry");
+        let extract = natives.join("lwjgl");
+        fs::create_dir_all(&extract).unwrap();
+        fs::write(extract.join("lwjgl.dll"), b"stale").unwrap();
+        let jar = shared.join("lwjgl-3.4.3-natives-windows.jar");
+        let entry = "windows/x64/org/lwjgl/lwjgl.dll";
+        let mut zip = zip::ZipWriter::new(File::create(&jar).unwrap());
+        zip.start_file(entry, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(b"native").unwrap();
+        zip.finish().unwrap();
+        let hash = crate::net::sha1_file(&jar).unwrap();
+        let job = crate::net::DownloadJob {
+            url: String::new(),
+            dest: jar.clone(),
+            sha1: Some(hash.clone()),
+            size: None,
+            lzma: None,
+            md5: None,
+        };
+        let env = crate::versions::RuleEnv {
+            os: "windows",
+            arch: "x86_64",
+            features: Default::default(),
+        };
+        let core =
+            lwjgl::CoreNative::for_library("org.lwjgl:lwjgl:3.4.3:natives-windows", &job, &env);
+        assert!(core.is_some());
+        let arm = crate::versions::RuleEnv {
+            arch: "arm64",
+            ..env
+        };
+        assert!(
+            lwjgl::CoreNative::for_library("org.lwjgl:lwjgl:3.4.3:natives-windows", &job, &arm)
+                .is_none()
+        );
+        let exe = dir.path().join("test-game");
+        let trace = include_str!("../../tests/fixtures/crash-419-lwjgl-load.log");
+        fs::write(
+            &exe,
+            format!(
+                "#!/bin/sh\n[ \"$1\" = '-version' ] && exit 0\n\
+                 for arg in \"$@\"; do\n\
+                   if [ \"$arg\" = '-Dorg.lwjgl.util.Debug=true' ]; then\n\
+                     echo '[LWJGL] Version: 3.4.3' >&2\n\
+                     echo '    Failed to lock file.' >&2\n\
+                   fi\n\
+                 done\n\
+                 cat <<'TRACE' >&2\n{trace}TRACE\nexit 1\n"
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&exe, fs::Permissions::from_mode(0o700)).unwrap();
+        let mut plan = LaunchPlan {
+            java: exe.clone(),
+            args: vec!["-Dorg.lwjgl.util.Debug=false".into(), "Minecraft".into()],
+            game_dir: dir.path().into(),
+            log_file: dir.path().join("game.log"),
+            high_performance_gpu: false,
+            maximize_window: false,
+            managed_runtime: None,
+            lwjgl: Some(lwjgl::Launch::new(
+                shared,
+                &natives,
+                core,
+                "Minecraft".into(),
+            )),
+            custom_max_heap: false,
+            secrets: Vec::new(),
+        };
+        let run = |plan: &LaunchPlan| {
+            let (tx, rx) = std::sync::mpsc::channel();
+            spawn(plan, move |event| {
+                let _ = tx.send(event);
+            })
+            .unwrap();
+            process_exit(&rx).0
+        };
+        assert_eq!(run(&plan), Some(1));
+        assert!(marker.is_file());
+        let log = fs::read_to_string(&plan.log_file).unwrap();
+        assert!(!log.contains("native-loader logging enabled"));
+        let report = crate::crash::Report::build("26.3", "fabric", "", &[&log], &[], None, None);
+        let evidence = report.log.split_once("---- diagnostics ----").unwrap().1;
+        let size = fs::metadata(&jar).unwrap().len();
+        assert!(evidence.contains(&format!("({size} bytes), SHA-1={hash}, expected={hash}")));
+        assert!(evidence.contains(&format!("entry {entry}=present")));
+        assert!(evidence.contains("natives/lwjgl, writable=yes, files=[\"lwjgl.dll\" (5 B)]"));
+
+        let prepare_retry = |plan: &mut LaunchPlan| {
+            assert!(
+                plan.lwjgl
+                    .as_mut()
+                    .unwrap()
+                    .prepare_retry()
+                    .unwrap()
+                    .is_some()
+            );
+        };
+        let original = fs::read_to_string(&marker).unwrap();
+        prepare_retry(&mut plan);
+        assert_eq!(run(&plan), Some(1));
+        assert_ne!(fs::read_to_string(&marker).unwrap(), original);
+        let log = fs::read_to_string(&plan.log_file).unwrap();
+        let report = crate::crash::Report::build("26.3", "fabric", "", &[&log], &[], None, None);
+        let evidence = report.log.split_once("---- diagnostics ----").unwrap().1;
+        assert!(evidence.contains("Failed to lock file."));
+
+        prepare_retry(&mut plan);
+        fs::write(
+            &exe,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\"\necho 'Sound engine started'\n",
+        )
+        .unwrap();
+        assert_eq!(run(&plan), Some(0));
+        let log = fs::read_to_string(&plan.log_file).unwrap();
+        for flag in lwjgl::DEBUG_FLAGS {
+            assert!(log.lines().any(|line| line == flag));
+        }
+        assert!(log.contains("-Dorg.lwjgl.util.Debug=false\n-Dorg.lwjgl.util.Debug=true"));
+        assert!(!marker.exists());
+        assert_eq!(run(&plan), Some(0));
+        let log = fs::read_to_string(&plan.log_file).unwrap();
+        assert!(lwjgl::DEBUG_FLAGS.iter().all(|flag| !log.contains(flag)));
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn inherited_pipe_does_not_block_exit_drain() {
         let mut child = Command::new("sh")
             .args(["-c", "sleep 8 & exit 0"])
@@ -931,6 +1130,7 @@ mod tests {
             high_performance_gpu: false,
             maximize_window: false,
             managed_runtime: None,
+            lwjgl: None,
             custom_max_heap: false,
             secrets: Vec::new(),
         };
@@ -1143,6 +1343,7 @@ mod tests {
         let seen = Seen {
             window: &window,
             ready: &ready_seen,
+            lwjgl_retry: None,
         };
         let fired = Mutex::new(Vec::new());
         let input =
@@ -1181,6 +1382,7 @@ mod tests {
         let seen = Seen {
             window: &window,
             ready: &ready,
+            lwjgl_retry: None,
         };
         let input = b"[Client thread/INFO] (Session ID is token:eyJ.SECRET:15ca)
 ok SECRET SECRET

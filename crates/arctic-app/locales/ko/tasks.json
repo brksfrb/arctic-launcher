@@ -85,6 +85,8 @@
   "tasks.launcher_open": "런처 열림",
   "tasks.linked": "{username} 연결됨",
   "tasks.listening_only_arctic_cant_use_your": "듣기만 가능: Arctic이 마이크를 사용할 수 없습니다. Windows 설정 → 개인 정보 → 마이크(\"데스크톱 앱이 마이크에 액세스하도록 허용\")를 확인하거나 아래에서 다른 마이크를 고르세요.",
+  "tasks.lwjgl_native_load_failed": "Minecraft가 LWJGL 네이티브 라이브러리를 불러오지 못했습니다",
+  "tasks.lwjgl_native_retry_detail": "백신 프로그램이 라이브러리를 차단했거나 게임 파일이 손상되었을 수 있습니다. 다음 실행 시 Arctic이 게임 파일을 다시 검사하고 네이티브 라이브러리 로딩 로그를 활성화합니다.",
   "tasks.minecraft": "Minecraft {id}",
   "tasks.minecraft_is_still_starting": "Minecraft가 아직 시작 중입니다",
   "tasks.minecraft_ran_out_of_memory_and_froze": "마인크래프트 메모리가 부족해 게임이 멈췄습니다",

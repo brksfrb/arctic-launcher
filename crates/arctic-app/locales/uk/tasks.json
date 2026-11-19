@@ -85,6 +85,8 @@
   "tasks.launcher_open": "Лаунчер відкритий",
   "tasks.linked": "Прив'язано {username}",
   "tasks.listening_only_arctic_cant_use_your": "Лише прослуховування: Arctic не може використати мікрофон. Перевір Параметри Windows → Конфіденційність → Мікрофон («Дозволити класичним програмам доступ до мікрофона») або вибери інший мікрофон нижче.",
+  "tasks.lwjgl_native_load_failed": "Minecraft не вдалося завантажити нативну бібліотеку LWJGL",
+  "tasks.lwjgl_native_retry_detail": "Можливо, антивірус заблокував бібліотеку або один із файлів гри пошкоджено. Під час наступного запуску Arctic повторно перевірить файли гри й увімкне журнал завантаження нативних бібліотек.",
   "tasks.minecraft": "Minecraft {id}",
   "tasks.minecraft_is_still_starting": "Minecraft ще запускається",
   "tasks.minecraft_ran_out_of_memory_and_froze": "У Minecraft закінчилася пам'ять, і гра зависла",

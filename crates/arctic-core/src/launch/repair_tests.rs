@@ -16,9 +16,20 @@ fn sha1(bytes: &[u8]) -> String {
     hex::encode(Sha1::digest(bytes))
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Repair {
+    None,
+    All,
+    Lwjgl,
+}
+
 fn prepare_with_damaged_library(request_repair: bool, library: &str, failed_download: bool) {
     prepare_with_library(
-        request_repair,
+        if request_repair {
+            Repair::All
+        } else {
+            Repair::None
+        },
         library,
         failed_download,
         b"wrong",
@@ -28,7 +39,7 @@ fn prepare_with_damaged_library(request_repair: bool, library: &str, failed_down
 }
 
 fn prepare_with_library(
-    request_repair: bool,
+    repair: Repair,
     library: &str,
     failed_download: bool,
     existing: &[u8],
@@ -135,8 +146,18 @@ fn prepare_with_library(
     };
     let account = crate::auth::offline::create("RepairTest").unwrap();
     let settings = Settings::default();
-    if request_repair {
-        files::request_repair(&dirs);
+    let natives = dirs.version_dir(loader_id).join("natives");
+    let other = dirs.version_dir("1.21.4").join("natives/lwjgl");
+    match repair {
+        Repair::All => files::request_repair(&dirs),
+        Repair::Lwjgl => {
+            let extract = natives.join("lwjgl");
+            fs::create_dir_all(&extract).unwrap();
+            fs::write(extract.join("old.dll"), b"stale").unwrap();
+            fs::create_dir_all(&other).unwrap();
+            lwjgl::Launch::new(dirs.shared(), &natives, None, String::new()).request_retry();
+        }
+        Repair::None => {}
     }
     let result = prepare(
         &LaunchRequest {
@@ -175,7 +196,7 @@ fn prepare_with_library(
     );
     assert_eq!(
         downloads,
-        usize::from(existing != replacement || (request_repair && !checksummed)),
+        usize::from(existing != replacement || (repair != Repair::None && !checksummed)),
         "fetch only the damaged library, preserving a healthy loader on normal Play"
     );
     assert!(
@@ -186,6 +207,24 @@ fn prepare_with_library(
     assert!(
         !dirs.cache().join("repair-libraries").exists(),
         "clear repair only after full preparation succeeds"
+    );
+    if repair == Repair::Lwjgl {
+        assert!(!natives.join("lwjgl").exists());
+        assert!(other.is_dir());
+        // Preparation alone does not consume the retry, since the player may cancel.
+        assert!(plan.lwjgl.unwrap().start_retry().unwrap().is_some());
+    }
+}
+
+#[test]
+fn lwjgl_retry_replaces_same_size_damage_and_clears_only_the_launch_versions_extract() {
+    prepare_with_library(
+        Repair::Lwjgl,
+        "org.lwjgl:lwjgl-glfw:3.4.3",
+        false,
+        b"wrong",
+        b"right",
+        true,
     );
 }
 
@@ -234,7 +273,7 @@ fn damaged_unhashed_loader_is_replaced_without_a_repair_request() {
         &bad_crc,
     ] {
         prepare_with_library(
-            false,
+            Repair::None,
             "net.fabricmc:fabric-loader:0.20.1",
             false,
             broken,
@@ -248,7 +287,7 @@ fn damaged_unhashed_loader_is_replaced_without_a_repair_request() {
 fn a_healthy_unhashed_loader_is_not_downloaded_again() {
     let good = jar_with_class("net/fabricmc/loader/impl/launch/knot/KnotClient.class");
     prepare_with_library(
-        false,
+        Repair::None,
         "net.fabricmc:fabric-loader:0.20.1",
         false,
         &good,
@@ -262,7 +301,7 @@ fn a_checksummed_loader_is_repaired_without_a_repair_request() {
     let good = jar_with_class("net/fabricmc/loader/impl/launch/knot/KnotClient.class");
     let broken = vec![0; good.len()];
     prepare_with_library(
-        false,
+        Repair::None,
         "net.fabricmc:fabric-loader:0.20.1",
         false,
         &broken,
@@ -275,7 +314,7 @@ fn a_checksummed_loader_is_repaired_without_a_repair_request() {
 fn an_invalid_unhashed_replacement_stops_launch_and_keeps_repair_pending() {
     let good = jar_with_class("net/fabricmc/loader/impl/launch/knot/KnotClient.class");
     prepare_with_library(
-        true,
+        Repair::All,
         "net.fabricmc:fabric-loader:0.20.1",
         true,
         b"broken",

@@ -85,6 +85,8 @@
   "tasks.launcher_open": "ランチャー起動中",
   "tasks.linked": "{username} をリンクしました",
   "tasks.listening_only_arctic_cant_use_your": "聞くだけ: Arcticがマイクを使えません。Windowsの設定 → プライバシー → マイク（「デスクトップアプリがマイクにアクセスできるようにする」）を確認するか、下で別のマイクを選んでください。",
+  "tasks.lwjgl_native_load_failed": "Minecraft が LWJGL のネイティブライブラリを読み込めませんでした",
+  "tasks.lwjgl_native_retry_detail": "ウイルス対策ソフトがライブラリをブロックしたか、ゲームファイルが破損している可能性があります。次回の起動時に、Arctic はゲームファイルを再確認し、ネイティブライブラリの読み込みログを有効にします。",
   "tasks.minecraft": "Minecraft {id}",
   "tasks.minecraft_is_still_starting": "Minecraft はまだ起動中です",
   "tasks.minecraft_ran_out_of_memory_and_froze": "Minecraft のメモリが足りず、フリーズしました",

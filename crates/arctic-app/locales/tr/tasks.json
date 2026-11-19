@@ -85,6 +85,8 @@
   "tasks.launcher_open": "Başlatıcı açık",
   "tasks.linked": "{username} bağlandı",
   "tasks.listening_only_arctic_cant_use_your": "Yalnızca dinleme: Arctic mikrofonunu kullanamıyor. Windows Ayarları → Gizlilik → Mikrofon'u (\"Masaüstü uygulamalarının mikrofonunuza erişmesine izin ver\") kontrol et ya da aşağıdan başka bir mikrofon seç.",
+  "tasks.lwjgl_native_load_failed": "Minecraft, LWJGL yerel kitaplığını yükleyemedi",
+  "tasks.lwjgl_native_retry_detail": "Antivirüs kitaplığı engellemiş veya bir oyun dosyası bozulmuş olabilir. Arctic, bir sonraki başlatmada oyun dosyalarını yeniden kontrol edecek ve yerel kitaplık yükleme günlüklerini etkinleştirecek.",
   "tasks.minecraft": "Minecraft {id}",
   "tasks.minecraft_is_still_starting": "Minecraft hâlâ açılıyor",
   "tasks.minecraft_ran_out_of_memory_and_froze": "Minecraft belleği bittiği için dondu",

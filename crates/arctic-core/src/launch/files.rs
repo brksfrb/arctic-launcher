@@ -26,6 +26,8 @@ pub struct Libraries {
     pub classpath: Vec<PathBuf>,
     pub natives: Vec<NativeJar>,
     pub jobs: Vec<DownloadJob>,
+    pub(super) lwjgl: Vec<DownloadJob>,
+    pub(super) lwjgl_core: Option<super::lwjgl::CoreNative>,
     /// Small loader dependencies checked even without a previous crash report.
     pub bootstrap: Vec<DownloadJob>,
     /// Downloadable library that supplies the profile's Java entry point, and its class entry.
@@ -46,8 +48,14 @@ pub fn resolve_libraries(dirs: &DataDirs, version: &VersionJson, env: &RuleEnv) 
             && seen.insert(job.dest.clone())
         {
             out.classpath.push(job.dest.clone());
+            if let Some(core) = super::lwjgl::CoreNative::for_library(&lib.name, &job, env) {
+                out.lwjgl_core = Some(core);
+            }
             // Locally generated files (no URL) are on the classpath only.
             if !job.url.is_empty() {
+                if is_lwjgl(&lib.name) {
+                    out.lwjgl.push(job.clone());
+                }
                 let entrypoint = supplies_main_class(&lib.name, &version.main_class);
                 if entrypoint {
                     out.main_class = Some((
@@ -81,10 +89,17 @@ pub fn resolve_libraries(dirs: &DataDirs, version: &VersionJson, env: &RuleEnv) 
                 path: job.dest.clone(),
                 exclude: lib.extract.clone().unwrap_or_default().exclude,
             });
+            if is_lwjgl(&lib.name) && !job.url.is_empty() {
+                out.lwjgl.push(job.clone());
+            }
             out.jobs.push(job);
         }
     }
     out
+}
+
+fn is_lwjgl(name: &str) -> bool {
+    name.starts_with("org.lwjgl:") || name.starts_with("org.lwjgl.lwjgl:")
 }
 
 /// Identify the entry-point artifact without opening every jar on the classpath.

@@ -9,6 +9,7 @@ pub mod files;
 mod game_window;
 mod language;
 pub mod logparse;
+mod lwjgl;
 #[cfg(any(windows, test))]
 mod named_runtime;
 mod priority;
@@ -114,6 +115,7 @@ fn unix_now() -> u64 {
 pub struct LaunchPlan {
     pub java: PathBuf,
     managed_runtime: Option<PathBuf>,
+    lwjgl: Option<lwjgl::Launch>,
     pub args: Vec<String>,
     pub game_dir: PathBuf,
     pub log_file: PathBuf,
@@ -234,6 +236,7 @@ pub struct Installation {
     /// Libraries + client jar, in classpath order.
     classpath: Vec<PathBuf>,
     natives_dir: PathBuf,
+    lwjgl: Option<lwjgl::Launch>,
     game_assets: PathBuf,
     asset_index: String,
     /// (log config path, JVM argument template)
@@ -254,7 +257,15 @@ pub fn install(
     progress: Progress,
 ) -> Result<Installation> {
     let repair = files::LibraryRepair::new(dirs)?;
-    let installed = install_with_repair(dirs, version, game_dir, java_override, progress, &repair)?;
+    let installed = install_with_repair(
+        dirs,
+        version,
+        game_dir,
+        java_override,
+        progress,
+        &repair,
+        false,
+    )?;
     repair.finish();
     Ok(installed)
 }
@@ -266,6 +277,7 @@ fn install_with_repair(
     java_override: Option<PathBuf>,
     progress: Progress,
     repair: &files::LibraryRepair,
+    for_launch: bool,
 ) -> Result<Installation> {
     let clock = std::time::Instant::now();
     fs::create_dir_all(game_dir).at(game_dir)?;
@@ -276,6 +288,20 @@ fn install_with_repair(
         let _ = fs::create_dir_all(&server_packs);
     }
     let libs = files::resolve_libraries(dirs, &version, &RuleEnv::for_version(&version));
+    let natives_dir = dirs.version_dir(&version.id).join("natives");
+    let mut lwjgl = for_launch.then(|| {
+        lwjgl::Launch::new(
+            dirs.shared(),
+            &natives_dir,
+            libs.lwjgl_core,
+            version.main_class.clone(),
+        )
+    });
+    let lwjgl_lock = lwjgl
+        .as_mut()
+        .map(lwjgl::Launch::prepare_retry)
+        .transpose()?
+        .flatten();
     let client = files::client_job(dirs, &version)?;
     let client_jar = client.dest.clone();
     let logging = files::logging_job(dirs, &version);
@@ -317,9 +343,12 @@ fn install_with_repair(
     // After a crash that pointed at a damaged file: each library and the client checked in full.
     repair.check(&jobs, &libs.bootstrap, libs.main_class.as_ref())?;
     jobs.extend(logging.iter().map(|(job, _)| job.clone()));
-    let replacements = runtime
+    let mut replacements = runtime
         .as_mut()
         .map_or_else(Vec::new, |r| std::mem::take(&mut r.jobs));
+    if lwjgl_lock.is_some() {
+        replacements.extend(lwjgl::replacements(libs.lwjgl));
+    }
     let assets_fresh = files::assets_verified_recently(dirs, &assets.index_name);
     if !assets_fresh {
         jobs.extend(assets.jobs.iter().cloned());
@@ -345,8 +374,13 @@ fn install_with_repair(
         (None, Some(path)) => path,
         (None, None) => unreachable!("runtime is planned whenever there is no override"),
     };
-    let natives_dir = dirs.version_dir(&version.id).join("natives");
     files::extract_natives(&libs.natives, &natives_dir)?;
+    if lwjgl_lock.is_some()
+        && let Some(lwjgl) = &lwjgl
+    {
+        lwjgl.clean_extract();
+    }
+    drop(lwjgl_lock);
     assets.finish()?;
     language::prepare(&client_jar, game_dir)?;
     mark_installed(dirs, &version.id)?;
@@ -359,6 +393,7 @@ fn install_with_repair(
         game_dir: game_dir.to_path_buf(),
         classpath,
         natives_dir,
+        lwjgl,
         game_assets: assets.game_assets.clone(),
         asset_index: assets.index_name.clone(),
         logging: logging.map(|(job, template)| (job.dest, template)),
@@ -523,6 +558,7 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
                 java_override.clone(),
                 progress,
                 &repair,
+                false,
             )?;
             timer.step("vanilla files");
             let stage = format!("Installing {} {loader_version}", kind.label());
@@ -624,8 +660,15 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
     };
     // The Arctic sign-in (a network round trip) runs while the game files are checked.
     let session = share_session.then(|| start_cosmetics_session(req, game_dir));
-    let installation =
-        install_with_repair(dirs, version, game_dir, java_override, progress, &repair)?;
+    let installation = install_with_repair(
+        dirs,
+        version,
+        game_dir,
+        java_override,
+        progress,
+        &repair,
+        true,
+    )?;
     if let Some(finished) = session {
         let _ = finished.recv_timeout(SESSION_WAIT);
     }
@@ -1041,6 +1084,7 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         args: args::build(&inst.version, &env, &vars, &opts),
         game_dir: inst.game_dir.clone(),
         managed_runtime: java::managed_runtime(req.dirs, &inst.java),
+        lwjgl: inst.lwjgl.clone(),
         log_file: game_log_file(req),
         high_performance_gpu: settings.high_performance_gpu,
         maximize_window: settings.game_maximized && !settings.fullscreen,
@@ -1334,6 +1378,7 @@ mod tests {
             game_dir: temp.path().into(),
             classpath: Vec::new(),
             natives_dir: temp.path().into(),
+            lwjgl: None,
             game_assets: temp.path().into(),
             asset_index: String::new(),
             logging: None,
@@ -1389,6 +1434,7 @@ mod tests {
             high_performance_gpu: false,
             maximize_window: false,
             managed_runtime: None,
+            lwjgl: None,
             custom_max_heap: false,
             secrets: vec!["SECRET123".into()],
         };
@@ -1432,6 +1478,7 @@ mod tests {
             high_performance_gpu: false,
             maximize_window: false,
             managed_runtime: None,
+            lwjgl: None,
             custom_max_heap: false,
             secrets: Vec::new(),
         };
@@ -1460,6 +1507,7 @@ mod tests {
             high_performance_gpu: false,
             maximize_window: false,
             managed_runtime: None,
+            lwjgl: None,
             custom_max_heap: false,
             secrets: vec!["SECRET123".into(), String::new()],
         };
@@ -1478,6 +1526,7 @@ mod tests {
             high_performance_gpu: false,
             maximize_window: false,
             managed_runtime: None,
+            lwjgl: None,
             custom_max_heap: false,
             secrets: vec!["tok".into(), "hunter2".into()],
         };

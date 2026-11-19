@@ -534,11 +534,13 @@ fn clash_mattered(text: &str, c: &Conflict, mods: &[InstalledMod]) -> bool {
 /// owned by a clashing mod gets the clash explanation; other clashes require evidence from the
 /// run before they can explain an otherwise unknown crash.
 pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
-    // The exit diagnosis already ran the rules on the captured throwable.
-    if base
-        .as_ref()
-        .is_some_and(|d| d.title == crate::crash::SAVE_FAILED_TITLE)
-    {
+    // These diagnoses have a specific cause in the captured throwable.
+    if base.as_ref().is_some_and(|d| {
+        matches!(
+            d.title.as_str(),
+            crate::crash::SAVE_FAILED_TITLE | crate::crash::LWJGL_TITLE
+        )
+    }) {
         return base;
     }
     if let Some((runtime, _)) = crate::crash::runtime_diagnosis(text) {

@@ -1354,6 +1354,9 @@ fn diagnose_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
     if let Some(runtime) = runtime_diagnosis(text) {
         return Some(runtime);
     }
+    if let Some(lwjgl) = lwjgl_diagnosis(text) {
+        return Some(lwjgl);
+    }
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
     }
@@ -1424,6 +1427,31 @@ fn diagnose_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
         }
     }
     hang_diagnosis(text)
+}
+
+pub const LWJGL_TITLE: &str = "Minecraft couldn't load its LWJGL native library";
+pub(crate) const LWJGL_EVIDENCE: &str = "[Arctic diagnostics] LWJGL natives: ";
+pub(crate) const LWJGL_DEBUG: &str =
+    "[Arctic diagnostics] LWJGL native-loader logging enabled for this launch";
+
+pub(crate) fn lwjgl_missing(line: &str) -> bool {
+    line.split_once("UnsatisfiedLinkError: Failed to locate library: ")
+        .is_some_and(|(_, name)| {
+            let name = name.split_once("]]>").map_or(name, |(name, _)| name);
+            matches!(name.trim(), "lwjgl.dll" | "liblwjgl.so" | "liblwjgl.dylib")
+        })
+}
+
+fn lwjgl_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    let line = text.lines().find(|line| lwjgl_missing(line))?;
+    Some((
+        Diagnosis::new(
+            LWJGL_TITLE,
+            "Antivirus may have blocked the library, or a game file may be damaged. Arctic will re-check the game files and turn on native-loader logging for the next launch.",
+            Vec::new(),
+        ),
+        head_of(line, 2048).to_owned(),
+    ))
 }
 
 /// The exception must name a native library in a managed JDK layout. Other
@@ -1765,6 +1793,7 @@ impl Report {
         };
         let title = registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
         let title = runtime_diagnosis(&diagnosis_text)
+            .or_else(|| lwjgl_diagnosis(&diagnosis_text))
             .or_else(|| native_diagnosis(&diagnosis_text))
             .map_or(title, |(d, _)| d.title);
         let title = if crash_report.is_none()
@@ -2100,6 +2129,26 @@ fn first_exceptions(text: &str) -> String {
 /// Preserve the latest dump and exit trace even when they are outside the log tail.
 fn diagnostic_evidence(text: &str, budget: usize) -> String {
     let mut out = String::new();
+    if let Some(line) = text
+        .lines()
+        .rev()
+        .find(|line| line.starts_with(LWJGL_EVIDENCE))
+    {
+        out.push_str(head_of(line, budget.min(3072)));
+        out.push('\n');
+    }
+    if text.contains(LWJGL_DEBUG)
+        && let Some(start) = text.find("[LWJGL] Version: ")
+    {
+        let loader = text[start..]
+            .lines()
+            .take(32)
+            .take_while(|line| !lwjgl_missing(line) && !line.starts_with("[Arctic diagnostics]"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        out.push_str(head_of(&loader, budget.saturating_sub(out.len()).min(3072)));
+        out.push('\n');
+    }
     if let Some(start) = text.rfind("[Arctic diagnostics] hang begin") {
         let dump = &text[start..];
         let end = dump
@@ -2124,6 +2173,7 @@ fn diagnostic_evidence(text: &str, budget: usize) -> String {
     for line in text.lines().filter(|l| {
         l.contains("[Arctic diagnostics]")
             && !l.starts_with(VANILLA_CRASH)
+            && !l.starts_with(LWJGL_EVIDENCE)
             && !l.contains("hang ")
             && !l.contains("thread ")
     }) {
@@ -2415,6 +2465,29 @@ mod tests {
             None,
         );
         assert_eq!(report.title, "The Java runtime is broken");
+    }
+
+    #[test]
+    fn report_419_diagnoses_the_core_lwjgl_native_failure() {
+        let log = include_str!("../tests/fixtures/crash-419-lwjgl-load.log");
+        let mods = tempfile::tempdir().unwrap();
+        for library in ["lwjgl.dll", "liblwjgl.so", "liblwjgl.dylib"] {
+            let log = log.replace("lwjgl.dll", library);
+            let diagnosis = crate::crash_conflicts::diagnose_exit_in(&log, 1, mods.path()).unwrap();
+            assert_eq!(diagnosis.title, LWJGL_TITLE);
+            assert!(
+                diagnosis
+                    .detail
+                    .contains("native-loader logging for the next launch")
+            );
+            assert!(diagnosis.mods.is_empty());
+            assert!(!diagnosis.repair, "LWJGL uses a version-specific retry");
+            let report = Report::build("26.3", "fabric", "", &[&log], &[], None, None);
+            assert_eq!(report.title, LWJGL_TITLE);
+            assert!(report.log.contains(&format!("matched: Caused by: java.lang.UnsatisfiedLinkError: Failed to locate library: {library}")));
+        }
+        assert!(lwjgl_diagnosis(&log.replace("lwjgl.dll", "vulkan-1.dll")).is_none());
+        assert!(lwjgl_diagnosis(&log.replace("lwjgl.dll", "lwjgl.dll.backup")).is_none());
     }
 
     #[test]

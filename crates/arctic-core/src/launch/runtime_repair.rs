@@ -66,26 +66,39 @@ fn runtime_failure(
         .ok()?;
         normalized(&path.to_string_lossy())
     };
+    find_crash_line(log, game_dir, since, |line| {
+        let Some(path) = crash::runtime_native_error(line) else {
+            return false;
+        };
+        let prefix = normalized(&line[..path.end()]);
+        prefix.ends_with(&original) || {
+            #[cfg(windows)]
+            {
+                prefix.ends_with(&named)
+            }
+            #[cfg(not(windows))]
+            {
+                false
+            }
+        }
+    })
+}
+
+pub(super) fn find_crash_line(
+    log: &Path,
+    game_dir: &Path,
+    since: SystemTime,
+    matches: impl Fn(&str) -> bool,
+) -> Option<String> {
     let find = |path: &Path| {
         crate::java::file_metadata(path).ok()??;
         BufReader::new(File::open(path).ok()?)
-            .lines()
+            .split(b'\n')
             .map_while(Result::ok)
-            .find(|line| {
-                let Some(path) = crash::runtime_native_error(line) else {
-                    return false;
-                };
-                let prefix = normalized(&line[..path.end()]);
-                prefix.ends_with(&original) || {
-                    #[cfg(windows)]
-                    {
-                        prefix.ends_with(&named)
-                    }
-                    #[cfg(not(windows))]
-                    {
-                        false
-                    }
-                }
+            .find_map(|line| {
+                let line = String::from_utf8_lossy(&line);
+                let line = line.trim_end_matches('\r');
+                matches(line).then(|| line.to_owned())
             })
     };
     let fresh = |p: &Path| {

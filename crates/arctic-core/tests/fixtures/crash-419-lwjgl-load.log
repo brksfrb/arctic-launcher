@@ -1,0 +1,11 @@
+[main/INFO]: Loading Minecraft 26.3 with Fabric Loader 0.20.1
+Exception in thread "main" java.lang.RuntimeException: Could not execute entrypoint stage 'preLaunch' due to errors, provided by 'sodium' at 'net.caffeinemc.mods.sodium.fabric.SodiumPreLaunch'!
+Caused by: java.lang.UnsatisfiedLinkError: Failed to locate library: lwjgl.dll
+	at knot//org.lwjgl.system.Library.loadSystem(Library.java:177)
+	at knot//org.lwjgl.system.Library.<clinit>(Library.java:55)
+	at knot//org.lwjgl.system.MemoryUtil.<clinit>(MemoryUtil.java)
+	at knot//org.lwjgl.system.windows.WindowsLibrary.<clinit>(WindowsLibrary.java)
+	at knot//net.caffeinemc.mods.sodium.client.platform.windows.api.Gdi32.<clinit>(Gdi32.java)
+	at knot//net.caffeinemc.mods.sodium.client.platform.windows.api.D3DKMT.findGraphicsAdapters(D3DKMT.java)
+	at knot//net.caffeinemc.mods.sodium.client.compatibility.environment.probe.GraphicsAdapterProbe.findAdapters(GraphicsAdapterProbe.java)
+	at knot//net.caffeinemc.mods.sodium.fabric.SodiumPreLaunch.onPreLaunch(SodiumPreLaunch.java)

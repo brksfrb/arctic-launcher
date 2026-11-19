@@ -85,6 +85,8 @@
   "tasks.launcher_open": "Launcher open",
   "tasks.linked": "{username} gekoppeld",
   "tasks.listening_only_arctic_cant_use_your": "Alleen luisteren: Arctic kan je microfoon niet gebruiken. Controleer Windows-instellingen → Privacy → Microfoon ('Desktop-apps toegang geven tot je microfoon') of kies hieronder een andere microfoon.",
+  "tasks.lwjgl_native_load_failed": "Minecraft kon de native LWJGL-bibliotheek niet laden",
+  "tasks.lwjgl_native_retry_detail": "Mogelijk heeft antivirussoftware de bibliotheek geblokkeerd of is een spelbestand beschadigd. Bij de volgende start controleert Arctic de spelbestanden opnieuw en schakelt het logboekregistratie voor het laden van native bibliotheken in.",
   "tasks.minecraft": "Minecraft {id}",
   "tasks.minecraft_is_still_starting": "Minecraft is nog aan het starten",
   "tasks.minecraft_ran_out_of_memory_and_froze": "Minecraft had te weinig geheugen en liep vast",
