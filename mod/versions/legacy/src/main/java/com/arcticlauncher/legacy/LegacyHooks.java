@@ -367,7 +367,8 @@ public final class LegacyHooks {
 	/** Pop-ups on the screens that cover the game; in the game the HUD shows them. */
 	public static void drawScreenNotices(net.minecraft.client.gui.screen.Screen screen) {
 		ClientConfig c = ArcticClient.config();
-		if (c == null || ArcticClient.platform() == null || screen instanceof LegacyPageScreen) {
+		if (c == null || ArcticClient.platform() == null || screen instanceof LegacyPageScreen
+				|| screen instanceof net.minecraft.client.gui.screen.TitleScreen) {
 			return;
 		}
 		String name = screen.getClass().getSimpleName().toLowerCase(java.util.Locale.ROOT);

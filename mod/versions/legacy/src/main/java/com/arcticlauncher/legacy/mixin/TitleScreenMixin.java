@@ -28,6 +28,7 @@ abstract class TitleScreenMixin extends Screen {
 	private void arctic$branding(int mx, int my, float delta, CallbackInfo ci) {
 		if (ArcticClient.restyles()) TitleBranding.draw(LegacyHooks.gfx(), width, height);
 		else com.arcticlauncher.client.menu.Badge.drawCentered(LegacyHooks.gfx(), width, height);
+		ArcticClient.renderTitleNotices(LegacyHooks.gfx());
 	}
 
 	@WrapWithCondition(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screen/TitleScreen;drawTexture(IIIIII)V"))
