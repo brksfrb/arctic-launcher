@@ -353,11 +353,11 @@ const RULES: &[Rule] = &[
     Rule {
         // Fabric: "Mixin apply for mod sodium failed sodium.mixins.json:..."
         pattern: r"Mixin apply for mod ([\w\-]+) failed",
-        explain: |c, text| broken_mod(&c[1], text),
+        explain: broken_mod,
     },
     Rule {
         pattern: r"Mixin \[[^\]\r\n]+\] from mod ([\w\-]+)",
-        explain: |c, text| broken_mod(&c[1], text),
+        explain: broken_mod,
     },
     Rule {
         // Forge/NeoForge and generic Mixin failures often name only the config.
@@ -769,7 +769,13 @@ fn built_for_another_game(id: &str, text: &str) -> Option<(String, String, Strin
     other.then_some((version, built_for, game))
 }
 
-fn broken_mod(id: &str, text: &str) -> Diagnosis {
+fn broken_mod(c: &regex::Captures, text: &str) -> Diagnosis {
+    let before = &text[..c.get(0).expect("mixin failure match").start()];
+    let prefix = before.rsplit('\n').next().unwrap_or(before);
+    if warning_log_line(prefix) {
+        return Diagnosis::none();
+    }
+    let id = &c[1];
     if let Some((version, built_for, game)) = built_for_another_game(id, text) {
         return Diagnosis::new(
             format!("{id} is for another Minecraft version"),
@@ -786,6 +792,15 @@ fn broken_mod(id: &str, text: &str) -> Diagnosis {
         ),
         vec![id.to_owned()],
     )
+}
+
+pub(crate) fn warning_log_line(line: &str) -> bool {
+    static WARNING: OnceLock<Regex> = OnceLock::new();
+    WARNING
+        .get_or_init(|| {
+            Regex::new(r"^(?:\[[^\]\r\n]*\][ \t]*)*\[(?:[^\]\r\n]*/)?WARN(?:ING)?\]").unwrap()
+        })
+        .is_match(line.trim_start())
 }
 
 /// Every match of capture group `group` of the first rule (deduplicated).
@@ -1219,6 +1234,69 @@ fn fatal_linkage(text: &str, at: usize) -> bool {
             && !freeze_evidence(text))
 }
 
+const JAVA_FATAL_HEADER: &str =
+    "# A fatal error has been detected by the Java Runtime Environment:";
+
+fn java_fatal_error(text: &str) -> Option<(&str, &str)> {
+    // HotSpot can print the header to stderr as well as writing the fuller hs_err file.
+    // The file is appended after the process output.
+    let (start, _) = text
+        .rmatch_indices(JAVA_FATAL_HEADER)
+        .find(|&(start, _)| start == 0 || text.as_bytes()[start - 1] == b'\n')?;
+    let report = &text[start..];
+    let report = report.split("\n---- ").next()?;
+    let fatal = report
+        .lines()
+        .skip(1)
+        .map(str::trim)
+        .find(|line| !line.is_empty() && *line != "#")?;
+    fatal.starts_with("# ").then_some((report, fatal))
+}
+
+pub(crate) fn java_fatal_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    let (report, fatal) = java_fatal_error(text)?;
+    let compiler_thread = report.lines().any(|line| {
+        line.trim_start().starts_with("Current thread ")
+            && (line.contains("\"C2 CompilerThread") || line.contains("\"C1 CompilerThread"))
+    });
+    let mut lines = report.lines();
+    let compile_task = lines
+        .find_map(|line| line.trim_start().strip_prefix("Current CompileTask:"))
+        .map(|task| {
+            if task.trim().is_empty() {
+                lines.next().unwrap_or_default()
+            } else {
+                task
+            }
+        });
+    let diagnosis = if compiler_thread || compile_task.is_some() {
+        let method =
+            compile_task.and_then(|task| task.split_whitespace().find(|word| word.contains("::")));
+        let task = method.map_or_else(String::new, |method| {
+            format!(" Java was compiling {method} when it crashed.")
+        });
+        Diagnosis::new(
+            "Java's JIT compiler crashed",
+            format!(
+                "A Java runtime bug or unstable hardware can cause this.{task} Clear the instance's custom Java setting to use the Java runtime Arctic recommends for this Minecraft version. If it happens again, test your RAM and turn off any CPU or RAM overclock."
+            ),
+            Vec::new(),
+        )
+    } else {
+        diagnose_log_rules(report, None).map_or_else(
+            || {
+                Diagnosis::new(
+                    "The Java runtime crashed",
+                    "Java reported a fatal error. Try the Java runtime Arctic recommends for this Minecraft version.",
+                    Vec::new(),
+                )
+            },
+            |(diagnosis, _)| diagnosis,
+        )
+    };
+    Some((diagnosis, head_of(fatal, 2048).to_owned()))
+}
+
 pub(crate) fn native_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
     if text.contains("---- Minecraft Crash Report ----")
         || text.contains("---- crash report ----\n")
@@ -1351,6 +1429,9 @@ fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
 }
 
 fn diagnose_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
+    if let Some(fatal) = java_fatal_diagnosis(text) {
+        return Some(fatal);
+    }
     if let Some(runtime) = runtime_diagnosis(text) {
         return Some(runtime);
     }
@@ -1388,6 +1469,10 @@ fn diagnose_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
         return Some(wrong_game);
     }
 
+    diagnose_log_rules(text, java).or_else(|| hang_diagnosis(text))
+}
+
+fn diagnose_log_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
     for (rule, re) in RULES.iter().zip(compiled()) {
         for c in re.captures_iter(text) {
             let matched = c.get(0)?;
@@ -1423,7 +1508,7 @@ fn diagnose_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
             }
         }
     }
-    hang_diagnosis(text)
+    None
 }
 
 /// The exception must name a native library in a managed JDK layout. Other
@@ -1564,6 +1649,13 @@ const REPORT_LAUNCHER_BYTES: usize = 6 * 1024;
 /// Prefer the captured exception or a crash document. In ordinary logs, require an exception
 /// followed by a Java stack frame in the same log record.
 fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a str> {
+    if let Some((_, error)) = crash_report
+        .and_then(java_fatal_error)
+        .or_else(|| java_fatal_error(log))
+    {
+        // The code is stable across runs. Fault addresses and process/thread IDs vary.
+        return Some(error.split_once(" at pc=").map_or(error, |(kind, _)| kind));
+    }
     if let Some(error) = vanilla_crash_trace(log).next() {
         return Some(error);
     }
@@ -1764,7 +1856,8 @@ impl Report {
             title
         };
         let title = registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
-        let title = runtime_diagnosis(&diagnosis_text)
+        let title = java_fatal_diagnosis(&diagnosis_text)
+            .or_else(|| runtime_diagnosis(&diagnosis_text))
             .or_else(|| native_diagnosis(&diagnosis_text))
             .map_or(title, |(d, _)| d.title);
         let title = if crash_report.is_none()
@@ -3839,6 +3932,26 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
     }
 
     #[test]
+    fn mixin_warnings_need_evidence_of_a_failure() {
+        for message in [
+            "@Mixin target net.minecraft.Foo was not found optional.mixins.json:FooMixin",
+            "Mixin apply for mod optional failed optional.mixins.json:FooMixin",
+            "Mixin [optional.mixins.json:FooMixin] from mod optional",
+            "MixinTransformerError: optional.mixins.json:FooMixin caused by ClassNotFoundException",
+            "InjectionError: Critical injection failure in optional.mixins.json:FooMixin from mod optional",
+        ] {
+            for prefix in ["[16:53:41] [main/WARN]:", "[main/WARN]", "[WARN]"] {
+                let log = format!("{prefix} {message}");
+                assert!(diagnose(&log).is_none(), "{log}");
+                assert!(crate::crash_conflicts::mixin_failure_line(&log).is_none());
+            }
+        }
+        let log = "[main/WARN] @Mixin target net.minecraft.Foo was not found optional.mixins.json:FooMixin\n\
+                   Caused by: org.spongepowered.asm.mixin.transformer.throwables.InvalidMixinException: @Mixin target net.minecraft.Foo was not found required.mixins.json:FooMixin";
+        assert_eq!(diagnose(log).unwrap().mods, ["required"]);
+    }
+
+    #[test]
     fn forge_295_suspected_mods_include_every_entry_and_keep_versions() {
         for report in [
             FORGE_SUSPECTS_295.to_owned(),
@@ -4115,6 +4228,33 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
 #[cfg(test)]
 mod native_tests {
     use super::*;
+
+    #[test]
+    fn fatal_java_error_uses_the_crashing_thread_or_compile_task() {
+        let fatal = format!("{JAVA_FATAL_HEADER}\n#\n#  EXCEPTION_ACCESS_VIOLATION (0xc0000005)");
+        for clue in [
+            "Current thread (0x1): JavaThread \"C1 CompilerThread0\"",
+            "Current thread (0x1): JavaThread \"C2 CompilerThread5\"",
+            "Current CompileTask:\nC2: 123 4 example.Class::method (10 bytes)",
+        ] {
+            let text = format!("{fatal}\n\n{clue}");
+            let diagnosis = diagnose(&text).unwrap();
+            assert_eq!(diagnosis.title, "Java's JIT compiler crashed");
+            assert!(diagnosis.detail.contains("runtime Arctic recommends"));
+            assert!(diagnosis.detail.contains("test your RAM"));
+            if clue.starts_with("Current CompileTask:") {
+                assert!(diagnosis.detail.contains("example.Class::method"));
+            }
+        }
+        let text = format!(
+            "[main/WARN]: Mixin apply for mod optional failed optional.mixins.json:FooMixin\n{fatal}\nCurrent thread (0x1): JavaThread \"Render thread\""
+        );
+        assert_eq!(
+            diagnose(&text).unwrap().title,
+            "Minecraft crashed in native code"
+        );
+    }
+
     #[test]
     fn report_300_native_exit_outranks_resource_pack_and_logged_linkage() {
         let text = include_str!("../tests/fixtures/crash-300-failfast.log");
