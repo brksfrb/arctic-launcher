@@ -465,6 +465,25 @@ mod tests {
         assert_eq!(core_text("Not a stage"), "Not a stage");
     }
 
+    #[test]
+    fn features_link_label_is_translated_in_every_language() {
+        let key = "nav.see_all_features";
+        assert_eq!(
+            english().strings.get(key).copied(),
+            Some("See all features")
+        );
+        for language in LANGUAGES {
+            assert!(
+                load(language.code)
+                    .strings
+                    .get(key)
+                    .is_some_and(|label| !label.trim().is_empty()),
+                "locales/{} is missing a label for {key}",
+                language.code
+            );
+        }
+    }
+
     /// Every translation has a key English has, with the same placeholders, and no language
     /// repeats a key across its files.
     #[test]
