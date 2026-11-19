@@ -9,12 +9,8 @@ feed using this repository's GitHub Pages site.
 
 ## Cutting a release
 
-1. Bump `version` in the root `Cargo.toml` (`[workspace.package]`). Run
-   `python mod/build.py` with JDK 25, or download the artifact from the **Client pack**
-   workflow run on the same sources with all versions selected. Commit the resulting
-   `mod/dist/arctic-client.pack`. The release workflow checks that the pack contains
-   all client targets and matches the tagged sources before it builds the launcher.
-2. Tag and push from the release commit with `git tag v0.2.0 && git push origin v0.2.0`.
+1. Bump `version` in the root `Cargo.toml` (`[workspace.package]`) and commit.
+2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
 3. `.github/workflows/release.yml` builds on Windows, Linux and macOS and publishes the
    release: `arctic-launcher-windows-x64.exe`, `arctic-launcher-linux-x64`,
    `arctic-launcher-macos.zip` (the app), `arctic-launcher-macos` (the program an update

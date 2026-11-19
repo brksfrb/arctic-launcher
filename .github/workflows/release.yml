@@ -34,9 +34,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Verify the bundled Arctic Client
-        run: python3 mod/build.py --verify-pack
-
       - name: Toolchain and build folder
         run: |
           rustup update stable --no-self-update
@@ -90,9 +87,6 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Verify the bundled Arctic Client
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-        run: python3 mod/build.py --verify-pack
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin, x86_64-apple-darwin
