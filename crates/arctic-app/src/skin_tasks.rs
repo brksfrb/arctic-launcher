@@ -118,7 +118,7 @@ impl Tasks {
         if account.needs_refresh(now_secs()) {
             let cfg = MsaConfig::load(self.dirs())?;
             let fresh = microsoft::refresh(&cfg, &account)?;
-            self.send(Event::AccountRefreshed(fresh.clone()));
+            self.send(Event::AccountRefreshed(self.dirs().clone(), fresh.clone()));
             Ok(fresh)
         } else {
             Ok(account)

@@ -20,7 +20,6 @@
   "tasks.choose_a_world_archive": "Choose a world archive",
   "tasks.choose_an_account_to_play": "Choose an account to play",
   "tasks.chosen_file_is_tagged_for_another": "The chosen file is tagged for another Minecraft version.",
-  "tasks.close_minecraft_before_switching_profiles": "Close Minecraft before switching profiles.",
   "tasks.closed": "{title} closed",
   "tasks.closed_unexpectedly": "{title} closed unexpectedly",
   "tasks.could_not_create_data_folders": "Could not create data folders",

@@ -20,7 +20,6 @@
   "tasks.choose_a_world_archive": "Bir dünya arşivi seç",
   "tasks.choose_an_account_to_play": "Oynamak için bir hesap seç",
   "tasks.chosen_file_is_tagged_for_another": "Seçilen dosya başka bir Minecraft sürümü için etiketli.",
-  "tasks.close_minecraft_before_switching_profiles": "Profil değiştirmeden önce Minecraft'ı kapat.",
   "tasks.closed": "{title} kapandı",
   "tasks.closed_unexpectedly": "{title} beklenmedik şekilde kapandı",
   "tasks.could_not_create_data_folders": "Veri klasörleri oluşturulamadı",

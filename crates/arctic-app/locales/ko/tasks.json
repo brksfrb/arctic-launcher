@@ -20,7 +20,6 @@
   "tasks.choose_a_world_archive": "월드 압축 파일 선택",
   "tasks.choose_an_account_to_play": "플레이할 계정을 고르세요",
   "tasks.chosen_file_is_tagged_for_another": "선택한 파일은 다른 Minecraft 버전용입니다.",
-  "tasks.close_minecraft_before_switching_profiles": "프로필을 전환하기 전에 Minecraft를 닫으세요.",
   "tasks.closed": "{title} 종료됨",
   "tasks.closed_unexpectedly": "{title}이(가) 예기치 않게 종료되었습니다",
   "tasks.could_not_create_data_folders": "데이터 폴더를 만들 수 없습니다",

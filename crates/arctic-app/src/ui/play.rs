@@ -123,7 +123,7 @@ impl ArcticApp {
             .is_default()
             .then_some(self.settings.last_version.as_deref())
             .flatten();
-        self.runs.active_for(&instance.id, version)
+        self.runs.active_for(&self.dirs, &instance.id, version)
     }
 
     /// Other games running at the same time, each with its log and a stop.
@@ -134,7 +134,7 @@ impl ArcticApp {
             .runs
             .active()
             .filter(|r| Some(r.id) != selected)
-            .map(|r| (r.id, r.title.clone(), r.game().is_some()))
+            .map(|r| (r.id, self.run_title(r), r.game().is_some()))
             .collect();
         if others.is_empty() {
             return;

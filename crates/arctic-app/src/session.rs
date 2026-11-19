@@ -83,9 +83,7 @@ fn load_faces(dirs: &DataDirs, accounts: &AccountStore, tasks: &Tasks) -> HashMa
 impl ArcticApp {
     /// Why switching profiles is not possible right now, if it isn't.
     pub(crate) fn profile_switch_blocked(&self) -> Option<&'static str> {
-        if self.runs.any_active() {
-            Some(t!("tasks.close_minecraft_before_switching_profiles"))
-        } else if !matches!(self.add_account, AddAccount::Closed) {
+        if !matches!(self.add_account, AddAccount::Closed) {
             Some(t!("tasks.finish_adding_the_account_first"))
         } else {
             None
@@ -105,6 +103,7 @@ impl ArcticApp {
         if !self.profiles.set_active(id) {
             return;
         }
+        self.flush_launcher_time();
         if let Err(e) = self.profiles.save(&self.root) {
             self.toasts.push(
                 Kind::Error,

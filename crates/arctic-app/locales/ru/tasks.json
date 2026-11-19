@@ -20,7 +20,6 @@
   "tasks.choose_a_world_archive": "Выберите архив мира",
   "tasks.choose_an_account_to_play": "Выберите аккаунт для игры",
   "tasks.chosen_file_is_tagged_for_another": "Выбранный файл отмечен для другой версии Minecraft.",
-  "tasks.close_minecraft_before_switching_profiles": "Закройте Minecraft перед сменой профиля.",
   "tasks.closed": "{title} закрыт",
   "tasks.closed_unexpectedly": "{title} неожиданно закрылся",
   "tasks.could_not_create_data_folders": "Не удалось создать папки данных",

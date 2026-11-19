@@ -617,7 +617,7 @@ impl ArcticApp {
                 let in_use = self
                     .instance_by_id(&state.target)
                     .is_some_and(|i| sharing::client::in_use(&i.game_dir(&self.dirs)));
-                if in_use || self.runs.instance_active(&state.target) {
+                if in_use || self.runs.instance_active(&self.dirs, &state.target) {
                     blocked = Some(t!("social.close_that_game_first_it_saves_its_own"));
                 }
             }

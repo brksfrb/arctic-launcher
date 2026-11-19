@@ -20,7 +20,6 @@
   "tasks.choose_a_world_archive": "Escolha um arquivo de mundo",
   "tasks.choose_an_account_to_play": "Escolha uma conta para jogar",
   "tasks.chosen_file_is_tagged_for_another": "O arquivo escolhido está marcado para outra versão do Minecraft.",
-  "tasks.close_minecraft_before_switching_profiles": "Feche o Minecraft antes de trocar de perfil.",
   "tasks.closed": "{title} fechou",
   "tasks.closed_unexpectedly": "{title} fechou inesperadamente",
   "tasks.could_not_create_data_folders": "Não foi possível criar as pastas de dados",

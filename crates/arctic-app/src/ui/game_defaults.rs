@@ -165,7 +165,7 @@ impl ArcticApp {
                     .on_hover_text(t!("play.puts_these_settings_into_that_instance_now"))
                     .clicked()
                 {
-                    if self.runs.instance_active(&instance.id) {
+                    if self.runs.instance_active(&self.dirs, &instance.id) {
                         self.toasts.push(
                             Toast::Info,
                             t!("play.close_that_game_first"),
