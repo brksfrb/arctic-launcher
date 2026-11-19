@@ -305,7 +305,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Ese archivo no existe; se usará el Java gestionado.",
   "instances.that_instance_is_gone": "Esa instancia ya no existe.",
   "instances.the_arctic_client_is_off_for_every_instance": "Arctic Client está desactivado en todas las instancias",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client funciona en instancias Vanilla, Fabric y Quilt, y en Forge 1.8.9. Aún no en este loader o versión: crea una instancia Vanilla o Fabric de la misma versión para jugar con él.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client funciona en instancias Vanilla, Fabric y Quilt, de forma no oficial en NeoForge, y en Forge 1.8.9. Aún no en este loader o versión: crea una instancia Vanilla o Fabric de la misma versión para jugar con él.",
   "instances.the_default_instance_plays_whichever_release": "La instancia predeterminada juega la versión que elijas en la pestaña Jugar.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "La carpeta (mundos y mods incluidos) se mueve a instances/.trash, no se borra.",
   "instances.the_game_would_stop_while_loading_fix_them": "El juego se detendría al cargar {name}. Arréglalos aquí o juega de todos modos.",
@@ -415,5 +415,8 @@
   "instances.hub.partial_install": "No se pueden instalar {count} proyectos seleccionados en esta instancia. Se mostrarán en el resumen.",
   "instances.hub.install_compatible": "Instalar proyectos compatibles",
   "instances.hub.partially_compatible": "Compatibilidad parcial",
-  "instances.hub.modpacks_create_instances": "Cada modpack crea su propia instancia."
+  "instances.hub.modpacks_create_instances": "Cada modpack crea su propia instancia.",
+  "instances.unofficial_on_neoforge_fabric_is_recommended": "No oficial en NeoForge. Te recomendamos Fabric.",
+  "instances.the_arctic_client_on_neoforge_is_unofficial": "Arctic Client no es oficial en NeoForge. La forma compatible de jugar con él es Fabric.",
+  "instances.needs_neoforge_or_newer": "Necesita NeoForge {version} o más reciente: elige una versión más nueva en Loader de mods."
 }

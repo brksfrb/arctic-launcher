@@ -7,7 +7,6 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.RandomAccess;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -27,7 +26,7 @@ import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 
 /** Terrain-only CTM context. Each meshing thread owns its scratch positions and neighbour cache. */
 public final class GlassCtm {
-	private static final boolean CONTINUITY = FabricLoader.getInstance().isModLoaded("continuity");
+	private static final boolean CONTINUITY = Mods.loaded("continuity");
 	private static volatile Map<TextureAtlasSprite, TextureAtlasSprite[]> sprites = new IdentityHashMap<>();
 	private static boolean lastEnabled = true;
 	private static volatile int atlasTileCount = GlassTiles.COUNT;

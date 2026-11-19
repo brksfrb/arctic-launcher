@@ -38,7 +38,7 @@ class PeekHookCoverageTest {
 		String json = read("src/main/resources/arctic.mixins.json");
 		assertTrue(json.contains("<% if (recipeBookPeek) { %>\t\t\"RecipeBookScreenMixin\""));
 		assertTrue(json.contains("\"ContainerHoverAccess\""));
-		assertTrue(read("common.gradle").contains("recipeBookPeek: atLeast('1.21.6')"));
+		assertTrue(read("shared.gradle").contains("recipeBookPeek: atLeast('1.21.6')"));
 	}
 	@Test
 	void oldestModernAdapterKeepsTheContainerOverlay() throws Exception {

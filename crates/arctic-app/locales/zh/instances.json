@@ -305,7 +305,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "该文件不存在；将使用托管的 Java。",
   "instances.that_instance_is_gone": "该实例已不存在。",
   "instances.the_arctic_client_is_off_for_every_instance": "所有实例都已关闭 Arctic Client",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic 客户端可在原版、Fabric 和 Quilt 实例以及 Forge 1.8.9 上运行。此加载器或版本暂不支持：创建同版本的原版或 Fabric 实例即可使用。",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic 客户端可在原版、Fabric 和 Quilt 实例以及 Forge 1.8.9 上运行，也可非官方地在 NeoForge 上运行。此加载器或版本暂不支持：创建同版本的原版或 Fabric 实例即可使用。",
   "instances.the_default_instance_plays_whichever_release": "默认实例运行你在“开始游戏”页选择的版本。",
   "instances.the_folder_worlds_and_mods_included_is_moved": "文件夹（含世界和模组）会移到 instances/.trash，不会删除。",
   "instances.the_game_would_stop_while_loading_fix_them": "游戏会在加载 {name} 时停止。在这里修复，或仍然游玩。",
@@ -415,5 +415,8 @@
   "instances.hub.partial_install": "所选项目中有 {count} 项无法安装到此实例。详情将显示在结果摘要中。",
   "instances.hub.install_compatible": "安装兼容的项目",
   "instances.hub.partially_compatible": "部分兼容",
-  "instances.hub.modpacks_create_instances": "每个整合包都会创建独立的实例。"
+  "instances.hub.modpacks_create_instances": "每个整合包都会创建独立的实例。",
+  "instances.unofficial_on_neoforge_fabric_is_recommended": "NeoForge 版为非官方版本，推荐使用 Fabric。",
+  "instances.the_arctic_client_on_neoforge_is_unofficial": "NeoForge 上的 Arctic 客户端为非官方版本，官方支持的玩法是 Fabric。",
+  "instances.needs_neoforge_or_newer": "需要 NeoForge {version} 或更新版本：请在“模组加载器”中选择更新的版本。"
 }

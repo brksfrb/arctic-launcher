@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
@@ -48,7 +47,7 @@ public final class TitleCompatTest {
 			if (!firstFrameChecked) throw new IllegalStateException("First title frame was not checked");
 			for (String id : new String[]{"modmenu", "flashback"}) {
 				boolean wanted = java.util.Arrays.asList(expected.split(",")).contains(id);
-				if (FabricLoader.getInstance().isModLoaded(id) != wanted) {
+				if (Mods.loaded(id) != wanted) {
 					throw new IllegalStateException("Unexpected test mod state: " + id);
 				}
 			}

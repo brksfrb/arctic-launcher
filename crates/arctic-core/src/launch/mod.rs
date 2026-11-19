@@ -609,6 +609,26 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
                     log::warn!("performance mods for Forge: {e}");
                 }
                 timer.step("performance mods");
+            } else if kind == loaders::LoaderKind::NeoForge {
+                // NeoForge instances: the Arctic Client's unofficial NeoForge build, where there is
+                // one for this game and the instance's NeoForge is new enough for it.
+                let fits = arctic_mod::neoforge_fits(&vanilla.id, loader_version);
+                if req.instance.arctic_mod && arctic_mod::supports_neoforge(&vanilla.id) && !fits {
+                    log::warn!(
+                        "NeoForge {loader_version} is older than the Arctic Client on {} needs ({}); starting without it",
+                        vanilla.id,
+                        arctic_mod::min_neoforge(&vanilla.id).unwrap_or_default()
+                    );
+                }
+                arctic_mod::sync_neoforge(
+                    &game_dir.join("mods"),
+                    &vanilla.id,
+                    loader_version,
+                    req.instance.arctic_mod,
+                )?;
+                share_session =
+                    req.instance.arctic_mod && fits && arctic_mod::supports_neoforge(&vanilla.id);
+                timer.step("arctic client");
             }
             profile
         }
@@ -730,6 +750,15 @@ fn effective_loader(
         let _ = crate::mods::polarium::sync(&game_dir.join("mods"), game, false);
     }
     fabric.map(|v| (loaders::LoaderKind::Fabric, v))
+}
+
+/// The client's class preloading (startup_cache) works through Fabric's class loading: not in
+/// NeoForge or Forge instances, whose Arctic Client is another jar.
+fn preloads(loader: Option<loaders::LoaderKind>) -> bool {
+    !matches!(
+        loader,
+        Some(loaders::LoaderKind::NeoForge | loaders::LoaderKind::Forge)
+    )
 }
 
 /// JVM flags that make the game start faster, for Vanilla instances (where the launcher
@@ -921,7 +950,11 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
     // The Arctic Client loads the classes a start needs ahead of the game on other cores
     // (see startup_cache); it must be there to do it.
     let preload_flags = match inst.version.java_version.as_ref() {
-        Some(java) if req.instance.arctic_mod && arctic_mod::supports(&req.version.id) => {
+        Some(java)
+            if preloads(req.instance.loader.kind())
+                && req.instance.arctic_mod
+                && arctic_mod::supports(&req.version.id) =>
+        {
             startup_cache::flags(
                 &inst.game_dir,
                 &req.version.id,
@@ -1172,6 +1205,16 @@ fn placeholders(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_fabric_like_instances_preload_with_the_client() {
+        use loaders::LoaderKind;
+        assert!(preloads(None));
+        assert!(preloads(Some(LoaderKind::Fabric)));
+        assert!(preloads(Some(LoaderKind::Quilt)));
+        assert!(!preloads(Some(LoaderKind::NeoForge)));
+        assert!(!preloads(Some(LoaderKind::Forge)));
+    }
 
     #[test]
     fn quilt_client_fit_reads_the_selected_jar_and_removes_an_incompatible_client() {

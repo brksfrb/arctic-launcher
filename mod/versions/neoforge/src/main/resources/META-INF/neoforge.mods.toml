@@ -1,0 +1,30 @@
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "GPL-3.0-or-later"
+
+[[mods]]
+modId = "arctic"
+version = "${version}"
+displayName = "Arctic Client"
+description = '''Arctic Launcher's client: Arctic menus and styles, HUD widgets (FPS, CPS, ping, keystrokes), and Arctic looks visible to other Arctic players. Unofficial on NeoForge: Fabric is recommended.'''
+logoFile = "assets/arctic/icon.png"
+authors = "Arctic Launcher contributors"
+displayURL = "https://arcticlauncher.com"
+displayTest = "IGNORE_ALL_VERSION"
+
+[[mixins]]
+config = "arctic.mixins.json"
+
+[[dependencies.arctic]]
+modId = "neoforge"
+${required}
+versionRange = "[${neoforge_min},)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.arctic]]
+modId = "minecraft"
+${required}
+versionRange = "${minecraft_range}"
+ordering = "NONE"
+side = "CLIENT"

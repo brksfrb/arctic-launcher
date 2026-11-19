@@ -78,6 +78,36 @@ abstract class BlockOutlineMixin {
 		args.set(6, (c & 0xFF) / 255f);
 		args.set(7, ((c >>> 24) & 0xFF) / 255f);
 	}
+	//#elif NEOFORGE && MC < 1.20.2
+	// 1.20.1's Forge can't load the class @ModifyArgs makes: one @ModifyArg for each of the four floats.
+	@ModifyArg(method = "renderHitOutline", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/renderer/LevelRenderer;renderShape(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/minecraft/world/phys/shapes/VoxelShape;DDDFFFF)V"), index = 6)
+	private float arctic$red(float game) {
+		return arctic$channel(game, 16);
+	}
+
+	@ModifyArg(method = "renderHitOutline", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/renderer/LevelRenderer;renderShape(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/minecraft/world/phys/shapes/VoxelShape;DDDFFFF)V"), index = 7)
+	private float arctic$green(float game) {
+		return arctic$channel(game, 8);
+	}
+
+	@ModifyArg(method = "renderHitOutline", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/renderer/LevelRenderer;renderShape(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/minecraft/world/phys/shapes/VoxelShape;DDDFFFF)V"), index = 8)
+	private float arctic$blue(float game) {
+		return arctic$channel(game, 0);
+	}
+
+	@ModifyArg(method = "renderHitOutline", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/renderer/LevelRenderer;renderShape(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/minecraft/world/phys/shapes/VoxelShape;DDDFFFF)V"), index = 9)
+	private float arctic$alpha(float game) {
+		return arctic$channel(game, 24);
+	}
+
+	private static float arctic$channel(float game, int shift) {
+		int c = ArcticClient.config().outlineColor;
+		return c == 0 ? game : ((c >>> shift) & 0xFF) / 255f;
+	}
 	//#else
 	// Before 1.21.2: the colour as four floats (the game's is black at 40%).
 	@ModifyArgs(method = "renderHitOutline", at = @At(value = "INVOKE",

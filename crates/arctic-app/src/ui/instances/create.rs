@@ -167,6 +167,13 @@ impl ArcticApp {
                 {
                     form.arctic_off = !arctic;
                 }
+                if arctic && form.loader == Some(LoaderKind::NeoForge) {
+                    ui.label(
+                        RichText::new(t!("instances.unofficial_on_neoforge_fabric_is_recommended"))
+                            .small()
+                            .color(p.warn),
+                    );
+                }
                 ui.add_space(14.0);
                 crate::widgets::row(ui, |ui| {
                     if crate::widgets::button(ui, p, None, t!("instances.cancel"), false).clicked()

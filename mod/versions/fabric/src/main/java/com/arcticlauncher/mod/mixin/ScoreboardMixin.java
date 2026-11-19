@@ -91,8 +91,12 @@ abstract class ScoreboardMixin {
 		return ArcticClient.config().scoreboardBackground ? color : 0;
 	}
 	//#elif MC >= 1.20.3 && MC < 1.21.3
-	// 1.20.3-1.21.2 draw the rows in a lambda inside displayScoreboardSidebar.
+	// 1.20.3-1.21.2 draw the rows in a lambda inside displayScoreboardSidebar (NeoForge: its own number).
+	//#if NEOFORGE
+	@ModifyArg(method = "/lambda\\$displayScoreboardSidebar\\$\\d+/",
+	//#else
 	@ModifyArg(method = "method_55440",
+	//#endif
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Options;getBackgroundColor(F)I"))
 	//#else
 	@ModifyArg(method = "displayScoreboardSidebar",

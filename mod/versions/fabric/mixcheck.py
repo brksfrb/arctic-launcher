@@ -1,7 +1,9 @@
 """Check the Fabric adapter's mixin hooks against Minecraft versions, without starting the game.
 
 Usage (from anywhere, JDK on JAVA_HOME):
-    python mod/versions/fabric/mixcheck.py 1.21.4 1.19.4 ...
+    python mod/versions/fabric/mixcheck.py 1.21.4 1.19.4 neoforge-1.21.1 ...
+neoforge-<version> checks the NeoForge jar of that version (versions/neoforge) against the game as
+NeoForge patches it: the same mixins, but NeoForge rewrites some of the methods they hook.
 Each version must have been compiled once (python mod/build.py <version>, or
 gradlew compileJava), so its preprocessed sources and Loom's named jar exist.
 
@@ -62,7 +64,24 @@ def constructor_head_problems(src):
     return problems
 
 
+def neoforge(version):
+    """The game version of a NeoForge check ("neoforge-1.21.1"), or None for a Fabric one."""
+    return version[len("neoforge-"):] if version.startswith("neoforge-") else None
+
+
+def neoforge_build(version):
+    """The NeoForge build targets.json compiles `version` against."""
+    with open(os.path.join(HERE, "..", "..", "targets.json"), encoding="utf-8") as f:
+        return next((t.get("neoforge") for t in json.load(f) if t["build"] == version), None)
+
+
 def jar_for(version):
+    game = neoforge(version)
+    if game:
+        # ModDevGradle's game jar, with NeoForge's patches applied (Mojang's names).
+        build = neoforge_build(game)
+        found = [j for r in build_roots(version) for j in glob.glob(os.path.join(r, "build", "moddev", "artifacts", f"*-{build}.jar"))]
+        return max(found, key=os.path.getmtime) if found else None
     found = glob.glob(f"{LOOM}/minecraft-merged-deobf/{version}/*.jar") + glob.glob(f"{LOOM}/minecraft-merged/{version}-loom*/*.jar")
     # Legacy Fabric (1.13.2): the jar with the carried-over names, not the intermediary one next to it.
     found += [j for j in glob.glob(f"{LOOM}/minecraft-merged-legacy*/{version}-*/*.jar")
@@ -145,29 +164,47 @@ class Jar:
         return "\n".join(out)
 
 
+def build_roots(version):
+    """The project folders a version may have been built in: build.py compiles in worker copies
+    (mod/build/workers/wN), a lone gradle build here."""
+    if neoforge(version):
+        return [os.path.join(HERE, "..", "neoforge")] + glob.glob(os.path.join(HERE, "..", "..", "build", "workers", "*", "versions", "neoforge"))
+    return [HERE, os.path.join(HERE, "..", "fabric13")] + glob.glob(os.path.join(HERE, "..", "..", "build", "workers", "*", "versions", "fabric*"))
+
+
 def build_dir(version):
-    """The fabric build folder holding this version's newest preprocessed sources: build.py
-    compiles in worker copies (mod/build/workers/wN), a lone gradle build here."""
-    roots = [HERE, os.path.join(HERE, "..", "fabric13")] + glob.glob(os.path.join(HERE, "..", "..", "build", "workers", "*", "versions", "fabric*"))
-    found = [r for r in roots if os.path.isdir(os.path.join(r, "build", "preprocessed", version))]
+    """The build folder holding this version's newest preprocessed sources."""
+    game = neoforge(version) or version
+    found = [r for r in build_roots(version) if os.path.isdir(os.path.join(r, "build", "preprocessed", game))]
     if not found:
         return HERE
-    return max(found, key=lambda r: os.path.getmtime(os.path.join(r, "build", "preprocessed", version)))
+    return max(found, key=lambda r: os.path.getmtime(os.path.join(r, "build", "preprocessed", game)))
 
 
 def active_mixins(version):
     """Mixin names from this version's processed resources, or the built jar as a fallback."""
     resources = os.path.join(build_dir(version), "build", "resources", "main")
+    game = neoforge(version)
     try:
         # A Gradle project shares its processed resources between Minecraft targets.
-        with open(os.path.join(resources, "fabric.mod.json"), encoding="utf-8") as f:
-            covers = json.load(f).get("depends", {}).get("minecraft", [])
-        if version in covers:
+        if game:
+            metadata = "mods.toml" if game == "1.20.1" else "neoforge.mods.toml"
+            with open(os.path.join(resources, "META-INF", metadata), encoding="utf-8") as f:
+                # The closed Minecraft range ends at the version used for the build.
+                version_range = re.search(r'^modId = "minecraft"\n(?:mandatory|type) = .+\nversionRange = "\[([^"\n]+)\]"$',
+                                          f.read(), re.M)
+            current = version_range is not None and version_range[1].rsplit(",", 1)[-1] == game
+        else:
+            with open(os.path.join(resources, "fabric.mod.json"), encoding="utf-8") as f:
+                covers = json.load(f).get("depends", {}).get("minecraft", [])
+            current = version in covers
+        if current:
             with open(os.path.join(resources, "arctic.mixins.json"), encoding="utf-8") as f:
                 return set(json.load(f).get("client", []))
     except (OSError, ValueError):
         pass
-    jar = os.path.join(HERE, "..", "..", "dist", f"arctic-mod-{version}.jar")
+    name = f"arctic-{version}.jar" if game else f"arctic-mod-{version}.jar"
+    jar = os.path.join(HERE, "..", "..", "dist", name)
     if not os.path.isfile(jar):
         return None
     try:
@@ -219,9 +256,8 @@ def callback_problems(jar, cls, src, imports, consts):
         if not ann[0].startswith("@Inject("):
             continue
         annotation, handler = ann.groups()
-        # Mixin can adapt a coerced argument. Check uncoerced handlers here.
-        if re.search(r"@(?:[\w.]+\.)?Coerce\b", handler):
-            continue
+        # Mixin can adapt a coerced argument, but the number of captured arguments must still match.
+        coerced = re.search(r"@(?:[\w.]+\.)?Coerce\b", handler)
         declaration = re.sub(r"@[\w.]+(?:\([^)]*\))?\s*", "", handler)
         while re.search(r"<[^<>]*>", declaration):
             declaration = re.sub(r"<[^<>]*>", "", declaration)
@@ -236,15 +272,19 @@ def callback_problems(jar, cls, src, imports, consts):
         )
         for selector in method_selectors(annotation, consts):
             descriptors = list(jar.method_descriptors(cls, selector))
+            if not descriptors and not selector.startswith(("/", "<")):
+                descriptors = [desc for parent in jar.hierarchy(cls)[1:]
+                               for desc in jar.method_descriptors(parent, selector)]
             if not descriptors:
                 continue
             for desc in descriptors:
                 args, result = desc[1:].split(")")
                 expected = [java_type(p) for p in JVM_TYPE.findall(args)]
                 callback = CALLBACK if result == "V" else CALLBACK + "Returnable"
-                prefixes = ([callback], expected + [callback])
+                prefixes = ([callback], [None] * len(expected) + [callback] if coerced else expected + [callback])
                 if modifiers.split()[-1] == "void" and any(
-                    types[:len(prefix)] == prefix and (len(types) == len(prefix) or captures_locals)
+                    len(types) >= len(prefix) and (len(types) == len(prefix) or captures_locals)
+                    and all(wanted is None or actual == wanted for actual, wanted in zip(types, prefix))
                     for prefix in prefixes
                 ):
                     break
@@ -256,7 +296,7 @@ def callback_problems(jar, cls, src, imports, consts):
 
 def check(version):
     jar_path = jar_for(version)
-    src_dir = os.path.join(build_dir(version), "build", "preprocessed", version, "java", "com", "arcticlauncher", "mod", "mixin")
+    src_dir = os.path.join(build_dir(version), "build", "preprocessed", neoforge(version) or version, "java", "com", "arcticlauncher", "mod", "mixin")
     if not jar_path or not os.path.isdir(src_dir):
         print(f"{version}: compile it first (no named jar or preprocessed sources)")
         return 1
