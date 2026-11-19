@@ -59,7 +59,7 @@ fn copy_game_folder(from: &Path, to: &Path, with_worlds: bool) -> Result<()> {
 }
 
 /// A file or a whole folder (links are left out: they could point anywhere).
-fn copy_entry(from: &Path, to: &Path) -> Result<()> {
+pub(crate) fn copy_entry(from: &Path, to: &Path) -> Result<()> {
     let kind = std::fs::symlink_metadata(from)
         .map_err(|e| Error::io(from, e))?
         .file_type();

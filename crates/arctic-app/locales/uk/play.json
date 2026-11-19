@@ -154,7 +154,7 @@
   "play.pick_an_instance_and_jump_in": "Вибери збірку та вперед.",
   "play.play": "Грати",
   "play.play_2": "Грати в {name}",
-  "play.play_another_copy_switch_account_first_for_a": "Запустити ще одну копію (для другого гравця спочатку зміни обліковий запис)",
+  "play.play_another_copy": "Запустити ще одну копію",
   "play.play_that_instance_once_first": "Спочатку запусти цю збірку один раз.",
   "play.play_with_the_arctic_client": "Грати з Arctic Client",
   "play.played_session_last.few": "Зіграно {format_duration} · {n} сесії · остання {value2}",
