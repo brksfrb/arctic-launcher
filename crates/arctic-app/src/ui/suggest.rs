@@ -134,23 +134,21 @@ impl ArcticApp {
     }
 
     fn send_suggestion(&mut self, form: &SuggestForm) {
-        let game_dir = {
-            let id = self
-                .settings
-                .last_instance
-                .clone()
-                .unwrap_or_else(|| self.instance.id.clone());
-            self.instance_by_id(&id)
-                .map(|i| i.game_dir(&self.dirs))
-                .or_else(|| Some(self.instance.game_dir(&self.dirs)))
-        };
         let launcher_log = form
             .launcher_log
             .then(|| self.dirs.launcher_logs().join("launcher.log"));
-        let game_log = form
-            .game_log
-            .then(|| game_dir.map(|d| d.join("logs").join("latest.log")))
-            .flatten();
+        let game_log = form.game_log.then(|| {
+            let instance = self.selected_instance();
+            self.runs
+                .for_instance(&self.dirs, &instance.id)
+                .and_then(|run| run.log_file.clone())
+                .unwrap_or_else(|| {
+                    instance
+                        .game_dir(&self.dirs)
+                        .join("logs")
+                        .join("latest.log")
+                })
+        });
         let suggestion = Suggestion {
             kind: if form.bug { "bug" } else { "idea" }.to_owned(),
             text: form.text.clone(),

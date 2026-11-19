@@ -7,6 +7,7 @@
 
 mod duplicate;
 
+pub(crate) use duplicate::copy_entry;
 pub use duplicate::duplicate;
 
 use std::path::{Path, PathBuf};

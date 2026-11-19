@@ -115,7 +115,6 @@ impl ArcticApp {
         self.discover_dialog(&ui.ctx().clone());
     }
 
-    /// The selected instance's game, while it's being prepared or runs.
     /// The selected instance's running game (for Vanilla, on the picked version).
     fn selected_run(&self) -> Option<&Run> {
         let instance = self.selected_instance();
@@ -133,7 +132,7 @@ impl ArcticApp {
         let others: Vec<(crate::tasks::LaunchId, String, bool)> = self
             .runs
             .active()
-            .filter(|r| Some(r.id) != selected)
+            .filter(|r| r.belongs_to(&self.dirs) && Some(r.id) != selected)
             .map(|r| (r.id, self.run_title(r), r.game().is_some()))
             .collect();
         if others.is_empty() {
@@ -147,18 +146,22 @@ impl ArcticApp {
         );
         let now = ui.input(|i| i.time);
         for (id, title, started) in others {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(&title).color(p.text));
-                if widgets::icon_button(ui, p, Icon::Document, t!("play.view_its_log")).clicked() {
-                    self.show_run_log(id, now);
-                }
-                if started
-                    && widgets::icon_button(ui, p, Icon::Stop, t!("play.force_close_this_game"))
+            ui.push_id(id, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(&title).color(p.text));
+                    if widgets::icon_button(ui, p, Icon::Document, t!("play.view_its_log"))
                         .clicked()
-                    && let Some(run) = self.runs.get_mut(id)
-                {
-                    run.force_close();
-                }
+                    {
+                        self.show_run_log(id, now);
+                    }
+                    if started
+                        && widgets::icon_button(ui, p, Icon::Stop, t!("play.force_close_this_game"))
+                            .clicked()
+                        && let Some(run) = self.runs.get_mut(id)
+                    {
+                        run.force_close();
+                    }
+                });
             });
         }
     }
@@ -620,12 +623,12 @@ impl ArcticApp {
                 ui,
                 p,
                 Icon::Plus,
-                t!("play.play_another_copy_switch_account_first_for_a"),
+                t!("play.play_another_copy"),
                 PLAY_SIZE[1],
             )
             .clicked()
         {
-            self.launch_another_copy();
+            self.launch_selected();
         }
         if widgets::tile_button(
             ui,
@@ -636,7 +639,10 @@ impl ArcticApp {
         )
         .clicked()
         {
-            let dir = self.selected_instance().game_dir(&self.dirs);
+            let dir = self.selected_run().map_or_else(
+                || self.selected_instance().game_dir(&self.dirs),
+                |r| r.game_dir.clone(),
+            );
             let _ = std::fs::create_dir_all(&dir);
             if let Err(e) = open::that_detached(&dir) {
                 self.toasts.push(
@@ -646,10 +652,12 @@ impl ArcticApp {
                 );
             }
         }
+        let instance_id = &self.selected_instance().id;
         let log = self
-            .dirs
-            .logs()
-            .join(format!("game-{}.log", self.selected_instance().id));
+            .selected_run()
+            .or_else(|| self.runs.for_instance(&self.dirs, instance_id))
+            .and_then(|r| r.log_file.clone())
+            .unwrap_or_else(|| self.dirs.logs().join(format!("game-{instance_id}.log")));
         if log.is_file()
             && widgets::tile_button(
                 ui,

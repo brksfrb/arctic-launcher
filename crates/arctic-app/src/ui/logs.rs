@@ -234,11 +234,13 @@ impl ArcticApp {
                 // A bullet the launcher's font has (● isn't in it).
                 let marker = if run.is_active() { "• " } else { "" };
                 let title = self.run_title(run);
-                ui.selectable_value(
-                    &mut self.log_source,
-                    LogSource::Game(run.id),
-                    format!("{marker}{title}"),
-                );
+                ui.push_id(run.id, |ui| {
+                    ui.selectable_value(
+                        &mut self.log_source,
+                        LogSource::Game(run.id),
+                        format!("{marker}{title}"),
+                    );
+                });
             }
             ui.selectable_value(
                 &mut self.log_source,
@@ -267,7 +269,7 @@ impl ArcticApp {
                 LogSource::Game(id) => self.runs.get(id).and_then(|r| r.log_file.clone()),
                 LogSource::Launcher => Some(self.dirs.launcher_logs().join("launcher.log")),
             };
-            if let Some(file) = file.filter(|p| p.is_file())
+            if let Some(file) = file.filter(|file| file.is_file())
                 && widgets::icon_button(ui, p, Icon::Document, t!("play.open_log_file")).clicked()
             {
                 let _ = open::that_detached(&file);

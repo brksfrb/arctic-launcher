@@ -1,7 +1,5 @@
-//! Games started from the launcher. Several can run at once, one per
-//! instance (two copies of one instance would fight over its worlds and
-//! files); each keeps its own log, can be stopped on its own, and gets its
-//! crash explained when it ends badly.
+//! Games started from the launcher, tracked by launch ID. Each copy keeps its
+//! own log, can be stopped on its own, and gets its crash explained when it ends badly.
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -49,6 +47,7 @@ pub struct Run {
     pub instance_id: String,
     /// The profile that started the game, even after the launcher switches profiles.
     pub dirs: DataDirs,
+    copy: u32,
     /// The Minecraft version it runs (Vanilla can run several at once).
     pub version: String,
     /// "Vanilla · 26.3", for lists and the Logs tab.
@@ -217,7 +216,7 @@ impl Run {
     }
 
     /// Memory a big pack was started with, if it was too little for it: the warning to show.
-    pub fn memory_warning(&self) -> Option<String> {
+    fn memory_warning(&self) -> Option<String> {
         let given = crash::max_memory_mb(self.java.as_deref()?)?;
         let mods = arctic_core::launch::mod_count(&self.game_dir.join("mods"));
         crash::memory_warning(given, mods, arctic_core::system::total_memory_mb())
@@ -528,12 +527,14 @@ impl Runs {
         game_dir: PathBuf,
     ) -> LaunchId {
         self.next_id += 1;
+        let copy = self.next_copy(dirs, instance_id);
         self.list
             .retain(|r| r.is_active() || !r.belongs_to(dirs) || r.instance_id != instance_id);
         self.list.push(Run {
             id: self.next_id,
             instance_id: instance_id.to_owned(),
             dirs: dirs.clone(),
+            copy,
             version: version.to_owned(),
             title,
             state: RunState::Preparing {
@@ -591,6 +592,20 @@ impl Runs {
         self.list.iter().filter(|r| r.is_active())
     }
 
+    pub fn next_copy(&self, dirs: &DataDirs, instance_id: &str) -> u32 {
+        let active = || {
+            self.active()
+                .filter(|r| r.belongs_to(dirs) && r.instance_id == instance_id)
+        };
+        if active().next().is_none() {
+            return 0;
+        }
+        // A count can't identify a slot: an earlier copy may have finished.
+        (1..)
+            .find(|copy| !active().any(|r| r.copy == *copy))
+            .expect("a free game copy slot")
+    }
+
     pub fn any_active(&self) -> bool {
         self.active().next().is_some()
     }
@@ -601,8 +616,7 @@ impl Runs {
     }
 
     pub fn instance_active(&self, dirs: &DataDirs, instance_id: &str) -> bool {
-        self.for_instance(dirs, instance_id)
-            .is_some_and(Run::is_active)
+        self.active_for(dirs, instance_id, None).is_some()
     }
 
     /// The newest run, for "View logs" defaults.
@@ -653,6 +667,19 @@ impl ArcticApp {
                 let Some(run) = self.runs.get_mut(id) else {
                     return;
                 };
+                run.started = game.started_at();
+                run.game_dir = game.game_dir().to_path_buf();
+                if let Some(warning) = run.memory_warning() {
+                    run.push_log([LogLine {
+                        level: Level::Warn,
+                        text: format!("──── Arctic: {warning} ────"),
+                    }]);
+                    self.toasts.push(
+                        Kind::Info,
+                        tf!("tasks.not_much_memory", title = run.title),
+                        warning,
+                    );
+                }
                 run.state = RunState::Starting {
                     game,
                     stage: Stage::Java,
@@ -687,11 +714,10 @@ impl ArcticApp {
         }
         match event {
             GameEvent::WindowReady => {
-                if let RunState::Starting { game, .. } =
-                    std::mem::replace(&mut run.state, RunState::Ended)
-                {
-                    run.state = RunState::Running { game };
-                }
+                let RunState::Starting { game, .. } = &run.state else {
+                    return;
+                };
+                run.state = RunState::Running { game: game.clone() };
                 if run
                     .profile_settings(&self.dirs, &self.settings)
                     .on_game_start
@@ -709,19 +735,18 @@ impl ArcticApp {
                 }
                 run.push_log(lines);
             }
-            GameEvent::Exited { code, killed } => {
+            GameEvent::Exited {
+                code,
+                killed,
+                played,
+                ended_at,
+            } => {
+                if run.game().is_none() {
+                    return;
+                }
                 let code = run.reported_exit_code(code, killed);
                 run.state = RunState::Ended;
                 self.bridge.forget_launch(id);
-                // What the game changed goes to the profile's other instances.
-                let settings = run.profile_settings(&self.dirs, &self.settings);
-                let dirs = run.dirs.clone();
-                let shared = settings.shared;
-                std::thread::spawn(move || {
-                    if let Err(e) = arctic_core::shared::sync(&dirs, shared, None) {
-                        log::warn!("sharing between instances: {e}");
-                    }
-                });
                 // The game threw its unfinished recording away itself unless it crashed or
                 // was killed; either way nothing is writing it now (unless another copy of
                 // the instance still runs in the same folder).
@@ -742,27 +767,25 @@ impl ArcticApp {
                 let watchdog = run.shutdown_watchdog_fired();
                 let title = run.title.clone();
                 let dirs = run.dirs.clone();
-                // Time played: from the start to the exit, for games that really started.
-                if let Ok(played) = run.started.elapsed() {
-                    if let Err(e) = arctic_core::playtime::record(
-                        &dirs,
-                        &run.instance_id,
-                        played.as_secs(),
-                        arctic_core::auth::now_secs(),
-                    ) {
-                        log::warn!("play time: {e}");
-                    }
-                    // What the game itself recorded: stretches in servers, worlds and menus.
-                    if let Err(e) = arctic_core::playtime::ingest_game_log(
-                        &dirs,
-                        &run.instance_id,
-                        &run.game_dir,
-                    ) {
-                        log::warn!("play time from the game: {e}");
-                    }
-                    if run.belongs_to(&self.dirs) {
-                        self.playtime = arctic_core::playtime::Stats::load(&dirs);
-                    }
+                let ended_at = ended_at
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default();
+                if let Err(e) = arctic_core::playtime::record(
+                    &dirs,
+                    &run.instance_id,
+                    played.as_secs(),
+                    ended_at.as_secs(),
+                ) {
+                    log::warn!("play time: {e}");
+                }
+                // What this process recorded: stretches in servers, worlds and menus.
+                if let Err(e) =
+                    arctic_core::playtime::ingest_game_log(&dirs, &run.instance_id, &run.game_dir)
+                {
+                    log::warn!("play time from the game: {e}");
+                }
+                if run.belongs_to(&self.dirs) {
+                    self.playtime = arctic_core::playtime::Stats::load(&dirs);
                 }
                 let diagnosis = run.exit_diagnosis(code, watchdog);
                 if let Some(d) = &diagnosis {
@@ -789,8 +812,10 @@ impl ArcticApp {
                     }]);
                     let mut report =
                         run.crash_report(diagnosis.as_ref().map_or("", |d| d.title.as_str()), code);
+                    let settings = run.profile_settings(&self.dirs, &self.settings);
                     report.contact = settings.crash_contact.trim().chars().take(80).collect();
-                    self.offer_crash_report(id, report, settings.crash_reports);
+                    let policy = settings.crash_reports;
+                    self.offer_crash_report(id, report, policy);
                 }
                 // Native crashes in several different places point at the computer, not a mod.
                 if let Some(place) = native_place {
@@ -1017,14 +1042,171 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
+    // Creating or switching an app changes the process-wide network proxy.
+    static PROFILE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[cfg(all(unix, feature = "offline-accounts"))]
+    fn start_test_game(
+        app: &mut ArcticApp,
+        instance: &arctic_core::instances::Instance,
+        ctx: &egui::Context,
+    ) -> (LaunchId, std::sync::mpsc::Receiver<GameEvent>) {
+        use arctic_core::launch::{LaunchRequest, prepare_watched};
+        use arctic_core::net::sha1_file;
+        use arctic_core::versions::{VersionEntry, VersionKind};
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        // Prepare from cached vanilla metadata and use a local stand-in for Java. It waits
+        // for a file in its own game folder so the test can choose the order of exit.
+        let dirs = &app.dirs;
+        let version_id = "1.21.1";
+        let version_dir = dirs.version_dir(version_id);
+        let metadata = version_dir.join(format!("{version_id}.json"));
+        let jar = version_dir.join(format!("{version_id}.jar"));
+        let indexes = dirs.assets().join("indexes");
+        let index = indexes.join("profile-test.json");
+        let java = dirs.root().join("test-java");
+        let url = "http://127.0.0.1:1/unused";
+        let jar_data = b"test jar";
+        let index_data = br#"{"objects":{}}"#;
+        fs::create_dir_all(&indexes).unwrap();
+        fs::create_dir_all(&version_dir).unwrap();
+        fs::write(&jar, jar_data).unwrap();
+        fs::write(&index, index_data).unwrap();
+        fs::write(
+            &metadata,
+            serde_json::json!({
+                "id": version_id,
+                "mainClass": "net.minecraft.client.main.Main",
+                "arguments": {"jvm": [], "game": []},
+                "assetIndex": {
+                    "id": "profile-test", "url": url,
+                    "sha1": sha1_file(&index).unwrap(), "size": index_data.len()
+                },
+                "downloads": {
+                    "client": {"url": url, "sha1": sha1_file(&jar).unwrap(), "size": jar_data.len()}
+                },
+                "libraries": []
+            })
+            .to_string(),
+        )
+        .unwrap();
+        if !java.is_file() {
+            fs::write(
+                &java,
+                r#"#!/bin/sh
+if [ "$1" = "-version" ]; then
+    echo 'openjdk version "21"'
+    exit 0
+fi
+i=0
+while [ "$i" -lt 500 ]; do
+    if [ -f .test-exit ]; then
+        exit "$(cat .test-exit)"
+    fi
+    i=$((i + 1))
+    sleep 0.02
+done
+exit 99
+"#,
+            )
+            .unwrap();
+            fs::set_permissions(&java, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+
+        let instance = arctic_core::instances::Instance {
+            java_path: Some(java),
+            arctic_mod: false,
+            performance: false,
+            shaders: false,
+            ..instance.clone()
+        };
+        let version = VersionEntry {
+            id: version_id.into(),
+            kind: VersionKind::Release,
+            url: url.into(),
+            release_time: String::new(),
+            sha1: sha1_file(&metadata).unwrap(),
+        };
+        let account = arctic_core::auth::offline::create("ProfileTest").unwrap();
+        let copy = app.runs.next_copy(dirs, &instance.id);
+        let id = app.runs.start(
+            dirs,
+            &instance.id,
+            version_id,
+            instance.name.clone(),
+            instance.game_dir(dirs),
+        );
+        let launch = prepare_watched(
+            &LaunchRequest {
+                dirs,
+                version: &version,
+                instance: &instance,
+                account: &account,
+                settings: &app.settings,
+                bridge: None,
+                copy,
+                quick_play: None,
+            },
+            &|_| {},
+        )
+        .unwrap();
+        let run = app.runs.get_mut(id).unwrap();
+        run.log_file = Some(launch.plan.log_file.clone());
+        run.java = Some(launch.plan.java_summary());
+        let (tx, rx) = std::sync::mpsc::channel();
+        let game = launch.spawn(move |event| drop(tx.send(event))).unwrap();
+        app.on_launched(id, Ok(game), ctx);
+        (id, rx)
+    }
+
+    #[cfg(all(unix, feature = "offline-accounts"))]
+    fn finish_test_game(
+        app: &mut ArcticApp,
+        id: LaunchId,
+        events: std::sync::mpsc::Receiver<GameEvent>,
+        exit_code: i32,
+        played_secs: u64,
+        ctx: &egui::Context,
+    ) {
+        let game_dir = &app.runs.get(id).unwrap().game_dir;
+        let release = game_dir.join(".test-exit");
+        let staged = release.with_extension("tmp");
+        std::fs::write(&staged, format!("{exit_code}\n")).unwrap();
+        std::fs::rename(staged, release).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let mut event = events
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                .unwrap();
+            if let GameEvent::Exited { code, played, .. } = &mut event {
+                assert_eq!(*code, Some(exit_code));
+                // Exercise playtime accounting without waiting for the minimum session duration.
+                *played = Duration::from_secs(played_secs);
+                app.on_game_event(id, event, ctx);
+                return;
+            }
+            app.on_game_event(id, event, ctx);
+        }
+    }
+
+    #[cfg(all(unix, feature = "offline-accounts"))]
+    fn shared_fov(dirs: &DataDirs) -> Option<String> {
+        arctic_core::storage::load_json::<arctic_core::game_defaults::Defaults>(
+            &dirs.profile_root().join("shared/options.json"),
+        )
+        .unwrap()
+        .and_then(|options| options.values.get("fov").cloned())
+    }
+
     #[test]
     fn switching_profiles_preserves_runs_and_their_write_back_paths() {
         use arctic_core::instances::{self, Loader};
-        use arctic_core::playtime::{GAME_LOG, Stats};
         use arctic_core::profiles::ProfileStore;
         use arctic_core::proxy::{ProxyKind, ProxySettings};
-        use std::fs;
 
+        let _proxy = PROFILE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = tempfile::tempdir().unwrap();
         let root = DataDirs::new(temp.path());
         let mut profiles = ProfileStore::load_or_init(&root).unwrap();
@@ -1077,13 +1259,15 @@ mod tests {
         assert_eq!(proxy_address().and_then(|(_, port)| port), Some(18081));
 
         let instance = instances::create(&launching, "Pack", "1.21.1", Loader::Vanilla).unwrap();
-        let game_dir = instance.game_dir(&launching);
+        #[cfg(all(unix, feature = "offline-accounts"))]
+        let (id, events) = start_test_game(&mut app, &instance, &ctx);
+        #[cfg(not(all(unix, feature = "offline-accounts")))]
         let id = app.runs.start(
             &app.dirs,
             &instance.id,
             "1.21.1",
             instance.name.clone(),
-            game_dir.clone(),
+            instance.game_dir(&launching),
         );
         assert!(app.runs.any_active());
         assert!(app.profile_switch_blocked().is_none());
@@ -1111,61 +1295,190 @@ mod tests {
         let mut frame = ctx.run_ui(egui::RawInput::default(), |ui| app.play_tab(ui));
         frame.textures_delta.clear();
 
-        // Drive the exit handler with files a JVM would have written in the launching profile.
-        let run = app.runs.get_mut(id).unwrap();
-        assert_eq!(run.dirs.profile_root(), launching.profile_root());
-        run.started = SystemTime::now() - Duration::from_secs(60);
-        fs::create_dir_all(game_dir.join("logs")).unwrap();
-        fs::write(game_dir.join("options.txt"), "fov:0.5\n").unwrap();
-        fs::write(game_dir.join(GAME_LOG), r#"{"k":"menu","s":20,"e":40}"#).unwrap();
-        fs::write(
-            game_dir.join("logs/latest.log"),
-            "java.lang.OutOfMemoryError: Java heap space",
-        )
-        .unwrap();
-        // This fixture has no process handle or Launched event to wait for.
-        run.state = RunState::Ended;
-        app.on_game_event(
-            id,
-            GameEvent::Exited {
-                code: Some(1),
-                killed: false,
-            },
-            &ctx,
-        );
+        #[cfg(all(unix, feature = "offline-accounts"))]
+        {
+            use arctic_core::playtime::{GAME_LOG, Stats};
+            use std::fs;
 
-        let run = app.runs.get(id).unwrap();
-        assert!(!run.is_active());
-        let report = run.crash_report.as_ref().unwrap();
-        assert_eq!(report.title, "Minecraft ran out of memory");
-        assert_eq!(report.contact, "test contact");
-        assert!(report.log.contains("logs/latest.log"));
-        let stats = Stats::load(&launching);
-        let entry = stats.of(&instance.id).unwrap();
-        assert_eq!(entry.sessions, 1);
-        assert!(entry.total_secs >= 60);
-        assert_eq!(entry.menu_secs, 20);
-        assert!(!game_dir.join(GAME_LOG).exists());
-        assert!(Stats::load(&other).of(&instance.id).is_none());
-        assert!(app.playtime.of(&instance.id).is_none());
-
-        let write_back = launching.profile_root().join("shared/options.json");
-        let deadline = Instant::now() + Duration::from_secs(2);
-        while !write_back.is_file() && Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        let options: arctic_core::game_defaults::Defaults =
-            arctic_core::storage::load_json(&write_back)
+            let run = app.runs.get(id).unwrap();
+            assert_eq!(run.dirs.profile_root(), launching.profile_root());
+            let game_dir = run.game_dir.clone();
+            let started = run.started;
+            fs::create_dir_all(game_dir.join("logs")).unwrap();
+            fs::write(game_dir.join("options.txt"), "fov:0.5\n").unwrap();
+            fs::write(game_dir.join(GAME_LOG), r#"{"k":"menu","s":20,"e":40}"#).unwrap();
+            let latest = game_dir.join("logs/latest.log");
+            fs::write(&latest, "java.lang.OutOfMemoryError: Java heap space").unwrap();
+            fs::File::options()
+                .write(true)
+                .open(latest)
                 .unwrap()
+                .set_modified(started + Duration::from_secs(1))
                 .unwrap();
-        assert_eq!(options.values.get("fov").map(String::as_str), Some("0.5"));
-        assert!(!other.profile_root().join("shared/options.json").exists());
+            finish_test_game(&mut app, id, events, 1, 60, &ctx);
 
-        app.switch_profile(&launching_id);
-        assert_eq!(app.playtime.of(&instance.id), Some(entry));
+            let run = app.runs.get(id).unwrap();
+            assert!(!run.is_active());
+            let report = run.crash_report.as_ref().unwrap();
+            assert_eq!(report.title, "Minecraft ran out of memory");
+            assert_eq!(report.contact, "test contact");
+            assert!(report.log.contains("logs/latest.log"));
+            let stats = Stats::load(&launching);
+            let entry = stats.of(&instance.id).unwrap();
+            assert_eq!(
+                (entry.sessions, entry.total_secs, entry.menu_secs),
+                (1, 60, 20)
+            );
+            assert!(!game_dir.join(GAME_LOG).exists());
+            assert!(Stats::load(&other).of(&instance.id).is_none());
+            assert!(app.playtime.of(&instance.id).is_none());
+            assert_eq!(shared_fov(&launching).as_deref(), Some("0.5"));
+            assert_eq!(shared_fov(&other), None);
+
+            app.switch_profile(&launching_id);
+            assert_eq!(app.playtime.of(&instance.id), Some(entry));
+        }
         app.switch_profile(&direct_id);
         assert!(app.proxy.active().is_none());
         assert!(proxy_address() == direct);
+    }
+
+    #[cfg(all(unix, feature = "offline-accounts"))]
+    #[test]
+    fn two_copies_keep_writing_to_their_launching_profile_after_switching() {
+        use arctic_core::playtime::{GAME_LOG, Stats};
+        use arctic_core::profiles::ProfileStore;
+        use std::fs;
+
+        let _proxy = PROFILE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = tempfile::tempdir().unwrap();
+        let root = DataDirs::new(temp.path());
+        let mut profiles = ProfileStore::load_or_init(&root).unwrap();
+        let launching_id = profiles.active.clone();
+        let launching = profiles.scoped(&root);
+        let other_id = profiles.create(&root, "Other").unwrap();
+        let other = root.with_profile(&other_id);
+        for dirs in [&launching, &other] {
+            let mut settings = Settings {
+                language: "en".into(),
+                check_updates_on_start: false,
+                onboarded: true,
+                ..Settings::default()
+            };
+            settings.shared.game = true;
+            settings.save(dirs).unwrap();
+        }
+
+        let ctx = egui::Context::default();
+        let cc = eframe::CreationContext::_new_kittest(ctx.clone());
+        let (_tx, rx) = std::sync::mpsc::channel();
+        let mut app = ArcticApp::new(&cc, root, profiles, Default::default(), rx);
+        let instance = app.selected_instance().clone();
+        let (first, first_events) = start_test_game(&mut app, &instance, &ctx);
+        let (second, second_events) = start_test_game(&mut app, &instance, &ctx);
+        let first_run = app.runs.get(first).unwrap();
+        let second_run = app.runs.get(second).unwrap();
+        assert_ne!(
+            first_run.game().unwrap().pid(),
+            second_run.game().unwrap().pid()
+        );
+        assert_ne!(first_run.game_dir, second_run.game_dir);
+        assert_ne!(first_run.log_file, second_run.log_file);
+        for run in [first_run, second_run] {
+            assert!(run.log_file.as_ref().unwrap().starts_with(launching.logs()));
+        }
+        let first_dir = first_run.game_dir.clone();
+        let second_dir = second_run.game_dir.clone();
+
+        app.switch_profile(&other_id);
+        assert_eq!(app.dirs.profile_root(), other.profile_root());
+        assert_eq!(app.selected_instance().id, instance.id);
+        assert!(!app.runs.instance_active(&app.dirs, &instance.id));
+        assert_eq!(app.runs.next_copy(&app.dirs, &instance.id), 0);
+        assert_eq!(
+            app.runs.active().map(|run| run.id).collect::<Vec<_>>(),
+            [first, second]
+        );
+        assert!(app.runs.active().all(|run| run.belongs_to(&launching)));
+
+        fs::write(first_dir.join("options.txt"), "fov:0.5\n").unwrap();
+        fs::write(first_dir.join(GAME_LOG), r#"{"k":"menu","s":20,"e":40}"#).unwrap();
+        finish_test_game(&mut app, first, first_events, 0, 60, &ctx);
+        assert_eq!(shared_fov(&launching).as_deref(), Some("0.5"));
+        assert_eq!(
+            app.runs
+                .active_for(&launching, &instance.id, None)
+                .unwrap()
+                .id,
+            second
+        );
+        assert_eq!(Stats::load(&launching).sessions(), 1);
+
+        fs::write(second_dir.join("options.txt"), "fov:0.75\n").unwrap();
+        fs::write(
+            second_dir.join(GAME_LOG),
+            r#"{"k":"world","n":"Copy","s":20,"e":50}"#,
+        )
+        .unwrap();
+        finish_test_game(&mut app, second, second_events, 0, 45, &ctx);
+        assert!(!app.runs.instance_active(&launching, &instance.id));
+        let stats = Stats::load(&launching);
+        let entry = stats.of(&instance.id).unwrap();
+        assert_eq!((entry.sessions, entry.total_secs), (2, 105));
+        assert_eq!((entry.menu_secs, entry.in_world_secs), (20, 30));
+        assert_eq!(shared_fov(&launching).as_deref(), Some("0.75"));
+        assert_eq!(shared_fov(&other), None);
+        assert!(Stats::load(&other).of(&instance.id).is_none());
+        assert!(app.playtime.of(&instance.id).is_none());
+
+        app.switch_profile(&launching_id);
+        assert_eq!(app.playtime.of(&instance.id), Some(entry));
+    }
+
+    #[test]
+    fn unreadable_game_log_keeps_the_process_output_available() {
+        let dir = tempfile::tempdir().unwrap();
+        // Reading a directory as a file fails on every platform.
+        std::fs::create_dir_all(dir.path().join("logs/latest.log")).unwrap();
+        let mut runs = Runs::default();
+        let dirs = DataDirs::new(dir.path());
+        let id = runs.start(
+            &dirs,
+            "vanilla",
+            "1.8.9",
+            "Vanilla".into(),
+            dir.path().into(),
+        );
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::UNIX_EPOCH;
+        run.push_log([LogLine {
+            level: Level::Error,
+            text: "output from this process".into(),
+        }]);
+        assert!(latest_log_tail(dir.path(), run.started).is_empty());
+        assert!(run.crash_text().contains("output from this process"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn latest_log_held_by_another_process_is_skipped() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("logs")).unwrap();
+        let path = dir.path().join("logs/latest.log");
+        std::fs::write(&path, "game output\n").unwrap();
+        let lock = std::fs::File::options()
+            .read(true)
+            .share_mode(0)
+            .open(path)
+            .unwrap();
+        assert!(latest_log_tail(dir.path(), SystemTime::UNIX_EPOCH).is_empty());
+        drop(lock);
+        assert_eq!(
+            latest_log_tail(dir.path(), SystemTime::UNIX_EPOCH),
+            ["game output"]
+        );
     }
 
     #[test]
@@ -1687,7 +2000,7 @@ mod tests {
     }
 
     #[test]
-    fn one_run_per_instance_and_old_logs_make_way() {
+    fn old_logs_make_way_when_an_instance_launches_again() {
         let dirs = DataDirs::new(PathBuf::new());
         let mut runs = Runs::default();
         let a = runs.start(
@@ -1764,6 +2077,29 @@ mod tests {
             a,
             "an older copy still running counts"
         );
+    }
+
+    #[test]
+    fn same_instance_stays_active_until_both_copies_exit() {
+        let dirs = DataDirs::new(PathBuf::new());
+        let mut runs = Runs::default();
+        let a = runs.start(&dirs, "vanilla", "1.8.9", "Vanilla".into(), PathBuf::new());
+        let b = runs.start(&dirs, "vanilla", "1.8.9", "Vanilla".into(), PathBuf::new());
+        assert_ne!(a, b);
+        assert_eq!(runs.active().count(), 2);
+        assert_eq!(runs.next_copy(&dirs, "vanilla"), 2);
+
+        runs.get_mut(a).unwrap().state = RunState::Ended;
+        assert!(runs.instance_active(&dirs, "vanilla"));
+        assert_eq!(
+            runs.active_for(&dirs, "vanilla", Some("1.8.9")).unwrap().id,
+            b
+        );
+        assert_eq!(runs.next_copy(&dirs, "vanilla"), 2);
+
+        runs.get_mut(b).unwrap().state = RunState::Ended;
+        assert!(!runs.instance_active(&dirs, "vanilla"));
+        assert_eq!(runs.next_copy(&dirs, "vanilla"), 0);
     }
 
     #[test]

@@ -154,7 +154,7 @@
   "play.pick_an_instance_and_jump_in": "Выберите сборку и вперёд.",
   "play.play": "Играть",
   "play.play_2": "Играть в {name}",
-  "play.play_another_copy_switch_account_first_for_a": "Запустить ещё одну копию (для второго игрока сначала смените аккаунт)",
+  "play.play_another_copy": "Запустить ещё одну копию",
   "play.play_that_instance_once_first": "Сначала запустите эту сборку один раз.",
   "play.play_with_the_arctic_client": "Играть с Arctic Client",
   "play.played_session_last.few": "Сыграно {format_duration} · {n} сессии · последняя {value2}",

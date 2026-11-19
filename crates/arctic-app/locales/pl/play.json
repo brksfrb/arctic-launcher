@@ -154,7 +154,7 @@
   "play.pick_an_instance_and_jump_in": "Wybierz instancję i wskakuj.",
   "play.play": "Graj",
   "play.play_2": "Graj: {name}",
-  "play.play_another_copy_switch_account_first_for_a": "Uruchom kolejną kopię (dla drugiego gracza najpierw zmień konto)",
+  "play.play_another_copy": "Uruchom kolejną kopię",
   "play.play_that_instance_once_first": "Najpierw zagraj raz w tę instancję.",
   "play.play_with_the_arctic_client": "Graj z Arctic Client",
   "play.played_session_last.few": "Grano {format_duration} · {n} sesje · ostatnio {value2}",

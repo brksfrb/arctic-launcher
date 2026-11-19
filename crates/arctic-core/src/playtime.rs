@@ -157,7 +157,7 @@ pub fn record(dirs: &DataDirs, instance_id: &str, secs: u64, now: u64) -> Result
     let entry = stats.instances.entry(instance_id.to_owned()).or_default();
     entry.total_secs += secs;
     entry.sessions += 1;
-    entry.last_played = now;
+    entry.last_played = entry.last_played.max(now);
     save_json(&path(dirs), &stats)
 }
 
@@ -284,6 +284,39 @@ mod tests {
         assert_eq!(Stats::load(&default).total_secs(), 180);
         assert_eq!(Stats::load(&other).total_secs(), 240);
         assert_eq!(Stats::load(&root).total_secs(), 60);
+    }
+
+    #[test]
+    fn overlapping_sessions_add_each_process_and_its_own_stretches() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        std::fs::write(
+            first.path().join(GAME_LOG),
+            "{\"k\":\"menu\",\"s\":100,\"e\":170}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            second.path().join(GAME_LOG),
+            "{\"k\":\"world\",\"n\":\"Test\",\"s\":110,\"e\":155}\n",
+        )
+        .unwrap();
+
+        // The later exit reaches the UI first because the other watcher is still diagnosing.
+        record(&dirs, "vanilla", 70, 170).unwrap();
+        assert_eq!(ingest_game_log(&dirs, "vanilla", first.path()).unwrap(), 1);
+        assert!(second.path().join(GAME_LOG).exists());
+        record(&dirs, "vanilla", 45, 155).unwrap();
+        assert_eq!(ingest_game_log(&dirs, "vanilla", second.path()).unwrap(), 1);
+
+        let stats = Stats::load(&dirs);
+        let entry = stats.of("vanilla").unwrap();
+        assert_eq!(
+            (entry.sessions, entry.total_secs, entry.last_played),
+            (2, 115, 170)
+        );
+        assert_eq!((entry.menu_secs, entry.in_world_secs), (70, 45));
     }
 
     #[test]
