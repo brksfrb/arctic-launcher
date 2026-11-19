@@ -154,7 +154,7 @@
   "play.pick_an_instance_and_jump_in": "Kies een instantie en spring erin.",
   "play.play": "Spelen",
   "play.play_2": "{name} spelen",
-  "play.play_another_copy_switch_account_first_for_a": "Nog een kopie spelen (wissel eerst van account voor een tweede speler)",
+  "play.play_another_copy": "Nog een exemplaar starten",
   "play.play_that_instance_once_first": "Speel die instantie eerst één keer.",
   "play.play_with_the_arctic_client": "Spelen met de Arctic Client",
   "play.played_session_last.one": "{format_duration} gespeeld · 1 sessie · laatst {value2}",

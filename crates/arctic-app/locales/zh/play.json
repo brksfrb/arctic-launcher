@@ -154,7 +154,7 @@
   "play.pick_an_instance_and_jump_in": "选一个实例，开始吧。",
   "play.play": "开始游戏",
   "play.play_2": "游玩 {name}",
-  "play.play_another_copy_switch_account_first_for_a": "再开一份游戏（第二位玩家请先切换账户）",
+  "play.play_another_copy": "启动另一个副本",
   "play.play_that_instance_once_first": "请先运行一次那个实例。",
   "play.play_with_the_arctic_client": "使用 Arctic 客户端游玩",
   "play.played_session_last.one": "已游玩 {format_duration} · 1 次 · 最近 {value2}",

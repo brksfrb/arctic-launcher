@@ -8,10 +8,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use super::LaunchPlan;
 use super::logparse::{LogLine, LogParser};
+use super::session::GameSession;
 use super::{priority, runtime_repair};
 use crate::Result;
 use crate::error::IoContext;
@@ -30,7 +31,12 @@ pub enum GameEvent {
     WindowReady,
     /// The process ended. `killed` means the launcher requested a force close;
     /// its nonzero exit code must not be treated as a crash.
-    Exited { code: Option<i32>, killed: bool },
+    Exited {
+        code: Option<i32>,
+        killed: bool,
+        played: Duration,
+        ended_at: SystemTime,
+    },
     /// Parsed output lines (one raw line may expand to several).
     Output(Vec<LogLine>),
 }
@@ -40,11 +46,21 @@ pub enum GameEvent {
 pub struct GameHandle {
     pid: u32,
     kill: Arc<AtomicBool>,
+    game_dir: PathBuf,
+    started_at: SystemTime,
 }
 
 impl GameHandle {
     pub fn pid(&self) -> u32 {
         self.pid
+    }
+
+    pub fn game_dir(&self) -> &Path {
+        &self.game_dir
+    }
+
+    pub fn started_at(&self) -> SystemTime {
+        self.started_at
     }
 
     /// End the game now, without waiting for the watcher (the launcher is
@@ -83,9 +99,20 @@ pub fn spawn(
     plan: &LaunchPlan,
     on_event: impl Fn(GameEvent) + Send + Sync + 'static,
 ) -> Result<GameHandle> {
+    spawn_with_session(plan, None, on_event)
+}
+
+pub(super) fn spawn_with_session(
+    plan: &LaunchPlan,
+    session: Option<GameSession>,
+    on_event: impl Fn(GameEvent) + Send + Sync + 'static,
+) -> Result<GameHandle> {
     let spawn_started = std::time::Instant::now();
     log::info!("launching: {}", plan.redacted_command());
     let runtime_lock = lock_launch_runtime(plan)?;
+    if let Some(parent) = plan.log_file.parent() {
+        std::fs::create_dir_all(parent).at(parent)?;
+    }
     rotate_game_log(&plan.log_file);
     let log = Arc::new(Mutex::new(File::create(&plan.log_file).at(&plan.log_file)?));
     let (args, argfile) = command_args(plan)?;
@@ -185,6 +212,8 @@ pub fn spawn(
     let handle = GameHandle {
         pid: child.id(),
         kill: kill.clone(),
+        game_dir: plan.game_dir.clone(),
+        started_at: launched_at,
     };
     let game_dir = plan.game_dir.clone();
     let managed_runtime = plan.managed_runtime.clone();
@@ -212,8 +241,13 @@ pub fn spawn(
             }
         };
         let runtime = started.elapsed();
-        #[cfg(windows)]
-        let exited_at = std::time::SystemTime::now();
+        let exited_at = SystemTime::now();
+        // Save settings before slower crash diagnostics or pipe drainage can reorder exits.
+        if let Some(session) = session
+            && let Err(e) = session.finish()
+        {
+            log::warn!("saving game settings: {e}");
+        }
         drain_readers([out_reader, err_reader].into_iter().flatten().collect());
         killed |= kill.load(Ordering::Relaxed);
         if let Some(c) = code {
@@ -312,7 +346,12 @@ pub fn spawn(
                 text: evidence,
             }]));
         }
-        on_event(GameEvent::Exited { code, killed });
+        on_event(GameEvent::Exited {
+            code,
+            killed,
+            played: runtime,
+            ended_at: exited_at,
+        });
     });
     Ok(handle)
 }
@@ -405,6 +444,9 @@ fn exit_code(status: &std::process::ExitStatus) -> Option<i32> {
 pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     log::info!("launching (detached): {}", plan.redacted_command());
     let runtime_lock = lock_launch_runtime(plan)?;
+    if let Some(parent) = plan.log_file.parent() {
+        std::fs::create_dir_all(parent).at(parent)?;
+    }
     rotate_game_log(&plan.log_file);
     let mut log = File::create(&plan.log_file).at(&plan.log_file)?;
     let (exe, versions) = game_exe(plan);
@@ -805,7 +847,7 @@ mod tests {
     fn process_exit(rx: &std::sync::mpsc::Receiver<GameEvent>) -> (Option<i32>, bool) {
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
         loop {
-            if let GameEvent::Exited { code, killed } = rx
+            if let GameEvent::Exited { code, killed, .. } = rx
                 .recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
                 .expect("the watcher must report an exit")
             {
@@ -825,6 +867,23 @@ mod tests {
         let log = std::fs::read_to_string(dir.path().join("game.log")).unwrap();
         assert!(log.contains("launcher force-close requested"));
         assert!(!log.contains("same-runtime java -version"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn force_close_only_stops_the_requested_process() {
+        let (_first_dir, first, first_rx) = test_process("exec sleep 30");
+        let (_second_dir, second, second_rx) = test_process("exec sleep 30");
+        assert_ne!(first.pid(), second.pid());
+        first.kill();
+        assert_eq!(process_exit(&first_rx), (Some(137), true));
+        assert!(
+            second_rx
+                .try_iter()
+                .all(|event| !matches!(event, GameEvent::Exited { .. }))
+        );
+        second.kill();
+        assert_eq!(process_exit(&second_rx), (Some(137), true));
     }
 
     #[cfg(unix)]
