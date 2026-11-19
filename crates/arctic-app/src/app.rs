@@ -1241,6 +1241,7 @@ impl ArcticApp {
             Event::ChatSent(result) => self.on_chat_sent(result),
             Event::ChatImage(id, result) => self.on_chat_image(ctx, id, result),
             Event::ChatNew(after, result) => self.on_chat_new(after, result),
+            Event::PublicServerIcon(address, png) => self.on_public_server_icon(ctx, address, png),
             Event::PublicServers(list) => self.on_public_servers(list),
             Event::ServerSubmitted(result) => self.on_server_submitted(result),
             Event::Bedrock(e) => self.on_bedrock_event(e),

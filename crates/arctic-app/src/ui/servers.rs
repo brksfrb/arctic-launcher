@@ -65,7 +65,7 @@ pub struct ServersUi {
     list: Option<Outcome<Vec<Server>>>,
     status: HashMap<String, Ping>,
     /// Image URI for each address (the live favicon, else the cached one).
-    icons: HashMap<String, String>,
+    pub(super) icons: HashMap<String, String>,
     refreshed_at: f64,
     /// The row being dragged.
     drag: Option<Drag>,
@@ -456,20 +456,7 @@ impl ArcticApp {
                     );
                 }
             }
-            let (rect, _) = ui.allocate_exact_size(vec2(ICON, ICON), egui::Sense::hover());
-            match self.servers.icons.get(&server.address) {
-                Some(uri) => {
-                    egui::Image::new(uri.clone())
-                        .corner_radius(CornerRadius::same(6))
-                        .texture_options(egui::TextureOptions::NEAREST)
-                        .paint_at(ui, rect);
-                }
-                None => {
-                    ui.painter()
-                        .rect_filled(rect, CornerRadius::same(6), p.surface_hover);
-                    icons::draw(ui.painter(), Icon::Friends, rect.shrink(11.0), p.muted);
-                }
-            }
+            server_icon(ui, p, self.servers.icons.get(&server.address));
             ui.add_space(4.0);
             ui.vertical(|ui| {
                 ui.set_max_width((ui.available_width() - 190.0).max(120.0));
@@ -609,7 +596,13 @@ impl ArcticApp {
                 if let Some(png) = &server.icon
                     && !self.servers.icons.contains_key(&server.address)
                 {
-                    self.set_server_icon(ctx, &server.address, png.clone());
+                    set_server_icon(
+                        ctx,
+                        &mut self.servers.icons,
+                        "saved",
+                        &server.address,
+                        png.clone(),
+                    );
                 }
             }
             let known: std::collections::HashSet<&String> =
@@ -632,7 +625,7 @@ impl ArcticApp {
         let ping = match status {
             Ok(status) => {
                 if let Some(png) = &status.icon {
-                    self.set_server_icon(ctx, &address, png.clone());
+                    set_server_icon(ctx, &mut self.servers.icons, "saved", &address, png.clone());
                 }
                 Ping::Up(status)
             }
@@ -640,16 +633,43 @@ impl ArcticApp {
         };
         self.servers.status.insert(address, ping);
     }
+}
 
-    /// One image URI per address, replaced (not added to) on each refresh.
-    fn set_server_icon(&mut self, ctx: &egui::Context, address: &str, png: Vec<u8>) {
-        use std::hash::{Hash, Hasher};
-        let mut h = std::collections::hash_map::DefaultHasher::new();
-        address.hash(&mut h);
-        let uri = format!("bytes://server/{:016x}.png", h.finish());
-        ctx.forget_image(&uri);
-        ctx.include_bytes(uri.clone(), png);
-        self.servers.icons.insert(address.to_owned(), uri);
+/// One image URI per address and view, replaced on refresh.
+pub(super) fn set_server_icon(
+    ctx: &egui::Context,
+    icons: &mut HashMap<String, String>,
+    view: &str,
+    address: &str,
+    png: Vec<u8>,
+) {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    address.hash(&mut h);
+    let uri = format!("bytes://server/{view}/{:016x}.png", h.finish());
+    ctx.forget_image(&uri);
+    ctx.include_bytes(uri.clone(), png);
+    icons.insert(address.to_owned(), uri);
+}
+
+pub(super) fn server_icon(ui: &mut egui::Ui, p: &crate::theme::Palette, uri: Option<&String>) {
+    let (rect, _) = ui.allocate_exact_size(vec2(ICON, ICON), egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        if let Some(uri) = uri {
+            let image =
+                egui::Image::new(uri.clone()).texture_options(egui::TextureOptions::NEAREST);
+            if let Ok(egui::load::TexturePoll::Ready { texture }) =
+                image.load_for_size(ui.ctx(), rect.size())
+            {
+                egui::Image::from_texture(texture)
+                    .corner_radius(CornerRadius::same(6))
+                    .paint_at(ui, rect);
+                return;
+            }
+        }
+        ui.painter()
+            .rect_filled(rect, CornerRadius::same(6), p.surface_hover);
+        icons::draw(ui.painter(), Icon::Friends, rect.shrink(11.0), p.muted);
     }
 }
 
