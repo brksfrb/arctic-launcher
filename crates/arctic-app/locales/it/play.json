@@ -154,7 +154,7 @@
   "play.pick_an_instance_and_jump_in": "Scegli un'istanza e parti.",
   "play.play": "Gioca",
   "play.play_2": "Gioca a {name}",
-  "play.play_another_copy_switch_account_first_for_a": "Avvia un'altra copia (cambia prima account per un secondo giocatore)",
+  "play.play_another_copy": "Avvia un’altra copia",
   "play.play_that_instance_once_first": "Gioca prima una volta a quell'istanza.",
   "play.play_with_the_arctic_client": "Gioca con l'Arctic Client",
   "play.played_session_last.one": "Giocato {format_duration} · 1 sessione · ultima {value2}",

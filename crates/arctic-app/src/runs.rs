@@ -1,7 +1,5 @@
-//! Games started from the launcher. Several can run at once, one per
-//! instance (two copies of one instance would fight over its worlds and
-//! files); each keeps its own log, can be stopped on its own, and gets its
-//! crash explained when it ends badly.
+//! Games started from the launcher, tracked by launch ID. Each copy keeps its
+//! own log, can be stopped on its own, and gets its crash explained when it ends badly.
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -46,6 +44,7 @@ pub enum RunState {
 pub struct Run {
     pub id: LaunchId,
     pub instance_id: String,
+    copy: u32,
     /// The Minecraft version it runs (Vanilla can run several at once).
     pub version: String,
     /// "Vanilla · 26.3", for lists and the Logs tab.
@@ -55,6 +54,7 @@ pub struct Run {
     /// Bumped whenever `log` changes (for the Logs tab cache).
     pub log_rev: u64,
     pub game_dir: PathBuf,
+    pub log_file: Option<PathBuf>,
     started: SystemTime,
     /// Game events that overtook their `Launched` event.
     early: Vec<GameEvent>,
@@ -507,11 +507,13 @@ impl Runs {
         game_dir: PathBuf,
     ) -> LaunchId {
         self.next_id += 1;
+        let copy = self.next_copy(instance_id);
         self.list
             .retain(|r| r.is_active() || r.instance_id != instance_id);
         self.list.push(Run {
             id: self.next_id,
             instance_id: instance_id.to_owned(),
+            copy,
             version: version.to_owned(),
             title,
             state: RunState::Preparing {
@@ -524,6 +526,7 @@ impl Runs {
             log: VecDeque::new(),
             log_rev: 0,
             game_dir,
+            log_file: None,
             started: SystemTime::now(),
             early: Vec::new(),
             crash_report: None,
@@ -560,6 +563,21 @@ impl Runs {
         self.list.iter().filter(|r| r.is_active())
     }
 
+    pub fn next_copy(&self, instance_id: &str) -> u32 {
+        let mut active = self.active().filter(|r| r.instance_id == instance_id);
+        if active.next().is_none() {
+            return 0;
+        }
+        // A count can't identify a slot: an earlier copy may have finished.
+        (1..)
+            .find(|copy| {
+                !self
+                    .active()
+                    .any(|r| r.instance_id == instance_id && r.copy == *copy)
+            })
+            .expect("a free game copy slot")
+    }
+
     pub fn any_active(&self) -> bool {
         self.active().next().is_some()
     }
@@ -570,7 +588,7 @@ impl Runs {
     }
 
     pub fn instance_active(&self, instance_id: &str) -> bool {
-        self.for_instance(instance_id).is_some_and(Run::is_active)
+        self.active_for(instance_id, None).is_some()
     }
 
     /// The newest run, for "View logs" defaults.
@@ -615,6 +633,7 @@ impl ArcticApp {
                 let Some(run) = self.runs.get_mut(id) else {
                     return;
                 };
+                run.started = game.started_at();
                 run.state = RunState::Starting {
                     game,
                     stage: Stage::Java,
@@ -648,11 +667,10 @@ impl ArcticApp {
         }
         match event {
             GameEvent::WindowReady => {
-                if let RunState::Starting { game, .. } =
-                    std::mem::replace(&mut run.state, RunState::Ended)
-                {
-                    run.state = RunState::Running { game };
-                }
+                let RunState::Starting { game, .. } = &run.state else {
+                    return;
+                };
+                run.state = RunState::Running { game: game.clone() };
                 if self.settings.on_game_start == GameStartAction::Minimize
                     && !self.minimized_for_game
                 {
@@ -667,17 +685,18 @@ impl ArcticApp {
                 }
                 run.push_log(lines);
             }
-            GameEvent::Exited { code, killed } => {
+            GameEvent::Exited {
+                code,
+                killed,
+                played,
+                ended_at,
+            } => {
+                if run.game().is_none() {
+                    return;
+                }
                 let code = run.reported_exit_code(code, killed);
                 run.state = RunState::Ended;
                 self.bridge.forget_launch(id);
-                // What the game changed goes to the profile's other instances.
-                let (dirs, shared) = (self.dirs.clone(), self.settings.shared);
-                std::thread::spawn(move || {
-                    if let Err(e) = arctic_core::shared::sync(&dirs, shared, None) {
-                        log::warn!("sharing between instances: {e}");
-                    }
-                });
                 // The game threw its unfinished recording away itself unless it crashed or
                 // was killed; either way nothing is writing it now (unless another copy of
                 // the instance still runs in the same folder).
@@ -698,26 +717,24 @@ impl ArcticApp {
                 let watchdog = run.shutdown_watchdog_fired();
                 let title = run.title.clone();
                 let instance_id = run.instance_id.clone();
-                // Time played: from the start to the exit, for games that really started.
-                if let Ok(played) = run.started.elapsed() {
-                    if let Err(e) = arctic_core::playtime::record(
-                        &self.dirs,
-                        &instance_id,
-                        played.as_secs(),
-                        arctic_core::auth::now_secs(),
-                    ) {
-                        log::warn!("play time: {e}");
-                    }
-                    // What the game itself recorded: stretches in servers, worlds and menus.
-                    if let Err(e) = arctic_core::playtime::ingest_game_log(
-                        &self.dirs,
-                        &instance_id,
-                        &run.game_dir,
-                    ) {
-                        log::warn!("play time from the game: {e}");
-                    }
-                    self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
+                let ended_at = ended_at
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default();
+                if let Err(e) = arctic_core::playtime::record(
+                    &self.dirs,
+                    &instance_id,
+                    played.as_secs(),
+                    ended_at.as_secs(),
+                ) {
+                    log::warn!("play time: {e}");
                 }
+                // What this process recorded: stretches in servers, worlds and menus.
+                if let Err(e) =
+                    arctic_core::playtime::ingest_game_log(&self.dirs, &instance_id, &run.game_dir)
+                {
+                    log::warn!("play time from the game: {e}");
+                }
+                self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
                 let diagnosis = run.exit_diagnosis(code, watchdog);
                 if let Some(d) = &diagnosis {
                     run.push_log([LogLine {
@@ -980,6 +997,45 @@ impl Tasks {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn unreadable_game_log_keeps_the_process_output_available() {
+        let dir = tempfile::tempdir().unwrap();
+        // Reading a directory as a file fails on every platform.
+        std::fs::create_dir_all(dir.path().join("logs/latest.log")).unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("vanilla", "1.8.9", "Vanilla".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::UNIX_EPOCH;
+        run.push_log([LogLine {
+            level: Level::Error,
+            text: "output from this process".into(),
+        }]);
+        assert!(latest_log_tail(dir.path(), run.started).is_empty());
+        assert!(run.crash_text().contains("output from this process"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn latest_log_held_by_another_process_is_skipped() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("logs")).unwrap();
+        let path = dir.path().join("logs/latest.log");
+        std::fs::write(&path, "game output\n").unwrap();
+        let lock = std::fs::File::options()
+            .read(true)
+            .share_mode(0)
+            .open(path)
+            .unwrap();
+        assert!(latest_log_tail(dir.path(), SystemTime::UNIX_EPOCH).is_empty());
+        drop(lock);
+        assert_eq!(
+            latest_log_tail(dir.path(), SystemTime::UNIX_EPOCH),
+            ["game output"]
+        );
+    }
 
     #[test]
     fn latest_log_html_body_does_not_evict_startup_error() {
@@ -1484,7 +1540,7 @@ mod tests {
     }
 
     #[test]
-    fn one_run_per_instance_and_old_logs_make_way() {
+    fn old_logs_make_way_when_an_instance_launches_again() {
         let mut runs = Runs::default();
         let a = runs.start("vanilla", "26.3", "Vanilla · 26.3".into(), PathBuf::new());
         let b = runs.start("pack", "1.21.6", "Pack · 1.21.6".into(), PathBuf::new());
@@ -1523,6 +1579,25 @@ mod tests {
             a,
             "an older copy still running counts"
         );
+    }
+
+    #[test]
+    fn same_instance_stays_active_until_both_copies_exit() {
+        let mut runs = Runs::default();
+        let a = runs.start("vanilla", "1.8.9", "Vanilla".into(), PathBuf::new());
+        let b = runs.start("vanilla", "1.8.9", "Vanilla".into(), PathBuf::new());
+        assert_ne!(a, b);
+        assert_eq!(runs.active().count(), 2);
+        assert_eq!(runs.next_copy("vanilla"), 2);
+
+        runs.get_mut(a).unwrap().state = RunState::Ended;
+        assert!(runs.instance_active("vanilla"));
+        assert_eq!(runs.active_for("vanilla", Some("1.8.9")).unwrap().id, b);
+        assert_eq!(runs.next_copy("vanilla"), 2);
+
+        runs.get_mut(b).unwrap().state = RunState::Ended;
+        assert!(!runs.instance_active("vanilla"));
+        assert_eq!(runs.next_copy("vanilla"), 0);
     }
 
     #[test]

@@ -424,6 +424,8 @@ impl Tasks {
         settings: &Settings,
         start: StartAt,
     ) -> Result<(GameHandle, PathBuf, String)> {
+        // Launches can share installer caches, and a new copy snapshots the instance's mods.
+        let _content = self.content_lock();
         let tracker = Mutex::new(LaunchProgress::new(LaunchSteps::from_instance(instance)));
         let progress = |p: ProgressInfo| {
             let percent = tracker
@@ -453,9 +455,11 @@ impl Tasks {
             copy: start.copy,
             quick_play: start.quick_play,
         };
-        let plan = launch::prepare(&req, &progress)?;
+        let prepared = launch::prepare_watched(&req, &progress)?;
+        let log_file = prepared.plan.log_file.clone();
+        let java = prepared.plan.java_summary();
         let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
-        let game = launch::spawn(&plan, move |event| {
+        let game = prepared.spawn(move |event| {
             let _ = tx.send(Event::Game(id, event));
             ctx.request_repaint();
         })?;
@@ -472,7 +476,7 @@ impl Tasks {
                 ..ProgressSnapshot::default()
             },
         ));
-        Ok((game, plan.log_file.clone(), plan.java_summary()))
+        Ok((game, log_file, java))
     }
 
     pub fn login_device_code(&self, attempt: LoginAttempt, cancel: Arc<AtomicBool>) {
