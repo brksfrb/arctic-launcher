@@ -62,12 +62,7 @@ impl ArcticApp {
                     ui.label(RichText::new(Self::instance_subtitle(&instance)).color(p.muted));
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let idle = !self.runs.instance_active(id);
-                    let play = ui
-                        .add_enabled_ui(idle, |ui| {
-                            widgets::button(ui, p, Some(Icon::Play), t!("instances.play"), true)
-                        })
-                        .inner;
+                    let play = widgets::button(ui, p, Some(Icon::Play), t!("instances.play"), true);
                     if play.clicked() {
                         self.settings.last_instance =
                             (!instance.is_default()).then(|| id.to_owned());
