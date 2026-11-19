@@ -2,11 +2,13 @@
 
 Usage (from anywhere, JDK 25 on JAVA_HOME):
     python mod/build.py [version ...] [--jobs N] [--pack] [--offline]
+    python mod/build.py --verify-pack
 With versions, only those targets are built. Each jar goes to dist/, and
 then all of them are packed into dist/arctic-client.pack, which is what the
 launcher embeds (and what's committed; the jars themselves aren't).
 `--pack` only packs the jars already in dist/. `--offline` builds from
-Gradle's cache (when a Maven is refusing Gradle).
+Gradle's cache (when a Maven is refusing Gradle). A full build records the
+client source fingerprint that `--verify-pack` requires before release.
 
 Every target is its own Gradle build (its own Minecraft jar and mappings),
 and Gradle won't run two builds in one folder, so up to N (default 3) run
@@ -17,6 +19,7 @@ version), compressed together with LZMA. It's about a twentieth of the
 jars' size; the launcher rebuilds the one jar a game needs from it.
 """
 import concurrent.futures
+import filecmp
 import hashlib
 import json
 import lzma
@@ -58,7 +61,7 @@ def mirror(src, dst):
             if d.exists() and not d.is_dir():
                 d.unlink()
             mirror(s, d)
-        elif not d.exists() or d.stat().st_size != s.stat().st_size or d.stat().st_mtime < s.stat().st_mtime:
+        elif not d.is_file() or not filecmp.cmp(s, d, shallow=False):
             shutil.copy2(s, d)
 
 
@@ -112,7 +115,44 @@ def build(targets, jobs):
         return [f for f in pool.map(run, targets) if f]
 
 
-def pack(targets):
+def source_digest(targets):
+    projects = {t.get("project", "fabric") for t in targets}
+    roots = [MOD / "core", *(MOD / "versions" / project for project in projects)]
+    paths = [MOD / "targets.json", MOD / "build.py", *list((MOD / "gradle" / "wrapper").iterdir())]
+    for root in roots:
+        paths.extend(root.glob("*.gradle"))
+        paths.extend(root.glob("*.gradle.kts"))
+        paths.extend(root.glob("gradle.properties"))
+        paths.extend((root / "src" / "main").rglob("*"))
+    paths.extend((MOD / "versions" / "fabric13" / "mappings").rglob("*"))
+    paths.extend((MOD / "versions" / "legacy" / "src" / "forge").rglob("*"))
+    paths.extend((MOD / "forge" / "shim").rglob("*"))
+    paths.extend((MOD / "forge" / "tool").glob("*.java"))
+    paths.extend((MOD / "forge").glob("*.py"))
+    digest = hashlib.sha256()
+    for name in sorted(path.relative_to(MOD).as_posix() for path in paths if path.is_file()):
+        digest.update(name.encode("utf-8") + b"\0")
+        digest.update(hashlib.sha256((MOD / name).read_bytes()).digest())
+    return digest.hexdigest()
+
+
+def verify_pack(targets):
+    try:
+        raw = lzma.decompress(PACK.read_bytes())
+        if not raw.startswith(MAGIC):
+            raise ValueError("bad pack header")
+        start = len(MAGIC) + 4
+        size, = struct.unpack_from("<I", raw, len(MAGIC))
+        index = json.loads(raw[start:start + size])
+        expected = {t["build"] for t in targets} | {"forge-1.8.9"}
+        if set(index["jars"]) != expected or index.get("source_sha256") != source_digest(targets):
+            raise ValueError("the pack does not match this checkout's client sources and targets")
+    except (OSError, ValueError, KeyError, struct.error, lzma.LZMAError) as error:
+        sys.exit(f"{PACK.name}: {error}. Run python mod/build.py and commit the rebuilt pack.")
+    print(f"{PACK.name} matches all {len(expected)} client targets and current sources")
+
+
+def pack(targets, fingerprint=None):
     """Layout (before LZMA): MAGIC, u32 index length, the JSON index, then the
     files. Index: {"jars": {build: [[name, file number or -1 for a folder], ...]},
     "sizes": [bytes of each file]}."""
@@ -140,7 +180,13 @@ def pack(targets):
                     sizes.append(len(data))
                 entries.append([info.filename, numbers[key]])
         jars[version] = entries
-    index = json.dumps({"jars": jars, "sizes": sizes}, separators=(",", ":"), sort_keys=True).encode()
+    index = {"jars": jars, "sizes": sizes}
+    if fingerprint is not None:
+        expected = {t["build"] for t in targets} | {"forge-1.8.9"}
+        if set(jars) != expected:
+            sys.exit("Cannot write a release pack with missing jars")
+        index["source_sha256"] = fingerprint
+    index = json.dumps(index, separators=(",", ":"), sort_keys=True).encode()
     raw = MAGIC + struct.pack("<I", len(index)) + index + b"".join(files)
     packed = lzma.compress(raw, format=lzma.FORMAT_ALONE, preset=9 | lzma.PRESET_EXTREME)
     PACK.write_bytes(packed)
@@ -151,6 +197,9 @@ def pack(targets):
 def main() -> None:
     targets = json.loads((MOD / "targets.json").read_text(encoding="utf-8"))
     args = sys.argv[1:]
+    if args == ["--verify-pack"]:
+        verify_pack(targets)
+        return
     jobs = 3
     if "--jobs" in args:
         at = args.index("--jobs")
@@ -161,6 +210,7 @@ def main() -> None:
     if "--offline" in args:
         OFFLINE.append("--offline")
     wanted = {a for a in args if a not in ("--pack", "--offline")}
+    fingerprint = source_digest(targets) if not wanted and not only_pack else None
     if not only_pack:
         chosen = [t for t in targets if not wanted or t["build"] in wanted]
         started = time.time()
@@ -174,7 +224,9 @@ def main() -> None:
             forge = subprocess.run([sys.executable, str(MOD / "forge" / "build_forge.py"), *OFFLINE], cwd=MOD)
             if forge.returncode != 0:
                 sys.exit(1)
-    pack(targets)
+    if fingerprint is not None and fingerprint != source_digest(targets):
+        sys.exit("Client sources changed during the build. Rebuild before packing.")
+    pack(targets, fingerprint)
 
 
 if __name__ == "__main__":
