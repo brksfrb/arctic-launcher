@@ -76,9 +76,8 @@ impl Tasks {
     /// Load the public cape and cosmetic catalog for browsing without an account.
     pub fn arctic_catalog(&self) {
         self.run(|t| {
-            let base = cosmetics::base_url();
             let result = t
-                .load_catalog_blocking(&base, Look::default())
+                .load_catalog_blocking(Look::default())
                 .map_err(|e| e.to_string());
             t.send(Event::ArcticCatalog(result));
         });
@@ -237,16 +236,18 @@ impl Tasks {
             Some(new) => cosmetics::set_look(&base, token, new),
             None => cosmetics::my_look(&base, token),
         })?;
-        self.load_catalog_blocking(&base, look)
+        self.load_catalog_blocking(look)
     }
 
-    fn load_catalog_blocking(&self, base: &str, look: Look) -> Result<ArcticState> {
-        let presets = cosmetics::catalog(base)?;
+    fn load_catalog_blocking(&self, look: Look) -> Result<ArcticState> {
+        let api = cosmetics::base_url();
+        let catalog_base = cosmetics::catalog_url();
+        let presets = cosmetics::catalog(&api)?;
         // Models and textures never change once uploaded (they're named by
         // their hash): kept on disk, and fetched several at a time.
         let cache = self.dirs().cache().join("arctic-looks");
         // 3D cosmetics are optional: an older server just has none.
-        let catalog = cosmetic_models::catalog(base).unwrap_or_default();
+        let catalog = cosmetic_models::catalog(&catalog_base).unwrap_or_default();
         // Meshes: the mesh-only items, and the sculpted version of any cuboid item that has one.
         let mut mesh_items = catalog.meshes.clone();
         mesh_items.extend(catalog.cosmetics.iter().filter_map(|i| {
@@ -260,7 +261,7 @@ impl Tasks {
         }));
         let meshes = in_parallel(mesh_items, |item| {
             let bytes = cached(&cache, &item.mesh, || {
-                cosmetic_models::mesh_asset(base, &item.mesh)
+                cosmetic_models::mesh_asset(&catalog_base, &item.mesh)
             })?;
             let mesh = cosmetic_models::mesh::parse(&bytes)
                 .inspect_err(|e| log::warn!("cosmetic {} (mesh): {e}", item.id))
@@ -269,13 +270,13 @@ impl Tasks {
         });
         let items: Vec<_> = in_parallel(catalog.cosmetics, |item| {
             let bytes = cached(&cache, &item.model, || {
-                cosmetic_models::asset(base, &item.model)
+                cosmetic_models::asset(&catalog_base, &item.model)
             })?;
             let geometry = cosmetic_models::Geometry::parse(&bytes)
                 .inspect_err(|e| log::warn!("cosmetic {}: {e}", item.id))
                 .ok()?;
             let animation = item.animation.as_ref().and_then(|hash| {
-                let bytes = cached(&cache, hash, || cosmetic_models::asset(base, hash))?;
+                let bytes = cached(&cache, hash, || cosmetic_models::asset(&catalog_base, hash))?;
                 cosmetic_models::Animation::parse(&bytes)
                     .inspect_err(|e| log::warn!("cosmetic {} (idle): {e}", item.id))
                     .ok()
@@ -297,8 +298,19 @@ impl Tasks {
         wanted.extend(look.cape.clone());
         let mut seen = HashSet::new();
         wanted.retain(|h| seen.insert(h.clone()));
+        let item_hashes: HashSet<String> = items
+            .iter()
+            .flat_map(|asset| {
+                std::iter::once(asset.item.texture.clone()).chain(asset.item.glow.clone())
+            })
+            .collect();
         let textures = in_parallel(wanted, |h| {
-            let png = cached(&cache, &h, || cosmetics::texture(base, &h))?;
+            let from = if item_hashes.contains(&h) {
+                &catalog_base
+            } else {
+                &api
+            };
+            let png = cached(&cache, &h, || cosmetics::texture(from, &h))?;
             Some((h, png))
         });
         Ok(ArcticState {

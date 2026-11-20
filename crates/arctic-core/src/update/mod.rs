@@ -34,6 +34,10 @@ pub const GITHUB_REPO: &str = "brksfrb/arctic-launcher";
 /// so it never offers or installs a public release over itself. Must stay false on release branches.
 /// Every update path (start-up check, background auto-install, manual check) goes through [`check`].
 const PERSONAL_BUILD: bool = false;
+/// Whether this exe was built as a personal test (see [`PERSONAL_BUILD`]).
+pub fn is_personal_build() -> bool {
+    PERSONAL_BUILD
+}
 /// Flatpak owns the installed executable and updates it through its signed repository.
 pub fn managed_by_flatpak() -> bool {
     cfg!(target_os = "linux") && std::path::Path::new("/.flatpak-info").is_file()

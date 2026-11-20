@@ -36,6 +36,20 @@ pub fn base_url() -> String {
         .to_owned()
 }
 
+/// Personal test builds only: 3D catalog, meshes, and those items' textures
+/// come from the ovh1 staging server so unpublished cosmetics can be previewed
+/// in the launcher. Looks, friends, gallery, crash reports, and the in-game
+/// session stay on [`base_url`].
+const TEST_CATALOG_URL: &str = "http://162.19.127.139:18765";
+
+pub fn catalog_url() -> String {
+    if crate::update::is_personal_build() {
+        TEST_CATALOG_URL.trim_end_matches('/').to_owned()
+    } else {
+        base_url()
+    }
+}
+
 /// A cape offered to everyone.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Preset {
