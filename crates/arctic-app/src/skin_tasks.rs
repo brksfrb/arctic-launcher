@@ -232,6 +232,7 @@ impl Tasks {
                 id: i.id.clone(),
                 name: i.name.clone(),
                 slot: i.slot.clone(),
+                legacy: i.legacy,
                 mesh,
             })
         }));

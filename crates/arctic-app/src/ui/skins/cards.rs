@@ -11,8 +11,7 @@ use eframe::egui::{
 };
 
 use super::model::{self, Pose};
-use super::panels::{slot_key, slot_name};
-use super::{Hover, SkinsView};
+use super::{Hover, Section, SkinsView};
 use crate::app::ArcticApp;
 use crate::art::icons::Icon;
 use crate::art::lerp_color;
@@ -748,9 +747,9 @@ impl ArcticApp {
             .collect()
     }
 
-    /// One slot's cosmetics: pointing at one tries it on, clicking wears it
+    /// The category's cosmetics: pointing at one tries it on, clicking wears it
     /// (replacing what's in that slot) or takes it off.
-    pub(super) fn cosmetics_header(&mut self, ui: &mut egui::Ui, slot: &'static str) {
+    pub(super) fn cosmetics_header(&mut self, ui: &mut egui::Ui, title: &str) {
         let hint = match self.wear_blocked() {
             None => {
                 t!("skins.one_per_slot_point_at_one_to_try_it_on_click")
@@ -761,10 +760,10 @@ impl ArcticApp {
             }
             Some(_) => t!("skins.point_at_one_to_try_it_on_add_an_account_to"),
         };
-        self.list_header(ui, slot_name(slot), hint, true);
+        self.list_header(ui, title, hint, true);
     }
 
-    pub(super) fn cosmetics_body(&mut self, ui: &mut egui::Ui, slot: &'static str) {
+    pub(super) fn cosmetics_body(&mut self, ui: &mut egui::Ui, section: Section) {
         let p = self.palette();
         let Some(entries) = self.catalog_state().map(cosmetic_entries) else {
             ui.label(RichText::new(t!("skins.cosmetics_are_loading")).color(p.muted));
@@ -776,30 +775,30 @@ impl ArcticApp {
         let worn_ids = self.worn_ids();
         let items: Vec<&Entry3d> = entries
             .iter()
-            .filter(|e| slot_key(&e.slot) == slot && self.matches_search(&e.name))
+            .filter(|e| e.section() == section && self.matches_search(&e.name))
             .collect();
         if items.is_empty() {
             ui.label(RichText::new(t!("skins.nothing_here_yet")).color(p.muted));
             return;
         }
-        if let Some(on) = items.iter().find(|e| worn_ids.contains(&e.id)) {
-            self.fit_controls(ui, slot, &on.id.clone(), &on.name.clone());
+        for on in items.iter().filter(|e| worn_ids.contains(&e.id)) {
+            self.fit_controls(ui, &on.slot, &on.id, &on.name);
         }
         // What you'd wear after clicking `item`: the rest, plus it in its slot (or nothing).
-        let after = |item_id: &str, worn: bool| -> Vec<String> {
+        let after = |item: &Entry3d, worn: bool| -> Vec<String> {
             let slot_of = |id: &String| {
                 entries
                     .iter()
                     .find(|e| &e.id == id)
-                    .map(|e| slot_key(&e.slot))
+                    .map(|e| e.slot.as_str())
             };
             let mut next: Vec<String> = worn_ids
                 .iter()
-                .filter(|id| slot_of(id) != Some(slot))
+                .filter(|id| slot_of(id) != Some(item.slot.as_str()))
                 .cloned()
                 .collect();
             if !worn {
-                next.push(item_id.to_owned());
+                next.push(item.id.clone());
             }
             next
         };
@@ -823,12 +822,12 @@ impl ArcticApp {
                 };
                 let r = cosmetic_card(ui, p, &still, &entry.name, worn, now);
                 if r.hovered() {
-                    self.skins.hover = Some(Hover::Cosmetics(after(&entry.id, worn)));
+                    self.skins.hover = Some(Hover::Cosmetics(after(entry, worn)));
                     ctx.request_repaint();
                 }
                 if r.clicked() {
                     if can_wear {
-                        pick = Some(after(&entry.id, worn));
+                        pick = Some(after(entry, worn));
                     } else {
                         blocked = true;
                     }
@@ -1101,7 +1100,14 @@ pub(super) struct Entry3d {
     pub id: String,
     pub name: String,
     pub slot: String,
+    legacy: bool,
     pub shape: Shape3d,
+}
+
+impl Entry3d {
+    fn section(&self) -> Section {
+        Section::for_cosmetic(&self.slot, self.legacy)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1131,6 +1137,7 @@ fn cosmetic_entries_matching(
             id: item.id.clone(),
             name: item.name.clone(),
             slot: item.slot.clone(),
+            legacy: item.legacy,
             shape: Shape3d::Mesh {
                 mesh: mesh.clone(),
                 hash: item.mesh.clone(),
@@ -1144,11 +1151,73 @@ fn cosmetic_entries_matching(
                 id: item.id.clone(),
                 name: item.name.clone(),
                 slot: item.slot.clone(),
+                legacy: item.legacy,
                 shape: Shape3d::Cuboid(asset.clone()),
             });
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arctic_core::cosmetic_models::{Catalog, Geometry};
+    use std::sync::Arc;
+
+    #[test]
+    fn catalog_cards_group_legacy_across_slots() {
+        let catalog: Catalog = serde_json::from_str(
+            r#"{"cosmetics":[
+                {"id":"halo","name":"Halo","slot":"head","model":"m","texture":"t","legacy":true},
+                {"id":"crown","name":"Crown","slot":"head","model":"m","texture":"t","legacy":false},
+                {"id":"ring","name":"Ring","slot":"aura","model":"m","texture":"t"}
+            ],"meshes":[{"id":"wings","name":"Wings","slot":"back","mesh":"m","legacy":true}]}"#,
+        )
+        .unwrap();
+        let geometry = Arc::new(
+            Geometry::parse(
+                br#"{"minecraft:geometry":[{"description":{"texture_width":32,"texture_height":32},
+                    "bones":[{"name":"head","pivot":[0,24,0],"cubes":[{"origin":[-4,34,-5],"size":[8,1,1],"uv":[0,0]}]}]}]}"#,
+            )
+            .unwrap(),
+        );
+        let state = crate::skin_tasks::ArcticState {
+            look: Default::default(),
+            presets: vec![],
+            textures: vec![],
+            items: catalog
+                .cosmetics
+                .into_iter()
+                .map(|item| CuboidAsset {
+                    item,
+                    geometry: geometry.clone(),
+                    animation: None,
+                })
+                .collect(),
+            meshes: catalog
+                .meshes
+                .into_iter()
+                .map(|item| {
+                    let mesh = arctic_core::cosmetic_models::mesh::sample_glb();
+                    let mesh = arctic_core::cosmetic_models::mesh::parse(&mesh).unwrap();
+                    (item, Arc::new(mesh))
+                })
+                .collect(),
+        };
+        let entries = cosmetic_entries(&state);
+        let ids = |section| {
+            entries
+                .iter()
+                .filter(|entry| entry.section() == section)
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(Section::Legacy), ["wings", "halo"]);
+        assert_eq!(ids(Section::Slot("head")), ["crown"]);
+        assert_eq!(ids(Section::Slot("aura")), ["ring"]);
+        assert!(ids(Section::Slot("back")).is_empty());
+    }
 }
 
 /// What the preview wears: cuboid cosmetics and sculpted ones.

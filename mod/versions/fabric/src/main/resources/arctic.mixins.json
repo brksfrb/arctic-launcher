@@ -55,6 +55,8 @@
 		"KeyboardHandlerMixin",
 		"MouseHandlerMixin",
 		"MouseHandlerInvoker",
+<% if (cosmeticGlowPipeline) { %>		"RenderTypeInvoker",
+<% } %>
 <% if (inventoryHotbarScroll) { %>		"InventoryHotbarScrollMixin",
 <% } %>
 		"PauseScreenMixin"<% if (panoramaHook) { %>,

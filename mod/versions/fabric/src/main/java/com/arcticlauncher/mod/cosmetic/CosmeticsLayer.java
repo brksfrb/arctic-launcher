@@ -262,7 +262,9 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 
 		void glow(PoseStack pose, Identifier texture, Emit emit) {
 			// Drawn after the base pass (as vanilla's own glowing layers are), or the base covers it.
-			//#if MC >= 1.21.11
+			//#if MC >= 1.21.11 && MC < 26.1
+			target.order(1).submitCustomGeometry(pose, CosmeticRenderTypes.GLOW_TYPE.apply(texture), (p, out) -> emit.emit(new PoseXform(p, out)));
+			//#elif MC >= 1.21.11
 			target.order(1).submitCustomGeometry(pose, RenderTypes.entityTranslucentEmissive(texture), (p, out) -> emit.emit(new PoseXform(p, out)));
 			//#else
 			target.order(1).submitCustomGeometry(pose, RenderType.entityTranslucentEmissive(texture), (p, out) -> emit.emit(new PoseXform(p, out)));

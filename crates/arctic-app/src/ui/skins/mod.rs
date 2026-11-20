@@ -26,13 +26,24 @@ use crate::tasks::Event;
 use crate::toasts::Kind;
 use crate::{t, tf};
 /// The category picked in the rail on the right.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum Section {
     #[default]
     Skins,
     Capes,
     /// 3D cosmetics of one slot (`head`, `face`...).
     Slot(&'static str),
+    Legacy,
+}
+
+impl Section {
+    fn for_cosmetic(slot: &str, legacy: bool) -> Self {
+        if legacy {
+            Self::Legacy
+        } else {
+            Self::Slot(panels::slot_key(slot))
+        }
+    }
 }
 
 /// Something pointed at in a list, shown on the preview (not saved).
@@ -246,6 +257,7 @@ impl ArcticApp {
             Some("shoulders") => Section::Slot("shoulders"),
             Some("arms") => Section::Slot("arms"),
             Some("body") => Section::Slot("body"),
+            Some("legacy") => Section::Legacy,
             _ => Section::default(),
         };
         self.skins = SkinsUi {

@@ -3,7 +3,7 @@
 //! each cosmetic slot) next to the list for the one picked. Pointing at
 //! something tries it on in the preview; clicking wears it.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use arctic_core::skins::Variant;
 use eframe::egui::{
@@ -121,7 +121,8 @@ impl ArcticApp {
                         match self.skins.section {
                             Section::Skins => self.skins_header(ui),
                             Section::Capes => self.capes_header(ui),
-                            Section::Slot(slot) => self.cosmetics_header(ui, slot),
+                            Section::Slot(slot) => self.cosmetics_header(ui, slot_name(slot)),
+                            Section::Legacy => self.cosmetics_header(ui, t!("skins.legacy")),
                         }
                         egui::ScrollArea::vertical()
                             .id_salt(("cosmetics_items", format!("{:?}", self.skins.section)))
@@ -130,7 +131,9 @@ impl ArcticApp {
                                 ui.vertical(|ui| match self.skins.section {
                                     Section::Skins => self.skins_body(ui),
                                     Section::Capes => self.capes_body(ui),
-                                    Section::Slot(slot) => self.cosmetics_body(ui, slot),
+                                    section @ (Section::Slot(_) | Section::Legacy) => {
+                                        self.cosmetics_body(ui, section)
+                                    }
                                 });
                             });
                     });
@@ -609,29 +612,25 @@ impl ArcticApp {
         }
     }
 
-    /// Skins, Capes, then one row per cosmetic slot (with how many there are).
+    /// Skins, Capes, the cosmetic slots, and the Legacy category.
     fn category_rail(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        let mut counts = [0; SLOTS.len()];
+        let mut counts = HashMap::new();
         if let Some(state) = self.catalog_state() {
             let mut seen = HashSet::new();
-            for (id, slot) in state
+            for (id, slot, legacy) in state
                 .meshes
                 .iter()
-                .map(|(item, _)| (item.id.as_str(), item.slot.as_str()))
-                .chain(
-                    state
-                        .items
-                        .iter()
-                        .map(|asset| (asset.item.id.as_str(), asset.item.slot.as_str())),
-                )
+                .map(|(item, _)| (&item.id, &item.slot, item.legacy))
+                .chain(state.items.iter().map(|asset| {
+                    let item = &asset.item;
+                    (&item.id, &item.slot, item.legacy)
+                }))
             {
-                if seen.insert(id)
-                    && let Some(index) = SLOTS
-                        .iter()
-                        .position(|candidate| *candidate == slot_key(slot))
-                {
-                    counts[index] += 1;
+                if seen.insert(id) {
+                    *counts
+                        .entry(Section::for_cosmetic(slot, legacy))
+                        .or_default() += 1;
                 }
             }
         }
@@ -670,15 +669,19 @@ impl ArcticApp {
                 .color(p.muted),
         );
         ui.add_space(2.0);
-        for (slot, n) in SLOTS.into_iter().zip(counts) {
+        let categories = SLOTS
+            .into_iter()
+            .map(|slot| (Section::Slot(slot), slot_name(slot)))
+            .chain([(Section::Legacy, t!("skins.legacy"))]);
+        for (section, name) in categories {
             if rail_row(
                 ui,
                 p,
-                slot_name(slot),
-                Some(n),
-                self.skins.section == Section::Slot(slot),
+                name,
+                Some(counts.get(&section).copied().unwrap_or_default()),
+                self.skins.section == section,
             ) {
-                pick = Some(Section::Slot(slot));
+                pick = Some(section);
             }
         }
         if let Some(section) = pick
