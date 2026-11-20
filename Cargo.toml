@@ -21,7 +21,7 @@ opt-level = 2
 lto = "fat"
 codegen-units = 1
 strip = true
-opt-level = "s"
+opt-level = "z"
 
 [profile.release.package]
 sha1 = { opt-level = 3 }
@@ -30,6 +30,7 @@ lzma-rs = { opt-level = 3 }
 miniz_oxide = { opt-level = 3 }
 flate2 = { opt-level = 3 }
 zip = { opt-level = 3 }
+crc32fast = { opt-level = 3 }
 image = { opt-level = 3 }
 png = { opt-level = 3 }
 zune-jpeg = { opt-level = 3 }
