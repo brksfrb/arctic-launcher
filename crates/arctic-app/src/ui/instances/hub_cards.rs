@@ -8,14 +8,18 @@ use arctic_core::mods::{ProjectHit, packs::PackKind};
 use eframe::egui::{self, RichText, Sense, vec2};
 
 use super::Load;
-use super::hub::{project_tags, stats_counts};
+use super::hub::{InstalledProjects, ProjectAction, project_tags, stats_counts};
 use super::mods_page::{ICON, mod_icon, visible_rows_with_height};
 use crate::app::ArcticApp;
 use crate::tasks::Tasks;
 use crate::{t, tf, theme, widgets};
 
-const MIN_CARD_WIDTH: f32 = 250.0;
-const CARD_SPACING: f32 = 6.0;
+const MIN_CARD_WIDTH: f32 = 260.0;
+const CARD_SPACING: f32 = 4.0;
+
+fn banner_height(width: f32) -> f32 {
+    (width * 9.0 / 16.0).min(150.0)
+}
 
 #[derive(Default)]
 pub(super) struct HubBanners {
@@ -118,7 +122,7 @@ impl ArcticApp {
         kind: PackKind,
         target: &Instance,
         hits: &[ProjectHit],
-        installed: &HashSet<String>,
+        installed: &InstalledProjects,
     ) {
         let p = self.palette();
         let game = self.pack_game(target);
@@ -132,14 +136,14 @@ impl ArcticApp {
         let frame = theme::card(p).inner_margin(10.0);
         let margin = frame.total_margin().sum();
         let content_width = (card_width - margin.x).max(1.0);
-        let banner_height = content_width * 9.0 / 16.0;
+        let banner_height = banner_height(content_width);
         let body = ui.text_style_height(&egui::TextStyle::Body);
         let small = ui.text_style_height(&egui::TextStyle::Small);
         let header = ICON.max(body + small + CARD_SPACING);
         let mut text_rows = 3;
         let mut sections = 6;
         if hits.iter().any(|hit| hit.is_incompatible(&game)) {
-            text_rows += 1;
+            text_rows += 2;
             sections += 1;
         }
         if shader_note.is_some() {
@@ -173,14 +177,13 @@ impl ArcticApp {
                 );
                 let open = frame
                     .show(&mut card, |ui| {
-                        self.hub_image_card(
-                            ui,
+                        let action = self.hub_action(
+                            kind.project_type(),
                             target,
-                            kind,
-                            hit,
-                            shader_note.as_deref(),
-                            installed.contains(&hit.project_id),
-                        )
+                            &hit.project_id,
+                            installed,
+                        );
+                        self.hub_image_card(ui, target, kind, hit, shader_note.as_deref(), action)
                     })
                     .inner;
                 if let Some(Some(url)) = self.inst.hub.banners.sources.get(&hit.project_id) {
@@ -212,7 +215,7 @@ impl ArcticApp {
         kind: PackKind,
         hit: &ProjectHit,
         shader_note: Option<&str>,
-        installed: bool,
+        action: ProjectAction,
     ) -> bool {
         let p = self.palette();
         let game = self.pack_game(target);
@@ -220,20 +223,21 @@ impl ArcticApp {
         ui.set_width(width);
         ui.spacing_mut().item_spacing.y = CARD_SPACING;
         let (banner, response) =
-            ui.allocate_exact_size(vec2(width, width * 9.0 / 16.0), Sense::click());
+            ui.allocate_exact_size(vec2(width, banner_height(width)), Sense::CLICK);
         let mut open = preview_click(response);
         if ui.is_rect_visible(banner) {
             ui.painter().rect_filled(banner, 8, p.surface_hover);
             self.inst.hub.banners.paint(ui, &self.tasks, hit, banner);
         }
-        open |= self.hub_card_heading(ui, hit);
+        open |= self.hub_card_heading(ui, hit, action.selectable());
         ui.scope(|ui| {
             ui.set_min_height(2.0 * ui.text_style_height(&egui::TextStyle::Body));
-            short_label(ui, &hit.description, egui::TextStyle::Body, p.muted, 2);
+            short_label(ui, &hit.description, egui::TextStyle::Body, p.muted, 2)
+                .on_hover_text(&hit.description);
         });
         let tags = project_tags(hit);
         if !tags.is_empty() {
-            short_label(ui, &tags, egui::TextStyle::Small, p.muted, 1);
+            short_label(ui, &tags, egui::TextStyle::Small, p.muted, 1).on_hover_text(&tags);
         }
         short_label(ui, &stats_counts(hit), egui::TextStyle::Small, p.muted, 2);
         if hit.is_incompatible(&game) {
@@ -242,7 +246,7 @@ impl ArcticApp {
                 t!("instances.incompatible"),
                 egui::TextStyle::Small,
                 p.error,
-                1,
+                2,
             )
             .on_hover_text(tf!(
                 "instances.no_file_is_tagged_for_minecraft_you_can",
@@ -250,35 +254,44 @@ impl ArcticApp {
             ));
         }
         if let Some(note) = shader_note {
-            short_label(ui, note, egui::TextStyle::Small, p.accent, 2);
+            short_label(ui, note, egui::TextStyle::Small, p.accent, 2).on_hover_text(note);
         }
         ui.add_space((ui.available_height() - widgets::BUTTON_HEIGHT).max(0.0));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.set_min_height(widgets::BUTTON_HEIGHT);
-            self.hub_install_button(ui, kind.project_type(), target, hit, installed);
+            widgets::row(ui, |ui| {
+                self.hub_install_button(ui, kind.project_type(), target, hit, action)
+            });
         });
         open
     }
 
-    fn hub_card_heading(&mut self, ui: &mut egui::Ui, hit: &ProjectHit) -> bool {
+    fn hub_card_heading(&mut self, ui: &mut egui::Ui, hit: &ProjectHit, selectable: bool) -> bool {
         let p = self.palette();
         ui.horizontal(|ui| {
-            super::content_install::select_content(ui, &mut self.inst.search.selected, hit);
+            super::content_install::select_content(
+                ui,
+                p,
+                &mut self.inst.search.selected,
+                hit,
+                selectable,
+            );
             let icon = ui.scope(|ui| mod_icon(ui, self, hit.icon_url.as_deref()));
-            let icon_clicked = preview_click(icon.response.interact(Sense::click()));
+            let icon_clicked = preview_click(icon.response.interact(Sense::CLICK));
             let title_clicked = ui
                 .vertical(|ui| {
                     let title = egui::Label::new(RichText::new(&hit.title).strong().color(p.text))
                         .truncate()
                         .sense(Sense::click());
-                    let clicked = preview_click(ui.add(title));
-                    short_label(
-                        ui,
-                        &tf!("common.by_author", author = hit.author),
-                        egui::TextStyle::Small,
-                        p.muted,
-                        1,
-                    );
+                    let response = ui.add(title);
+                    widgets::focus_ring(ui, &response);
+                    let clicked = response
+                        .on_hover_cursor(egui::CursorIcon::PointingHand)
+                        .on_hover_text(&hit.title)
+                        .clicked();
+                    let author = tf!("common.by_author", author = hit.author);
+                    short_label(ui, &author, egui::TextStyle::Small, p.muted, 1)
+                        .on_hover_text(&author);
                     clicked
                 })
                 .inner;

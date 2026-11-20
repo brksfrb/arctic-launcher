@@ -1,11 +1,15 @@
 //! Resolve and install the projects selected in Discover or in an instance's browser.
 
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 
 use arctic_core::instances::Instance;
 use arctic_core::loaders::LoaderKind;
 use arctic_core::mods::discovery::{self, VersionInfo};
-use arctic_core::mods::{self, ProjectHit, ProjectType, datapack, modpack};
+use arctic_core::mods::{
+    self, BatchResolver, ProjectHit, ProjectType, datapack, modpack, pack_index, packs,
+};
 use arctic_core::{Progress, ProgressInfo};
 use eframe::egui;
 
@@ -160,9 +164,66 @@ pub(crate) struct ContentTarget {
     pub world: Option<String>,
 }
 
+pub(crate) enum ContentFiles {
+    Mods(Vec<String>),
+    Packs {
+        expected: Vec<PathBuf>,
+        known: Arc<Vec<pack_index::PackFile>>,
+    },
+}
+
+pub(crate) struct ContentRemoval {
+    pub target: String,
+    pub kind: ProjectType,
+    pub project: String,
+    pub result: Outcome<()>,
+}
+
 impl Tasks {
+    pub(crate) fn remove_discover_content(
+        &self,
+        target: Instance,
+        kind: ProjectType,
+        game: String,
+        project: String,
+        files: ContentFiles,
+    ) {
+        self.run(move |t| {
+            let _guard = t.content_lock();
+            let game_dir = target.game_dir(t.dirs());
+            let result = match files {
+                ContentFiles::Mods(expected) => {
+                    let mods_dir = game_dir.join("mods");
+                    let index = mods::index_path(&t.dirs().instance_dir(&target.id));
+                    mods::list(&mods_dir, &index).and_then(|current| {
+                        for file in current.iter().filter(|file| {
+                            expected.contains(&file.file_name)
+                                && file
+                                    .tracked
+                                    .as_ref()
+                                    .is_some_and(|m| m.project_id == project)
+                        }) {
+                            mods::remove(&mods_dir, &index, &file.file_name)?;
+                        }
+                        Ok(())
+                    })
+                }
+                ContentFiles::Packs { expected, known } => {
+                    remove_packs(kind, &game_dir, &game, &project, &expected, &known)
+                }
+            };
+            t.send(Event::ContentRemoved(ContentRemoval {
+                target: target.id,
+                kind,
+                project,
+                result: result.map_err(content_install_error),
+            }));
+        });
+    }
+
     pub(crate) fn install_content(
         &self,
+        job: u64,
         request: ContentRequest,
         choices: Vec<Outcome<ContentChoice>>,
         target: ContentTarget,
@@ -179,6 +240,16 @@ impl Tasks {
                 notes: Vec::new(),
                 shaders_switched_on: false,
             };
+            let batch = if request.bulk && request.kind != ProjectType::Modpack {
+                let roots: Vec<_> = choices
+                    .iter()
+                    .filter_map(|choice| choice.as_ref().ok())
+                    .map(|choice| choice.version.id.as_str())
+                    .collect();
+                BatchResolver::new(&roots)
+            } else {
+                BatchResolver::default()
+            };
             for (index, (hit, choice)) in request.hits.into_iter().zip(choices).enumerate() {
                 let progress = |p: ProgressInfo| {
                     let share = if p.bytes_total > 0 {
@@ -186,19 +257,23 @@ impl Tasks {
                     } else {
                         0.0
                     };
-                    t.send(Event::ContentProgress(ContentProgress {
-                        current: index + 1,
-                        total,
-                        title: hit.title.clone(),
-                        share,
-                    }));
+                    t.send(Event::ContentProgress(
+                        job,
+                        ContentProgress {
+                            current: index + 1,
+                            total,
+                            title: hit.title.clone(),
+                            share,
+                        },
+                    ));
                 };
                 progress(ProgressInfo::stage(""));
                 match choice.and_then(|choice| {
-                    t.install_content_item(request.kind, &hit, &choice, &target, &progress)
+                    t.install_content_item(request.kind, &hit, &choice, &target, &batch, &progress)
                 }) {
                     Ok(pack) => {
                         report.succeeded += 1;
+                        t.send(Event::ContentItemInstalled(job, hit.project_id));
                         if let Some(pack) = pack {
                             report.shaders_switched_on |= pack.shaders_switched_on;
                             if !pack.note.is_empty() && !report.notes.contains(&pack.note) {
@@ -209,7 +284,7 @@ impl Tasks {
                     Err(error) => report.failed.push((hit.title, error)),
                 }
             }
-            t.send(Event::ContentInstalled(report));
+            t.send(Event::ContentInstalled(job, report));
         });
     }
 
@@ -219,6 +294,7 @@ impl Tasks {
         hit: &ProjectHit,
         choice: &ContentChoice,
         target: &ContentTarget,
+        batch: &BatchResolver,
         progress: Progress,
     ) -> Outcome<Option<crate::pack_tasks::PackDone>> {
         let instance = &target.instance;
@@ -232,16 +308,17 @@ impl Tasks {
                     .kind()
                     .ok_or_else(|| t!("tasks.vanilla_instances_cant_load_mods").to_owned())?;
                 let index = mods::index_path(&self.dirs().instance_dir(&instance.id));
-                mods::install_version(
-                    version,
-                    game,
-                    loader,
-                    &game_dir.join("mods"),
-                    &index,
-                    progress,
-                )
-                .map(|_| None)
-                .map_err(content_install_error)
+                batch
+                    .install_mod(
+                        version,
+                        game,
+                        loader,
+                        &game_dir.join("mods"),
+                        &index,
+                        progress,
+                    )
+                    .map(|_| None)
+                    .map_err(content_install_error)
             }
             ProjectType::ResourcePack | ProjectType::Shader => {
                 let kind = if kind == ProjectType::Shader {
@@ -255,7 +332,7 @@ impl Tasks {
                     &hit.project_id,
                     game,
                     Some((version, choice.other_game)),
-                    Some(progress),
+                    Some((batch, progress)),
                 )
                 .map(Some)
                 .map_err(content_install_error)
@@ -265,9 +342,17 @@ impl Tasks {
                     .world
                     .as_deref()
                     .ok_or_else(|| t!("instances.hub.no_worlds").to_owned())?;
-                datapack::install(version, &game_dir, world, game, choice.other_game, progress)
-                    .map(|()| None)
-                    .map_err(content_install_error)
+                datapack::install(
+                    batch,
+                    version,
+                    &game_dir,
+                    world,
+                    game,
+                    choice.other_game,
+                    progress,
+                )
+                .map(|()| None)
+                .map_err(content_install_error)
             }
             ProjectType::Modpack => {
                 modpack::install_version(self.dirs(), &hit.project_id, Some(version), progress)
@@ -276,6 +361,46 @@ impl Tasks {
             }
         }
     }
+}
+
+fn remove_packs(
+    kind: ProjectType,
+    game_dir: &Path,
+    game: &str,
+    project: &str,
+    expected: &[PathBuf],
+    known: &[pack_index::PackFile],
+) -> arctic_core::Result<()> {
+    let matches = pack_index::PackScan::default().matches(kind, game_dir, known);
+    if !matches.contains_key(project) {
+        return Ok(());
+    }
+    let paths = pack_index::removable_files(&matches, kind, project)
+        .filter(|paths| *paths == expected)
+        .ok_or_else(|| arctic_core::Error::Other(t!("instances.hub.files_changed").to_owned()))?;
+    for path in paths {
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or(arctic_core::Error::IncompatibleContentVersion)?;
+        match kind {
+            ProjectType::ResourcePack => {
+                packs::remove(packs::PackKind::Resource, game_dir, game, name)?
+            }
+            ProjectType::Shader => packs::remove(packs::PackKind::Shader, game_dir, game, name)?,
+            ProjectType::DataPack => {
+                let world = path
+                    .parent()
+                    .and_then(Path::parent)
+                    .and_then(Path::file_name)
+                    .and_then(|name| name.to_str())
+                    .ok_or(arctic_core::Error::DataPackWorldMissing)?;
+                datapack::remove(game_dir, world, name)?;
+            }
+            _ => return Err(arctic_core::Error::IncompatibleContentVersion),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

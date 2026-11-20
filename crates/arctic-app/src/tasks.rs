@@ -125,8 +125,10 @@ pub enum Event {
     ModProgress(ProgressSnapshot),
     /// (instance id, project id, result)
     ModInstalled(String, String, Outcome<Vec<InstalledMod>>),
-    ContentProgress(crate::content_tasks::ContentProgress),
-    ContentInstalled(crate::content_tasks::ContentReport),
+    ContentProgress(u64, crate::content_tasks::ContentProgress),
+    ContentItemInstalled(u64, String),
+    ContentInstalled(u64, crate::content_tasks::ContentReport),
+    ContentRemoved(crate::content_tasks::ContentRemoval),
     /// What an instance's mods become on another version: (instance id, version, result).
     /// The newer builds of an instance's mods (from `mod_updates_check`).
     ModUpdatesChecked(String, Outcome<Vec<arctic_core::mods::ModUpdate>>),

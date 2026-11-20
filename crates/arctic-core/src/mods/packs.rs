@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use super::resolve::{self, Planned, Target};
+use super::resolve::{self, BatchResolver, CachedSource, Planned, Target, VersionSource};
 use super::{modrinth, pack_index};
 use crate::loaders::LoaderKind;
 use crate::net::{DownloadJob, download_all};
@@ -158,7 +158,32 @@ pub fn selected_version(
     game_version: &str,
     allow_other_game: bool,
 ) -> Result<SelectedPack> {
-    let version = modrinth::version(version_id)?;
+    select_version(
+        kind,
+        modrinth::version(version_id)?,
+        game_version,
+        allow_other_game,
+    )
+}
+
+impl BatchResolver {
+    pub fn select_pack(
+        &self,
+        kind: PackKind,
+        version_id: &str,
+        game: &str,
+        allow_other_game: bool,
+    ) -> Result<SelectedPack> {
+        select_version(kind, self.version(version_id)?, game, allow_other_game)
+    }
+}
+
+fn select_version(
+    kind: PackKind,
+    version: modrinth::Version,
+    game_version: &str,
+    allow_other_game: bool,
+) -> Result<SelectedPack> {
     let other_game = check_selected_version(kind, &version, game_version, allow_other_game)?;
     Ok(SelectedPack {
         kind,
@@ -276,6 +301,7 @@ pub fn install_with_dependencies(
     game: &str,
     game_dir: &Path,
     present: &HashSet<String>,
+    batch: &BatchResolver,
     progress: Progress,
 ) -> Result<InstalledPack> {
     let dest = game_dir.join(selected.kind.folder());
@@ -285,6 +311,7 @@ pub fn install_with_dependencies(
         game,
         selected.other_game,
         present,
+        batch,
     )?;
     let file_name = selected
         .version
@@ -317,6 +344,7 @@ pub(super) fn plan_archives(
     game: &str,
     other_game: bool,
     present: &HashSet<String>,
+    batch: &BatchResolver,
 ) -> Result<Vec<Planned>> {
     // For a confirmed fallback, resolve its dependencies for the version the file targets.
     let game_version = if game.is_empty() || other_game {
@@ -336,6 +364,11 @@ pub(super) fn plan_archives(
     let source = resolve::Modrinth {
         loaders,
         game_version: &game_version,
+    };
+    let source = CachedSource {
+        batch,
+        target,
+        source: &source as &dyn VersionSource,
     };
     let project = version.project_id.clone();
     resolve::resolve_root(&project, version, target, present, &source)
@@ -438,7 +471,7 @@ pub fn set_active(
     update_active(kind, game_dir, game, file_name, on)
 }
 
-fn reserve_for_edit(game_dir: &Path) -> Result<std::fs::File> {
+pub(super) fn reserve_for_edit(game_dir: &Path) -> Result<std::fs::File> {
     if let Some(reservation) = crate::launch::session::try_reserve_dir(game_dir)?
         && !crate::sharing::client::in_use(game_dir)
     {

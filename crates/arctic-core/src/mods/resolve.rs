@@ -3,7 +3,8 @@
 //! The resolver talks to a [`VersionSource`]; production uses Modrinth,
 //! tests use an in-memory table.
 
-use std::collections::{HashSet, VecDeque};
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use super::modrinth::{self, Version};
 use crate::{Error, Result};
@@ -29,6 +30,91 @@ impl VersionSource for Modrinth<'_> {
 
     fn version(&self, version_id: &str) -> Result<Version> {
         modrinth::version(version_id)
+    }
+}
+
+/// Modrinth lookups shared by one confirmed install, including all of its
+/// selected roots and their required dependencies.
+#[derive(Default)]
+pub struct BatchResolver {
+    versions: RefCell<HashMap<String, Version>>,
+    projects: RefCell<HashMap<ProjectVersions, Vec<Version>>>,
+}
+
+#[derive(PartialEq, Eq, Hash)]
+struct ProjectVersions {
+    project: String,
+    loaders: Vec<String>,
+    game: String,
+}
+
+impl BatchResolver {
+    pub fn new(version_ids: &[&str]) -> Self {
+        let mut versions = HashMap::new();
+        for chunk in version_ids.chunks(40) {
+            // Fall back to an individual lookup when the API omits a version or
+            // a bulk fetch fails. Keep the ordinary per-item error reporting.
+            if let Ok(found) = modrinth::versions(chunk) {
+                versions.extend(
+                    found
+                        .into_iter()
+                        .map(|version| (version.id.clone(), version)),
+                );
+            }
+        }
+        Self {
+            versions: RefCell::new(versions),
+            ..Self::default()
+        }
+    }
+
+    pub(super) fn version(&self, id: &str) -> Result<Version> {
+        self.cached_version(id, || modrinth::version(id))
+    }
+
+    fn cached_version(&self, id: &str, fetch: impl FnOnce() -> Result<Version>) -> Result<Version> {
+        if let Some(version) = self.versions.borrow().get(id) {
+            return Ok(version.clone());
+        }
+        let version = fetch()?;
+        self.versions
+            .borrow_mut()
+            .insert(id.to_owned(), version.clone());
+        Ok(version)
+    }
+}
+
+pub(super) struct CachedSource<'a> {
+    pub batch: &'a BatchResolver,
+    pub target: Target<'a>,
+    pub source: &'a dyn VersionSource,
+}
+
+impl VersionSource for CachedSource<'_> {
+    fn project_versions(&self, project: &str) -> Result<Vec<Version>> {
+        let key = ProjectVersions {
+            project: project.to_owned(),
+            loaders: self
+                .target
+                .loaders
+                .iter()
+                .map(|loader| (*loader).to_owned())
+                .collect(),
+            game: self.target.game_version.to_owned(),
+        };
+        if let Some(versions) = self.batch.projects.borrow().get(&key) {
+            return Ok(versions.clone());
+        }
+        let versions = self.source.project_versions(project)?;
+        self.batch
+            .projects
+            .borrow_mut()
+            .insert(key, versions.clone());
+        Ok(versions)
+    }
+
+    fn version(&self, id: &str) -> Result<Version> {
+        self.batch.cached_version(id, || self.source.version(id))
     }
 }
 
@@ -253,6 +339,45 @@ mod tests {
         plan.iter()
             .map(|p| (p.version.id.as_str(), p.dependency))
             .collect()
+    }
+
+    #[test]
+    fn batch_reuses_a_dependency_lookup_across_roots() {
+        struct Counted {
+            fake: Fake,
+            lookups: std::cell::Cell<usize>,
+        }
+
+        impl VersionSource for Counted {
+            fn project_versions(&self, project: &str) -> Result<Vec<Version>> {
+                self.lookups.set(self.lookups.get() + 1);
+                self.fake.project_versions(project)
+            }
+
+            fn version(&self, id: &str) -> Result<Version> {
+                self.fake.version(id)
+            }
+        }
+
+        let source = Counted {
+            fake: Fake::new(vec![
+                ver("a1", "A", "1.21.4", json!([req_project("D")])),
+                ver("b1", "B", "1.21.4", json!([req_project("D")])),
+                ver("d1", "D", "1.21.4", json!([])),
+            ]),
+            lookups: std::cell::Cell::new(0),
+        };
+        let batch = BatchResolver::default();
+        let cached = CachedSource {
+            batch: &batch,
+            target: TARGET,
+            source: &source,
+        };
+        for root in ["a1", "b1"] {
+            let plan = resolve_version(root, TARGET, &HashSet::new(), &cached).unwrap();
+            assert_eq!(ids(&plan), [(root, false), ("d1", true)]);
+        }
+        assert_eq!(source.lookups.get(), 1);
     }
 
     #[test]

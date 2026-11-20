@@ -78,6 +78,8 @@ pub struct SearchState {
     /// Where the page being fetched starts (0: a new search, which replaces the results; more:
     /// the next page, added to them).
     pub more_from: usize,
+    /// Number of API hits consumed, including any repeated across pages.
+    pub loaded: usize,
     /// Why the last next page failed; it's asked for again only on Retry, so a rate limit
     /// isn't hit again every frame.
     pub more_failed: Option<String>,
@@ -102,7 +104,7 @@ pub(super) fn more_on_scroll(
                 ui.label(
                     egui::RichText::new(tf!("instances.load_more_failed", e = e)).color(p.error),
                 );
-                ui.button(t!("instances.retry")).clicked()
+                crate::widgets::field_button(ui, p, t!("instances.retry"), true).clicked()
             })
             .inner;
         return next_page(search, shown, false, retry);
@@ -121,8 +123,8 @@ fn more_to_load(search: &SearchState) -> Option<usize> {
     let Some(Ok(page)) = &search.results else {
         return None;
     };
-    let shown = page.hits.len();
-    (shown > 0 && shown < page.total).then_some(shown)
+    let loaded = search.loaded.max(page.hits.len());
+    (loaded > 0 && loaded < page.total).then_some(loaded)
 }
 
 /// Whether to ask for the page after `shown`: when the list end comes into view, or after a
@@ -586,8 +588,12 @@ impl ArcticApp {
                 self.create_form_defaults();
             }
             Event::HubTags(result) => self.on_hub_tags(result),
-            Event::ContentProgress(progress) => self.inst.content.progress = Some(progress),
-            Event::ContentInstalled(report) => self.on_content_installed(report),
+            Event::ContentProgress(job, progress) => self.inst.content.set_progress(job, progress),
+            Event::ContentItemInstalled(job, project) => {
+                self.on_content_item_installed(job, &project)
+            }
+            Event::ContentInstalled(job, report) => self.on_content_installed(job, report),
+            Event::ContentRemoved(removal) => self.on_hub_content_removed(removal),
             Event::ModSearch(request, result) => {
                 if let Ok(page) = &result {
                     for hit in &page.hits {
@@ -600,8 +606,15 @@ impl ArcticApp {
                 if request == self.inst.search.request {
                     let search = &mut self.inst.search;
                     search.loading = false;
-                    let more = std::mem::take(&mut search.more_from) > 0;
-                    match (more, &mut search.results, result) {
+                    let offset = std::mem::take(&mut search.more_from);
+                    if let Ok(page) = &result {
+                        search.loaded = if page.hits.is_empty() {
+                            page.total
+                        } else {
+                            offset + page.hits.len()
+                        };
+                    }
+                    match (offset > 0, &mut search.results, result) {
                         // The next page: added (a project already listed isn't listed twice).
                         (true, Some(Ok(shown)), Ok(page)) => {
                             for hit in page.hits {
@@ -629,7 +642,21 @@ impl ArcticApp {
                 self.inst.mod_updates.insert(instance, state);
             }
             Event::ModUpdatesApplied(instance, result) => {
-                self.inst.mod_updates.remove(&instance);
+                if let Some(mods_page::UpdateState::Applying {
+                    projects,
+                    mut prior,
+                }) = self.inst.mod_updates.remove(&instance)
+                {
+                    if let Ok((_, failed)) = &result {
+                        prior.retain(|update| {
+                            !projects.contains(&update.project_id)
+                                || failed.contains(&update.project_id)
+                        });
+                    }
+                    self.inst
+                        .mod_updates
+                        .insert(instance.clone(), mods_page::UpdateState::Ready(prior));
+                }
                 self.inst.install_progress = None;
                 match result {
                     Ok((installed, failed)) => {
@@ -638,20 +665,26 @@ impl ArcticApp {
                         } else {
                             tf!("instances.could_not_be_updated", count = failed.len())
                         };
-                        self.toasts.push(
-                            Kind::Success,
-                            tn!("instances.updated_file", installed),
-                            note,
-                        );
+                        if installed == 0 && !failed.is_empty() {
+                            self.toasts.push(
+                                Kind::Error,
+                                t!("instances.could_not_update_mods"),
+                                note,
+                            );
+                        } else {
+                            self.toasts.push(
+                                Kind::Success,
+                                tn!("instances.updated_file", installed),
+                                note,
+                            );
+                        }
                     }
                     Err(e) => {
                         self.toasts
                             .push(Kind::Error, t!("instances.could_not_update_mods"), e)
                     }
                 }
-                if self.inst.open.as_deref() == Some(instance.as_str()) {
-                    self.refresh_mods(&instance);
-                }
+                self.refresh_mods(&instance);
             }
             Event::RetargetChecked(instance, version, result) => {
                 self.on_retarget_checked(instance, version, result)

@@ -54,7 +54,27 @@ pub fn installed_by_name(
     game_dir: &Path,
     known: &[PackFile],
 ) -> HashSet<String> {
-    installed(kind, game_dir, known, None)
+    matches_by_name(kind, game_dir, known).into_keys().collect()
+}
+
+/// A project can be installed even when a filename matches more than one project.
+pub type PackMatches = HashMap<String, Option<Vec<PathBuf>>>;
+
+pub fn matches_by_name(kind: ProjectType, game_dir: &Path, known: &[PackFile]) -> PackMatches {
+    find_matches(kind, game_dir, known, None)
+}
+
+/// Paths that can be removed together. A data pack installed into multiple worlds
+/// needs a separate world choice, so Discover leaves it alone.
+pub fn removable_files<'a>(
+    matches: &'a PackMatches,
+    kind: ProjectType,
+    project: &str,
+) -> Option<&'a [PathBuf]> {
+    let paths = matches.get(project)?.as_deref()?;
+    let first = paths.first()?;
+    (kind != ProjectType::DataPack || paths.iter().all(|p| p.parent() == first.parent()))
+        .then_some(paths)
 }
 
 #[derive(Default)]
@@ -76,10 +96,19 @@ impl PackScan {
         game_dir: &Path,
         known: &[PackFile],
     ) -> HashSet<String> {
-        installed(kind, game_dir, known, Some(self))
+        self.matches(kind, game_dir, known).into_keys().collect()
     }
 
-    fn hashed_files(&mut self, files: &HashMap<PathBuf, fs::Metadata>) -> HashSet<&str> {
+    pub fn matches(
+        &mut self,
+        kind: ProjectType,
+        game_dir: &Path,
+        known: &[PackFile],
+    ) -> PackMatches {
+        find_matches(kind, game_dir, known, Some(self))
+    }
+
+    fn hash_files(&mut self, files: &HashMap<PathBuf, fs::Metadata>) {
         self.hashes.retain(|path, _| files.contains_key(path));
         for (path, meta) in files {
             let modified = meta.modified().ok();
@@ -104,10 +133,6 @@ impl PackScan {
                 );
             }
         }
-        self.hashes
-            .values()
-            .map(|cached| cached.sha1.as_str())
-            .collect()
     }
 }
 
@@ -127,19 +152,20 @@ fn pack_dirs(kind: ProjectType, game_dir: &Path) -> Vec<PathBuf> {
     }
 }
 
-fn installed(
+fn find_matches(
     kind: ProjectType,
     game_dir: &Path,
     known: &[PackFile],
     scan: Option<&mut PackScan>,
-) -> HashSet<String> {
-    let dirs = pack_dirs(kind, game_dir);
-    let mut tracked = Vec::new();
+) -> PackMatches {
+    let mut tracked = HashMap::new();
     let mut files = HashMap::new();
-    for dir in dirs {
+    for dir in pack_dirs(kind, game_dir) {
         let path = dir.join(INDEX);
         match load_json::<Vec<PackFile>>(&path) {
-            Ok(Some(entries)) => tracked.extend(entries),
+            Ok(Some(entries)) => {
+                tracked.insert(dir.clone(), entries);
+            }
             Ok(None) => {}
             Err(e) => log::debug!("ignoring unreadable {}: {e}", path.display()),
         }
@@ -157,28 +183,59 @@ fn installed(
         }
     }
 
-    let names: HashSet<_> = files.keys().filter_map(|path| path.file_name()).collect();
-    let entries = tracked.iter().chain(known);
-    let mut installed: HashSet<_> = entries
-        .clone()
-        .filter(|entry| names.contains(std::ffi::OsStr::new(&entry.file_name)))
-        .map(|entry| entry.project_id.clone())
-        .collect();
-    if let Some(scan) = scan {
-        let unmatched: Vec<_> = entries
-            .filter(|entry| !installed.contains(&entry.project_id) && entry.sha1.is_some())
+    let hashes = scan.map(|scan| {
+        if known
+            .iter()
+            .chain(tracked.values().flatten())
+            .any(|p| p.sha1.is_some())
+        {
+            scan.hash_files(&files);
+        } else {
+            scan.hashes.clear();
+        }
+        &scan.hashes
+    });
+    let mut matches = PackMatches::new();
+    for path in files.keys() {
+        let Some((dir, name)) = path.parent().zip(path.file_name()) else {
+            continue;
+        };
+        let hash = hashes.and_then(|hashes| hashes.get(path));
+        let named_here = tracked.get(dir).into_iter().flatten().chain(known);
+        let mut projects: HashSet<_> = named_here
+            .filter(|entry| name == std::ffi::OsStr::new(&entry.file_name))
+            .map(|entry| entry.project_id.as_str())
             .collect();
-        if !unmatched.is_empty() {
-            let hashes = scan.hashed_files(&files);
-            installed.extend(unmatched.into_iter().filter_map(|entry| {
-                let hash = entry.sha1.as_deref()?.to_ascii_lowercase();
-                hashes
-                    .contains(hash.as_str())
-                    .then(|| entry.project_id.clone())
-            }));
+        if let Some(hash) = hash {
+            projects.extend(
+                known
+                    .iter()
+                    .chain(tracked.values().flatten())
+                    .filter(|entry| {
+                        entry
+                            .sha1
+                            .as_ref()
+                            .is_some_and(|sha1| sha1.eq_ignore_ascii_case(&hash.sha1))
+                    })
+                    .map(|entry| entry.project_id.as_str()),
+            );
+        }
+        let unique = projects.len() == 1;
+        for project in projects {
+            let matched = matches
+                .entry(project.to_owned())
+                .or_insert_with(|| Some(Vec::new()));
+            if !unique {
+                *matched = None;
+            } else if let Some(paths) = matched {
+                paths.push(path.clone());
+            }
         }
     }
-    installed
+    for paths in matches.values_mut().flatten() {
+        paths.sort();
+    }
+    matches
 }
 
 #[cfg(test)]
@@ -250,6 +307,57 @@ mod tests {
             PackScan::default().installed(kind, game.path(), &known),
             HashSet::from(["name-match".into(), "hash-match".into()])
         );
+    }
+
+    #[test]
+    fn removal_finds_renamed_files_and_excludes_ambiguous_matches() {
+        let game = tempfile::tempdir().unwrap();
+        let dir = game.path().join("resourcepacks");
+        fs::create_dir(&dir).unwrap();
+        let renamed = dir.join("renamed.zip");
+        fs::write(&renamed, b"x").unwrap();
+        let kind = ProjectType::ResourcePack;
+        let mut scan = PackScan::default();
+        let matches = scan.matches(kind, game.path(), &[file("first", "old.zip")]);
+        assert_eq!(
+            removable_files(&matches, kind, "first"),
+            Some(std::slice::from_ref(&renamed))
+        );
+
+        let matches = scan.matches(
+            kind,
+            game.path(),
+            &[file("first", "old.zip"), file("second", "other.zip")],
+        );
+        for project in ["first", "second"] {
+            assert!(matches.contains_key(project));
+            assert!(removable_files(&matches, kind, project).is_none());
+        }
+    }
+
+    #[test]
+    fn data_pack_removal_requires_a_single_matched_world() {
+        let game = tempfile::tempdir().unwrap();
+        let kind = ProjectType::DataPack;
+        let first = game.path().join("saves/First");
+        let second = game.path().join("saves/Second");
+        let path = first.join("datapacks/pack.zip");
+        for world in [&first, &second] {
+            fs::create_dir_all(world.join("datapacks")).unwrap();
+            fs::write(world.join("level.dat"), []).unwrap();
+        }
+        let known = [file("pack", "pack.zip")];
+        fs::write(&path, b"x").unwrap();
+        let matches = matches_by_name(kind, game.path(), &known);
+        assert_eq!(
+            removable_files(&matches, kind, "pack"),
+            Some(std::slice::from_ref(&path))
+        );
+
+        fs::write(second.join("datapacks/pack.zip"), b"x").unwrap();
+        let matches = matches_by_name(kind, game.path(), &known);
+        assert!(matches.contains_key("pack"));
+        assert!(removable_files(&matches, kind, "pack").is_none());
     }
 
     #[test]
