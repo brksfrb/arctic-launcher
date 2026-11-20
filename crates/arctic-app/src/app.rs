@@ -829,20 +829,14 @@ impl ArcticApp {
             self.start_login(true);
             return;
         }
-        let copy = self
-            .runs
-            .active()
-            .filter(|r| r.instance_id == instance.id)
-            .count() as u32;
         // Vanilla on another version is a different game, not another copy.
         let same = instance.is_default().then_some(version.id.as_str());
-        if self.runs.active_for(&instance.id, same).is_some() && !another_copy {
+        if self.runs.active_for(&instance.id, same).is_some() {
             self.toasts.push(
                 Kind::Info,
                 tf!("tasks.is_already_running", name = instance.name),
-                "Pick another instance to play more at once.",
+                t!("tasks.last_copy_keeps_settings"),
             );
-            return;
         }
         // The default instance's mods folder holds one Minecraft version's performance mods at a
         // time. Starting another version would have to swap them out under the game that's
@@ -869,6 +863,7 @@ impl ArcticApp {
             );
             return;
         }
+        let copy = self.runs.next_copy(&instance.id);
         self.warn_if_proxy_misses_servers(&instance, &version.id);
         // A new launch isn't on the previous game's server yet.
         self.voice.forget_place();
