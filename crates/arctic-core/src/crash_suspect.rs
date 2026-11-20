@@ -399,41 +399,29 @@ pub(crate) struct HangCulprit<'a> {
 
 /// Find the one mod whose code appears in most of the frozen client-thread samples.
 pub(crate) fn hang_culprit<'a>(text: &'a str, mods_dir: Option<&Path>) -> Option<HangCulprit<'a>> {
-    let snapshot = if let Some((_, snapshot)) = text.rsplit_once("---- logs/arctic-freezes/") {
-        let snapshot = snapshot.split("\n---- ").next()?;
-        // A finished freeze can establish a hang with the Windows exit code, but its
-        // samples may be from an earlier, recovered stall.
-        if snapshot
+    let snapshot = crate::crash::latest_freeze_snapshot(text);
+    // A finished freeze can establish a hang with the Windows exit code, but its
+    // samples may be from an earlier, recovered stall.
+    if snapshot.len() < text.len()
+        && snapshot
             .lines()
             .find(|l| l.starts_with("duration: "))
             .is_some_and(|l| !l.ends_with(" (still frozen when written)"))
-        {
-            return None;
-        }
-        snapshot
-    } else {
-        // Uploaded reports can retain the samples even if the snapshot header was trimmed.
-        text
-    };
-    let (_, rows) =
-        snapshot.rsplit_once("== Where the time went (frames present in the most samples) ==")?;
-    let mut frames = rows
-        .lines()
-        .skip(1)
-        .take_while(|l| !l.trim().is_empty() && !l.starts_with("== "))
-        .filter_map(|line| {
-            let (percent, entry) = line.trim().split_once('%')?;
-            let percent: u8 = percent.parse().ok()?;
+    {
+        return None;
+    }
+    let mut frames = crate::crash::freeze_hot_frames(snapshot)
+        .filter_map(|(percent, entry, line)| {
             if !(60..=100).contains(&percent) {
                 return None;
             }
-            let frame = parse_frame(entry.trim())?;
+            let frame = parse_frame(entry)?;
             if NOT_MODS.iter().any(|p| frame.class.starts_with(p))
                 || frame.class.starts_with("net.fabricmc.fabric.")
             {
                 return None;
             }
-            Some((frame, percent, line.trim()))
+            Some((frame, percent, line))
         })
         .peekable();
     frames.peek()?;
