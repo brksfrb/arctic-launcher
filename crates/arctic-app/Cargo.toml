@@ -13,8 +13,10 @@ arctic-core = { path = "../arctic-core" }
 arctic-share = { path = "../arctic-share" }
 arctic-voice = { path = "../arctic-voice" }
 memmap2 = "0.9"
+lzma-rs = "0.3.0"
+skrifa = "0.44.0"
 # glow (OpenGL) instead of the default wgpu backend keeps the binary small.
-eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "default_fonts", "glow", "links", "wayland", "x11"] }
+eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "glow", "links", "wayland", "x11"] }
 egui_extras = { version = "0.36", default-features = false, features = ["file", "image"] }
 discord-rich-presence = "1.1.0"
 # `wayland-data-control`: without it arboard only ever speaks X11, so copying a screenshot or
@@ -48,7 +50,9 @@ name = "arctic-launcher"
 path = "src/main.rs"
 
 [build-dependencies]
+png = "0.18.1"
 winresource = "0.1.31"
+xz2 = { version = "0.1.7", features = ["static"] }
 
 # The Linux tray (StatusNotifierItem over D-Bus; no GTK needed).
 [target."cfg(target_os = \"linux\")".dependencies]

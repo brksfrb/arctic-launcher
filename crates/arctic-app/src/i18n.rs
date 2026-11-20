@@ -11,7 +11,30 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::{Mutex, OnceLock, PoisonError, RwLock};
 
-// `LOCALE_FILES`: (language, file name, contents) of every locales/<language>/<file>.json.
+struct EmbeddedLocale {
+    code: &'static str,
+    bytes: &'static [u8],
+    /// File names and their end offsets in the decompressed blob.
+    files: &'static [(&'static str, usize)],
+}
+
+impl EmbeddedLocale {
+    fn decode(&self) -> Result<Vec<u8>, lzma_rs::error::Error> {
+        let mut plain = Vec::with_capacity(self.files.last().map_or(0, |&(_, end)| end));
+        lzma_rs::lzma_decompress(&mut &self.bytes[..], &mut plain)?;
+        Ok(plain)
+    }
+
+    fn files<'a>(&self, plain: &'a [u8]) -> impl Iterator<Item = (&'static str, &'a [u8])> {
+        let mut start = 0;
+        self.files.iter().map(move |&(name, end)| {
+            let json = &plain[start..end];
+            start = end;
+            (name, json)
+        })
+    }
+}
+
 include!(concat!(env!("OUT_DIR"), "/locales.rs"));
 
 /// The setting that means "the language this computer uses".
@@ -123,17 +146,21 @@ fn load(code: &str) -> &'static Catalog {
         return catalog;
     }
     let mut strings = HashMap::new();
-    for (lang, file, json) in LOCALE_FILES {
-        if *lang != code {
-            continue;
-        }
-        match serde_json::from_str::<HashMap<String, String>>(json) {
-            Ok(map) => {
-                for (key, value) in map {
-                    strings.insert(leak(key), leak(value));
+    if let Some(locale) = LOCALES.iter().find(|locale| locale.code == code) {
+        match locale.decode() {
+            Ok(plain) => {
+                for (file, json) in locale.files(&plain) {
+                    match serde_json::from_slice::<HashMap<String, String>>(json) {
+                        Ok(map) => {
+                            strings.extend(
+                                map.into_iter().map(|(key, value)| (leak(key), leak(value))),
+                            );
+                        }
+                        Err(e) => log::error!("locales/{code}/{file}: {e}"),
+                    }
                 }
             }
-            Err(e) => log::error!("locales/{lang}/{file}: {e}"),
+            Err(e) => log::error!("locales/{code}: {e}"),
         }
     }
     let code = match LANGUAGES.iter().find(|l| l.code == code) {
@@ -499,50 +526,55 @@ mod tests {
         }
         let english = english();
         let mut problems = Vec::new();
-        let mut seen: HashMap<&str, Vec<&str>> = HashMap::new();
-        for (lang, file, json) in LOCALE_FILES {
-            let map: HashMap<String, String> = serde_json::from_str(json)
-                .unwrap_or_else(|e| panic!("locales/{lang}/{file} is not a flat JSON object: {e}"));
-            let keys = seen.entry(lang).or_default();
-            for (key, value) in &map {
-                let key_static = leak(key.clone());
-                if keys.contains(&key_static) {
-                    problems.push(format!("{lang}/{file}: {key} appears twice in {lang}"));
-                }
-                keys.push(key_static);
-                if value.trim().is_empty() {
-                    problems.push(format!("{lang}/{file}: {key} is empty"));
-                }
-                if *lang == "en" {
-                    continue;
-                }
-                // A plural form ("key.few") a language needs and English doesn't is fine when
-                // English has "key.other"; `{n}` may appear in any form.
-                let (base, form) = key.rsplit_once('.').unwrap_or((key.as_str(), ""));
-                let is_form = matches!(form, "zero" | "one" | "two" | "few" | "many" | "other");
-                let other = format!("{base}.other");
-                let source = english.strings.get(key.as_str()).copied().or(if is_form {
-                    english.strings.get(other.as_str()).copied()
-                } else {
-                    None
-                });
-                fn strip_n(mut v: Vec<&str>, is_form: bool) -> Vec<&str> {
-                    if is_form {
-                        v.retain(|p| *p != "n");
+        for locale in LOCALES {
+            let lang = locale.code;
+            let plain = locale
+                .decode()
+                .unwrap_or_else(|e| panic!("locales/{lang}: {e}"));
+            let mut seen = std::collections::HashSet::new();
+            for (file, json) in locale.files(&plain) {
+                let map: HashMap<String, String> =
+                    serde_json::from_slice(json).unwrap_or_else(|e| {
+                        panic!("locales/{lang}/{file} is not a flat JSON object: {e}")
+                    });
+                for (key, value) in &map {
+                    if !seen.insert(key.clone()) {
+                        problems.push(format!("{lang}/{file}: {key} appears twice in {lang}"));
                     }
-                    v
-                }
-                match source {
-                    None => problems.push(format!("{lang}/{file}: {key} is not in English")),
-                    Some(source)
-                        if strip_n(placeholders(source), is_form)
-                            != strip_n(placeholders(value), is_form) =>
-                    {
-                        problems.push(format!(
-                            "{lang}/{file}: {key} has other placeholders than English"
-                        ))
+                    if value.trim().is_empty() {
+                        problems.push(format!("{lang}/{file}: {key} is empty"));
                     }
-                    Some(_) => {}
+                    if lang == "en" {
+                        continue;
+                    }
+                    // A plural form ("key.few") a language needs and English doesn't is fine when
+                    // English has "key.other"; `{n}` may appear in any form.
+                    let (base, form) = key.rsplit_once('.').unwrap_or((key.as_str(), ""));
+                    let is_form = matches!(form, "zero" | "one" | "two" | "few" | "many" | "other");
+                    let other = format!("{base}.other");
+                    let source = english.strings.get(key.as_str()).copied().or(if is_form {
+                        english.strings.get(other.as_str()).copied()
+                    } else {
+                        None
+                    });
+                    fn strip_n(mut v: Vec<&str>, is_form: bool) -> Vec<&str> {
+                        if is_form {
+                            v.retain(|p| *p != "n");
+                        }
+                        v
+                    }
+                    match source {
+                        None => problems.push(format!("{lang}/{file}: {key} is not in English")),
+                        Some(source)
+                            if strip_n(placeholders(source), is_form)
+                                != strip_n(placeholders(value), is_form) =>
+                        {
+                            problems.push(format!(
+                                "{lang}/{file}: {key} has other placeholders than English"
+                            ))
+                        }
+                        Some(_) => {}
+                    }
                 }
             }
         }
@@ -552,9 +584,7 @@ mod tests {
     #[test]
     fn every_language_in_the_picker_has_text() {
         for language in LANGUAGES {
-            let has_files = LOCALE_FILES
-                .iter()
-                .any(|(lang, _, _)| *lang == language.code);
+            let has_files = LOCALES.iter().any(|locale| locale.code == language.code);
             assert!(has_files, "locales/{} has no files", language.code);
         }
     }
