@@ -3,9 +3,9 @@
 //! launcher UI never waits on the game.
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Seek, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
@@ -295,7 +295,7 @@ pub(super) fn spawn_with_session(
             }
         }
         if !killed && code.is_some_and(|c| c != 0) && runtime < Duration::from_secs(5) {
-            let probe = runtime_probe(&exe);
+            let probe = runtime_probe_diagnostic(&exe);
             writeln!(log.lock().unwrap(), "{probe}").ok();
             on_event(GameEvent::Output(vec![LogLine {
                 level: super::logparse::Level::Info,
@@ -372,46 +372,68 @@ fn drain_readers(readers: Vec<std::thread::JoinHandle<()>>) {
 }
 
 /// Bounded and invisible: same executable, no game or account arguments.
-fn runtime_probe(exe: &Path) -> String {
+fn runtime_probe(exe: &Path) -> io::Result<Option<(ExitStatus, String)>> {
+    // A wrapper can leave a child holding stdout or stderr open. A file lets us
+    // read the completed probe's output without waiting for that child.
+    let mut output = tempfile::tempfile()?;
     let mut cmd = Command::new(exe);
     cmd.arg("-version")
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stdout(output.try_clone()?)
+        .stderr(output.try_clone()?);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000);
     }
-    let result = (|| -> std::io::Result<String> {
-        let mut probe = cmd.spawn()?;
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
-        loop {
-            if probe.try_wait()?.is_some() {
-                let out = probe.wait_with_output()?;
-                let output = format!(
-                    "{}{}",
-                    String::from_utf8_lossy(&out.stdout),
-                    String::from_utf8_lossy(&out.stderr)
-                );
-                return Ok(format!(
-                    "status={}; {}",
-                    out.status,
-                    crate::crash::scrubbed_tail(&output, 2048).replace('\n', " | ")
-                ));
-            }
-            if std::time::Instant::now() >= deadline {
-                let _ = probe.kill();
-                let _ = probe.wait();
-                return Ok("timed out after 3 s".into());
-            }
-            std::thread::sleep(Duration::from_millis(50));
+    let mut probe = cmd.spawn()?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    loop {
+        if let Some(status) = probe.try_wait()? {
+            output.rewind()?;
+            let mut bytes = Vec::new();
+            output.take(8 * 1024).read_to_end(&mut bytes)?;
+            return Ok(Some((status, String::from_utf8_lossy(&bytes).into_owned())));
         }
-    })();
-    format!(
-        "[Arctic diagnostics] same-runtime java -version: {}",
-        result.unwrap_or_else(|e| format!("failed: {e}"))
-    )
+        if std::time::Instant::now() >= deadline {
+            let _ = probe.kill();
+            let _ = probe.wait();
+            return Ok(None);
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn runtime_probe_diagnostic(exe: &Path) -> String {
+    let result = match runtime_probe(exe) {
+        Ok(Some((status, output))) => format!(
+            "status={status}; {}",
+            crate::crash::scrubbed_tail(&output, 2048).replace('\n', " | ")
+        ),
+        Ok(None) => "timed out after 3 s".into(),
+        Err(e) => format!("failed: {e}"),
+    };
+    format!("[Arctic diagnostics] same-runtime java -version: {result}")
+}
+
+pub(crate) fn runtime_major_version(exe: &Path) -> Option<u32> {
+    let (status, output) = runtime_probe(exe).ok()??;
+    if !status.success() {
+        return None;
+    }
+    parse_java_major_version(&output)
+}
+
+fn parse_java_major_version(output: &str) -> Option<u32> {
+    output.lines().find_map(|line| {
+        let line = line.trim_start();
+        let (version, _) = line
+            .strip_prefix("openjdk version \"")
+            .or_else(|| line.strip_prefix("java version \""))?
+            .split_once('"')?;
+        let version = version.strip_prefix("1.").unwrap_or(version);
+        version.split(['.', '-', '+']).next()?.parse().ok()
+    })
 }
 
 /// The game's exit code; a game the system stopped with a signal (Linux, macOS) counts as 128 plus the
@@ -810,6 +832,55 @@ fn is_window_marker(line: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn parses_java_major_versions() {
+        use super::parse_java_major_version;
+
+        for (output, major) in [
+            (r#"openjdk version "1.8.0_452""#, 8),
+            (r#"java version "1.8.0_452""#, 8),
+            (r#"openjdk version "11.0.26""#, 11),
+            (r#"openjdk version "17.0.15""#, 17),
+            (r#"openjdk version "21.0.7" 2025-04-15 LTS"#, 21),
+            (r#"openjdk version "25.0.1""#, 25),
+            (r#"openjdk version "27-ea""#, 27),
+        ] {
+            assert_eq!(parse_java_major_version(output), Some(major));
+        }
+        assert_eq!(
+            parse_java_major_version("wrapper warning\r\nopenjdk version \"21.0.7\"\r\n"),
+            Some(21)
+        );
+        for output in [
+            "",
+            "Java(TM) Runtime Environment (build 21.0.7)",
+            "openjdk version \"17",
+        ] {
+            assert_eq!(parse_java_major_version(output), None);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn runtime_version_requires_a_successful_probe() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("java");
+        assert_eq!(super::runtime_major_version(&exe), None);
+        for (exit, major) in [(0, Some(21)), (1, None)] {
+            std::fs::write(
+                &exe,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' 'openjdk version \"21.0.7\"' >&2\nexit {exit}\n"
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
+            assert_eq!(super::runtime_major_version(&exe), major);
+        }
+    }
+
     #[cfg(unix)]
     fn test_process(
         script: &str,

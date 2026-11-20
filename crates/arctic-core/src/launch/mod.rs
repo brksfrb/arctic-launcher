@@ -225,8 +225,7 @@ fn java_flag_without_path(arg: &str) -> String {
     format!("{name}{sep}{file}")
 }
 
-/// A version whose files are all downloaded and laid out; command lines
-/// for any account can be built from it without further I/O.
+/// A version whose files are all downloaded and laid out for launch.
 pub struct Installation {
     pub version: VersionJson,
     pub java: PathBuf,
@@ -1011,12 +1010,22 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
             "memory setting {asked} MB is more than this computer can spare: using {max_memory_mb} MB"
         );
     }
+    let native_x86_64 =
+        java::native_x86_64() && !crate::versions::rules::needs_rosetta(&inst.version);
+    let java_major = if !native_x86_64 {
+        None
+    } else if req.instance.java_path.is_some() || settings.java_override.is_some() {
+        process::runtime_major_version(&inst.java)
+    } else {
+        inst.version.java_version.as_ref().map(|j| j.major_version)
+    };
     let opts = JvmOptions {
         min_memory_mb: settings.min_memory_mb.min(max_memory_mb),
         max_memory_mb,
-        extra: user_args
+        extra: args::java4shell_flags(java_major, native_x86_64, &user_args)
             .iter()
-            .cloned()
+            .map(|&arg| arg.to_owned())
+            .chain(user_args.iter().cloned())
             .chain(arctic_mod::jvm_flag())
             .chain(arctic_mod::brand_flag(&req.instance.loader))
             .chain(Some(arctic_mod::version_flag()))
@@ -1401,6 +1410,23 @@ mod tests {
             .collect();
         assert_eq!(heap_flags, ["-Xms1G", "-Xmx3584M"]);
         assert!(plan.args.iter().any(|arg| arg == "-XX:+UseG1GC"));
+        if java::native_x86_64() {
+            assert_eq!(
+                &plan.args[..3],
+                [
+                    "-XX:+UnlockDiagnosticVMOptions",
+                    "-XX:-UseBASE64Intrinsics",
+                    "-XX:+UseG1GC",
+                ]
+            );
+        } else {
+            assert!(
+                !plan
+                    .args
+                    .iter()
+                    .any(|arg| arg.contains("UseBASE64Intrinsics"))
+            );
+        }
         let summary = plan.java_summary();
         assert!(summary.contains(args::CUSTOM_MAX_HEAP_SOURCE));
         assert_eq!(crate::crash::max_memory_mb(&summary), Some(3584));
