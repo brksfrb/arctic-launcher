@@ -3,6 +3,9 @@
 //! the wrong Java, running out of memory, graphics drivers.
 
 use std::sync::OnceLock;
+use std::time::SystemTime;
+
+use chrono::{DateTime, Days, Local, NaiveTime, TimeZone};
 
 use regex::Regex;
 
@@ -1551,7 +1554,9 @@ pub struct Report {
 const REPORT_LOG_LINES: usize = 150;
 /// Most of the log's end, and of the crash report's start, that are sent (bytes). All together they
 /// stay under what the server keeps (48 KB).
-const REPORT_LOG_BYTES: usize = 8 * 1024;
+const REPORT_LOG_BYTES: usize = 12 * 1024;
+const REPORT_TRACE_LOOKBACK: usize = 4 * 1024;
+const REPORT_BYTES: usize = 47 * 1024;
 const REPORT_CRASH_BYTES: usize = 16 * 1024;
 /// Latest registry warnings/errors, reserved ahead of verbose log tails and crash inventories.
 const REPORT_REGISTRY_BYTES: usize = 6 * 1024;
@@ -1560,6 +1565,48 @@ const REPORT_JAVA_BYTES: usize = 5 * 1024;
 /// The launcher's own log (sign-in failures, downloads, launch steps): its last lines.
 const REPORT_LAUNCHER_LINES: usize = 80;
 const REPORT_LAUNCHER_BYTES: usize = 6 * 1024;
+
+fn log_record(line: &str) -> Option<(&str, &str)> {
+    let (mut tag, mut message) = line.strip_prefix('[')?.split_once(']')?;
+    if tag.starts_with(|c: char| c.is_ascii_digit()) && tag.contains(':') {
+        (tag, message) = message.trim_start().strip_prefix('[')?.split_once(']')?;
+    }
+    let level = tag.rsplit('/').next()?;
+    if !matches!(
+        level,
+        "TRACE" | "DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL"
+    ) {
+        return None;
+    }
+    let message = message.strip_prefix(':').unwrap_or(message).trim_start();
+    // Forge can put a logger category between the level and the message.
+    let message = message
+        .strip_prefix('[')
+        .and_then(|category| category.split_once(']'))
+        .and_then(|(_, rest)| rest.strip_prefix(": "))
+        .unwrap_or(message);
+    Some((level, message))
+}
+
+fn log_message(line: &str) -> &str {
+    log_record(line).map_or(line, |(_, message)| message)
+}
+
+fn error_record(line: &str) -> bool {
+    matches!(log_record(line), Some(("ERROR" | "FATAL", _)))
+}
+
+fn harmless_log_record(line: &str) -> bool {
+    let message = log_message(line);
+    // Minecraft rejects the unnamed pool and logs a synthetic stack for its origin.
+    message.starts_with("Bad loottable added: ") && message.ends_with(", name is null")
+}
+
+fn exception_header_pattern() -> &'static Regex {
+    static EXCEPTION: OnceLock<Regex> = OnceLock::new();
+    EXCEPTION
+        .get_or_init(|| Regex::new(r"(?:[\w$]+\.)*[\w$]*(?:Exception|Error)(?::|\s*$)").unwrap())
+}
 
 /// Prefer the captured exception or a crash document. In ordinary logs, require an exception
 /// followed by a Java stack frame in the same log record.
@@ -1573,17 +1620,17 @@ fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a st
     {
         return Some(error.as_str());
     }
-    static EXCEPTION: OnceLock<Regex> = OnceLock::new();
-    let exception = EXCEPTION
-        .get_or_init(|| Regex::new(r"(?:[\w$]+\.)*[\w$]*(?:Exception|Error)(?::|\s*$)").unwrap());
+    let exception = exception_header_pattern();
     let select = |text: &'a str, report: bool| {
-        let mut warning = false;
+        let mut skip_record = false;
         let mut lines = text.lines();
         while let Some(line) = lines.next() {
             if line.starts_with('[') {
-                warning = line.contains("/WARN]") || line.contains("/INFO]");
+                skip_record = line.contains("/WARN]")
+                    || line.contains("/INFO]")
+                    || (!report && harmless_log_record(line));
             }
-            if warning || line.contains("pack.mcmeta") || line.contains("pack metadata") {
+            if skip_record || line.contains("pack.mcmeta") || line.contains("pack metadata") {
                 continue;
             }
             let Some(found) = exception.find(line) else {
@@ -1643,6 +1690,9 @@ impl Report {
                 scrub(head_of(error, 2048), &Own::this_pc())
             ));
         }
+        priority.push_str("\n---- last output ----\n");
+        priority.push_str(&scrub(&last_output(&all), &Own::this_pc()));
+        priority.push('\n');
         let diagnosis_text = format!(
             "{all}\n{}\n{}\n{}",
             crash_report
@@ -1701,15 +1751,8 @@ impl Report {
         let ram_total_mb = crate::system::total_memory_mb();
         let ram_free_mb = crate::system::free_memory_mb();
         priority.push_str(&memory_section(ram_total_mb, ram_free_mb));
-        let remaining = (47 * 1024usize).saturating_sub(priority.len() + 512);
-        let skip = lines.len().saturating_sub(REPORT_LOG_LINES);
-        let tail = lines[skip..].join("\n");
-        // The first-exceptions section takes its room out of the tail.
-        let tail_bytes = REPORT_LOG_BYTES
-            .saturating_sub(early.len())
-            .max(REPORT_LOG_BYTES / 4);
-        let mut text = tail_of(&tail, tail_bytes).to_owned();
-        text.push_str("\n\n---- initial output ----\n");
+        let remaining = REPORT_BYTES.saturating_sub(priority.len() + 512);
+        let mut text = String::from("\n---- initial output ----\n");
         text.push_str(head_of(&all, 2 * 1024));
         let launcher_compact = launcher_lines
             .iter()
@@ -1722,7 +1765,7 @@ impl Report {
         let reserved = launcher_compact.len().min(REPORT_LAUNCHER_BYTES)
             + java.map_or(0, |s| s.len().min(REPORT_JAVA_BYTES))
             + crash_report.map_or(0, |s| s.len().min(REPORT_CRASH_BYTES));
-        let evidence_budget = (48 * 1024usize).saturating_sub(text.len() + reserved + 1024);
+        let evidence_budget = remaining.saturating_sub(text.len() + reserved + 1024);
         let evidence = diagnostic_evidence(&all, evidence_budget);
         if !evidence.is_empty() {
             text.push_str("\n\n---- diagnostics ----\n");
@@ -1802,7 +1845,7 @@ impl Report {
                     "{priority}\n{}",
                     scrub(head_of(&text, remaining), &Own::this_pc())
                 ),
-                47 * 1024,
+                REPORT_BYTES,
             )
             .to_owned(),
             ram_total_mb,
@@ -1810,6 +1853,221 @@ impl Report {
             contact: String::new(),
         }
     }
+
+    /// Attach the context from a failed process exit for which no crash file was available.
+    pub fn with_exit_context(mut self, context: &str) -> Self {
+        let context = scrub(context, &Own::this_pc());
+        let section = format!(
+            "\n\n---- exit context ----\n{}",
+            head_of(&context, 4 * 1024)
+        );
+        let keep = head_of(&self.log, REPORT_BYTES.saturating_sub(section.len())).len();
+        self.log.truncate(keep);
+        self.log.push_str(&section);
+        self
+    }
+}
+
+/// Exit evidence only describes what was logged. A shutdown message can also follow a failure.
+pub fn exit_context(
+    output: &[&str],
+    latest_log: &[&str],
+    started: SystemTime,
+    exited: SystemTime,
+) -> String {
+    use std::fmt::Write;
+
+    let exited = DateTime::<Local>::from(exited);
+    let started = DateTime::<Local>::from(started);
+    let console = || output.iter().rev().flat_map(|chunk| chunk.lines().rev());
+    let file = || latest_log.iter().rev().copied();
+    let timestamp =
+        |line: &str| log_time(line).and_then(|time| log_timestamp(time, started, exited));
+    let last_matching = |predicate: fn(&str) -> bool| {
+        let file_match = last_matching_output(file(), predicate, timestamp);
+        let console_match = last_matching_output(console(), predicate, timestamp);
+        // The file preserves ordering within logger records. Prefer it unless the console
+        // has evidence of a later record, such as an exception printed after log shutdown.
+        match (file_match, console_match) {
+            (Some((_, Some(file_time))), Some((line, Some(console_time))))
+                if console_time > file_time =>
+            {
+                Some(line)
+            }
+            (Some((line, _)), _) | (None, Some((line, _))) => Some(line),
+            (None, None) => None,
+        }
+    };
+    let stop = last_matching(|line| {
+        let message = log_message(line);
+        message == "Stopping!"
+            || message.contains("Shutting down culling task!")
+            || matches!(message, "Sound engine stopped" | "Sound engine stopped.")
+            || message.starts_with("Shutting down SoundSystem")
+            || message.starts_with("SoundSystem shutting down")
+            || message.starts_with("[Arctic diagnostics] minecraft stop complete")
+    });
+    let mut context = String::new();
+    if let Some(line) = stop {
+        writeln!(
+            context,
+            "Client shutdown logged: yes ({})",
+            head_of(line, 384)
+        )
+        .unwrap();
+    } else {
+        context.push_str("Client shutdown logged: no\n");
+    }
+    let last_time = [file().find_map(timestamp), console().find_map(timestamp)]
+        .into_iter()
+        .flatten()
+        .max();
+    if let Some(time) = last_time {
+        writeln!(
+            context,
+            "Last log timestamp to process exit: {} s",
+            (exited - time).num_seconds()
+        )
+        .unwrap();
+    } else {
+        context.push_str("Last log timestamp to process exit: unknown\n");
+    }
+    let last_error = last_matching(error_record);
+    let last_exception = last_matching(|line| {
+        let message = log_message(line).trim_start();
+        !stack_continuation(message)
+            && exception_header_pattern()
+                .find(message)
+                .is_some_and(|found| {
+                    let class = found.as_str().trim_end_matches(':').trim_end();
+                    (found.start() == 0
+                        && (class.contains('.')
+                            || class.starts_with(|c: char| c.is_ascii_uppercase()))
+                        && !matches!(class, "Exception" | "Error"))
+                        || message.starts_with("Exception in thread \"")
+                        || (error_record(line) && class.contains('.'))
+                })
+    });
+    for (label, evidence) in [
+        ("Last ERROR/FATAL", last_error),
+        ("Last exception header", last_exception),
+    ] {
+        writeln!(
+            context,
+            "{label}: {}",
+            evidence.map_or("none logged", |line| head_of(line, 512))
+        )
+        .unwrap();
+    }
+    let mut callers = Vec::new();
+    for line in console().chain(file()) {
+        let message = log_message(line);
+        let prefix = &line[..line.len() - message.len()];
+        let message = message.trim();
+        if (line.contains("[Arctic diagnostics] exit caller ")
+            || message.contains("System.exit")
+            || message.contains("Runtime.halt")
+            || message.starts_with("Halting")
+            || (message.to_ascii_lowercase().contains("exit")
+                && prefix.to_ascii_lowercase().contains("fml")))
+            && !callers.contains(&line)
+        {
+            callers.push(line);
+            if callers.len() == 4 {
+                break;
+            }
+        }
+    }
+    for line in callers.into_iter().rev() {
+        writeln!(context, "Exit-related output: {}", head_of(line, 384)).unwrap();
+    }
+    context
+}
+
+fn last_matching_output<'a>(
+    mut reversed: impl Iterator<Item = &'a str>,
+    predicate: fn(&str) -> bool,
+    timestamp: impl Fn(&str) -> Option<DateTime<Local>>,
+) -> Option<(&'a str, Option<DateTime<Local>>)> {
+    let line = reversed.find(|line| predicate(line))?;
+    // A bare Java exception belongs to the last stamped record above it.
+    let time = timestamp(line).or_else(|| reversed.find_map(timestamp));
+    Some((line, time))
+}
+
+fn log_time(line: &str) -> Option<NaiveTime> {
+    let clock = line.strip_prefix('[')?.split_once(']')?.0;
+    NaiveTime::parse_from_str(clock, "%H:%M:%S%.f").ok()
+}
+
+fn log_timestamp(
+    time: NaiveTime,
+    started: DateTime<Local>,
+    exited: DateTime<Local>,
+) -> Option<DateTime<Local>> {
+    // Minecraft usually logs only the wall clock. Runs of at least one day cannot date it reliably.
+    if (exited - started).num_hours() >= 24 {
+        return None;
+    }
+    let date = exited.date_naive();
+    [Some(date), date.checked_sub_days(Days::new(1))]
+        .into_iter()
+        .flatten()
+        .filter_map(|date| Local.from_local_datetime(&date.and_time(time)).single())
+        .find(|&stamp| stamp <= exited && (stamp - started).num_seconds() >= 0)
+}
+
+fn stack_continuation(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.starts_with("at ")
+        || trimmed.starts_with("Caused by:")
+        || trimmed.starts_with("Suppressed:")
+        || trimmed.starts_with("... ")
+}
+
+fn last_output(text: &str) -> String {
+    let text = text.trim_end_matches(['\r', '\n']);
+    let (mut start, mut count) = (text.len(), 0);
+    for line in text.rsplit('\n') {
+        let next = start.saturating_sub(line.len() + usize::from(count != 0));
+        if count == REPORT_LOG_LINES || text.len() - next > REPORT_LOG_BYTES {
+            break;
+        }
+        start = next;
+        count += 1;
+    }
+    if count == 0 {
+        // A single oversized final line still has a useful prefix.
+        let line = text.rsplit('\n').next().unwrap_or_default();
+        return format!("{} [line truncated]", head_of(line, REPORT_LOG_BYTES));
+    }
+    let first = text[start..].lines().next().unwrap_or_default();
+    if stack_continuation(first) {
+        let cutoff = start;
+        let mut previous_start = start;
+        for line in text[..start].strip_suffix('\n').unwrap_or("").rsplit('\n') {
+            previous_start = previous_start.saturating_sub(line.len() + 1);
+            if start - previous_start > REPORT_TRACE_LOOKBACK {
+                break;
+            }
+            if !stack_continuation(line) {
+                if exception_header_pattern().is_match(log_message(line)) {
+                    start = previous_start;
+                    // Include the log message immediately above a bare exception header.
+                    if !line.starts_with('[')
+                        && let Some(prefix) = text[..start].strip_suffix('\n')
+                        && let Some(record) = prefix.rsplit('\n').next()
+                        && record.starts_with('[')
+                        && record.len() < REPORT_TRACE_LOOKBACK - (cutoff - start)
+                    {
+                        start -= record.len() + 1;
+                    }
+                }
+                break;
+            }
+        }
+    }
+    text[start..].to_owned()
 }
 
 /// "---- memory ----\n16384 MB total, 4096 MB free\n", with "unknown" for what couldn't be read.
@@ -2026,41 +2284,47 @@ const FIRST_EXCEPTIONS: usize = 3;
 const FIRST_EXCEPTION_FRAMES: usize = 25;
 const FIRST_EXCEPTION_CAUSES: usize = 6;
 
+struct ExceptionEntry<'a> {
+    line: &'a str,
+    body: Vec<&'a str>,
+    count: usize,
+}
+
 /// The first distinct ERROR/FATAL log entries that carry a stack trace, from the whole log, so a
 /// root cause that scrolled out of the tail (e.g. a join-time NPE that later leaves `player`
 /// null) is still reported. Repeats of the same trace are kept once.
 fn first_exceptions(text: &str) -> String {
-    let mut seen: Vec<String> = Vec::new();
-    let mut out = String::new();
+    let mut entries: Vec<ExceptionEntry<'_>> = Vec::new();
     let mut lines = text.lines().peekable();
     while let Some(line) = lines.next() {
-        if !(line.starts_with('[') && (line.contains("/ERROR]") || line.contains("/FATAL]"))) {
+        if !error_record(line) {
             continue;
         }
         let mut body = Vec::new();
-        while let Some(next) = lines.next_if(|l| !l.starts_with('[')) {
+        while let Some(next) = lines.next_if(|l| !l.starts_with('[') && !l.starts_with("---- ")) {
             body.push(next);
         }
-        if !body.iter().any(|l| l.trim_start().starts_with("at ")) {
+        if harmless_log_record(line) || !body.iter().any(|l| l.trim_start().starts_with("at ")) {
             continue;
         }
-        let message = line.split_once("]: ").map_or(line, |(_, m)| m);
-        let frames: Vec<&str> = body
-            .iter()
-            .copied()
-            .filter(|l| l.trim_start().starts_with("at "))
-            .take(4)
-            .collect();
-        let key = format!(
-            "{message}\n{}\n{}",
-            body.first().copied().unwrap_or(""),
-            frames.join("\n")
-        );
-        if seen.contains(&key) {
-            continue;
+        let message = log_message(line);
+        if let Some(entry) = entries
+            .iter_mut()
+            .find(|entry| log_message(entry.line) == message && entry.body == body)
+        {
+            entry.count += 1;
+        } else if entries.len() < FIRST_EXCEPTIONS {
+            entries.push(ExceptionEntry {
+                line,
+                body,
+                count: 1,
+            });
         }
-        seen.push(key);
-        let mut entry = String::from(line);
+    }
+    let mut out = String::new();
+    let entry_budget = FIRST_EXCEPTIONS_BYTES / entries.len().max(1);
+    for ExceptionEntry { line, body, count } in entries {
+        let mut entry = String::from(head_of(line, 1024));
         entry.push('\n');
         let (mut frames, mut causes) = (0, 0);
         for l in body {
@@ -2082,17 +2346,20 @@ fn first_exceptions(text: &str) -> String {
             entry.push_str(head_of(l, 512));
             entry.push('\n');
         }
-        if out.len() + entry.len() > FIRST_EXCEPTIONS_BYTES {
-            // A single oversized first entry is cut rather than dropped.
-            if out.is_empty() {
-                out.push_str(head_of(&entry, FIRST_EXCEPTIONS_BYTES));
-            }
-            break;
+        let repeats = if count > 1 {
+            format!("[{count} occurrences]\n")
+        } else {
+            String::new()
+        };
+        let limit = entry_budget - repeats.len();
+        if entry.len() > limit {
+            let clipped = head_of(&entry, limit - 5);
+            out.push_str(clipped.rsplit_once('\n').map_or(clipped, |(head, _)| head));
+            out.push_str("\n...\n");
+        } else {
+            out.push_str(&entry);
         }
-        out.push_str(&entry);
-        if seen.len() >= FIRST_EXCEPTIONS {
-            break;
-        }
+        out.push_str(&repeats);
     }
     out
 }
@@ -4090,6 +4357,157 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
             first_exceptions(&all).matches("Error on GameJoin").count(),
             1
         );
+    }
+
+    const LOOT_WARNING_424: &str = "[09:00:00] [Render thread/ERROR]: Bad loottable added: net.minecraft.loot.LootPool@1a2b, name is null
+java.lang.Exception
+    at example.LootMixin.onAddPool(LootMixin.java:42)";
+    const WATCHDOG_424: &str =
+        "[09:36:51] [Integrated Server Watchdog/ERROR]: Uncaught exception in watchdog
+java.lang.IllegalArgumentException: timeout value is negative
+    at java.lang.Thread.sleep(Native Method)";
+    const SHUTDOWN_424: &str = "[09:38:00] [CullThread/INFO]: Shutting down culling task!";
+
+    #[test]
+    fn crash_424_skips_unnamed_loot_pool_warnings_and_counts_repeated_exceptions() {
+        let different = LOOT_WARNING_424.replace("@1a2b", "@3c4d");
+        let log = format!(
+            "{LOOT_WARNING_424}\n{different}\n{WATCHDOG_424}\n{}\n{}\n{SHUTDOWN_424}",
+            WATCHDOG_424.replace("09:36:51", "09:36:52"),
+            WATCHDOG_424.replace("timeout value is negative", "different timeout")
+        );
+        assert!(first_error(LOOT_WARNING_424, None).is_none());
+        assert_eq!(
+            first_error(&log, None),
+            Some("java.lang.IllegalArgumentException: timeout value is negative")
+        );
+        let section = first_exceptions(&log);
+        assert!(!section.contains("Bad loottable added"));
+        assert_eq!(section.matches("timeout value is negative").count(), 1);
+        assert!(section.contains("[2 occurrences]"));
+        assert!(section.contains("different timeout"));
+        let other_loot_error = LOOT_WARNING_424.replace("name is null", "duplicate name");
+        assert_eq!(
+            first_error(&other_loot_error, None),
+            Some("java.lang.Exception")
+        );
+        assert!(first_exceptions(&other_loot_error).contains("duplicate name"));
+    }
+
+    #[test]
+    fn crash_424_tail_has_its_own_budget_and_keeps_the_stack_header() {
+        let click = "[09:36:49] [Render thread/ERROR]: Mouse click handler";
+        let click_exception = "java.lang.IllegalStateException: Closing inventory";
+        let frames = "    at example.MouseHelper.clickInventory(MouseHelper.java:73)\n".repeat(190);
+        let earlier = (0..3)
+            .map(|index| format!(
+                "[09:01:00] [main/ERROR]: Earlier error {index}\njava.lang.Exception: Earlier\n{}",
+                format!("    at example.Game.{}(Game.java:9)\n", "x".repeat(300)).repeat(25)
+            ))
+            .collect::<Vec<_>>()
+            .join("");
+        let log = format!(
+            "{LOOT_WARNING_424}\n{earlier}{click}\n{click_exception}\n{frames}{WATCHDOG_424}\n{SHUTDOWN_424}"
+        );
+        let lines: Vec<_> = log.lines().collect();
+        let report = Report::build("1.16.5", "forge", "", &lines, &[], None, None);
+        let tail = report.log.split_once("---- last output ----\n").unwrap().1;
+        let tail = tail.split("\n---- ").next().unwrap();
+        assert!(tail.starts_with(&format!("{click}\n{click_exception}\n")));
+        assert!(tail.contains(WATCHDOG_424));
+        assert!(tail.contains(SHUTDOWN_424));
+        assert!(tail.lines().count() >= REPORT_LOG_LINES);
+        assert!(tail.len() <= REPORT_LOG_BYTES + REPORT_TRACE_LOOKBACK + 1);
+        assert!(report.log.contains("Earlier error 2"));
+        assert!(report.log.len() <= REPORT_BYTES);
+    }
+
+    #[test]
+    fn tail_obeys_byte_budget_and_clean_boundaries_when_trace_header_is_too_far() {
+        let frame = format!(
+            "    at example.MouseHelper.{}(MouseHelper.java:73)",
+            "é".repeat(250)
+        );
+        let text = format!(
+            "java.lang.IllegalStateException: Closing inventory\n{}\n{SHUTDOWN_424}",
+            vec![frame.as_str(); 60].join("\n")
+        );
+        let tail = last_output(&text);
+        assert_eq!(tail.lines().next(), Some(frame.as_str()));
+        assert!(tail.ends_with(SHUTDOWN_424));
+        assert!(tail.len() <= REPORT_LOG_BYTES);
+        assert!(tail.len() > REPORT_LOG_BYTES - frame.len() - 1);
+    }
+
+    #[test]
+    fn crash_424_context_uses_the_last_timestamp_and_preserves_exit_evidence() {
+        let exit = Local.with_ymd_and_hms(2026, 11, 20, 9, 38, 3).unwrap();
+        let start = exit - chrono::Duration::seconds(3693);
+        let callers = [
+            "[09:37:50] [main/INFO] [FML]: Calling exit handler",
+            "[09:37:51] [main/INFO]: Halting",
+            "    at java.lang.Runtime.halt(Runtime.java:270)",
+            "    at java.lang.System.exit(System.java:973)",
+        ];
+        let log = format!("{LOOT_WARNING_424}\n{WATCHDOG_424}\n{SHUTDOWN_424}");
+        let context = exit_context(
+            &callers,
+            &log.lines().collect::<Vec<_>>(),
+            start.into(),
+            exit.into(),
+        );
+        assert!(context.contains("Client shutdown logged: yes ([09:38:00]"));
+        assert!(context.contains("Last log timestamp to process exit: 3 s"));
+        assert!(context.contains("Last ERROR/FATAL: [09:36:51]"));
+        assert!(context.contains("Last exception header: java.lang.IllegalArgumentException"));
+        for line in callers {
+            assert!(context.contains(line.trim_start()));
+        }
+        let context = exit_context(&[], &[], start.into(), exit.into());
+        assert!(context.contains("Client shutdown logged: no"));
+        assert!(context.contains("Last log timestamp to process exit: unknown"));
+        assert!(context.contains("Last ERROR/FATAL: none logged"));
+        assert!(context.contains("Last exception header: none logged"));
+        assert!(!context.contains("Exit-related output"));
+    }
+
+    #[test]
+    fn exit_context_preserves_a_later_console_exception_after_file_logging_stopped() {
+        let exit = Local.with_ymd_and_hms(2026, 11, 20, 9, 38, 3).unwrap();
+        let start = exit - chrono::Duration::minutes(5);
+        let console = [
+            SHUTDOWN_424,
+            "[09:38:01] [Render thread/FATAL]: Shutdown failed",
+            "Exception in thread \"Render thread\" java.lang.IllegalStateException: shutdown",
+            "    at example.Client.stop(Client.java:73)",
+        ];
+        let file = format!("{WATCHDOG_424}\n{SHUTDOWN_424}");
+        let context = exit_context(
+            &console,
+            &file.lines().collect::<Vec<_>>(),
+            start.into(),
+            exit.into(),
+        );
+        assert!(context.contains("Last ERROR/FATAL: [09:38:01]"));
+        assert!(context.contains("Last exception header: Exception in thread"));
+        assert!(context.contains("Last log timestamp to process exit: 2 s"));
+    }
+
+    #[test]
+    fn exit_context_handles_midnight_and_unstamped_legacy_shutdown() {
+        let exit = Local.with_ymd_and_hms(2026, 11, 20, 0, 0, 2).unwrap();
+        let start = exit - chrono::Duration::minutes(5);
+        let console = [
+            "[23:59:59] [Client thread/INFO] Stopping!",
+            "unstructured cleanup",
+        ];
+        let context = exit_context(&console, &[], start.into(), exit.into());
+        assert!(context.contains("Client shutdown logged: yes"));
+        assert!(context.contains("Last log timestamp to process exit: 3 s"));
+        let console = ["[Client thread/INFO] Sound engine stopped"];
+        let context = exit_context(&console, &[], start.into(), exit.into());
+        assert!(context.contains("Client shutdown logged: yes"));
+        assert!(context.contains("Last log timestamp to process exit: unknown"));
     }
 
     #[test]
