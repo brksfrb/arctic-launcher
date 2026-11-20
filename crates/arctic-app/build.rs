@@ -1,7 +1,11 @@
 //! Embeds the translations (`locales/`), and on Windows the generated snowflake icon and
 //! version info, into the exe.
 
+use std::fmt::Write as _;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use xz2::stream::{LzmaOptions, Stream};
+use xz2::write::XzEncoder;
 
 include!("src/icon_raster.rs");
 
@@ -12,11 +16,12 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR is set by cargo"));
     embed_locales(&out_dir);
+    embed_fonts(&out_dir);
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
     let ico = out_dir.join("arctic.ico");
-    if let Err(e) = std::fs::write(&ico, ico_bytes(&ICO_SIZES)) {
+    if let Err(e) = std::fs::write(&ico, ico_bytes(&ICO_SIZES, icon_frame)) {
         println!("cargo:warning=could not write icon: {e}");
         return;
     }
@@ -42,42 +47,93 @@ fn main() {
     }
 }
 
-/// Write `locales.rs`: `LOCALE_FILES`, the (language, file, contents) of every
-/// `locales/<language>/<file>.json`, each pulled in with `include_str!`. Adding a language is
-/// adding a folder; nothing else lists them.
+fn icon_frame(size: u32) -> Vec<u8> {
+    if size != 256 {
+        return bmp_entry(size);
+    }
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, size, size);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().expect("write icon PNG header");
+    writer
+        .write_image_data(&app_icon_rgba(size))
+        .expect("write icon PNG pixels");
+    writer.finish().expect("finish icon PNG");
+    bytes
+}
+
+/// Compress each language independently. Keep file boundaries for parsing and validation.
 fn embed_locales(out_dir: &Path) {
     println!("cargo:rerun-if-changed=locales");
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("locales");
-    let mut entries = Vec::new();
-    let languages = std::fs::read_dir(&root)
-        .map(|dir| dir.flatten().collect::<Vec<_>>())
-        .unwrap_or_default();
+    let mut languages = directory_paths(&root);
+    languages.sort();
+    let mut source = String::from("const LOCALES: &[EmbeddedLocale] = &[\n");
     for language in languages {
-        if !language.path().is_dir() {
+        if !language.is_dir() {
             continue;
         }
-        let code = language.file_name().to_string_lossy().into_owned();
-        let mut files: Vec<PathBuf> = std::fs::read_dir(language.path())
-            .map(|dir| dir.flatten().map(|e| e.path()).collect())
-            .unwrap_or_default();
+        let mut files = directory_paths(&language);
         files.retain(|p| p.extension().is_some_and(|ext| ext == "json"));
-        files.sort();
-        for file in files {
-            let name = file
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            let path = file.to_string_lossy().into_owned();
-            entries.push(format!(
-                "    ({code:?}, {name:?}, include_str!({path:?})),\n"
-            ));
+        if files.is_empty() {
+            continue;
         }
+        files.sort();
+        let code = language.file_name().unwrap().to_str().unwrap();
+        let blob = format!("locale-{code}.lzma");
+        writeln!(
+            source,
+            "    EmbeddedLocale {{ code: {code:?}, bytes: include_bytes!({blob:?}), files: &["
+        )
+        .unwrap();
+        let mut plain = Vec::new();
+        for file in files {
+            let name = file.file_name().unwrap().to_str().unwrap();
+            let json = std::fs::read_to_string(&file)
+                .unwrap_or_else(|error| panic!("read {}: {error}", file.display()));
+            plain.extend_from_slice(json.as_bytes());
+            writeln!(source, "        ({name:?}, {}),", plain.len()).unwrap();
+        }
+        source.push_str("    ] },\n");
+
+        compress(&out_dir.join(blob), &plain);
     }
-    entries.sort();
-    let source = format!(
-        "/// (language, file, contents) of every locales/<language>/<file>.json.\n\
-         pub(crate) const LOCALE_FILES: &[(&str, &str, &str)] = &[\n{}];\n",
-        entries.concat()
-    );
+    source.push_str("];\n");
     std::fs::write(out_dir.join("locales.rs"), source).expect("write locales.rs into OUT_DIR");
+}
+
+fn embed_fonts(out_dir: &Path) {
+    println!("cargo:rerun-if-changed=assets/fonts");
+    for path in directory_paths(Path::new("assets/fonts")) {
+        if !matches!(
+            path.extension().and_then(|ext| ext.to_str()),
+            Some("ttf" | "otf")
+        ) {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_str().unwrap();
+        let bytes =
+            std::fs::read(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+        compress(&out_dir.join(format!("{name}.lzma")), &bytes);
+    }
+}
+
+fn compress(path: &Path, plain: &[u8]) {
+    // A match-finding encoder. The existing lzma-rs runtime decoder reads
+    // this format, but lzma-rs's own encoder writes only literals.
+    let mut options = LzmaOptions::new_preset(6).expect("valid LZMA preset");
+    options.dict_size(512 * 1024);
+    let stream = Stream::new_lzma_encoder(&options).expect("initialize LZMA encoder");
+    let mut encoder = XzEncoder::new_stream(Vec::new(), stream);
+    encoder.write_all(plain).expect("compress embedded asset");
+    std::fs::write(path, encoder.finish().expect("finish embedded asset"))
+        .unwrap_or_else(|error| panic!("write {}: {error}", path.display()));
+}
+
+fn directory_paths(dir: &Path) -> Vec<PathBuf> {
+    std::fs::read_dir(dir)
+        .unwrap_or_else(|error| panic!("read {}: {error}", dir.display()))
+        .map(|entry| entry.expect("read locale directory entry").path())
+        .collect()
 }

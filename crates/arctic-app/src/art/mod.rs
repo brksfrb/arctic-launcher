@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn ico_header_lists_every_size() {
-        let ico = crate::icon_raster::ico_bytes(&[16, 32]);
+        let ico = crate::icon_raster::ico_bytes(&[16, 32], crate::icon_raster::bmp_entry);
         assert_eq!(&ico[..6], &[0, 0, 1, 0, 2, 0]);
         assert_eq!(ico[6], 16);
         assert_eq!(ico[22], 32);
