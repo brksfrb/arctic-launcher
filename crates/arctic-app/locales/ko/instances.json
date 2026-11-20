@@ -375,6 +375,7 @@
   "instances.hub.install_into": "설치할 인스턴스",
   "instances.hub.any_version": "모든 버전",
   "instances.hub.any_loader": "모든 로더",
+  "instances.hub.category": "카테고리",
   "instances.hub.any_category": "모든 카테고리",
   "instances.hub.any_environment": "모든 환경",
   "instances.hub.client": "클라이언트",

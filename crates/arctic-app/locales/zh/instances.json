@@ -375,6 +375,7 @@
   "instances.hub.install_into": "安装到",
   "instances.hub.any_version": "任意版本",
   "instances.hub.any_loader": "任意加载器",
+  "instances.hub.category": "分类",
   "instances.hub.any_category": "任意分类",
   "instances.hub.any_environment": "任意环境",
   "instances.hub.client": "客户端",

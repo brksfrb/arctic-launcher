@@ -1203,6 +1203,7 @@ impl ArcticApp {
             | Event::Retargeted(..)
             | Event::LoaderChecked(..)
             | Event::LoaderSwitched(..)
+            | Event::HubBanner(..)
             | Event::ModIcon(..)
             | Event::ModGalleryImage(..)) => self.on_instances_event(e, ctx),
             Event::Share(id, event) => self.on_share_event(id, event),

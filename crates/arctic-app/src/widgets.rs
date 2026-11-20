@@ -270,6 +270,17 @@ pub fn button(
     label: &str,
     primary: bool,
 ) -> Response {
+    button_with_height(ui, p, icon, label, primary, BUTTON_HEIGHT)
+}
+
+fn button_with_height(
+    ui: &mut Ui,
+    p: &Palette,
+    icon: Option<Icon>,
+    label: &str,
+    primary: bool,
+    height: f32,
+) -> Response {
     let (fg, bg) = if primary {
         (p.on_accent, p.accent)
     } else {
@@ -279,7 +290,7 @@ pub fn button(
         .painter()
         .layout_no_wrap(label.to_owned(), FontId::proportional(14.0), fg);
     let icon_w = if icon.is_some() { 22.0 } else { 0.0 };
-    let size = vec2(galley.size().x + icon_w + 28.0, BUTTON_HEIGHT);
+    let size = vec2(galley.size().x + icon_w + 28.0, height);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     let hover = ui
         .ctx()
@@ -483,6 +494,21 @@ fn paint_emblem_with_hover(
 
 /// Height of text fields, and of controls placed next to them.
 pub const FIELD_HEIGHT: f32 = 36.0;
+
+/// Text button as tall as a text field.
+pub fn field_button(ui: &mut Ui, p: &Palette, label: &str, primary: bool) -> Response {
+    button_with_height(ui, p, None, label, primary, FIELD_HEIGHT)
+}
+
+/// Single-line dropdown as tall as a text field.
+pub fn field_combo(ui: &mut Ui, combo: egui::ComboBox, items: impl FnOnce(&mut Ui)) -> Response {
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = FIELD_HEIGHT;
+        ui.spacing_mut().button_padding.y = 9.0;
+        combo.truncate().show_ui(ui, items).response
+    })
+    .inner
+}
 
 /// A row as tall as a text field, with its contents vertically centered
 /// (so a label lines up with the field next to it).

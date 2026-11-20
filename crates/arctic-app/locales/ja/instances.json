@@ -375,6 +375,7 @@
   "instances.hub.install_into": "インストール先",
   "instances.hub.any_version": "すべてのバージョン",
   "instances.hub.any_loader": "すべてのローダー",
+  "instances.hub.category": "カテゴリ",
   "instances.hub.any_category": "すべてのカテゴリ",
   "instances.hub.any_environment": "すべての環境",
   "instances.hub.client": "クライアント",

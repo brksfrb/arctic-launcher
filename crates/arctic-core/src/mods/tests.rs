@@ -48,6 +48,25 @@ fn search_response_maps_to_page() {
 }
 
 #[test]
+fn search_hits_accept_present_null_and_missing_featured_gallery() {
+    let response: modrinth::SearchResponse = serde_json::from_value(json!({
+        "hits": [
+            {"project_id": "a", "featured_gallery": "https://cdn.example/a.webp"},
+            {"project_id": "b", "featured_gallery": null},
+            {"project_id": "c"}
+        ]
+    }))
+    .unwrap();
+    let page = response.into_page();
+    assert_eq!(
+        page.hits[0].featured_gallery.as_deref(),
+        Some("https://cdn.example/a.webp")
+    );
+    assert!(page.hits[1].featured_gallery.is_none());
+    assert!(page.hits[2].featured_gallery.is_none());
+}
+
+#[test]
 fn search_hits_only_mark_known_version_mismatches_incompatible() {
     let page = serde_json::from_str::<SearchResponse>(SEARCH_SAMPLE)
         .unwrap()
@@ -363,6 +382,26 @@ fn project_preview_accepts_projects_without_gallery_and_optional_captions() {
     assert!(project.gallery[0].title.is_none());
     assert_eq!(project.loaders, ["iris"]);
     assert_eq!(project.game_versions, ["1.21.1"]);
+}
+
+#[test]
+fn project_banner_prefers_featured_then_first_gallery_image() {
+    let mut project: super::ProjectDetail = serde_json::from_value(json!({
+        "id": "test",
+        "gallery": [
+            {"url": "https://cdn.example/first.webp"},
+            {"url": "https://cdn.example/featured.webp", "featured": true}
+        ]
+    }))
+    .unwrap();
+    assert_eq!(
+        project.banner_url(),
+        Some("https://cdn.example/featured.webp")
+    );
+    project.gallery[1].featured = false;
+    assert_eq!(project.banner_url(), Some("https://cdn.example/first.webp"));
+    project.gallery.clear();
+    assert_eq!(project.banner_url(), None);
 }
 
 #[test]

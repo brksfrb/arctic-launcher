@@ -201,7 +201,19 @@ impl ArcticApp {
         };
         if picker.versions.is_none() {
             match picker.receiver.try_recv() {
-                Ok(versions) => picker.versions = Some(versions),
+                Ok(versions) => {
+                    for (hit, result) in picker.request.hits.iter().zip(&versions) {
+                        if let Ok(versions) = result {
+                            self.inst.hub.installed.remember_versions(
+                                picker.request.kind,
+                                &hit.project_id,
+                                versions,
+                            );
+                        }
+                    }
+                    picker.versions = Some(versions);
+                    ctx.request_repaint();
+                }
                 Err(TryRecvError::Empty) => {}
                 Err(TryRecvError::Disconnected) => {
                     picker.versions = Some(
@@ -451,6 +463,14 @@ impl ArcticApp {
             }
             if matches!(report.kind, ProjectType::Mod | ProjectType::Shader) {
                 self.refresh_mods(&report.target);
+            }
+            if matches!(
+                report.kind,
+                ProjectType::ResourcePack | ProjectType::Shader | ProjectType::DataPack
+            ) && let Some(instance) = self.instance_by_id(&report.target)
+            {
+                let game_dir = instance.game_dir(&self.dirs);
+                self.inst.hub.installed.refresh(report.kind, &game_dir);
             }
             if matches!(report.kind, ProjectType::ResourcePack | ProjectType::Shader)
                 && self

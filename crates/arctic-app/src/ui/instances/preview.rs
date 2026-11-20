@@ -57,7 +57,7 @@ impl Drop for Preview {
 }
 
 impl Preview {
-    pub(super) fn gallery_result(&mut self, url: String, result: Result<Vec<u8>, String>) {
+    pub(super) fn gallery_result(&mut self, url: String, result: Result<Arc<[u8]>, String>) {
         if !matches!(self.gallery.get(&url), Some(IconState::Loading)) {
             return;
         }
@@ -330,6 +330,7 @@ impl ArcticApp {
                         downloads: 0,
                         follows: 0,
                         icon_url: None,
+                        featured_gallery: None,
                         categories: vec![],
                         game_versions: vec![],
                     },
@@ -368,7 +369,17 @@ impl ArcticApp {
         }
         if preview.versions.is_none() {
             match preview.versions_rx.try_recv() {
-                Ok(result) => preview.versions = Some(result),
+                Ok(result) => {
+                    if let (Some(kind), Ok(versions)) = (preview.discover_kind, &result) {
+                        self.inst.hub.installed.remember_versions(
+                            kind,
+                            &preview.hit.project_id,
+                            versions,
+                        );
+                        ctx.request_repaint();
+                    }
+                    preview.versions = Some(result);
+                }
                 Err(mpsc::TryRecvError::Disconnected) => {
                     preview.versions = Some(Err(t!(
                         "instances.project_request_stopped_please_retry"
@@ -895,6 +906,7 @@ mod tests {
             game_versions: games.iter().map(|g| g.to_string()).collect(),
             loaders: loaders.iter().map(|l| l.to_string()).collect(),
             file_name: Some("content.zip".into()),
+            file_sha1: None,
         }
     }
 
@@ -1011,6 +1023,7 @@ mod tests {
                 downloads: 0,
                 follows: 0,
                 icon_url: None,
+                featured_gallery: None,
                 categories: vec![],
                 game_versions: vec![],
             },
@@ -1038,7 +1051,7 @@ mod tests {
         let ctx = preview.context.clone();
         let url = "https://example.com/screenshot.png".to_owned();
         preview.gallery.insert(url.clone(), IconState::Loading);
-        preview.gallery_result(url.clone(), Ok(vec![1, 2, 3]));
+        preview.gallery_result(url.clone(), Ok([1, 2, 3].into()));
         let IconState::Ready(uri) = preview.gallery.get(&url).unwrap() else {
             panic!("image not ready")
         };
@@ -1047,11 +1060,11 @@ mod tests {
         drop(preview);
         assert!(ctx.try_load_bytes(&uri).is_err());
         let mut reopened = preview_fixture();
-        reopened.gallery_result(url.clone(), Ok(vec![4, 5, 6]));
+        reopened.gallery_result(url.clone(), Ok([4, 5, 6].into()));
         assert!(!reopened.gallery.contains_key(&url));
         assert!(ctx.try_load_bytes(&uri).is_err());
         reopened.gallery.insert(url.clone(), IconState::Loading);
-        reopened.gallery_result(url, Ok(vec![4, 5, 6]));
+        reopened.gallery_result(url, Ok([4, 5, 6].into()));
         assert!(reopened.context.try_load_bytes(&uri).is_ok());
     }
 
@@ -1061,7 +1074,7 @@ mod tests {
         let ctx = preview.context.clone();
         let url = "https://example.com/screenshot.png".to_owned();
         preview.gallery.insert(url.clone(), IconState::Loading);
-        preview.gallery_result(url.clone(), Ok(vec![1, 2, 3]));
+        preview.gallery_result(url.clone(), Ok([1, 2, 3].into()));
         let IconState::Ready(uri) = preview.gallery.get(&url).unwrap() else {
             panic!("image not ready")
         };

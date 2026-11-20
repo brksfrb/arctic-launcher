@@ -379,6 +379,7 @@
   "instances.hub.install_into": "Встановити в",
   "instances.hub.any_version": "Будь-яка версія",
   "instances.hub.any_loader": "Будь-який завантажувач",
+  "instances.hub.category": "Категорія",
   "instances.hub.any_category": "Будь-яка категорія",
   "instances.hub.any_environment": "Будь-яке середовище",
   "instances.hub.client": "Клієнт",

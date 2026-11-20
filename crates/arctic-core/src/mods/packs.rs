@@ -5,8 +5,8 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use super::modrinth;
 use super::resolve::{self, Planned, Target};
+use super::{modrinth, pack_index};
 use crate::loaders::LoaderKind;
 use crate::net::{DownloadJob, download_all};
 use crate::{Error, Progress, ProgressInfo, Result};
@@ -227,13 +227,16 @@ fn download_version(
     game_dir: &Path,
     progress: Progress,
 ) -> Result<InstalledPack> {
-    let job = download_job(version, &game_dir.join(kind.folder()))?;
+    download_versions(
+        std::iter::once(version),
+        &game_dir.join(kind.folder()),
+        progress,
+    )?;
     let file_name = version
         .primary_file()
         .expect("validated file")
         .filename
         .clone();
-    download_all("Downloading", vec![job], progress)?;
     Ok(InstalledPack {
         file_name,
         used_fallback,
@@ -242,19 +245,29 @@ fn download_version(
     })
 }
 
-fn download_job(version: &modrinth::Version, dest: &Path) -> Result<DownloadJob> {
+fn prepare_archive(
+    version: &modrinth::Version,
+    dir: &Path,
+) -> Result<(DownloadJob, pack_index::PackFile)> {
     let file = version
         .primary_file()
         .ok_or_else(|| Error::Other("it has no file to download".into()))?;
     super::files::check_pack_name(&file.filename)?;
-    Ok(DownloadJob {
-        url: file.url.clone(),
-        dest: dest.join(&file.filename),
-        sha1: file.hashes.sha1.clone(),
-        size: file.size,
-        lzma: None,
-        md5: None,
-    })
+    Ok((
+        DownloadJob {
+            url: file.url.clone(),
+            dest: dir.join(&file.filename),
+            sha1: file.hashes.sha1.clone(),
+            size: file.size,
+            lzma: None,
+            md5: None,
+        },
+        pack_index::PackFile {
+            project_id: version.project_id.clone(),
+            file_name: file.filename.clone(),
+            sha1: file.hashes.sha1.clone(),
+        },
+    ))
 }
 
 /// Install the selected archive and the required Modrinth archives that go with it.
@@ -329,17 +342,50 @@ pub(super) fn plan_archives(
 }
 
 pub(super) fn download_archives(plan: &[Planned], dest: &Path, progress: Progress) -> Result<()> {
-    let mut jobs = plan
-        .iter()
+    download_versions(plan.iter().map(|planned| &planned.version), dest, progress)
+}
+
+fn download_versions<'a>(
+    versions: impl DoubleEndedIterator<Item = &'a modrinth::Version>,
+    dest: &Path,
+    progress: Progress,
+) -> Result<()> {
+    let mut plan = versions
         .rev()
-        .map(|planned| download_job(&planned.version, dest))
+        .map(|version| prepare_archive(version, dest))
         .collect::<Result<Vec<_>>>()?;
     // Validate every file first. A failed dependency download should not leave a new root.
-    let root = jobs.pop().expect("resolved root");
-    if !jobs.is_empty() {
-        download_all("Downloading", jobs, progress)?;
+    let (root, root_entry) = plan.pop().expect("resolved root");
+    let _lock = pack_index::lock(dest)?;
+    let mut seen = HashSet::new();
+    let (jobs, mut entries): (Vec<_>, Vec<_>) = plan
+        .into_iter()
+        .filter(|(job, _)| seen.insert(job.dest.clone()))
+        .unzip();
+    if !jobs.is_empty()
+        && let Err(error) = download_all("Downloading", jobs, progress)
+    {
+        // Some dependencies may have finished before the first download error.
+        entries.retain(|entry| {
+            entry.sha1.as_ref().is_some_and(|sha1| {
+                crate::net::sha1_file(&dest.join(&entry.file_name))
+                    .is_ok_and(|actual| actual.eq_ignore_ascii_case(sha1))
+            })
+        });
+        if !entries.is_empty() {
+            pack_index::record(dest, entries)?;
+        }
+        return Err(error);
     }
-    download_all("Downloading", vec![root], progress)
+    let result = download_all("Downloading", vec![root], progress);
+    if result.is_ok() {
+        entries.push(root_entry);
+    }
+    if entries.is_empty() {
+        return result;
+    }
+    let recorded = pack_index::record(dest, entries);
+    result.and(recorded)
 }
 
 /// Packs in the instance (files and unpacked folders), by name.
@@ -612,6 +658,41 @@ mod tests {
     }
 
     #[test]
+    fn single_and_dependency_installs_track_archives_already_on_disk() {
+        let game = tempfile::tempdir().unwrap();
+        let kind = PackKind::Resource;
+        let dir = game.path().join(kind.folder());
+        std::fs::create_dir(&dir).unwrap();
+        let cached = |name: &str| {
+            let path = dir.join(format!("{name}.zip"));
+            std::fs::write(&path, name).unwrap();
+            let mut version = version(name, "release", "2026", "1.21.4", "minecraft");
+            version.project_id = name.to_owned();
+            version.files[0].hashes.sha1 = Some(crate::net::sha1_file(&path).unwrap());
+            version.files[0].size = Some(name.len() as u64);
+            version
+        };
+        let single = cached("single");
+        download_version(kind, &single, false, game.path(), &|_| {}).unwrap();
+        let plan = ["root", "dependency"].map(|name| Planned {
+            version: cached(name),
+            dependency: name == "dependency",
+        });
+        download_archives(&plan, &dir, &|_| {}).unwrap();
+
+        let expected = HashSet::from(["single".into(), "root".into(), "dependency".into()]);
+        assert_eq!(
+            pack_index::installed_by_name(kind.project_type(), game.path(), &[]),
+            expected
+        );
+        std::fs::rename(dir.join("dependency.zip"), dir.join("renamed.zip")).unwrap();
+        assert_eq!(
+            pack_index::PackScan::default().installed(kind.project_type(), game.path(), &[]),
+            expected
+        );
+    }
+
+    #[test]
     fn selected_pack_targets_the_exact_file_and_content_folder() {
         for (kind, loader, folder) in [
             (PackKind::Resource, "minecraft", "resourcepacks"),
@@ -620,7 +701,7 @@ mod tests {
         ] {
             let selected = version("older", "beta", "2023", "1.21.4", loader);
             assert!(!check_selected_version(kind, &selected, "1.21.4", false).unwrap());
-            let job = download_job(
+            let (job, _) = prepare_archive(
                 &selected,
                 &Path::new("selected-instance").join(kind.folder()),
             )

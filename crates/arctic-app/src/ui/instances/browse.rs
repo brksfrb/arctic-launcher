@@ -270,17 +270,13 @@ impl ArcticApp {
 
 /// Sort dropdown, as tall as the search field next to it.
 pub(super) fn sort_combo(ui: &mut egui::Ui, id: &str, sort: &mut SortBy) {
-    ui.scope(|ui| {
-        ui.spacing_mut().interact_size.y = widgets::FIELD_HEIGHT;
-        ui.spacing_mut().button_padding.y = 9.0;
-        egui::ComboBox::from_id_salt(id)
-            .width(170.0)
-            .selected_text(sort_label(*sort))
-            .show_ui(ui, |ui| {
-                for (value, name) in SORTS {
-                    ui.selectable_value(sort, value, t!(name));
-                }
-            });
+    let combo = egui::ComboBox::from_id_salt(id)
+        .width(170.0)
+        .selected_text(sort_label(*sort));
+    widgets::field_combo(ui, combo, |ui| {
+        for (value, name) in SORTS {
+            ui.selectable_value(sort, value, t!(name));
+        }
     });
 }
 
