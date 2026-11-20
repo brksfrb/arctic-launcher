@@ -5,7 +5,7 @@
 
 use std::f32::consts::PI;
 
-use arctic_core::cosmetic_models::{Geometry, Mesh as MeshModel};
+use arctic_core::cosmetic_models::{Animation, Geometry, Mesh as MeshModel};
 use arctic_core::cosmetics::Fit;
 use arctic_core::skins::Variant;
 use eframe::egui::{self, Color32, Pos2, Rect, TextureId, pos2};
@@ -63,6 +63,7 @@ pub(super) struct Face {
     pub(super) uv: [Pos2; 4],
     pub(super) depth: f32,
     pub(super) texture: TextureId,
+    pub(super) glow: Option<TextureId>,
     /// Multiplies the texture (white for the player and cuboid cosmetics;
     /// the shading and vertex colors of a mesh).
     pub(super) tint: Color32,
@@ -73,6 +74,10 @@ pub(super) struct Face {
 pub struct Worn<'a> {
     pub geometry: &'a Geometry,
     pub texture: TextureId,
+    pub glow: Option<TextureId>,
+    pub animation: Option<&'a Animation>,
+    pub time: Option<f64>,
+    pub swing: f32,
     /// How the wearer moved it (or mirrored it).
     pub fit: Fit,
 }
@@ -180,7 +185,14 @@ pub fn paint_zoomed(
         64.0,
         &view,
     );
-    if let Some(cape) = cape {
+    if let Some(cape) = cape.filter(|_| {
+        !cosmetics.iter().any(|worn| {
+            worn.geometry
+                .bones
+                .iter()
+                .any(|bone| bone.parent.is_none() && bone.name == "cape")
+        })
+    }) {
         faces.extend(build_faces(
             &[cape_part(pose.swing)],
             cape,
@@ -249,6 +261,7 @@ fn build_faces(
                 uv,
                 depth,
                 texture,
+                glow: None,
                 tint: Color32::WHITE,
             });
         }
@@ -650,6 +663,7 @@ fn mesh_faces(worn: &WornMesh, view: &impl Fn(V3) -> V3) -> Vec<Face> {
                 uv: [uv(tri[0]), uv(tri[1]), uv(tri[2]), uv(tri[2])],
                 depth: (a[2] + b[2] + c[2]) / 3.0,
                 texture,
+                glow: None,
                 tint,
             });
         }
@@ -753,8 +767,21 @@ fn cosmetic_faces(worn: &Worn, view: &impl Fn(V3) -> V3) -> Vec<Face> {
                 continue;
             };
             let pivot = java_pivot(bone.pivot);
-            let offset = sub(pivot, parent_pivot);
-            let at = parent_at.then(offset, bone.rotation);
+            let mut offset = sub(pivot, parent_pivot);
+            let mut rotation = bone.rotation;
+            if bone.parent.is_none() && bone.name == "cape" {
+                rotation[0] += (worn.swing.abs() * 0.25).to_degrees();
+            }
+            if let Some(animation) = worn.animation {
+                let pose = animation.sample(&bone.name, worn.time.unwrap_or(0.0));
+                offset[0] += pose.position[0];
+                offset[1] -= pose.position[1];
+                offset[2] += pose.position[2];
+                for (r, delta) in rotation.iter_mut().zip(pose.rotation) {
+                    *r += delta;
+                }
+            }
+            let at = parent_at.then(offset, rotation);
             placed.push((&bone.name, at, pivot));
             for cube in &bone.cubes {
                 // Cubes inside each other share faces; the later one (a detail on the base)
@@ -762,7 +789,7 @@ fn cosmetic_faces(worn: &Worn, view: &impl Fn(V3) -> V3) -> Vec<Face> {
                 let nudge = cubes as f32 * CUBE_NUDGE;
                 cubes += 1;
                 faces.extend(
-                    cube_faces(cube, pivot, &at, worn.texture, tex_w, tex_h, view)
+                    cube_faces(cube, pivot, &at, worn, tex_w, tex_h, view)
                         .into_iter()
                         .map(|mut f| {
                             for c in &mut f.corners {
@@ -783,7 +810,7 @@ fn cube_faces(
     cube: &arctic_core::cosmetic_models::Cube,
     pivot: V3,
     at: &Placement,
-    texture: TextureId,
+    worn: &Worn,
     tex_w: f32,
     tex_h: f32,
     view: &impl Fn(V3) -> V3,
@@ -857,8 +884,15 @@ fn cube_faces(
             corners,
             uv: uv.map(|(u, v)| pos2(u / tex_w, v / tex_h)),
             depth,
-            texture,
-            tint: Color32::WHITE,
+            texture: worn.texture,
+            glow: worn.glow,
+            tint: if worn.glow.is_some() {
+                let len = n[0].hypot(n[1]).hypot(n[2]).max(1e-6);
+                let shade = ((n[0] * -0.36 + n[1] * 0.8 + n[2] * 0.48) / len).max(0.0);
+                Color32::from_gray((210.0 + 45.0 * shade) as u8)
+            } else {
+                Color32::WHITE
+            },
         });
     }
     out
@@ -965,6 +999,10 @@ mod tests {
         let worn = Worn {
             geometry: &geometry,
             texture: TextureId::default(),
+            glow: None,
+            animation: None,
+            time: None,
+            swing: 0.0,
             fit: Fit::default(),
         };
         let view = |p: V3| p;
@@ -1000,6 +1038,10 @@ mod tests {
         let worn = Worn {
             geometry: &geometry,
             texture: TextureId::default(),
+            glow: None,
+            animation: None,
+            time: None,
+            swing: 0.0,
             fit: Fit::default(),
         };
         // Seen from the front and from behind, so every face shows once.

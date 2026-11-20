@@ -241,6 +241,19 @@ public final class Cosmetics {
 		return null;
 	}
 
+	/** A ready 3D cape takes priority over the user's native cape texture. */
+	public boolean wearsCape(Look look) {
+		if (look != null) {
+			for (String id : look.cosmetics) {
+				Item item = item(id);
+				if (item != null && item.ready && "cape".equals(item.slot)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	/** An item that can be drawn now; starts loading it on first ask. */
 	public Item drawable(String id) {
 		Item item = item(id);

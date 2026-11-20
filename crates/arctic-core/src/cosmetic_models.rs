@@ -2,6 +2,9 @@
 //! Blockbench (Bedrock) geometry, parsed with the same limits the game
 //! uses. The launcher draws them on the skin preview; the game wears them.
 
+mod animation;
+
+pub use animation::Animation;
 use serde::Deserialize;
 
 pub use arctic_mesh as mesh;
@@ -27,6 +30,8 @@ pub struct Item {
     /// Content hashes of the geometry (JSON) and texture (PNG).
     pub model: String,
     pub texture: String,
+    #[serde(default)]
+    pub glow: Option<String>,
     #[serde(default)]
     pub animation: Option<String>,
     /// A sculpted version (hash of a `.glb`); used instead of the cuboids
@@ -79,6 +84,7 @@ pub fn catalog(base: &str) -> Result<Catalog> {
             && is_id(&i.slot)
             && is_hash(&i.model)
             && is_hash(&i.texture)
+            && i.glow.as_deref().is_none_or(is_hash)
             && i.animation.as_deref().is_none_or(is_hash)
             && i.mesh.as_deref().is_none_or(is_hash)
     });

@@ -41,7 +41,7 @@ public final class Animation {
 		}
 
 		/** The value at {@code t} seconds (held before the first and after the last). */
-		float[] at(float t) {
+		float[] at(float t, float[] out) {
 			int n = times.length;
 			if (n == 1 || t <= times[0]) {
 				return values[0];
@@ -62,13 +62,16 @@ public final class Animation {
 			if (mode == STEP) {
 				return a;
 			}
-			if (mode == LINEAR) {
-				return new float[] {a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k};
+			if (out == null) {
+				out = new float[3];
 			}
 			float[] before = values[Math.max(i - 2, 0)];
 			float[] after = values[Math.min(i + 1, n - 1)];
-			return new float[] {spline(before[0], a[0], b[0], after[0], k), spline(before[1], a[1], b[1], after[1], k),
-					spline(before[2], a[2], b[2], after[2], k)};
+			for (int axis = 0; axis < 3; axis++) {
+				out[axis] = mode == LINEAR ? a[axis] + (b[axis] - a[axis]) * k
+						: spline(before[axis], a[axis], b[axis], after[axis], k);
+			}
+			return out;
 		}
 
 		/** Catmull-Rom through p1 → p2 (k in 0..1), with p0 and p3 as the neighbors. */
@@ -126,14 +129,22 @@ public final class Animation {
 
 	/** Rotation of {@code bone} in degrees at {@code t} seconds, or null if it isn't animated. */
 	public float[] rotation(String bone, float t) {
+		return rotation(bone, t, null);
+	}
+
+	float[] rotation(String bone, float t, float[] out) {
 		Track track = rotations.get(bone);
-		return track == null ? null : track.at(time(t));
+		return track == null ? null : track.at(time(t), out);
 	}
 
 	/** Position offset of {@code bone} in pixels at {@code t} seconds, or null. */
 	public float[] position(String bone, float t) {
+		return position(bone, t, null);
+	}
+
+	float[] position(String bone, float t, float[] out) {
 		Track track = positions.get(bone);
-		return track == null ? null : track.at(time(t));
+		return track == null ? null : track.at(time(t), out);
 	}
 
 	/** The same animation with only these bones' tracks (the rest of the player is posed elsewhere). */

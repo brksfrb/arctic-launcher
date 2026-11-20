@@ -2,7 +2,8 @@
 //! capes and each cosmetic slot, as cards. Pointing at a card tries it on
 //! in the preview ([`Hover`]); clicking wears it (again: takes it off).
 
-use arctic_core::cosmetic_models::{Geometry, Mesh};
+use crate::skin_tasks::CuboidAsset;
+use arctic_core::cosmetic_models::Mesh;
 use arctic_core::cosmetics::{CapeChoice, FIT_FORWARD, FIT_UP, Fit};
 use arctic_core::skins::{SkinEntry, Variant};
 use eframe::egui::{
@@ -693,9 +694,9 @@ impl ArcticApp {
             }
             let fit = fits.get(&entry.id).copied().unwrap_or_default();
             match entry.shape {
-                Shape3d::Cuboid { geometry, texture } => {
-                    if let Some(t) = self.skin_texture(ctx, &format!("acos:{texture}")) {
-                        out.cuboids.push((geometry, t.handle.id(), fit));
+                Shape3d::Cuboid(asset) => {
+                    if let Some(cuboid) = self.cuboid_preview(ctx, asset, fit) {
+                        out.cuboids.push(cuboid);
                     }
                 }
                 Shape3d::Mesh { mesh, hash } => {
@@ -708,6 +709,28 @@ impl ArcticApp {
             .skin_texture(ctx, super::WHITE)
             .map_or(egui::TextureId::default(), |t| t.handle.id());
         out
+    }
+
+    fn cuboid_preview(
+        &mut self,
+        ctx: &egui::Context,
+        asset: CuboidAsset,
+        fit: Fit,
+    ) -> Option<WornCuboid> {
+        let texture = self
+            .skin_texture(ctx, &format!("acos:{}", asset.item.texture))?
+            .handle
+            .id();
+        let glow = asset.item.glow.as_ref().and_then(|hash| {
+            self.skin_texture(ctx, &format!("acos:{hash}"))
+                .map(|t| t.handle.id())
+        });
+        Some(WornCuboid {
+            asset,
+            texture,
+            glow,
+            fit,
+        })
     }
 
     /// The textures embedded in a mesh cosmetic (a gap where one isn't ready).
@@ -787,11 +810,8 @@ impl ArcticApp {
             for entry in items {
                 let worn = worn_ids.contains(&entry.id);
                 let still = match &entry.shape {
-                    Shape3d::Cuboid { geometry, texture } => {
-                        let t = self
-                            .skin_texture(&ctx, &format!("acos:{texture}"))
-                            .map(|t| t.handle.id());
-                        CardModel::Cuboid(geometry.clone(), t)
+                    Shape3d::Cuboid(asset) => {
+                        CardModel::Cuboid(self.cuboid_preview(&ctx, asset.clone(), Fit::default()))
                     }
                     Shape3d::Mesh { mesh, hash } => {
                         let textures = self.mesh_textures(&ctx, hash, mesh.images.len());
@@ -1087,7 +1107,7 @@ pub(super) struct Entry3d {
 #[derive(Debug, Clone)]
 pub(super) enum Shape3d {
     /// The model and the hash of its texture.
-    Cuboid { geometry: Geometry, texture: String },
+    Cuboid(CuboidAsset),
     /// The mesh and the hash it is stored under (its textures are keyed by it).
     Mesh {
         mesh: std::sync::Arc<Mesh>,
@@ -1117,16 +1137,14 @@ fn cosmetic_entries_matching(
             },
         })
         .collect();
-    for (item, geometry) in &state.items {
+    for asset in &state.items {
+        let item = &asset.item;
         if include(&item.id) && !out.iter().any(|e| e.id == item.id) {
             out.push(Entry3d {
                 id: item.id.clone(),
                 name: item.name.clone(),
                 slot: item.slot.clone(),
-                shape: Shape3d::Cuboid {
-                    geometry: geometry.clone(),
-                    texture: item.texture.clone(),
-                },
+                shape: Shape3d::Cuboid(asset.clone()),
             });
         }
     }
@@ -1136,14 +1154,35 @@ fn cosmetic_entries_matching(
 /// What the preview wears: cuboid cosmetics and sculpted ones.
 #[derive(Default)]
 pub(super) struct WornModels {
-    pub cuboids: Vec<(Geometry, egui::TextureId, Fit)>,
+    pub cuboids: Vec<WornCuboid>,
     pub meshes: Vec<(std::sync::Arc<Mesh>, Vec<egui::TextureId>, Fit)>,
     pub white: egui::TextureId,
 }
 
+pub(super) struct WornCuboid {
+    asset: CuboidAsset,
+    texture: egui::TextureId,
+    glow: Option<egui::TextureId>,
+    fit: Fit,
+}
+
+impl WornCuboid {
+    pub(super) fn preview(&self, time: Option<f64>, swing: f32) -> model::Worn<'_> {
+        model::Worn {
+            geometry: &self.asset.geometry,
+            texture: self.texture,
+            glow: self.glow,
+            animation: self.asset.animation.as_deref(),
+            time,
+            swing,
+            fit: self.fit,
+        }
+    }
+}
+
 /// What a cosmetic card draws.
 enum CardModel {
-    Cuboid(Geometry, Option<egui::TextureId>),
+    Cuboid(Option<WornCuboid>),
     Mesh(std::sync::Arc<Mesh>, Vec<egui::TextureId>, egui::TextureId),
 }
 
@@ -1166,20 +1205,16 @@ fn cosmetic_card(
     } else {
         CARD_YAW
     };
+    let moving = response.hovered() && !arctic_core::cosmetics::reduce_cape_motion();
     match model_to_draw {
-        CardModel::Cuboid(geometry, Some(texture)) => model::paint_cosmetic(
+        CardModel::Cuboid(Some(cuboid)) => model::paint_cosmetic(
             ui.painter(),
             model_rect,
             &format!("cube:{name}"),
-            model::Worn {
-                geometry,
-                texture: *texture,
-                fit: Fit::default(),
-            },
+            cuboid.preview(moving.then_some(now), 0.0),
             yaw,
         ),
         CardModel::Mesh(mesh, textures, white) => {
-            let moving = response.hovered() && !arctic_core::cosmetics::reduce_cape_motion();
             model::paint_mesh_cosmetic(
                 ui.painter(),
                 model_rect,
@@ -1195,7 +1230,7 @@ fn cosmetic_card(
                 yaw,
             );
         }
-        CardModel::Cuboid(_, None) => {
+        CardModel::Cuboid(None) => {
             ui.painter()
                 .circle_filled(model_rect.center(), 4.0, p.muted);
         }

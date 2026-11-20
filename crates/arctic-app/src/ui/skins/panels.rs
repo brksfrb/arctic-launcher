@@ -34,7 +34,16 @@ const ZOOM: std::ops::RangeInclusive<f32> = 0.4..=4.0;
 /// at the face and what's worn there, not the belt.
 const ZOOM_FOCUS: f32 = 28.0;
 /// Cosmetic slots in the order they're listed.
-pub(super) const SLOTS: [&str; 6] = ["head", "face", "back", "shoulders", "arms", "body"];
+pub(super) const SLOTS: [&str; 8] = [
+    "head",
+    "face",
+    "cape",
+    "back",
+    "shoulders",
+    "arms",
+    "body",
+    "aura",
+];
 
 /// How far the idle auto-turn moves the preview this frame: nothing while locked, or until
 /// `AUTO_TURN_AFTER` seconds after the last drag (`dragged_at < 0` = never auto-turn yet).
@@ -269,7 +278,10 @@ impl ArcticApp {
                 current.skin_key = Some(key.clone());
                 current.variant = Some(*variant);
             }
-            Some(Hover::Cape(key)) => current.cape_key = key.clone(),
+            Some(Hover::Cape(key)) => {
+                current.cape_key = key.clone();
+                self.without_cape_cosmetics(&mut worn_ids);
+            }
             Some(Hover::Cosmetics(ids)) => worn_ids = ids.clone(),
             None => {}
         }
@@ -349,17 +361,12 @@ impl ArcticApp {
             swing: model::idle_swing(now),
         };
         let wearing = self.cosmetic_models(&ctx, &worn_ids);
+        let motion = (!arctic_core::cosmetics::reduce_cape_motion()).then_some(now);
         let worn: Vec<model::Worn> = wearing
             .cuboids
             .iter()
-            .map(|(geometry, texture, fit)| model::Worn {
-                geometry,
-                texture: *texture,
-                fit: *fit,
-            })
+            .map(|cuboid| cuboid.preview(motion, pose.swing))
             .collect();
-        // Sculpted cosmetics play their idle animation (still, if the viewer froze motion).
-        let motion = (!arctic_core::cosmetics::reduce_cape_motion()).then_some(now);
         let worn_meshes: Vec<model::WornMesh> = wearing
             .meshes
             .iter()
@@ -616,7 +623,7 @@ impl ArcticApp {
                     state
                         .items
                         .iter()
-                        .map(|(item, _)| (item.id.as_str(), item.slot.as_str())),
+                        .map(|asset| (asset.item.id.as_str(), asset.item.slot.as_str())),
                 )
             {
                 if seen.insert(id)
@@ -810,6 +817,8 @@ pub(super) fn slot_name(slot: &str) -> &'static str {
         "head" => t!("skins.head"),
         "face" => t!("skins.face"),
         "back" => t!("skins.back"),
+        "cape" => t!("skins.capes_3d"),
+        "aura" => t!("skins.auras"),
         "shoulders" => t!("skins.shoulders"),
         "arms" => t!("skins.arms"),
         _ => t!("skins.body"),

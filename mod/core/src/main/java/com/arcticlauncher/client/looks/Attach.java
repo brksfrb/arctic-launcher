@@ -4,7 +4,10 @@ import java.util.Locale;
 
 /** Player parts a cosmetic's root bone (or node) can hang off, with their resting pivots in Java model space. */
 public enum Attach {
-	HEAD(0, 0, 0), BODY(0, 0, 0), RIGHT_ARM(-5, 2, 0), LEFT_ARM(5, 2, 0), RIGHT_LEG(-1.9f, 12, 0), LEFT_LEG(1.9f, 12, 0);
+	HEAD(0, 0, 0), BODY(0, 0, 0), CAPE(0, 0, 0), RIGHT_ARM(-5, 2, 0), LEFT_ARM(5, 2, 0), RIGHT_LEG(-1.9f, 12, 0), LEFT_LEG(1.9f, 12, 0);
+
+	/** The 3D cape collar is 2.65 skin texels behind the body. */
+	public static final float CAPE_HINGE = 2.65f / 16f;
 
 	public final float x;
 	public final float y;
@@ -21,6 +24,8 @@ public enum Attach {
 		switch (bone.toLowerCase(Locale.ROOT).replace("_", "")) {
 			case "head":
 				return HEAD;
+			case "cape":
+				return CAPE;
 			case "rightarm":
 				return RIGHT_ARM;
 			case "leftarm":

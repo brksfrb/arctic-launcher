@@ -61,6 +61,7 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 		}
 		Cosmetics cosmetics = ArcticClient.looks().cosmetics();
 		boolean animate = !ArcticClient.config().reduceCapeMotion;
+		float time = animate ? CuboidModel.Piece.time() : 0f;
 		for (String worn : look.cosmetics) {
 			if (cosmetics.drawable(worn) == null) {
 				continue;
@@ -76,16 +77,52 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 				continue;
 			}
 			for (CuboidModel.Piece piece : cuboid.pieces) {
+				boolean cape = piece.attach == Attach.CAPE;
+				if (cape && !player.isPartVisible(PlayerModelPart.CAPE)) {
+					continue;
+				}
 				GlStateManager.pushMatrix();
 				part(piece.attach).preRender(SCALE);
+				if (cape) {
+					placeCape(player, tickDelta);
+				}
 				fit(fit);
-				draw(cuboid.texture, new Pass(piece));
+				Pass pass = new Pass(piece, null, time);
+				draw(cuboid.texture, pass);
 				if (cuboid.glow != null) {
-					drawGlow(player, tickDelta, cuboid.glow, new Pass(piece));
+					drawGlow(player, tickDelta, cuboid.glow, pass);
 				}
 				GlStateManager.popMatrix();
 			}
 		}
+	}
+
+	/** Vanilla's smoothed cape position relative to the player, in body coordinates. */
+	private static void placeCape(AbstractClientPlayerEntity player, float dt) {
+		double dx = lerp(player.prevCapeX - player.prevX, player.capeX - player.x, dt);
+		double dy = lerp(player.prevCapeY - player.prevY, player.capeY - player.y, dt);
+		double dz = lerp(player.prevCapeZ - player.prevZ, player.capeZ - player.z, dt);
+		double yaw = Math.toRadians(lerp(player.prevBodyYaw, player.bodyYaw, dt));
+		double sin = Math.sin(yaw);
+		double cos = Math.cos(yaw);
+		float forward = (float) Math.max(0, (dx * sin - dz * cos) * 50);
+		float side = (float) Math.max(-25, Math.min(25, (-dx * cos - dz * sin) * 50));
+		double flap = Math.max(-6, Math.min(32, dy * 10));
+		flap += Math.sin(lerp(player.prevHorizontalSpeed, player.horizontalSpeed, dt) * 6)
+				* 32 * lerp(player.prevStrideDistance, player.strideDistance, dt);
+		if (player.isSneaking()) {
+			flap += 25;
+		}
+		float lift = (float) Math.max(-5, Math.min(65, forward + flap));
+		GlStateManager.translate(0f, 0f, Attach.CAPE_HINGE);
+		GlStateManager.rotate(lift, 1f, 0f, 0f);
+		GlStateManager.rotate(side, 0f, 0f, 1f);
+		GlStateManager.rotate(-side, 0f, 1f, 0f);
+		GlStateManager.translate(0f, 0f, -Attach.CAPE_HINGE);
+	}
+
+	private static double lerp(double a, double b, float t) {
+		return a + (b - a) * t;
 	}
 
 	/**
@@ -185,10 +222,6 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 		private final com.arcticlauncher.client.looks.Animation bend;
 		private final float t;
 
-		Pass(CuboidModel.Piece piece) {
-			this(piece, null, 0f);
-		}
-
 		Pass(CuboidModel.Piece piece, com.arcticlauncher.client.looks.Animation bend, float t) {
 			this.bend = bend;
 			this.t = t;
@@ -222,7 +255,7 @@ public final class LegacyCosmeticLayer implements FeatureRenderer<AbstractClient
 			if (piece != null && bend != null) {
 				piece.emit(xf, light, bend, t);
 			} else if (piece != null) {
-				piece.emit(xf, light);
+				piece.emit(xf, light, t);
 			} else if (sheen) {
 				MeshDraw.emitSheen(mesh.mesh, primitive, attach, xf);
 			} else {

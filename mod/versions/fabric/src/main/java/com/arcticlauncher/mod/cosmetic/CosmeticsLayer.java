@@ -3,6 +3,8 @@ package com.arcticlauncher.mod.cosmetic;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.looks.Attach;
 import com.arcticlauncher.client.looks.Cosmetics;
+import com.arcticlauncher.client.looks.CuboidModel;
+import com.arcticlauncher.mod.Compat;
 import com.arcticlauncher.client.looks.Look;
 import com.arcticlauncher.client.looks.Xform;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -75,7 +77,9 @@ public final class CosmeticsLayer extends RenderLayer<AvatarRenderState, PlayerM
 		if (!state.isInvisible) {
 			Canvas canvas = new Canvas(collector);
 			// Looked up when the state was filled in.
-			draw(pose, canvas, light, ((AvatarIdentity) state).arctic$look());
+			draw(pose, canvas, light, ((AvatarIdentity) state).arctic$look(),
+					state.showCape && !state.chestEquipment.is(net.minecraft.world.item.Items.ELYTRA),
+					state.capeFlap + state.capeLean * 0.5f, state.capeLean2 * 0.5f);
 			drawLimbs(pose, canvas, light, player(state), state.skin.body().texturePath(),
 					state.skin.model() == net.minecraft.world.entity.player.PlayerModelType.SLIM,
 					new boolean[] {state.showRightSleeve, state.showLeftSleeve, state.showRightPants, state.showLeftPants, state.showJacket});
@@ -92,7 +96,9 @@ public final class CosmeticsLayer extends RenderLayer<PlayerRenderState, PlayerM
 		if (!state.isInvisible) {
 			Canvas canvas = new Canvas(buffers);
 			// Looked up when the state was filled in.
-			draw(pose, canvas, light, ((AvatarIdentity) state).arctic$look());
+			draw(pose, canvas, light, ((AvatarIdentity) state).arctic$look(),
+					state.showCape && !state.chestEquipment.is(net.minecraft.world.item.Items.ELYTRA),
+					state.capeFlap + state.capeLean * 0.5f, state.capeLean2 * 0.5f);
 			drawLimbs(pose, canvas, light, ((AvatarIdentity) state).arctic$uuid(), state.skin.texture(),
 					state.skin.model() == net.minecraft.client.resources.PlayerSkin.Model.SLIM,
 					new boolean[] {state.showRightSleeve, state.showLeftSleeve, state.showRightPants, state.showLeftPants, state.showJacket});
@@ -160,7 +166,8 @@ public final class CosmeticsLayer implements FeatureRenderer<AbstractClientPlaye
 			//#else
 			Canvas canvas = new Canvas(() -> restoreLight(player));
 			//#endif
-			draw(pose, canvas, 0, entry.look);
+			draw(pose, canvas, 0, entry.look,
+					player.isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart.CAPE), limbSwingAmount * 20f, 0f);
 			boolean slim = "slim".equals(player.getModelName());
 			drawLimbs(pose, canvas, 0, id, player.getSkinTextureLocation(), slim, new boolean[] {
 					player.isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart.RIGHT_SLEEVE),
@@ -216,7 +223,8 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 			ArcticClient.looks().cosmetics().watch(id);
 		}
 		Canvas canvas = new Canvas(buffers);
-		draw(pose, canvas, light, entry.look);
+		draw(pose, canvas, light, entry.look,
+				player.isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart.CAPE), limbSwingAmount * 20f, 0f);
 		//#if MC >= 1.20.2
 		boolean slim = player.getSkin().model() == net.minecraft.client.resources.PlayerSkin.Model.SLIM;
 		//#else
@@ -327,11 +335,12 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 		//#endif
 	}
 
-	private void draw(PoseStack pose, Canvas canvas, int light, Look look) {
+	private void draw(PoseStack pose, Canvas canvas, int light, Look look, boolean showCape, float capeLift, float capeSway) {
 		if (look == null || look.cosmetics.isEmpty() || ArcticClient.looks() == null) {
 			return;
 		}
 		Cosmetics cosmetics = ArcticClient.looks().cosmetics();
+		float t = ArcticClient.config().reduceCapeMotion ? 0f : CuboidModel.Piece.time();
 		for (String worn : look.cosmetics) {
 			if (cosmetics.drawable(worn) == null) {
 				continue;
@@ -346,17 +355,34 @@ public final class CosmeticsLayer extends RenderLayer<AbstractClientPlayer, Play
 			if (baked == null) {
 				continue;
 			}
-			for (com.arcticlauncher.client.looks.CuboidModel.Piece piece : baked.pieces) {
+			for (CuboidModel.Piece piece : baked.pieces) {
+				boolean cape = piece.attach == Attach.CAPE;
+				if (cape && !showCape) {
+					continue;
+				}
 				pose.pushPose();
 				place(part(piece.attach), pose);
+				if (cape) {
+					placeCape(pose, capeLift, capeSway);
+				}
 				fit(pose, fit);
-				canvas.base(pose, baked.texture, xf -> piece.emit(xf, light));
+				canvas.base(pose, baked.texture, xf -> piece.emit(xf, light, t));
 				if (baked.glow != null) {
-					canvas.glow(pose, baked.glow, xf -> piece.emit(xf, CosmeticModels.fullBright()));
+					canvas.glow(pose, baked.glow, xf -> piece.emit(xf, CosmeticModels.fullBright(), t));
 				}
 				pose.popPose();
 			}
 		}
+	}
+
+	/** Vanilla cape lift and sway, turned around the design's collar hinge. */
+	private static void placeCape(PoseStack pose, float lift, float sway) {
+		float pitch = (float) Math.toRadians(Math.max(-5f, Math.min(65f, lift)));
+		float side = (float) Math.toRadians(Math.max(-25f, Math.min(25f, sway)));
+		pose.translate(0, 0, Attach.CAPE_HINGE);
+		Compat.turnZYX(pose, pitch, 0, 0);
+		Compat.turnZYX(pose, 0, -side, side);
+		pose.translate(0, 0, -Attach.CAPE_HINGE);
 	}
 
 	/**
