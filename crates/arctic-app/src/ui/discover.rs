@@ -2,6 +2,8 @@
 //! time (nothing paid or pinned), filtered by premium / cracked, with a
 //! "Surprise me" pick; plus the form owners use to list their own server.
 
+use std::collections::{HashMap, HashSet};
+
 use arctic_core::servers::public::{self, Access, PublicServer, Submitted};
 use eframe::egui::{self, Id, Modal, RichText, Stroke, vec2};
 
@@ -12,6 +14,8 @@ use crate::tasks::Outcome;
 use crate::toasts::Kind;
 use crate::widgets;
 use crate::{t, tf};
+
+use super::servers::{server_icon, set_server_icon};
 const WIDTH: f32 = 640.0;
 const LIST_HEIGHT: f32 = 380.0;
 const MAX_TAGS: usize = 5;
@@ -22,6 +26,9 @@ pub struct DiscoverUi {
     pub(crate) open: bool,
     list: Option<Outcome<Vec<PublicServer>>>,
     access: Access,
+    icons: HashMap<String, String>,
+    /// Includes pending pings and servers that returned no favicon.
+    icon_requests: HashSet<String>,
     search: String,
     sort: Sort,
     /// "Surprise me" result, shown first.
@@ -312,71 +319,77 @@ impl ArcticApp {
             .inner_margin(10.0)
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                crate::widgets::row(ui, |ui| {
-                    ui.vertical(|ui| {
-                        ui.set_max_width((ui.available_width() - 220.0).max(160.0));
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new(&s.name).strong().color(p.text));
-                            ui.label(RichText::new(&s.address).small().color(p.muted));
-                            if !s.partner.is_empty() {
-                                ui.label(RichText::new(&s.partner).small().color(p.accent))
-                                    .on_hover_text(t!("instances.a_partner_of_arctic_launcher"));
-                            }
-                        });
-                        let mut detail = Vec::new();
-                        if !s.tags.is_empty() {
-                            detail.push(s.tags.join(" · "));
-                        }
-                        if !s.version.is_empty() {
-                            detail.push(s.version.clone());
-                        }
-                        if !detail.is_empty() {
-                            ui.add(
-                                egui::Label::new(
-                                    RichText::new(detail.join("  |  ")).small().color(p.muted),
-                                )
-                                .truncate(),
-                            );
-                        }
-                        if !s.description.is_empty() {
-                            ui.add(
-                                egui::Label::new(RichText::new(&s.description).color(p.muted))
-                                    .truncate(),
-                            );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    join = widgets::button(ui, p, Some(Icon::Play), t!("instances.join"), true)
+                        .clicked();
+                    add = widgets::icon_button(
+                        ui,
+                        p,
+                        Icon::Plus,
+                        t!("instances.add_to_your_server_list"),
+                    )
+                    .clicked();
+                    ui.add_space(6.0);
+                    ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| {
+                        ui.label(
+                            RichText::new(format!("{} / {}", s.players, s.max_players))
+                                .color(p.text),
+                        );
+                        // Only the exception is tagged: a Microsoft account is the normal case.
+                        if s.cracked == Some(true) {
+                            ui.label(RichText::new("cracked").small().color(p.muted))
+                                .on_hover_text(t!(
+                                    "instances.lets_any_name_in_works_with_offline_accounts"
+                                ));
                         }
                     });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        join = widgets::button(ui, p, Some(Icon::Play), t!("instances.join"), true)
-                            .clicked();
-                        add = widgets::icon_button(
-                            ui,
-                            p,
-                            Icon::Plus,
-                            t!("instances.add_to_your_server_list"),
-                        )
-                        .clicked();
-                        ui.add_space(6.0);
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        let uri = self
+                            .discover
+                            .icons
+                            .get(&s.address)
+                            .or_else(|| self.servers.icons.get(&s.address));
+                        server_icon(ui, p, uri);
                         ui.vertical(|ui| {
-                            ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| {
-                                ui.label(
-                                    RichText::new(format!("{} / {}", s.players, s.max_players))
-                                        .color(p.text),
+                            ui.set_max_width(ui.available_width());
+                            ui.add(
+                                egui::Label::new(RichText::new(&s.name).strong().color(p.text))
+                                    .truncate(),
+                            );
+                            ui.add(
+                                egui::Label::new(RichText::new(&s.address).small().color(p.muted))
+                                    .truncate(),
+                            );
+                            if !s.partner.is_empty() {
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(&s.partner).small().color(p.accent),
+                                    )
+                                    .truncate(),
+                                )
+                                .on_hover_text(t!("instances.a_partner_of_arctic_launcher"));
+                            }
+                            let mut detail = Vec::new();
+                            if !s.tags.is_empty() {
+                                detail.push(s.tags.join(" · "));
+                            }
+                            if !s.version.is_empty() {
+                                detail.push(s.version.clone());
+                            }
+                            if !detail.is_empty() {
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(detail.join("  |  ")).small().color(p.muted),
+                                    )
+                                    .truncate(),
                                 );
-                                // Only the exception is tagged: a Microsoft account is the normal case.
-                                let (label, tip) = match s.cracked {
-                                    Some(true) => (
-                                        "cracked",
-                                        t!(
-                                            "instances.lets_any_name_in_works_with_offline_accounts"
-                                        ),
-                                    ),
-                                    _ => ("", ""),
-                                };
-                                if !label.is_empty() {
-                                    ui.label(RichText::new(label).small().color(p.muted))
-                                        .on_hover_text(tip);
-                                }
-                            });
+                            }
+                            if !s.description.is_empty() {
+                                ui.add(
+                                    egui::Label::new(RichText::new(&s.description).color(p.muted))
+                                        .truncate(),
+                                );
+                            }
                         });
                     });
                 });
@@ -509,7 +522,27 @@ impl ArcticApp {
     }
 
     pub(crate) fn on_public_servers(&mut self, list: Outcome<Vec<PublicServer>>) {
+        if let Ok(list) = &list {
+            let addresses: Vec<_> = list
+                .iter()
+                .map(|server| &server.address)
+                .filter(|address| self.discover.icon_requests.insert((*address).clone()))
+                .cloned()
+                .collect();
+            if !addresses.is_empty() {
+                self.tasks.public_server_icons(addresses);
+            }
+        }
         self.discover.list = Some(list);
+    }
+
+    pub(crate) fn on_public_server_icon(
+        &mut self,
+        ctx: &egui::Context,
+        address: String,
+        png: Vec<u8>,
+    ) {
+        set_server_icon(ctx, &mut self.discover.icons, "discover", &address, png);
     }
 
     pub(crate) fn on_server_submitted(&mut self, result: Outcome<Submitted>) {
