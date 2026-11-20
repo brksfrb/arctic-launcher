@@ -1,0 +1,7 @@
+# Bundle the MSVC CRT so the Windows executables run without the VC++ redistributable.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[env]
+# The cmake crate checks this spelling before cargo-xwin's underscored variable.
+CMAKE_TOOLCHAIN_FILE_x86_64-pc-windows-msvc = { value = ".cargo/windows-msvc.cmake", relative = true }

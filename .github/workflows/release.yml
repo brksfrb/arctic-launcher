@@ -61,6 +61,8 @@ jobs:
         env:
           ARCTIC_MSA_CLIENT_ID: ${{ secrets.ARCTIC_MSA_CLIENT_ID }}
         run: |
+          # Use the target rustflags in .cargo/config.toml even on a shared runner.
+          unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS
           cargo xwin build --release --locked --target x86_64-pc-windows-msvc -p arctic-app -p arctic-cli 2>&1 | tee xwin.log
           # build.rs only warns when the icon can't go in; a release must have it.
           if grep -q "could not embed exe icon" xwin.log; then echo "the Windows exe has no icon"; exit 1; fi
