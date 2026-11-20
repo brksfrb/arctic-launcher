@@ -379,6 +379,7 @@
   "instances.hub.install_into": "Zainstaluj w",
   "instances.hub.any_version": "Dowolna wersja",
   "instances.hub.any_loader": "Dowolny loader",
+  "instances.hub.category": "Kategoria",
   "instances.hub.any_category": "Dowolna kategoria",
   "instances.hub.any_environment": "Dowolne środowisko",
   "instances.hub.client": "Klient",

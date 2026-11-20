@@ -20,6 +20,7 @@ use crate::widgets;
 use crate::{t, tf};
 
 const PAGE_SIZE: usize = 20;
+const FILTER_COMBO_WIDTH: f32 = 132.0;
 /// Seconds after the last keystroke before searching.
 const SEARCH_DELAY: f64 = 0.35;
 /// Marks the shared search state as belonging to this page.
@@ -361,7 +362,7 @@ impl ArcticApp {
         };
         let mut search = false;
         let mut filters = self.inst.hub.filters[idx].clone();
-        widgets::row(ui, |ui| {
+        widgets::field_row(ui, |ui| {
             let field = ui.add(
                 widgets::text_field(&mut filters.text)
                     .hint_text(section.hint())
@@ -386,7 +387,7 @@ impl ArcticApp {
             let before = filters.sort;
             hub_sort_combo(ui, &mut filters.sort);
             search |= filters.sort != before;
-            search |= widgets::button(ui, p, None, t!("instances.search"), true).clicked();
+            search |= widgets::field_button(ui, p, t!("instances.search"), true).clicked();
         });
         ui.add_space(4.0);
         let before = filters.clone();
@@ -459,43 +460,49 @@ impl ArcticApp {
                     _ => None,
                 };
             }
+            let any_category = t!("instances.hub.any_category");
+            let selected_category = filters
+                .categories
+                .first()
+                .map_or_else(|| any_category.to_owned(), |id| discovery::pretty_name(id));
+            let categories = tags
+                .as_ref()
+                .map_or_else(Vec::new, |tags| tags.categories_for(kind));
+            let combo = egui::ComboBox::from_id_salt("hub_category")
+                .width(FILTER_COMBO_WIDTH)
+                .selected_text(selected_category);
+            widgets::field_combo(ui, combo, |ui| {
+                if ui
+                    .selectable_label(filters.categories.is_empty(), any_category)
+                    .clicked()
+                {
+                    filters.categories.clear();
+                }
+                for category in categories {
+                    if ui
+                        .selectable_label(
+                            filters.categories.contains(category),
+                            discovery::pretty_name(category),
+                        )
+                        .clicked()
+                    {
+                        filters.categories.clear();
+                        filters.categories.insert(category.to_owned());
+                    }
+                }
+            })
+            .on_hover_text(t!("instances.hub.category"));
             let unfiltered = Filters {
                 text: filters.text.clone(),
                 sort: filters.sort,
                 ..Filters::default()
             };
             if filters != unfiltered
-                && widgets::button(ui, p, None, t!("instances.hub.clear_filters"), false).clicked()
+                && widgets::field_button(ui, p, t!("instances.hub.clear_filters"), false).clicked()
             {
                 filters = unfiltered;
             }
         });
-        if let Some(tags) = &tags {
-            let categories = tags.categories_for(section.project_type());
-            if !categories.is_empty() {
-                ui.horizontal_wrapped(|ui| {
-                    if ui
-                        .selectable_label(
-                            filters.categories.is_empty(),
-                            t!("instances.hub.any_category"),
-                        )
-                        .clicked()
-                    {
-                        filters.categories.clear();
-                    }
-                    for category in categories {
-                        let selected = filters.categories.contains(category);
-                        if ui
-                            .selectable_label(selected, discovery::pretty_name(category))
-                            .clicked()
-                            && !filters.categories.remove(category)
-                        {
-                            filters.categories.insert(category.to_owned());
-                        }
-                    }
-                });
-            }
-        }
         if let Some(Load::Failed(e)) = &self.inst.hub.tags {
             ui.label(
                 RichText::new(tf!("instances.hub.filters_failed", e = e))
@@ -726,15 +733,15 @@ fn option_combo(
         },
         |(_, l)| l.clone(),
     );
-    egui::ComboBox::from_id_salt(id)
-        .width(140.0)
-        .selected_text(shown)
-        .show_ui(ui, |ui| {
-            ui.selectable_value(value, String::new(), any);
-            for (v, label) in options {
-                ui.selectable_value(value, v, label);
-            }
-        });
+    let combo = egui::ComboBox::from_id_salt(id)
+        .width(FILTER_COMBO_WIDTH)
+        .selected_text(shown);
+    widgets::field_combo(ui, combo, |ui| {
+        ui.selectable_value(value, String::new(), any);
+        for (v, label) in options {
+            ui.selectable_value(value, v, label);
+        }
+    });
 }
 
 #[cfg(test)]

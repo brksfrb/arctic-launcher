@@ -375,6 +375,7 @@
   "instances.hub.install_into": "Install into",
   "instances.hub.any_version": "Any version",
   "instances.hub.any_loader": "Any loader",
+  "instances.hub.category": "Category",
   "instances.hub.any_category": "Any category",
   "instances.hub.any_environment": "Any environment",
   "instances.hub.client": "Client",

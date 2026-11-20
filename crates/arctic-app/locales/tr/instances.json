@@ -375,6 +375,7 @@
   "instances.hub.install_into": "Şuraya kur",
   "instances.hub.any_version": "Herhangi bir sürüm",
   "instances.hub.any_loader": "Herhangi bir yükleyici",
+  "instances.hub.category": "Kategori",
   "instances.hub.any_category": "Herhangi bir kategori",
   "instances.hub.any_environment": "Herhangi bir ortam",
   "instances.hub.client": "İstemci",
