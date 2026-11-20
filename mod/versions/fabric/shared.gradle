@@ -364,6 +364,7 @@ ext.arcticProps = [
 		guiReplay: atLeast('26.1'),
 		// Before 1.21.2 the hotbar wraps inside Inventory.swapPaint. After that, MouseHandler.onScroll does.
 		inventoryHotbarScroll: !atLeast('1.21.2'),
+		cosmeticGlowPipeline: atLeast('1.21.11') && !atLeast('26.1'),
 		neoforge: neoforge,
 		// NeoForge 1.20.2+ reads minecraft:register itself: Arctic's hellos come from it (NeoForgeRegisterMixin).
 		neoforgeRegister: neoforge && atLeast('1.20.2'),

@@ -2,6 +2,9 @@
 //! Blockbench (Bedrock) geometry, parsed with the same limits the game
 //! uses. The launcher draws them on the skin preview; the game wears them.
 
+mod animation;
+
+pub use animation::Animation;
 use serde::Deserialize;
 
 pub use arctic_mesh as mesh;
@@ -24,9 +27,13 @@ pub struct Item {
     pub id: String,
     pub name: String,
     pub slot: String,
+    #[serde(default)]
+    pub legacy: bool,
     /// Content hashes of the geometry (JSON) and texture (PNG).
     pub model: String,
     pub texture: String,
+    #[serde(default)]
+    pub glow: Option<String>,
     #[serde(default)]
     pub animation: Option<String>,
     /// A sculpted version (hash of a `.glb`); used instead of the cuboids
@@ -41,6 +48,8 @@ pub struct MeshItem {
     pub id: String,
     pub name: String,
     pub slot: String,
+    #[serde(default)]
+    pub legacy: bool,
     /// Content hash of the `.glb`.
     pub mesh: String,
 }
@@ -79,6 +88,7 @@ pub fn catalog(base: &str) -> Result<Catalog> {
             && is_id(&i.slot)
             && is_hash(&i.model)
             && is_hash(&i.texture)
+            && i.glow.as_deref().is_none_or(is_hash)
             && i.animation.as_deref().is_none_or(is_hash)
             && i.mesh.as_deref().is_none_or(is_hash)
     });
@@ -315,6 +325,27 @@ impl Geometry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn catalog_accepts_legacy_flags_and_defaults_to_current() {
+        let payload = r#"{
+            "cosmetics": [
+                {"id":"halo","name":"Halo","slot":"head","model":"m","texture":"t","legacy":true,"extra":1},
+                {"id":"rune_circle","name":"Rune Circle","slot":"aura","model":"m","texture":"t"}
+            ],
+            "meshes": [
+                {"id":"old_wings","name":"Old Wings","slot":"back","mesh":"m","legacy":true},
+                {"id":"wings","name":"Wings","slot":"back","mesh":"m"}
+            ]
+        }"#;
+        let catalog: Catalog = serde_json::from_str(payload).unwrap();
+        assert_eq!(catalog.cosmetics[0].id, "halo");
+        assert_eq!(catalog.cosmetics[0].slot, "head");
+        assert!(catalog.cosmetics[0].legacy);
+        assert!(!catalog.cosmetics[1].legacy);
+        assert!(catalog.meshes[0].legacy);
+        assert!(!catalog.meshes[1].legacy);
+    }
 
     #[test]
     fn the_bundled_cosmetics_parse() {

@@ -37,6 +37,7 @@ public final class Cosmetics {
 		public final String id;
 		public final String name;
 		public final String slot;
+		public final boolean legacy;
 		final String model;
 		final String texture;
 		/** The glow texture's hash, or null. */
@@ -54,10 +55,11 @@ public final class Cosmetics {
 		/** Failed loads so far (it is asked for again after a wait, a few times). */
 		volatile int attempts;
 
-		Item(String id, String name, String slot, String model, String texture, String glow, String animation, String mesh) {
+		Item(String id, String name, String slot, boolean legacy, String model, String texture, String glow, String animation, String mesh) {
 			this.id = id;
 			this.name = name;
 			this.slot = slot;
+			this.legacy = legacy;
 			this.model = model;
 			this.texture = texture;
 			this.glow = glow;
@@ -239,6 +241,19 @@ public final class Cosmetics {
 			}
 		}
 		return null;
+	}
+
+	/** A ready 3D cape takes priority over the user's native cape texture. */
+	public boolean wearsCape(Look look) {
+		if (look != null) {
+			for (String id : look.cosmetics) {
+				Item item = item(id);
+				if (item != null && item.ready && "cape".equals(item.slot)) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/** An item that can be drawn now; starts loading it on first ask. */
@@ -447,7 +462,7 @@ public final class Cosmetics {
 			String mesh = Looks.stringField(o, "mesh");
 			if (isId(id) && isId(slot) && Looks.isHash(model) && Looks.isHash(texture) && (glow == null || Looks.isHash(glow))
 					&& (animation == null || Looks.isHash(animation)) && (mesh == null || Looks.isHash(mesh))) {
-				found.add(new Item(id, Looks.cleanName(Looks.stringField(o, "name")), slot, model, texture, glow, animation, mesh));
+				found.add(new Item(id, Looks.cleanName(Looks.stringField(o, "name")), slot, legacy(o), model, texture, glow, animation, mesh));
 			}
 		}
 		// Sculpted cosmetics that have no cuboid version.
@@ -460,7 +475,7 @@ public final class Cosmetics {
 			String slot = Looks.stringField(o, "slot");
 			String mesh = Looks.stringField(o, "mesh");
 			if (isId(id) && isId(slot) && Looks.isHash(mesh)) {
-				found.add(new Item(id, Looks.cleanName(Looks.stringField(o, "name")), slot, null, null, null, null, mesh));
+				found.add(new Item(id, Looks.cleanName(Looks.stringField(o, "name")), slot, legacy(o), null, null, null, null, mesh));
 			}
 		}
 		List<Emote> moves = new ArrayList<Emote>();
@@ -590,6 +605,11 @@ public final class Cosmetics {
 	private JsonElement json(String hash) throws Exception {
 		byte[] bytes = AssetCache.get(hash, () -> Http.get(baseUrl + "/v1/assets/" + hash, null));
 		return GSON.fromJson(new String(bytes, StandardCharsets.UTF_8), JsonElement.class);
+	}
+
+	private static boolean legacy(JsonObject item) {
+		JsonElement flag = item.get("legacy");
+		return flag != null && flag.isJsonPrimitive() && flag.getAsJsonPrimitive().isBoolean() && flag.getAsBoolean();
 	}
 
 	private static List<JsonElement> list(JsonObject o, String key) {

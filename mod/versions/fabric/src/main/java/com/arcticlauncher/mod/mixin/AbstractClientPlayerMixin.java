@@ -59,7 +59,7 @@ abstract class AbstractClientPlayerMixin {
 			cape = new ClientAsset.ResourceTexture(capeTexture, capeTexture);
 			elytra = cape;
 		}
-		return new PlayerSkin(body, cape, elytra, model, skin.secure());
+		return new PlayerSkin(body, wearsCape(look) ? null : cape, elytra, model, skin.secure());
 	}
 	//#else
 	private static PlayerSkin withLook(PlayerSkin skin, Look look) {
@@ -77,7 +77,7 @@ abstract class AbstractClientPlayerMixin {
 			cape = capeTexture;
 			elytra = capeTexture;
 		}
-		return new PlayerSkin(body, skin.textureUrl(), cape, elytra, model, skin.secure());
+		return new PlayerSkin(body, skin.textureUrl(), wearsCape(look) ? null : cape, elytra, model, skin.secure());
 	}
 	//#endif
 	//#else
@@ -104,7 +104,9 @@ abstract class AbstractClientPlayerMixin {
 		}
 		Look look = look();
 		Identifier tex = look == null ? null : ready(look.cape);
-		if (tex != null) {
+		if (wearsCape(look)) {
+			cir.setReturnValue(null);
+		} else if (tex != null) {
 			cir.setReturnValue(tex);
 		}
 	}
@@ -135,6 +137,10 @@ abstract class AbstractClientPlayerMixin {
 		}
 	}
 	//#endif
+
+	private static boolean wearsCape(Look look) {
+		return ArcticClient.looks() != null && ArcticClient.looks().cosmetics().wearsCape(look);
+	}
 
 	private Look look() {
 		AbstractClientPlayer self = (AbstractClientPlayer) (Object) this;

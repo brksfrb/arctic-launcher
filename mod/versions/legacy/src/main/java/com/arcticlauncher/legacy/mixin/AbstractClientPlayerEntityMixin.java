@@ -38,7 +38,9 @@ abstract class AbstractClientPlayerEntityMixin {
 	private void arctic$cape(CallbackInfoReturnable<Identifier> cir) {
 		Look look = look();
 		Identifier tex = look == null ? null : LegacyHooks.ready(look.cape);
-		if (tex != null) {
+		if (look != null && ArcticClient.looks().cosmetics().wearsCape(look)) {
+			cir.setReturnValue(null);
+		} else if (tex != null) {
 			cir.setReturnValue(tex);
 		}
 	}
