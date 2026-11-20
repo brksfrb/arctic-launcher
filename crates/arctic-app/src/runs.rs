@@ -1417,6 +1417,59 @@ mod tests {
     }
 
     #[test]
+    fn report_436_resolves_the_sampled_package_to_the_installed_mod() {
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let mods = dir.path().join("mods");
+        let freezes = dir.path().join("logs/arctic-freezes");
+        std::fs::create_dir(&mods).unwrap();
+        std::fs::create_dir_all(&freezes).unwrap();
+        let mut jar = zip::ZipWriter::new(
+            std::fs::File::create(mods.join("customrecipe-1.5.2+26.3.jar")).unwrap(),
+        );
+        let options = zip::write::SimpleFileOptions::default();
+        jar.start_file("fabric.mod.json", options).unwrap();
+        jar.write_all(br#"{"id":"customrecipe","name":"Custom Recipe","version":"1.5.2+26.3"}"#)
+            .unwrap();
+        jar.start_file(
+            "fr/zazac1/customrecipe/client/VanillaRecipesScreen.class",
+            options,
+        )
+        .unwrap();
+        jar.finish().unwrap();
+
+        let fixture =
+            include_str!("../../arctic-core/tests/fixtures/crash-436-customrecipe-hang.log");
+        let (_, log) = fixture.split_once("---- game log ----\n").unwrap();
+        let (log, snapshot) = log
+            .split_once("---- logs/arctic-freezes/freeze-436.txt ----\n")
+            .unwrap();
+        let (snapshot, _) = snapshot.split_once("Hang at exit:").unwrap();
+        std::fs::write(freezes.join("freeze-436.txt"), snapshot).unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "26.3", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        run.push_log([LogLine {
+            level: Level::Warn,
+            text: log.trim().into(),
+        }]);
+        let code = Some(-805306369);
+        let diagnosis = run.exit_diagnosis(code, false).unwrap();
+        assert_eq!(diagnosis.title, "Custom Recipe froze the game");
+        assert_eq!(diagnosis.mods, ["customrecipe"]);
+        assert!(
+            diagnosis
+                .detail
+                .contains("VanillaRecipesScreen.findLocalRecipes")
+        );
+        let report = run.crash_report(&diagnosis.title, code);
+        assert_eq!(report.title, diagnosis.title);
+        assert!(!report.title.contains("c2me"));
+    }
+
+    #[test]
     fn windows_kill_with_an_unfinished_freeze_reports_the_hang_at_exit() {
         let dir = tempfile::tempdir().unwrap();
         let freezes = dir.path().join("logs/arctic-freezes");
