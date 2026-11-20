@@ -293,6 +293,7 @@ mod tests {
             game_versions: vec![game.into()],
             loaders: vec![loader.into()],
             file_name: Some("mod.jar".into()),
+            file_sha1: None,
         }
     }
 

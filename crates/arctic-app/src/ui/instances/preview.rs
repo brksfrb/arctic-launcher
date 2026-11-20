@@ -369,7 +369,17 @@ impl ArcticApp {
         }
         if preview.versions.is_none() {
             match preview.versions_rx.try_recv() {
-                Ok(result) => preview.versions = Some(result),
+                Ok(result) => {
+                    if let (Some(kind), Ok(versions)) = (preview.discover_kind, &result) {
+                        self.inst.hub.installed.remember_versions(
+                            kind,
+                            &preview.hit.project_id,
+                            versions,
+                        );
+                        ctx.request_repaint();
+                    }
+                    preview.versions = Some(result);
+                }
                 Err(mpsc::TryRecvError::Disconnected) => {
                     preview.versions = Some(Err(t!(
                         "instances.project_request_stopped_please_retry"
@@ -896,6 +906,7 @@ mod tests {
             game_versions: games.iter().map(|g| g.to_string()).collect(),
             loaders: loaders.iter().map(|l| l.to_string()).collect(),
             file_name: Some("content.zip".into()),
+            file_sha1: None,
         }
     }
 

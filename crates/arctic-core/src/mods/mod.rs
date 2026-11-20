@@ -16,6 +16,7 @@ pub mod modpack;
 mod modrinth;
 mod oneconfig;
 pub mod pack_groups;
+pub mod pack_index;
 pub mod pack_preview;
 pub mod packs;
 pub mod performance;
@@ -60,7 +61,7 @@ pub enum SortBy {
 }
 
 /// What kind of Modrinth project to search for.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum ProjectType {
     #[default]
     Mod,
@@ -552,6 +553,11 @@ pub fn icon(url: &str, cache_dir: &Path) -> Result<Vec<u8>> {
 /// Path of an instance's mod index.
 pub fn index_path(instance_dir: &Path) -> PathBuf {
     instance_dir.join("mods.json")
+}
+
+/// Read the tracked projects without inspecting any JAR contents.
+pub fn tracked_projects(mods_dir: &Path, index: &Path) -> Result<HashSet<String>> {
+    Ok(installed_projects(&ModIndex::load(index)?, mods_dir))
 }
 
 // ---------------------------------------------------------------- helpers

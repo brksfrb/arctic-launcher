@@ -118,6 +118,7 @@ impl ArcticApp {
         kind: PackKind,
         target: &Instance,
         hits: &[ProjectHit],
+        installed: &HashSet<String>,
     ) {
         let p = self.palette();
         let game = self.pack_game(target);
@@ -172,7 +173,14 @@ impl ArcticApp {
                 );
                 let open = frame
                     .show(&mut card, |ui| {
-                        self.hub_image_card(ui, target, kind, hit, &game, shader_note.as_deref())
+                        self.hub_image_card(
+                            ui,
+                            target,
+                            kind,
+                            hit,
+                            shader_note.as_deref(),
+                            installed.contains(&hit.project_id),
+                        )
                     })
                     .inner;
                 if let Some(Some(url)) = self.inst.hub.banners.sources.get(&hit.project_id) {
@@ -203,10 +211,11 @@ impl ArcticApp {
         target: &Instance,
         kind: PackKind,
         hit: &ProjectHit,
-        game: &str,
         shader_note: Option<&str>,
+        installed: bool,
     ) -> bool {
         let p = self.palette();
+        let game = self.pack_game(target);
         let width = ui.available_width();
         ui.set_width(width);
         ui.spacing_mut().item_spacing.y = CARD_SPACING;
@@ -227,7 +236,7 @@ impl ArcticApp {
             short_label(ui, &tags, egui::TextStyle::Small, p.muted, 1);
         }
         short_label(ui, &stats_counts(hit), egui::TextStyle::Small, p.muted, 2);
-        if hit.is_incompatible(game) {
+        if hit.is_incompatible(&game) {
             short_label(
                 ui,
                 t!("instances.incompatible"),
@@ -246,7 +255,7 @@ impl ArcticApp {
         ui.add_space((ui.available_height() - widgets::BUTTON_HEIGHT).max(0.0));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.set_min_height(widgets::BUTTON_HEIGHT);
-            self.hub_install_button(ui, kind.project_type(), target, hit);
+            self.hub_install_button(ui, kind.project_type(), target, hit, installed);
         });
         open
     }

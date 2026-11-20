@@ -8,6 +8,7 @@ mod create;
 mod detail;
 mod hub;
 mod hub_cards;
+mod hub_installed;
 mod icon_picker;
 mod loader_switch;
 mod modpacks;
@@ -516,7 +517,7 @@ impl ArcticApp {
         self.check_mods(id, true);
     }
 
-    /// Opening and drawing a page only schedules work, never reads its JARs.
+    /// The scan reads JARs in the background. The tracking index is available immediately.
     pub(super) fn check_mods(&mut self, id: &str, force: bool) {
         let Some(instance) = self.instance_by_id(id) else {
             return;

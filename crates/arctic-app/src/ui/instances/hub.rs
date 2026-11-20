@@ -13,6 +13,7 @@ use eframe::egui::{self, RichText};
 use super::Load;
 use super::browse::compact;
 use super::hub_cards::HubBanners;
+use super::hub_installed::HubInstalled;
 use super::mods_page::mod_icon;
 use crate::app::ArcticApp;
 use crate::art::icons::Icon;
@@ -188,6 +189,7 @@ pub struct HubUi {
     /// The instance supplying search defaults and the default install target.
     pub target: Option<String>,
     pub(super) banners: HubBanners,
+    pub(super) installed: HubInstalled,
     tags: Option<Load<Arc<Tags>>>,
     filters: [Filters; Section::ALL.len()],
     showing: Option<Section>,
@@ -281,6 +283,13 @@ impl ArcticApp {
                 self.inst.hub.filters[s.index()].follow_instance(s, &game, loader);
             }
             self.inst.hub.defaults_from = Some(defaults_from);
+        }
+        let shows_mod_projects = matches!(section, Section::Mods | Section::Shaders);
+        if shows_mod_projects {
+            ui.ctx()
+                .request_repaint_after(crate::mod_tasks::POLL_INTERVAL);
+        }
+        if defaults_changed || shows_mod_projects {
             self.check_mods(&target.id, false);
         }
         if defaults_changed || section_changed || browser_changed {
@@ -550,12 +559,12 @@ impl ArcticApp {
             Some(Ok(page)) => page.hits.clone(),
         };
         let target = self.hub_target();
+        let installed = self.hub_installed(ui.ctx(), section, target.as_ref());
         if let Some(kind) = section.pack_kind() {
             if let Some(target) = &target {
-                self.hub_card_grid(ui, kind, target, &hits);
+                self.hub_card_grid(ui, kind, target, &hits, &installed);
             }
         } else {
-            let installed = self.hub_installed(target.as_ref());
             theme::card(p).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 for hit in &hits {
@@ -573,23 +582,37 @@ impl ArcticApp {
         }
     }
 
-    /// Tracked mod project ids of the target instance.
-    fn hub_installed(&self, target: Option<&Instance>) -> HashSet<String> {
-        target
-            .and_then(|i| self.inst.mod_scans.get(&i.id))
-            .and_then(|s| s.data.as_ref())
-            .map(|data| {
-                data.files
-                    .iter()
-                    .filter_map(|f| f.tracked.as_ref().map(|m| m.project_id.clone()))
-                    .collect()
-            })
+    fn hub_installed(
+        &mut self,
+        ctx: &egui::Context,
+        section: Section,
+        target: Option<&Instance>,
+    ) -> Arc<HashSet<String>> {
+        let Some(target) = target else {
+            return Arc::default();
+        };
+        match section {
+            Section::Mods => Arc::new(self.hub_mod_projects(target)),
+            Section::ResourcePacks | Section::Shaders | Section::DataPacks => self
+                .inst
+                .hub
+                .installed
+                .packs(ctx, section.project_type(), target.game_dir(&self.dirs)),
+            Section::Modpacks => Arc::default(),
+        }
+    }
+
+    fn hub_mod_projects(&self, target: &Instance) -> HashSet<String> {
+        self.inst
+            .mod_scans
+            .get(&target.id)
+            .map(crate::mod_tasks::ModScan::tracked_projects)
             .unwrap_or_default()
     }
 
     /// What installing a shader pack into `target` needs, as a note under the row.
     pub(super) fn shader_note(&self, target: &Instance) -> Option<String> {
-        let installed = self.hub_installed(Some(target));
+        let installed = self.hub_mod_projects(target);
         match discovery::shader_loader(target.loader.kind(), &installed) {
             ShaderLoader::Present => None,
             ShaderLoader::Switch => Some(t!("instances.hub.shaders_switched_on").to_owned()),
@@ -654,10 +677,13 @@ impl ArcticApp {
                 ui.label(RichText::new(stats_line(hit)).small().color(p.muted));
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                self.hub_install_button(ui, section.project_type(), target, hit);
-                if section == Section::Mods && installed.contains(&hit.project_id) {
-                    ui.label(RichText::new(t!("instances.installed")).color(p.accent));
-                }
+                self.hub_install_button(
+                    ui,
+                    section.project_type(),
+                    target,
+                    hit,
+                    installed.contains(&hit.project_id),
+                );
             });
         });
         if open {
@@ -671,6 +697,7 @@ impl ArcticApp {
         project_type: ProjectType,
         target: &Instance,
         hit: &ProjectHit,
+        installed: bool,
     ) {
         let p = self.palette();
         let installing = match project_type {
@@ -687,6 +714,9 @@ impl ArcticApp {
             .clicked()
         {
             self.pick_single_content(ui.ctx(), project_type, hit, None, target);
+        }
+        if installed {
+            ui.label(RichText::new(t!("instances.installed")).color(p.accent));
         }
     }
 }
