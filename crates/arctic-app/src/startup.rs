@@ -1,7 +1,7 @@
 //! Command-line flags of the GUI, for shortcuts and `arctic open`:
 //!
 //! ```text
-//! arctic-launcher.exe [--launch <version|latest>] [--account <name|uuid>]
+//! arctic-launcher.exe [--instance <id> | --launch <version|latest>] [--account <name|uuid>]
 //!                     [--tab <play|accounts|instances|skins|together|logs|settings|about>] [--no-intro]
 //!                     [--profile <name|id>]
 //! ```
@@ -9,8 +9,15 @@
 
 use crate::app::Tab;
 
+pub enum LaunchRequest {
+    Instance(String),
+    Version(String),
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct StartupOptions {
+    /// Launch this instance by its stable id.
+    pub instance: Option<String>,
     /// Launch this version as soon as the version list is loaded.
     pub launch: Option<String>,
     /// Account to make active first (username, UUID or id).
@@ -29,6 +36,7 @@ impl StartupOptions {
         let mut args = args.into_iter();
         while let Some(arg) = args.next() {
             match arg.as_str() {
+                "--instance" => opts.instance = args.next(),
                 "--launch" => opts.launch = args.next(),
                 "--account" => opts.account = args.next(),
                 "--tab" => opts.tab = args.next().as_deref().and_then(parse_tab),
@@ -43,6 +51,14 @@ impl StartupOptions {
             }
         }
         opts
+    }
+
+    pub fn launch_request(&self) -> Option<LaunchRequest> {
+        if let Some(id) = &self.instance {
+            Some(LaunchRequest::Instance(id.clone()))
+        } else {
+            self.launch.clone().map(LaunchRequest::Version)
+        }
     }
 }
 
@@ -92,5 +108,14 @@ mod tests {
     fn tolerates_junk() {
         let o = parse(&["--bogus", "--tab", "nope", "--launch"]);
         assert_eq!(o, StartupOptions::default());
+    }
+
+    #[test]
+    fn instance_takes_precedence_over_version() {
+        let o = parse(&["--junk", "--instance", "my-instance", "--launch", "latest"]);
+        assert_eq!(o.instance.as_deref(), Some("my-instance"));
+        assert!(
+            matches!(o.launch_request(), Some(LaunchRequest::Instance(id)) if id == "my-instance")
+        );
     }
 }
