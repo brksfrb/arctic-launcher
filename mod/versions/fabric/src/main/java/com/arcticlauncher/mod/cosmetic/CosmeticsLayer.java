@@ -97,7 +97,12 @@ public final class CosmeticsLayer extends RenderLayer<PlayerRenderState, PlayerM
 			Canvas canvas = new Canvas(buffers);
 			// Looked up when the state was filled in.
 			draw(pose, canvas, light, ((AvatarIdentity) state).arctic$look(),
+					//#if MC >= 1.21.4
 					state.showCape && !state.chestEquipment.is(net.minecraft.world.item.Items.ELYTRA),
+					//#else
+					// 1.21.2–1.21.3 have no chest equipment on the render state; vanilla already clears showCape under an elytra.
+					state.showCape,
+					//#endif
 					state.capeFlap + state.capeLean * 0.5f, state.capeLean2 * 0.5f);
 			drawLimbs(pose, canvas, light, ((AvatarIdentity) state).arctic$uuid(), state.skin.texture(),
 					state.skin.model() == net.minecraft.client.resources.PlayerSkin.Model.SLIM,
