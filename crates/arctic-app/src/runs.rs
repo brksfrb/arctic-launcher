@@ -117,8 +117,14 @@ impl Run {
     }
 
     /// The crash as a report, from the game log's end and the crash report it wrote.
-    fn crash_report(&self, title: &str, code: Option<i32>) -> crash::Report {
+    fn crash_report(&self, title: &str, code: Option<i32>, ended_at: SystemTime) -> crash::Report {
         let mut lines: Vec<&str> = self.log.iter().map(|l| l.text.as_str()).collect();
+        let latest = read_latest_log(&self.game_dir, self.started).unwrap_or_default();
+        let latest_lines = log_without_html(&latest);
+        let written = newest_crash_report(&self.game_dir, self.started)
+            .or_else(|| newest_hs_err(&self.game_dir, self.started));
+        let exit_context = (code.is_some_and(|code| code != 0) && written.is_none())
+            .then(|| crash::exit_context(&lines, &latest_lines, self.started, ended_at));
         let mixin =
             fresh_diagnostic_sidecar(&self.game_dir, self.started, "arctic-mixin-failure.txt");
         if let Some(context) = &mixin {
@@ -132,12 +138,12 @@ impl Run {
         let freezes = fresh_freeze_files(&self.game_dir, self.started);
         // The game's own log file often says more than what it printed (a mod that quits quietly writes
         // only there), and Java writes a file of its own when it dies.
-        let own_log = latest_log_tail(&self.game_dir, self.started);
+        let own_log = select_latest_log_tail(&latest_lines);
         if !own_log.is_empty() {
             lines.push("---- logs/latest.log ----");
             lines.extend(own_log.iter().map(String::as_str));
         }
-        // Keep both bounded snapshots and the fatal hang summary within the report's 8 KB log tail.
+        // Keep both bounded snapshots and the fatal hang summary within the report's log tail.
         // Newest last, so its client stacks have priority if the report's budget changes.
         for freeze in freezes.iter().rev() {
             lines.push(freeze);
@@ -146,8 +152,6 @@ impl Run {
         if let Some(summary) = &hang_at_exit {
             lines.push(summary);
         }
-        let written = newest_crash_report(&self.game_dir, self.started)
-            .or_else(|| newest_hs_err(&self.game_dir, self.started));
         // What the launcher itself logged (a failed sign-in, a download, a launch step) often explains
         // a crash the game's own log doesn't.
         let launcher = crate::logbook::snapshot_if_changed(0)
@@ -163,7 +167,7 @@ impl Run {
             ),
             None => format!("{j}\n{}", self.run_summary(written.is_some())),
         });
-        crash::Report::build(
+        let report = crash::Report::build(
             &self.version,
             "",
             title,
@@ -171,7 +175,12 @@ impl Run {
             &launcher,
             written.as_deref(),
             java.as_deref(),
-        )
+        );
+        if let Some(context) = exit_context {
+            report.with_exit_context(&context)
+        } else {
+            report
+        }
     }
 
     /// How the run went, for a crash that left no error text: how long the game lived, how much it
@@ -281,7 +290,7 @@ fn fresh_diagnostic_sidecar(
 }
 
 /// The newest short-freeze files this run wrote. Two 3 KB snapshots leave room for the hang-at-exit
-/// summary in the report's 8 KB log tail; the full files remain in `logs/arctic-freezes/`.
+/// summary in the report's log tail; the full files remain in `logs/arctic-freezes/`.
 fn fresh_freeze_files(game_dir: &std::path::Path, since: SystemTime) -> Vec<String> {
     let Ok(entries) = std::fs::read_dir(game_dir.join("logs").join("arctic-freezes")) else {
         return Vec::new();
@@ -391,24 +400,32 @@ fn freeze_at_exit(text: &str) -> Option<String> {
     })
 }
 
-/// Lines of `logs/latest.log` that are looked at.
-const LATEST_LOG_LINES: usize = 120;
+/// Retain enough input for the report tail and its stack-header lookback.
+const LATEST_LOG_LINES: usize = 300;
 
-/// Recent registry errors plus the end of this run's own log. Forge's detailed ID warnings
-/// precede its crash report/mod inventory, often falling outside the ordinary 120-line tail.
-fn latest_log_tail(game_dir: &std::path::Path, since: SystemTime) -> Vec<String> {
+fn read_latest_log(game_dir: &std::path::Path, since: SystemTime) -> Option<String> {
     let path = game_dir.join("logs").join("latest.log");
     let fresh = std::fs::metadata(&path)
         .and_then(|m| m.modified())
         .is_ok_and(|modified| modified >= since);
     if !fresh {
-        return Vec::new();
+        return None;
     }
-    let Ok(bytes) = std::fs::read(&path) else {
-        return Vec::new();
-    };
-    let text = String::from_utf8_lossy(&bytes);
-    let lines = log_without_html(&text);
+    let bytes = std::fs::read(&path).ok()?;
+    Some(
+        String::from_utf8(bytes)
+            .unwrap_or_else(|err| String::from_utf8_lossy(err.as_bytes()).into_owned()),
+    )
+}
+
+fn latest_log_tail(game_dir: &std::path::Path, since: SystemTime) -> Vec<String> {
+    read_latest_log(game_dir, since)
+        .map(|log| select_latest_log_tail(&log_without_html(&log)))
+        .unwrap_or_default()
+}
+
+/// Preserve registry errors that precede the ordinary tail.
+fn select_latest_log_tail(lines: &[&str]) -> Vec<String> {
     let skip = lines.len().saturating_sub(LATEST_LOG_LINES);
     let registry = crash::registry_failure_evidence(&lines[..skip].join("\n"));
     registry
@@ -717,14 +734,14 @@ impl ArcticApp {
                 let watchdog = run.shutdown_watchdog_fired();
                 let title = run.title.clone();
                 let instance_id = run.instance_id.clone();
-                let ended_at = ended_at
+                let ended_since_epoch = ended_at
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .unwrap_or_default();
                 if let Err(e) = arctic_core::playtime::record(
                     &self.dirs,
                     &instance_id,
                     played.as_secs(),
-                    ended_at.as_secs(),
+                    ended_since_epoch.as_secs(),
                 ) {
                     log::warn!("play time: {e}");
                 }
@@ -758,8 +775,11 @@ impl ArcticApp {
                         text: "Need help with this crash? Join our Discord: https://discord.arcticlauncher.com"
                             .into(),
                     }]);
-                    let report =
-                        run.crash_report(diagnosis.as_ref().map_or("", |d| d.title.as_str()), code);
+                    let report = run.crash_report(
+                        diagnosis.as_ref().map_or("", |d| d.title.as_str()),
+                        code,
+                        ended_at,
+                    );
                     self.offer_crash_report(id, report);
                 }
                 // Native crashes in several different places point at the computer, not a mod.
@@ -999,6 +1019,57 @@ mod tests {
     use std::time::Duration;
 
     #[test]
+    fn nonzero_exit_includes_context_only_when_no_crash_file_was_written() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("logs")).unwrap();
+        let log = format!(
+            "[09:36:51] [Watchdog/ERROR]: An exception\njava.lang.IllegalArgumentException: timeout value is negative\n    at java.lang.Thread.sleep(Native Method)\n{}[09:38:00] [CullThread/INFO]: Shutting down culling task!\n",
+            "[09:37:00] [Render thread/INFO]: Still running\n".repeat(400)
+        );
+        std::fs::write(dir.path().join("logs/latest.log"), log).unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.16.5", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        let ended_at = SystemTime::now();
+        run.started = ended_at - Duration::from_secs(3693);
+
+        let report = run.crash_report("Game exited with code 1", Some(1), ended_at);
+        let context = report.log.split_once("---- exit context ----\n").unwrap().1;
+        assert!(context.contains("Client shutdown logged: yes"));
+        assert!(context.contains("Last ERROR/FATAL: [09:36:51]"));
+        assert!(context.contains("Last exception header: java.lang.IllegalArgumentException"));
+        assert!(report.log.contains("---- last output ----"));
+        for code in [None, Some(0)] {
+            assert!(
+                !run.crash_report("", code, ended_at)
+                    .log
+                    .contains("---- exit context ----")
+            );
+        }
+
+        let hs_err = dir.path().join("hs_err_pid42.log");
+        std::fs::write(&hs_err, "# A fatal error has been detected").unwrap();
+        assert!(
+            !run.crash_report("", Some(1), ended_at)
+                .log
+                .contains("---- exit context ----")
+        );
+        std::fs::remove_file(hs_err).unwrap();
+        let reports = dir.path().join("crash-reports");
+        std::fs::create_dir(&reports).unwrap();
+        std::fs::write(
+            reports.join("crash.txt"),
+            "---- Minecraft Crash Report ----",
+        )
+        .unwrap();
+        assert!(
+            !run.crash_report("", Some(1), ended_at)
+                .log
+                .contains("---- exit context ----")
+        );
+    }
+
+    #[test]
     fn unreadable_game_log_keeps_the_process_output_available() {
         let dir = tempfile::tempdir().unwrap();
         // Reading a directory as a file fails on every platform.
@@ -1085,7 +1156,7 @@ mod tests {
         let diagnosis = run.exit_diagnosis(Some(-1), false).unwrap();
         assert_eq!(diagnosis.title, "Forge registry IDs did not sync");
         assert_eq!(diagnosis.mods, ["example"]);
-        let report = run.crash_report(&diagnosis.title, Some(-1));
+        let report = run.crash_report(&diagnosis.title, Some(-1), SystemTime::now());
         assert!(report.log.contains("---- registry failure context ----"));
         assert!(
             report
@@ -1192,7 +1263,7 @@ mod tests {
         let id = runs.start("pack", "26.3", "Pack".into(), dir.path().into());
         let run = runs.get_mut(id).unwrap();
         run.started = started;
-        let report = run.crash_report("Crash", Some(1));
+        let report = run.crash_report("Crash", Some(1), SystemTime::now());
         assert!(report.log.contains("class=example.Item; role=preloader"));
         assert!(report.log.contains("last_mod 1.2.3"));
         std::fs::File::create(&path)
@@ -1297,7 +1368,7 @@ mod tests {
         );
         assert!(diagnosis.detail.contains("possible mods-folder clash"));
         assert!(diagnosis.fix.is_none());
-        let report = run.crash_report(&diagnosis.title, Some(-805306369));
+        let report = run.crash_report(&diagnosis.title, Some(-805306369), SystemTime::now());
         assert_eq!(
             report.title,
             "Game exited with code -805306369 (0xCFFFFFFF)"
@@ -1336,7 +1407,7 @@ mod tests {
         run.java = Some("Java 21 -Xmx4100M".into());
         let diagnosis = run.exit_diagnosis(Some(-805306369), false).unwrap();
         assert_eq!(diagnosis.title, "Minecraft ran out of memory and froze");
-        let report = run.crash_report(&diagnosis.title, Some(-805306369));
+        let report = run.crash_report(&diagnosis.title, Some(-805306369), SystemTime::now());
         assert_eq!(report.title, diagnosis.title);
         assert!(report.log.contains("matched: heap: 3868 MB"));
         run.force_close();
@@ -1367,7 +1438,7 @@ mod tests {
         ));
         assert!(!diagnosis.detail.contains("may be normal"));
         assert!(!diagnosis.repair);
-        let report = run.crash_report(&diagnosis.title, Some(-805306369));
+        let report = run.crash_report(&diagnosis.title, Some(-805306369), SystemTime::now());
         assert_eq!(report.title, diagnosis.title);
         assert!(
             report
@@ -1413,7 +1484,7 @@ mod tests {
             format!("verbose log line {}\n", "x".repeat(300)).repeat(3000),
         )
         .unwrap();
-        let large_report = run.crash_report(&diagnosis.title, Some(-805306369));
+        let large_report = run.crash_report(&diagnosis.title, Some(-805306369), SystemTime::now());
         assert!(
             large_report
                 .log
@@ -1457,7 +1528,7 @@ mod tests {
         );
         assert!(run.exit_diagnosis(Some(1), false).is_none());
         assert!(
-            !run.crash_report("", Some(-805306369))
+            !run.crash_report("", Some(-805306369), SystemTime::now())
                 .log
                 .contains("Hang at exit:")
         );
@@ -1474,7 +1545,7 @@ mod tests {
             diagnosis.title
         );
         assert!(
-            !run.crash_report("", Some(-805306369))
+            !run.crash_report("", Some(-805306369), SystemTime::now())
                 .log
                 .contains("still frozen when written")
         );
