@@ -2,7 +2,7 @@
 //! Searching and filtering live in `hub.rs`.
 
 use arctic_core::instances::Instance;
-use arctic_core::mods::ProjectHit;
+use arctic_core::mods::{ProjectHit, ProjectType};
 use eframe::egui::{self, RichText};
 
 use super::Load;
@@ -92,81 +92,77 @@ impl ArcticApp {
 
     pub(super) fn pack_row(&mut self, ui: &mut egui::Ui, hit: &ProjectHit) {
         let p = self.palette();
+        let target = self.instance.clone();
+        let kind = ProjectType::Modpack;
+        let installed = self.hub_installed(ui.ctx(), kind, &target);
+        let action = self.hub_action(kind, &target, &hit.project_id, &installed);
         let mut open = false;
-        crate::widgets::row(ui, |ui| {
-            super::content_install::select_content(ui, &mut self.inst.search.selected, hit);
+        ui.horizontal(|ui| {
+            super::content_install::select_content(
+                ui,
+                p,
+                &mut self.inst.search.selected,
+                hit,
+                action.selectable(),
+            );
             open |= ui
                 .scope(|ui| mod_icon(ui, self, hit.icon_url.as_deref()))
                 .response
-                .interact(egui::Sense::click())
+                .interact(egui::Sense::CLICK)
                 .on_hover_text(t!("instances.preview_project"))
                 .clicked();
             ui.vertical(|ui| {
-                ui.set_max_width(ui.available_width() - 130.0);
-                ui.horizontal(|ui| {
-                    open |= ui
-                        .add(
-                            egui::Label::new(RichText::new(&hit.title).strong().color(p.text))
-                                .sense(egui::Sense::click()),
-                        )
-                        .on_hover_text(t!("instances.preview_project"))
-                        .clicked();
-                    ui.label(
-                        RichText::new(tf!("common.by_author", author = hit.author))
-                            .small()
-                            .color(p.muted),
-                    );
-                });
+                let title = ui
+                    .add(
+                        egui::Label::new(RichText::new(&hit.title).strong().color(p.text))
+                            .wrap()
+                            .sense(egui::Sense::click()),
+                    )
+                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                    .on_hover_text(t!("instances.preview_project"));
+                widgets::focus_ring(ui, &title);
+                open |= title.clicked();
+                ui.label(
+                    RichText::new(tf!("common.by_author", author = hit.author))
+                        .small()
+                        .color(p.muted),
+                );
                 ui.label(RichText::new(&hit.description).color(p.muted));
                 ui.label(
                     RichText::new(super::hub::stats_line(hit))
                         .small()
                         .color(p.muted),
                 );
-            });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let busy = self.inst.pack_installing.is_some();
-                if self.inst.pack_installing.as_deref() == Some(hit.project_id.as_str()) {
-                    ui.spinner();
-                } else {
-                    let install = ui
-                        .add_enabled_ui(!busy, |ui| {
-                            widgets::button(ui, p, Some(Icon::Plus), t!("instances.install"), true)
-                        })
-                        .inner;
-                    if install.clicked() {
-                        self.inst.pack_installing = Some(hit.project_id.clone());
-                        self.inst.install_progress = None;
-                        self.tasks.install_modpack(hit.project_id.clone(), None);
+                ui.horizontal_wrapped(|ui| {
+                    self.hub_install_button(ui, kind, &target, hit, action);
+                    if widgets::button(ui, p, None, t!("instances.view_mods"), false).clicked() {
+                        self.open_pack_preview(&hit.project_id, &hit.title, None);
                     }
-                }
-                if widgets::button(ui, p, None, t!("instances.view_mods"), false).clicked() {
-                    self.open_pack_preview(&hit.project_id, &hit.title, None);
-                }
-                let open = self.inst.pack_choosing.as_deref() == Some(hit.project_id.as_str());
-                let label = if open {
-                    t!("instances.hide_versions")
-                } else {
-                    t!("instances.versions")
-                };
-                if widgets::button(ui, p, None, label, false).clicked() {
-                    if open {
-                        self.inst.pack_choosing = None;
+                    let expanded =
+                        self.inst.pack_choosing.as_deref() == Some(hit.project_id.as_str());
+                    let label = if expanded {
+                        t!("instances.hide_versions")
                     } else {
-                        self.inst.pack_choosing = Some(hit.project_id.clone());
-                        if !self.inst.pack_versions.contains_key(&hit.project_id) {
-                            self.inst
-                                .pack_versions
-                                .insert(hit.project_id.clone(), Load::Loading);
-                            self.tasks.pack_versions(hit.project_id.clone());
+                        t!("instances.versions")
+                    };
+                    if widgets::button(ui, p, None, label, false).clicked() {
+                        if expanded {
+                            self.inst.pack_choosing = None;
+                        } else {
+                            self.inst.pack_choosing = Some(hit.project_id.clone());
+                            if !self.inst.pack_versions.contains_key(&hit.project_id) {
+                                self.inst
+                                    .pack_versions
+                                    .insert(hit.project_id.clone(), Load::Loading);
+                                self.tasks.pack_versions(hit.project_id.clone());
+                            }
                         }
                     }
-                }
+                });
             });
         });
         if open {
-            let owner = self.instance.id.clone();
-            self.open_project_preview_in(ui.ctx(), owner, hit.clone(), None, true);
+            self.open_discover_project(ui.ctx(), &target, hit, kind, None);
         }
         if self.inst.pack_choosing.as_deref() == Some(hit.project_id.as_str()) {
             self.pack_version_list(ui, &hit.project_id, &hit.title);

@@ -18,7 +18,10 @@ pub(super) const ICON: f32 = 36.0;
 pub(crate) enum UpdateState {
     Checking,
     Ready(Vec<mods::ModUpdate>),
-    Applying,
+    Applying {
+        projects: Vec<String>,
+        prior: Vec<arctic_core::mods::ModUpdate>,
+    },
     Failed(String),
 }
 
@@ -69,7 +72,7 @@ impl ArcticApp {
                 }
                 let busy = matches!(
                     self.inst.mod_updates.get(&instance.id),
-                    Some(UpdateState::Checking | UpdateState::Applying)
+                    Some(UpdateState::Checking | UpdateState::Applying { .. })
                 );
                 if !busy
                     && instance.loader.kind().is_some()
@@ -202,7 +205,7 @@ impl ArcticApp {
                         );
                     });
                 }
-                UpdateState::Applying => {
+                UpdateState::Applying { .. } => {
                     ui.horizontal(|ui| {
                         ui.spinner();
                         ui.label(RichText::new(t!("instances.updating_mods")).color(p.muted));
@@ -271,11 +274,22 @@ impl ArcticApp {
             self.inst.mod_updates.remove(&instance.id);
         }
         if let Some(projects) = apply {
-            self.inst
-                .mod_updates
-                .insert(instance.id.clone(), UpdateState::Applying);
-            self.tasks.mod_updates_apply(instance.clone(), projects);
+            self.apply_mod_updates(instance, projects);
         }
+    }
+
+    pub(super) fn apply_mod_updates(&mut self, instance: &Instance, projects: Vec<String>) {
+        let Some(UpdateState::Ready(prior)) = self.inst.mod_updates.remove(&instance.id) else {
+            return;
+        };
+        self.inst.mod_updates.insert(
+            instance.id.clone(),
+            UpdateState::Applying {
+                projects: projects.clone(),
+                prior,
+            },
+        );
+        self.tasks.mod_updates_apply(instance.clone(), projects);
     }
 
     /// .jar files dropped on the window go into this instance's mods folder (from any of its

@@ -1,6 +1,6 @@
 //! Discover's per-instance pack matches. Only the post-install name check runs on the UI thread.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use arctic_core::mods::ProjectType;
 use arctic_core::mods::discovery::VersionInfo;
-use arctic_core::mods::pack_index::{self, PackFile, PackScan};
+use arctic_core::mods::pack_index::{self, PackFile, PackMatches, PackScan};
 use eframe::egui;
 
 use crate::mod_tasks::POLL_INTERVAL;
@@ -58,8 +58,12 @@ impl HubInstalled {
             .known
             .get(&kind)
             .map_or(&[][..], |files| files.as_slice());
-        status.installed = Arc::new(pack_index::installed_by_name(kind, game_dir, known));
+        status.installed = Arc::new(pack_index::matches_by_name(kind, game_dir, known));
         status.invalidate();
+    }
+
+    pub fn known_files(&self, kind: ProjectType) -> Arc<Vec<PackFile>> {
+        self.known.get(&kind).cloned().unwrap_or_default()
     }
 
     pub fn packs(
@@ -67,7 +71,7 @@ impl HubInstalled {
         ctx: &egui::Context,
         kind: ProjectType,
         game_dir: PathBuf,
-    ) -> Arc<HashSet<String>> {
+    ) -> Arc<PackMatches> {
         let known = self.known.get(&kind).cloned().unwrap_or_default();
         let status = self.packs.entry((game_dir.clone(), kind)).or_default();
         status.poll(ctx, kind, game_dir, known);
@@ -75,7 +79,7 @@ impl HubInstalled {
     }
 }
 
-type PackScanResult = (PackScan, HashSet<String>);
+type PackScanResult = (PackScan, PackMatches);
 
 #[derive(Default)]
 struct PackStatus {
@@ -83,7 +87,7 @@ struct PackStatus {
     pending: Option<Receiver<PackScanResult>>,
     dirty: bool,
     checked_at: Option<Instant>,
-    installed: Arc<HashSet<String>>,
+    installed: Arc<PackMatches>,
 }
 
 impl PackStatus {
@@ -128,7 +132,7 @@ impl PackStatus {
         let mut scan = std::mem::take(&mut self.scan);
         let ctx = ctx.clone();
         std::thread::spawn(move || {
-            let installed = scan.installed(kind, &game_dir, &known);
+            let installed = scan.matches(kind, &game_dir, &known);
             let _ = send.send((scan, installed));
             ctx.request_repaint();
         });

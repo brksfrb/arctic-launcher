@@ -2,7 +2,7 @@
 
 use arctic_core::instances::Instance;
 use arctic_core::mods::packs::{self, PackKind};
-use arctic_core::mods::{self, SearchQuery};
+use arctic_core::mods::{self, BatchResolver, SearchQuery};
 use arctic_core::{Error, Progress, ProgressInfo, Result};
 
 use crate::tasks::{Event, ProgressSnapshot, Tasks};
@@ -68,17 +68,20 @@ impl Tasks {
         project: &str,
         game: &str,
         chosen: Option<(&str, bool)>,
-        discover_progress: Option<Progress>,
+        discover: Option<(&BatchResolver, Progress)>,
     ) -> Result<PackDone> {
         let pack_progress =
             |p: ProgressInfo| self.send(Event::ModProgress(ProgressSnapshot::from(p)));
-        let progress = discover_progress.unwrap_or(&pack_progress);
+        let progress = discover.map_or(&pack_progress as Progress, |(_, progress)| progress);
         let game_dir = instance.game_dir(self.dirs());
         // A chosen version is checked before Iris is added for it.
         let selected = match chosen {
             Some((id, allow_other_game)) => {
                 progress(ProgressInfo::stage(t!("tasks.finding_a_version")));
-                Some(packs::selected_version(kind, id, game, allow_other_game)?)
+                Some(match discover {
+                    Some((batch, _)) => batch.select_pack(kind, id, game, allow_other_game)?,
+                    None => packs::selected_version(kind, id, game, allow_other_game)?,
+                })
             }
             None => None,
         };
@@ -121,8 +124,8 @@ impl Tasks {
                 }
             }
         }
-        let installed = match &selected {
-            Some(selected) if discover_progress.is_some() => {
+        let installed = match (&selected, discover) {
+            (Some(selected), Some((batch, _))) => {
                 let mut present = std::collections::HashSet::new();
                 if kind == PackKind::Shader {
                     // Iris-format packs use the shader loader prepared above.
@@ -133,10 +136,12 @@ impl Tasks {
                     present.insert(shader_mod.to_owned());
                     present.insert(packs::IRIS.to_owned());
                 }
-                packs::install_with_dependencies(selected, game, &game_dir, &present, progress)?
+                packs::install_with_dependencies(
+                    selected, game, &game_dir, &present, batch, progress,
+                )?
             }
-            Some(selected) => packs::install_selected(selected, &game_dir, progress)?,
-            None => packs::install(kind, project, game, &game_dir, progress)?,
+            (Some(selected), None) => packs::install_selected(selected, &game_dir, progress)?,
+            (None, _) => packs::install(kind, project, game, &game_dir, progress)?,
         };
         if let Err(e) = installed.activate(&game_dir, game) {
             note = tf!("tasks.installed_but_not_switched_on", e = e);

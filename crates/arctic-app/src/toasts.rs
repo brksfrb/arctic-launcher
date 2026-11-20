@@ -13,6 +13,7 @@ const WIDTH: f32 = 320.0;
 const SLIDE: f32 = 0.25;
 const FADE: f32 = 0.3;
 const MARGIN: f32 = 16.0;
+const TOP_OFFSET: f32 = 144.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -106,7 +107,7 @@ impl Toasts {
         let now = ctx.input(|i| i.time);
         self.items
             .retain(|t| t.created.is_none_or(|c| now - c < t.kind.lifetime()));
-        let mut y = MARGIN;
+        let mut y = TOP_OFFSET;
         let mut dismissed = None;
         let mut clicked = None;
         for toast in &mut self.items {

@@ -6,18 +6,22 @@ use std::sync::Arc;
 use arctic_core::instances::Instance;
 use arctic_core::loaders::LoaderKind;
 use arctic_core::mods::discovery::{self, ShaderLoader, Tags};
+use arctic_core::mods::pack_index::{self, PackMatches};
 use arctic_core::mods::packs::PackKind;
 use arctic_core::mods::{Environment, ProjectHit, ProjectType, SearchQuery, SortBy};
 use eframe::egui::{self, RichText};
 
 use super::Load;
 use super::browse::compact;
+use super::content_install::{prune_selection, select_content};
 use super::hub_cards::HubBanners;
 use super::hub_installed::HubInstalled;
-use super::mods_page::mod_icon;
+use super::mods_page::{UpdateState, mod_icon};
 use crate::app::ArcticApp;
 use crate::art::icons::Icon;
+use crate::content_tasks::{ContentFiles, ContentRemoval};
 use crate::theme;
+use crate::toasts::Kind;
 use crate::widgets;
 use crate::{t, tf};
 
@@ -183,6 +187,68 @@ fn loader_kind(id: &str) -> Option<LoaderKind> {
     LoaderKind::ALL.into_iter().find(|l| l.modrinth_id() == id)
 }
 
+pub(super) enum InstalledProjects {
+    Mods(HashSet<String>),
+    Packs(Arc<PackMatches>),
+}
+
+impl InstalledProjects {
+    pub(super) fn contains(&self, project: &str) -> bool {
+        match self {
+            Self::Mods(projects) => projects.contains(project),
+            Self::Packs(projects) => projects.contains_key(project),
+        }
+    }
+
+    fn pack_files(&self, kind: ProjectType, project: &str) -> Option<&[std::path::PathBuf]> {
+        match self {
+            Self::Packs(matches) => pack_index::removable_files(matches, kind, project),
+            Self::Mods(_) => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ProjectAction {
+    Install,
+    Busy,
+    Installed { update: bool, remove: bool },
+}
+
+impl ProjectAction {
+    fn new(installed: bool, busy: bool, update: bool, remove: bool) -> Self {
+        match (busy, installed) {
+            (true, _) => Self::Busy,
+            (false, true) => Self::Installed { update, remove },
+            (false, false) => Self::Install,
+        }
+    }
+
+    pub(super) fn selectable(self) -> bool {
+        self == Self::Install
+    }
+
+    fn width(self, ui: &egui::Ui) -> f32 {
+        let (label, icon, remove) = match self {
+            Self::Install | Self::Busy => (t!("instances.install"), true, false),
+            Self::Installed {
+                update: true,
+                remove,
+            } => (t!("nav.update"), false, remove),
+            Self::Installed {
+                update: false,
+                remove,
+            } => (t!("instances.installed"), true, remove),
+        };
+        widgets::button_width(ui, icon, label)
+            + if remove {
+                widgets::ICON_BUTTON_SIZE + ui.spacing().item_spacing.x
+            } else {
+                0.0
+            }
+    }
+}
+
 #[derive(Default)]
 pub struct HubUi {
     pub section: Section,
@@ -190,6 +256,9 @@ pub struct HubUi {
     pub target: Option<String>,
     pub(super) banners: HubBanners,
     pub(super) installed: HubInstalled,
+    removing: HashSet<(String, ProjectType, String)>,
+    needs_scroll_reset: bool,
+    submitted_query: Option<SearchQuery>,
     tags: Option<Load<Arc<Tags>>>,
     filters: [Filters; Section::ALL.len()],
     showing: Option<Section>,
@@ -239,7 +308,19 @@ impl ArcticApp {
     /// Search again with the current filters (`offset` 0 replaces the results, more adds a page).
     pub(super) fn run_hub_search(&mut self, offset: usize) {
         let section = self.inst.hub.section;
-        let query = self.inst.hub.filters[section.index()].query(section, offset);
+        let hub = &mut self.inst.hub;
+        let mut query = if offset == 0 {
+            let filters = &mut hub.filters[section.index()];
+            filters.typed_at = None;
+            let query = filters.query(section, 0);
+            hub.submitted_query = Some(query.clone());
+            query
+        } else if let Some(query) = &hub.submitted_query {
+            query.clone()
+        } else {
+            return;
+        };
+        query.offset = offset;
         let search = &mut self.inst.search;
         search.request += 1;
         search.loading = true;
@@ -247,13 +328,13 @@ impl ArcticApp {
         search.more_failed = None;
         if offset == 0 {
             search.results = None;
+            self.inst.hub.needs_scroll_reset = true;
         }
         self.tasks.mod_search(search.request, query);
     }
 
     /// The page's body below the title: sections, target, filters and results.
     pub(super) fn hub_body(&mut self, ui: &mut egui::Ui) {
-        let section = self.inst.hub.section;
         if self.inst.hub.tags.is_none() {
             self.inst.hub.tags = Some(Load::Loading);
             self.tasks.hub_tags();
@@ -268,6 +349,22 @@ impl ArcticApp {
         {
             self.inst.hub.target = Some(self.selected_instance().id.clone());
             self.inst.hub.showing = None;
+        }
+        ui.horizontal_wrapped(|ui| {
+            for section in Section::ALL {
+                let response =
+                    ui.selectable_label(self.inst.hub.section == section, section.label());
+                widgets::focus_ring(ui, &response);
+                if response.clicked() {
+                    self.inst.hub.section = section;
+                }
+            }
+        });
+        let section = self.inst.hub.section;
+        ui.add_space(6.0);
+        if section.needs_instance() {
+            self.hub_target_picker(ui);
+            ui.add_space(6.0);
         }
         let target = self
             .hub_target()
@@ -293,33 +390,12 @@ impl ArcticApp {
             self.check_mods(&target.id, false);
         }
         if defaults_changed || section_changed || browser_changed {
-            if section_changed || browser_changed {
-                self.inst.search.selected.clear();
-            }
+            self.inst.search.selected.clear();
             self.inst.hub.showing = Some(section);
             self.inst.search.instance = Some(SEARCH_OWNER.to_owned());
             self.run_hub_search(0);
         }
 
-        // Sections.
-        ui.horizontal_wrapped(|ui| {
-            for s in Section::ALL {
-                if ui.selectable_label(section == s, s.label()).clicked() {
-                    self.inst.hub.section = s;
-                }
-            }
-        });
-        if self.inst.hub.section != section {
-            return;
-        }
-        ui.add_space(6.0);
-        if section.needs_instance() {
-            self.hub_target_picker(ui);
-            if self.inst.hub.target.as_deref() != Some(target.id.as_str()) {
-                return;
-            }
-            ui.add_space(6.0);
-        }
         self.hub_filter_bar(ui);
         ui.add_space(8.0);
         if section == Section::Modpacks {
@@ -327,8 +403,18 @@ impl ArcticApp {
         } else {
             self.install_bar(ui);
         }
-        self.content_selection_bar(ui, section.project_type(), &target);
-        self.hub_results(ui);
+        let kind = section.project_type();
+        let installed = self.hub_installed(ui.ctx(), kind, &target);
+        prune_selection(&mut self.inst.search.selected, |id| installed.contains(id));
+        self.content_selection_bar(ui, kind, &target);
+
+        let mut scroll = egui::ScrollArea::vertical()
+            .id_salt("discover_results")
+            .auto_shrink(false);
+        if std::mem::take(&mut self.inst.hub.needs_scroll_reset) {
+            scroll = scroll.vertical_scroll_offset(0.0);
+        }
+        scroll.show(ui, |ui| self.hub_results(ui, &target, &installed));
     }
 
     fn hub_target_picker(&mut self, ui: &mut egui::Ui) {
@@ -336,12 +422,14 @@ impl ArcticApp {
         let instances = self.hub_instances();
         let current = self.hub_target();
         let mut chosen = None;
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(t!("instances.hub.install_into")).color(p.muted));
-            egui::ComboBox::from_id_salt("hub_target")
-                .width(240.0)
-                .selected_text(current.as_ref().map_or("", |i| i.name.as_str()))
-                .show_ui(ui, |ui| {
+        ui.scope(|ui| {
+            ui.spacing_mut().interact_size.y = widgets::FIELD_HEIGHT;
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(t!("instances.hub.install_into")).color(p.muted));
+                let combo = egui::ComboBox::from_id_salt("hub_target")
+                    .width(240.0)
+                    .selected_text(current.as_ref().map_or("", |i| i.name.as_str()));
+                widgets::field_combo(ui, combo, |ui| {
                     for i in &instances {
                         let selected = current.as_ref().is_some_and(|c| c.id == i.id);
                         if ui.selectable_label(selected, &i.name).clicked() {
@@ -349,13 +437,14 @@ impl ArcticApp {
                         }
                     }
                 });
-            if let Some(i) = &current {
-                ui.label(
-                    RichText::new(Self::instance_subtitle(i))
-                        .small()
-                        .color(p.muted),
-                );
-            }
+                if let Some(i) = &current {
+                    ui.label(
+                        RichText::new(Self::instance_subtitle(i))
+                            .small()
+                            .color(p.muted),
+                    );
+                }
+            });
         });
         if let Some(id) = chosen {
             self.inst.hub.target = Some(id);
@@ -373,12 +462,36 @@ impl ArcticApp {
         };
         let mut search = false;
         let mut filters = self.inst.hub.filters[idx].clone();
-        widgets::field_row(ui, |ui| {
-            let field = ui.add(
-                widgets::text_field(&mut filters.text)
-                    .hint_text(section.hint())
-                    .desired_width(360.0),
-            );
+        ui.horizontal_wrapped(|ui| {
+            let field_width = (ui.available_width() - 48.0).clamp(72.0, 360.0);
+            let field = ui
+                .allocate_ui_with_layout(
+                    egui::vec2(field_width + 48.0, widgets::FIELD_HEIGHT),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        let field = ui.add(
+                            widgets::text_field(&mut filters.text)
+                                .hint_text(section.hint())
+                                .desired_width(field_width),
+                        );
+                        widgets::focus_ring(ui, &field);
+                        if !filters.text.is_empty()
+                            && widgets::icon_button(
+                                ui,
+                                p,
+                                Icon::Close,
+                                t!("instances.hub.clear_search"),
+                            )
+                            .clicked()
+                        {
+                            filters.text.clear();
+                            field.request_focus();
+                            search = true;
+                        }
+                        field
+                    },
+                )
+                .inner;
             let now = ui.input(|i| i.time);
             if field.changed() {
                 filters.typed_at = Some(now);
@@ -534,71 +647,81 @@ impl ArcticApp {
         }
     }
 
-    fn hub_results(&mut self, ui: &mut egui::Ui) {
+    fn hub_results(&mut self, ui: &mut egui::Ui, target: &Instance, installed: &InstalledProjects) {
         let p = self.palette();
         let section = self.inst.hub.section;
-        let hits: Vec<ProjectHit> = match &self.inst.search.results {
-            None => {
-                ui.horizontal(|ui| {
-                    ui.spinner();
-                    ui.label(RichText::new(t!("instances.searching_modrinth")).color(p.muted));
+        let hits = match &self.inst.search.results {
+            Some(Ok(page)) if !page.hits.is_empty() => page.hits.clone(),
+            result => {
+                let error = result.as_ref().and_then(|r| r.as_ref().err()).cloned();
+                ui.add_space(24.0);
+                ui.vertical_centered(|ui| {
+                    if let Some(error) = error {
+                        ui.colored_label(p.error, tf!("instances.search_failed", e = error));
+                        ui.add_space(8.0);
+                        if widgets::field_button(ui, p, t!("instances.retry"), true).clicked() {
+                            self.run_hub_search(0);
+                        }
+                    } else if self.inst.search.loading {
+                        ui.spinner();
+                        ui.label(RichText::new(t!("instances.searching_modrinth")).color(p.muted));
+                    } else {
+                        ui.label(RichText::new(t!("instances.hub.nothing_matches")).color(p.muted));
+                    }
                 });
                 return;
             }
-            Some(Err(e)) => {
-                ui.label(RichText::new(tf!("instances.search_failed", e = e)).color(p.error));
-                if ui.button(t!("instances.retry")).clicked() {
-                    self.run_hub_search(0);
-                }
-                return;
-            }
-            Some(Ok(page)) if page.hits.is_empty() => {
-                ui.label(RichText::new(t!("instances.hub.nothing_matches")).color(p.muted));
-                return;
-            }
-            Some(Ok(page)) => page.hits.clone(),
         };
-        let target = self.hub_target();
-        let installed = self.hub_installed(ui.ctx(), section, target.as_ref());
         if let Some(kind) = section.pack_kind() {
-            if let Some(target) = &target {
-                self.hub_card_grid(ui, kind, target, &hits, &installed);
-            }
+            self.hub_card_grid(ui, kind, target, &hits, installed);
         } else {
             theme::card(p).show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                for hit in &hits {
-                    if section == Section::Modpacks {
-                        self.pack_row(ui, hit);
-                    } else if let Some(target) = &target {
-                        self.hub_row(ui, section, target, hit, &installed);
+                for (index, hit) in hits.iter().enumerate() {
+                    if index > 0 {
+                        ui.separator();
                     }
-                    ui.separator();
+                    ui.push_id(&hit.project_id, |ui| {
+                        if section == Section::Modpacks {
+                            self.pack_row(ui, hit);
+                        } else {
+                            self.hub_row(ui, section, target, hit, installed);
+                        }
+                    });
                 }
             });
         }
+        ui.add_space(8.0);
         if let Some(from) = super::more_on_scroll(ui, p, &self.inst.search) {
             self.run_hub_search(from);
+        } else if matches!(&self.inst.search.results, Some(Ok(page)) if self.inst.search.loaded >= page.total)
+        {
+            ui.vertical_centered(|ui| {
+                ui.label(
+                    RichText::new(t!("instances.hub.end_of_results"))
+                        .small()
+                        .color(p.muted),
+                );
+            });
         }
     }
 
-    fn hub_installed(
+    pub(super) fn hub_installed(
         &mut self,
         ctx: &egui::Context,
-        section: Section,
-        target: Option<&Instance>,
-    ) -> Arc<HashSet<String>> {
-        let Some(target) = target else {
-            return Arc::default();
-        };
-        match section {
-            Section::Mods => Arc::new(self.hub_mod_projects(target)),
-            Section::ResourcePacks | Section::Shaders | Section::DataPacks => self
-                .inst
-                .hub
-                .installed
-                .packs(ctx, section.project_type(), target.game_dir(&self.dirs)),
-            Section::Modpacks => Arc::default(),
+        kind: ProjectType,
+        target: &Instance,
+    ) -> InstalledProjects {
+        match kind {
+            ProjectType::Mod => InstalledProjects::Mods(self.hub_mod_projects(target)),
+            ProjectType::ResourcePack | ProjectType::Shader | ProjectType::DataPack => {
+                InstalledProjects::Packs(self.inst.hub.installed.packs(
+                    ctx,
+                    kind,
+                    target.game_dir(&self.dirs),
+                ))
+            }
+            ProjectType::Modpack => InstalledProjects::Mods(HashSet::new()),
         }
     }
 
@@ -628,41 +751,56 @@ impl ArcticApp {
         section: Section,
         target: &Instance,
         hit: &ProjectHit,
-        installed: &HashSet<String>,
+        installed: &InstalledProjects,
     ) {
         let p = self.palette();
         let game = self.pack_game(target);
+        let kind = section.project_type();
+        let action = self.hub_action(kind, target, &hit.project_id, installed);
+        let width = action.width(ui);
+        let stack = ui.available_width() < width + 260.0;
         let mut open = false;
-        widgets::row(ui, |ui| {
-            super::content_install::select_content(ui, &mut self.inst.search.selected, hit);
+        ui.horizontal(|ui| {
+            select_content(
+                ui,
+                p,
+                &mut self.inst.search.selected,
+                hit,
+                action.selectable(),
+            );
             open |= ui
                 .scope(|ui| mod_icon(ui, self, hit.icon_url.as_deref()))
                 .response
-                .interact(egui::Sense::click())
+                .interact(egui::Sense::CLICK)
                 .on_hover_text(t!("instances.preview_project"))
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
                 .clicked();
+            let gap = ui.spacing().item_spacing.x;
+            let text_width = if stack {
+                ui.available_width()
+            } else {
+                ui.available_width() - width - gap
+            };
             ui.vertical(|ui| {
-                ui.set_max_width(ui.available_width() - 130.0);
-                ui.horizontal(|ui| {
-                    open |= ui
+                ui.set_width(text_width.max(1.0));
+                ui.horizontal_wrapped(|ui| {
+                    let title = ui
                         .add(
                             egui::Label::new(RichText::new(&hit.title).strong().color(p.text))
+                                .wrap()
                                 .sense(egui::Sense::click()),
                         )
-                        .on_hover_text(t!("instances.preview_project"))
-                        .clicked();
+                        .on_hover_cursor(egui::CursorIcon::PointingHand)
+                        .on_hover_text(t!("instances.preview_project"));
+                    widgets::focus_ring(ui, &title);
+                    open |= title.clicked();
                     ui.label(
                         RichText::new(tf!("common.by_author", author = hit.author))
                             .small()
                             .color(p.muted),
                     );
                 });
-                open |= ui
-                    .add(
-                        egui::Label::new(RichText::new(&hit.description).color(p.muted))
-                            .sense(egui::Sense::click()),
-                    )
-                    .clicked();
+                ui.label(RichText::new(&hit.description).color(p.muted));
                 if hit.is_incompatible(&game) {
                     ui.label(
                         RichText::new(t!("instances.incompatible"))
@@ -676,47 +814,204 @@ impl ArcticApp {
                 }
                 ui.label(RichText::new(stats_line(hit)).small().color(p.muted));
             });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                self.hub_install_button(
-                    ui,
-                    section.project_type(),
-                    target,
-                    hit,
-                    installed.contains(&hit.project_id),
-                );
-            });
+            if !stack {
+                self.hub_install_button(ui, kind, target, hit, action);
+            }
         });
-        if open {
-            self.open_discover_project(ui.ctx(), target, hit, section.project_type(), None);
+        if stack {
+            ui.horizontal_wrapped(|ui| {
+                self.hub_install_button(ui, kind, target, hit, action);
+            });
         }
+        if open {
+            self.open_discover_project(ui.ctx(), target, hit, kind, None);
+        }
+    }
+
+    pub(super) fn hub_content_busy(
+        &self,
+        kind: ProjectType,
+        target: &Instance,
+        project: &str,
+    ) -> bool {
+        self.inst.content.installing(&target.id, kind, project)
+            || self
+                .inst
+                .hub
+                .removing
+                .contains(&(target.id.clone(), kind, project.to_owned()))
+            || match kind {
+                ProjectType::Mod => {
+                    self.inst.installing.contains(project)
+                        || matches!(self.inst.mod_updates.get(&target.id),
+                        Some(UpdateState::Applying { projects, .. }) if projects.iter().any(|id| id == project))
+                }
+                ProjectType::ResourcePack | ProjectType::Shader => {
+                    self.inst.packs.installing.contains(project)
+                }
+                ProjectType::Modpack => self.inst.pack_installing.as_deref() == Some(project),
+                ProjectType::DataPack => false,
+            }
+    }
+
+    pub(super) fn hub_action(
+        &self,
+        kind: ProjectType,
+        target: &Instance,
+        project: &str,
+        installed: &InstalledProjects,
+    ) -> ProjectAction {
+        let is_installed = installed.contains(project);
+        let files = if kind == ProjectType::Mod && is_installed {
+            self.hub_mod_files(target, project)
+        } else {
+            Vec::new()
+        };
+        let update = matches!(self.inst.mod_updates.get(&target.id),
+            Some(UpdateState::Ready(updates)) if updates.iter().any(|u| u.project_id == project
+                && files.iter().any(|f| f.file_name == u.file_name && f.enabled
+                    && f.tracked.as_ref().is_some_and(|m| m.version_number == u.current))));
+        let remove = !files.is_empty() || installed.pack_files(kind, project).is_some();
+        ProjectAction::new(
+            is_installed,
+            self.hub_content_busy(kind, target, project),
+            update,
+            remove,
+        )
+    }
+
+    fn hub_mod_files<'a>(
+        &'a self,
+        target: &Instance,
+        project: &str,
+    ) -> Vec<&'a arctic_core::mods::ModFile> {
+        self.inst
+            .mod_scans
+            .get(&target.id)
+            .and_then(|scan| scan.data.as_ref())
+            .into_iter()
+            .flat_map(|data| &data.files)
+            .filter(|file| {
+                file.tracked
+                    .as_ref()
+                    .is_some_and(|mod_| mod_.project_id == project)
+            })
+            .collect()
     }
 
     pub(super) fn hub_install_button(
         &mut self,
         ui: &mut egui::Ui,
-        project_type: ProjectType,
+        kind: ProjectType,
         target: &Instance,
         hit: &ProjectHit,
-        installed: bool,
+        action: ProjectAction,
     ) {
         let p = self.palette();
-        let installing = match project_type {
-            ProjectType::ResourcePack | ProjectType::Shader => &self.inst.packs.installing,
-            _ => &self.inst.installing,
-        };
-        if installing.contains(&hit.project_id) {
-            ui.spinner();
-        } else if ui
-            .add_enabled_ui(self.inst.content.progress.is_none(), |ui| {
-                widgets::button(ui, p, Some(Icon::Plus), t!("instances.install"), true)
-            })
-            .inner
-            .clicked()
-        {
-            self.pick_single_content(ui.ctx(), project_type, hit, None, target);
+        match action {
+            ProjectAction::Busy => {
+                let size = egui::vec2(action.width(ui), widgets::BUTTON_HEIGHT);
+                let (rect, response) = ui.allocate_exact_size(size, egui::Sense::hover());
+                ui.painter().rect_filled(rect, 9, p.surface);
+                let spinner = egui::Rect::from_center_size(rect.center(), egui::Vec2::splat(18.0));
+                egui::Spinner::new().paint_at(ui, spinner);
+                response.on_hover_text(t!("instances.installing"));
+            }
+            ProjectAction::Install => {
+                if widgets::button(ui, p, Some(Icon::Plus), t!("instances.install"), true).clicked()
+                {
+                    self.pick_single_content(ui.ctx(), kind, hit, None, target);
+                }
+            }
+            ProjectAction::Installed { update, remove } => {
+                if update {
+                    if widgets::button(ui, p, None, t!("nav.update"), true).clicked() {
+                        self.apply_mod_updates(target, vec![hit.project_id.clone()]);
+                    }
+                } else {
+                    ui.add_enabled_ui(false, |ui| {
+                        widgets::button(ui, p, Some(Icon::Check), t!("instances.installed"), false);
+                    });
+                }
+                if remove
+                    && widgets::icon_button(ui, p, Icon::Trash, t!("instances.remove")).clicked()
+                {
+                    self.remove_hub_content(ui.ctx(), kind, target, &hit.project_id);
+                }
+            }
         }
-        if installed {
-            ui.label(RichText::new(t!("instances.installed")).color(p.accent));
+    }
+
+    fn remove_hub_content(
+        &mut self,
+        ctx: &egui::Context,
+        kind: ProjectType,
+        target: &Instance,
+        project: &str,
+    ) {
+        let files = if kind == ProjectType::Mod {
+            ContentFiles::Mods(
+                self.hub_mod_files(target, project)
+                    .into_iter()
+                    .map(|f| f.file_name.clone())
+                    .collect(),
+            )
+        } else {
+            let installed = self.hub_installed(ctx, kind, target);
+            let Some(files) = installed.pack_files(kind, project) else {
+                return;
+            };
+            ContentFiles::Packs {
+                expected: files.to_vec(),
+                known: self.inst.hub.installed.known_files(kind),
+            }
+        };
+        self.inst
+            .hub
+            .removing
+            .insert((target.id.clone(), kind, project.to_owned()));
+        self.tasks.remove_discover_content(
+            target.clone(),
+            kind,
+            self.pack_game(target),
+            project.to_owned(),
+            files,
+        );
+    }
+
+    pub(super) fn on_hub_content_removed(&mut self, removal: ContentRemoval) {
+        let ContentRemoval {
+            target,
+            kind,
+            project,
+            result,
+        } = removal;
+        if !self
+            .inst
+            .hub
+            .removing
+            .remove(&(target.clone(), kind, project))
+        {
+            return;
+        }
+        if let Err(error) = result {
+            self.toasts
+                .push(Kind::Error, t!("instances.could_not_delete_it"), error);
+        }
+        if kind == ProjectType::Mod {
+            self.refresh_mods(&target);
+        } else if let Some(instance) = self.instance_by_id(&target).cloned() {
+            let dir = instance.game_dir(&self.dirs);
+            self.inst.hub.installed.refresh(kind, &dir);
+            if self
+                .inst
+                .packs
+                .showing
+                .as_ref()
+                .is_some_and(|(id, _, _)| id == &target)
+            {
+                self.refresh_packs(&instance);
+            }
         }
     }
 }
@@ -800,6 +1095,25 @@ fn option_combo(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn installed_projects_replace_install_and_cannot_be_selected() {
+        assert_eq!(
+            ProjectAction::new(false, false, false, false),
+            ProjectAction::Install
+        );
+        assert!(ProjectAction::Install.selectable());
+        for (update, remove) in [(false, false), (true, false), (false, true), (true, true)] {
+            let action = ProjectAction::new(true, false, update, remove);
+            assert_eq!(action, ProjectAction::Installed { update, remove });
+            assert!(!action.selectable());
+        }
+        assert_eq!(
+            ProjectAction::new(true, true, true, true),
+            ProjectAction::Busy
+        );
+        assert!(!ProjectAction::Busy.selectable());
+    }
 
     fn filters() -> Filters {
         Filters {

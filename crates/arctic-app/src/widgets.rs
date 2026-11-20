@@ -164,9 +164,11 @@ fn paint_progress_fill(
     }
 }
 
+pub(crate) const ICON_BUTTON_SIZE: f32 = 28.0;
+
 /// Borderless icon button with a soft hover background.
 pub fn icon_button(ui: &mut Ui, p: &Palette, icon: Icon, tooltip: &str) -> Response {
-    let (rect, response) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(ICON_BUTTON_SIZE), Sense::click());
     let hover = ui
         .ctx()
         .animate_bool(response.id.with("h"), response.hovered());
@@ -177,6 +179,10 @@ pub fn icon_button(ui: &mut Ui, p: &Palette, icon: Icon, tooltip: &str) -> Respo
     );
     let color = lerp_color(p.muted, p.text, hover);
     icons::draw(ui.painter(), icon, rect.shrink(7.0), color);
+    focus_ring(ui, &response);
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), tooltip)
+    });
     response
         .on_hover_text(tooltip)
         .on_hover_cursor(CursorIcon::PointingHand)
@@ -273,6 +279,28 @@ pub fn button(
     button_with_height(ui, p, icon, label, primary, BUTTON_HEIGHT)
 }
 
+pub(crate) fn focus_ring(ui: &Ui, response: &Response) {
+    if response.has_focus() {
+        ui.painter().rect_stroke(
+            response.rect.shrink(1.0),
+            CornerRadius::same(5),
+            Stroke::new(2.0, ui.visuals().selection.stroke.color),
+            StrokeKind::Inside,
+        );
+    }
+}
+
+fn button_size(text_width: f32, icon: bool, height: f32) -> Vec2 {
+    vec2(text_width + if icon { 22.0 } else { 0.0 } + 28.0, height)
+}
+
+pub(crate) fn button_width(ui: &Ui, icon: bool, label: &str) -> f32 {
+    let text =
+        ui.painter()
+            .layout_no_wrap(label.to_owned(), FontId::proportional(14.0), Color32::WHITE);
+    button_size(text.size().x, icon, BUTTON_HEIGHT).x
+}
+
 fn button_with_height(
     ui: &mut Ui,
     p: &Palette,
@@ -281,16 +309,12 @@ fn button_with_height(
     primary: bool,
     height: f32,
 ) -> Response {
-    let (fg, bg) = if primary {
-        (p.on_accent, p.accent)
-    } else {
-        (p.text, p.surface)
-    };
+    let fg = if primary { p.on_accent } else { p.text };
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_owned(), FontId::proportional(14.0), fg);
     let icon_w = if icon.is_some() { 22.0 } else { 0.0 };
-    let size = vec2(galley.size().x + icon_w + 28.0, height);
+    let size = button_size(galley.size().x, icon.is_some(), height);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     let hover = ui
         .ctx()
@@ -313,7 +337,10 @@ fn button_with_height(
     }
     ui.painter()
         .galley(pos2(x, rect.center().y - galley.size().y / 2.0), galley, fg);
-    let _ = bg;
+    focus_ring(ui, &response);
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label)
+    });
     response.on_hover_cursor(CursorIcon::PointingHand)
 }
 
@@ -505,7 +532,9 @@ pub fn field_combo(ui: &mut Ui, combo: egui::ComboBox, items: impl FnOnce(&mut U
     ui.scope(|ui| {
         ui.spacing_mut().interact_size.y = FIELD_HEIGHT;
         ui.spacing_mut().button_padding.y = 9.0;
-        combo.truncate().show_ui(ui, items).response
+        let response = combo.truncate().show_ui(ui, items).response;
+        focus_ring(ui, &response);
+        response
     })
     .inner
 }

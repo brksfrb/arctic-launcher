@@ -94,14 +94,21 @@ impl ArcticApp {
                 }
                 ui.multiply_opacity(t);
                 ui.add_space((1.0 - t) * TAB_SLIDE);
-                if self.tab == Tab::Skins {
-                    // Scrolls inside itself: the character stays in view while the catalog scrolls.
+                let discover_content = self.tab == Tab::Instances && self.inst.modpacks_open;
+                if self.tab == Tab::Skins || discover_content {
+                    // The catalog scrolls inside these pages while their controls stay visible.
                     egui::Frame::new()
                         .inner_margin(egui::Margin {
                             right: PAGE_SIDE,
                             ..egui::Margin::ZERO
                         })
-                        .show(ui, |ui| self.skins_tab(ui));
+                        .show(ui, |ui| {
+                            if discover_content {
+                                self.instances_tab(ui);
+                            } else {
+                                self.skins_tab(ui);
+                            }
+                        });
                     return;
                 }
                 // A scroll position of its own for each page (one shared by all would carry the

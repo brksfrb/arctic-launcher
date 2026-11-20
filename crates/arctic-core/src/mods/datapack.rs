@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::{modrinth, packs};
+use super::{BatchResolver, packs};
 use crate::{Error, Progress, Result};
 
 pub(super) const LOADERS: &[&str] = &["datapack"];
@@ -50,6 +50,7 @@ fn real_dir(path: &Path) -> bool {
 }
 
 pub fn install(
+    batch: &BatchResolver,
     version_id: &str,
     game_dir: &Path,
     world: &str,
@@ -57,11 +58,26 @@ pub fn install(
     allow_other_game: bool,
     progress: Progress,
 ) -> Result<()> {
-    let version = modrinth::version(version_id)?;
+    let version = batch.version(version_id)?;
     let other_game = packs::check_install_version(LOADERS, &version, game, allow_other_game)?;
-    let plan = packs::plan_archives(version, LOADERS, game, other_game, &Default::default())?;
+    let plan = packs::plan_archives(
+        version,
+        LOADERS,
+        game,
+        other_game,
+        &Default::default(),
+        batch,
+    )?;
     let dest = install_dir(game_dir, world)?;
     packs::download_archives(&plan, &dest, progress)
+}
+
+/// Remove an identified archive from one existing world.
+pub fn remove(game_dir: &Path, world: &str, file_name: &str) -> Result<()> {
+    let _reservation = packs::reserve_for_edit(game_dir)?;
+    super::files::check_pack_name(file_name)?;
+    let path = install_dir(game_dir, world)?.join(file_name);
+    fs::remove_file(&path).map_err(|e| Error::io(&path, e))
 }
 
 #[cfg(test)]
