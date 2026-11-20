@@ -1,30 +1,92 @@
 //! Instance and world selection, with compatibility and batch feedback.
 
+use std::collections::{HashSet, VecDeque};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use arctic_core::instances::Instance;
 use arctic_core::mods::{ProjectHit, ProjectType, datapack};
 use eframe::egui::{self, RichText};
 
+use super::hub::SEARCH_OWNER;
 use crate::app::ArcticApp;
+use crate::art::icons::{self, Icon};
 use crate::content_tasks::{
     ContentChoice, ContentProgress, ContentReport, ContentRequest, ContentTarget, ContentVersions,
 };
 use crate::tasks::Outcome;
+use crate::theme::Palette;
 use crate::toasts::Kind;
 use crate::{t, tf, widgets};
+
+static NEXT_JOB: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Default)]
 pub(crate) struct ContentUi {
     picker: Option<Picker>,
-    pub(super) progress: Option<ContentProgress>,
+    running: Option<ContentProjects>,
+    queue: VecDeque<PendingInstall>,
+    progress: Option<ContentProgress>,
     report: Option<ContentReport>,
 }
 
 impl ContentUi {
+    pub(super) fn installing(&self, target: &str, kind: ProjectType, project: &str) -> bool {
+        let matches = |projects: &ContentProjects| {
+            projects.kind == kind
+                && (kind == ProjectType::Modpack || projects.target == target)
+                && projects.ids.contains(project)
+        };
+        self.running.as_ref().is_some_and(matches)
+            || self.queue.iter().any(|job| matches(&job.projects))
+            || self.picker.as_ref().is_some_and(|picker| {
+                picker.request.kind == kind
+                    && (kind == ProjectType::Modpack || picker.instance == target)
+                    && picker
+                        .request
+                        .hits
+                        .iter()
+                        .any(|hit| hit.project_id == project)
+            })
+    }
+
+    fn batch_pending(&self) -> bool {
+        self.running.as_ref().is_some_and(|job| job.bulk)
+            || self.queue.iter().any(|job| job.projects.bulk)
+            || self
+                .picker
+                .as_ref()
+                .is_some_and(|picker| picker.request.bulk)
+    }
+
+    pub(super) fn set_progress(&mut self, job: u64, progress: ContentProgress) {
+        if self
+            .running
+            .as_ref()
+            .is_some_and(|running| running.job == job)
+        {
+            self.progress = Some(progress);
+        }
+    }
+
     pub(super) fn close_picker(&mut self) -> bool {
         self.picker.take().is_some()
     }
+}
+
+struct ContentProjects {
+    job: u64,
+    target: String,
+    kind: ProjectType,
+    ids: HashSet<String>,
+    bulk: bool,
+}
+
+struct PendingInstall {
+    projects: ContentProjects,
+    request: ContentRequest,
+    choices: Vec<Outcome<ContentChoice>>,
+    target: ContentTarget,
 }
 
 struct Picker {
@@ -72,7 +134,7 @@ impl ArcticApp {
         request: ContentRequest,
         instance: &Instance,
     ) {
-        if self.inst.content.progress.is_some() {
+        if self.inst.content.picker.is_some() || request.hits.is_empty() {
             return;
         }
         let receiver = request.fetch_versions(ctx);
@@ -118,30 +180,46 @@ impl ArcticApp {
             return;
         }
         let p = self.palette();
-        ui.horizontal_wrapped(|ui| {
-            ui.label(tf!("instances.hub.selected_count", count = count));
-            if ui
-                .add_enabled_ui(self.inst.content.progress.is_none(), |ui| {
-                    widgets::button(ui, p, None, t!("instances.hub.install_selected"), true)
-                })
-                .inner
-                .clicked()
-            {
-                let hits = self.inst.search.selected.clone();
-                self.pick_content_target(
-                    ui.ctx(),
-                    ContentRequest {
-                        kind,
-                        hits,
-                        version: None,
-                        bulk: true,
-                    },
-                    instance,
+        let hits: Vec<_> = self
+            .inst
+            .search
+            .selected
+            .iter()
+            .filter(|hit| !self.hub_content_busy(kind, instance, &hit.project_id))
+            .cloned()
+            .collect();
+        crate::theme::card(p).inner_margin(10.0).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.spacing_mut().interact_size.y = widgets::FIELD_HEIGHT;
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    RichText::new(tf!("instances.hub.selected_count", count = count)).strong(),
                 );
-            }
-            if widgets::button(ui, p, None, t!("instances.hub.clear_selection"), false).clicked() {
-                self.inst.search.selected.clear();
-            }
+                if ui
+                    .add_enabled_ui(
+                        !self.inst.content.batch_pending() && !hits.is_empty(),
+                        |ui| widgets::field_button(ui, p, t!("instances.hub.install_all"), true),
+                    )
+                    .inner
+                    .clicked()
+                {
+                    self.pick_content_target(
+                        ui.ctx(),
+                        ContentRequest {
+                            kind,
+                            hits,
+                            version: None,
+                            bulk: true,
+                        },
+                        instance,
+                    );
+                }
+                if widgets::field_button(ui, p, t!("instances.hub.clear_selection"), false)
+                    .clicked()
+                {
+                    self.inst.search.selected.clear();
+                }
+            });
         });
         ui.add_space(6.0);
     }
@@ -151,12 +229,17 @@ impl ArcticApp {
         if let Some(progress) = &self.inst.content.progress {
             let fraction = (progress.current.saturating_sub(1) as f32 + progress.share)
                 / progress.total.max(1) as f32;
-            ui.add(egui::ProgressBar::new(fraction).animate(true).text(tf!(
+            ui.label(tf!(
                 "instances.hub.installing_batch",
                 current = progress.current,
                 total = progress.total,
                 title = progress.title
-            )));
+            ));
+            ui.add(
+                egui::ProgressBar::new(fraction)
+                    .animate(true)
+                    .show_percentage(),
+            );
             ui.add_space(6.0);
         }
         if let Some(report) = &self.inst.content.report {
@@ -233,10 +316,18 @@ impl ArcticApp {
         let p = self.palette();
         let kind = picker.request.kind;
         let game = self.pack_game(&current);
-        let choices = picker
-            .versions
-            .as_ref()
-            .map(|v| picker.request.choices(v, &current, &game));
+        let choices = picker.versions.as_ref().map(|versions| {
+            let installed = self.hub_installed(ctx, kind, &current);
+            let mut choices = picker.request.choices(versions, &current, &game);
+            for (hit, choice) in picker.request.hits.iter().zip(&mut choices) {
+                if installed.contains(&hit.project_id) {
+                    *choice = Err(t!("instances.installed").to_owned());
+                } else if self.hub_content_busy(kind, &current, &hit.project_id) {
+                    *choice = Err(t!("instances.installing").to_owned());
+                }
+            }
+            choices
+        });
         let fit = choices.as_ref().map(|c| Compatibility::of(c));
         let mut next = None;
         let mut close = false;
@@ -245,10 +336,12 @@ impl ArcticApp {
             .frame(super::dialog_frame(p))
             .show(ctx, |ui| {
                 ui.set_width(440.0_f32.min((ctx.content_rect().width() - 50.0).max(160.0)));
-                let title = if kind == ProjectType::Modpack {
-                    t!("instances.hub.install_selected")
-                } else {
+                let title = if kind != ProjectType::Modpack {
                     t!("instances.hub.choose_instance")
+                } else if picker.request.bulk {
+                    t!("instances.hub.install_all")
+                } else {
+                    t!("instances.modpacks")
                 };
                 ui.heading(title);
                 if picker.request.bulk {
@@ -337,27 +430,31 @@ impl ArcticApp {
             picker.world = None;
         }
         if install && let Some(choices) = choices {
-            let total = picker.request.hits.len();
-            let title = picker.request.hits[0].title.clone();
-            if picker.request.bulk {
-                self.inst.search.selected.clear();
-                self.inst.content.report = None;
-            }
-            self.inst.content.progress = Some(ContentProgress {
-                current: 1,
-                total,
-                title,
-                share: 0.0,
-            });
-            self.tasks.install_content(
-                picker.request,
+            let projects = ContentProjects {
+                job: NEXT_JOB.fetch_add(1, Ordering::Relaxed),
+                target: current.id.clone(),
+                kind,
+                ids: picker
+                    .request
+                    .hits
+                    .iter()
+                    .zip(&choices)
+                    .filter(|(_, choice)| choice.is_ok())
+                    .map(|(hit, _)| hit.project_id.clone())
+                    .collect(),
+                bulk: picker.request.bulk,
+            };
+            self.inst.content.queue.push_back(PendingInstall {
+                projects,
+                request: picker.request,
                 choices,
-                ContentTarget {
+                target: ContentTarget {
                     instance: current,
                     game,
                     world: picker.world,
                 },
-            );
+            });
+            self.start_next_content_install();
         } else if !close && !modal.should_close() {
             self.inst.content.picker = Some(picker);
         }
@@ -453,7 +550,89 @@ impl ArcticApp {
         }
     }
 
-    pub(super) fn on_content_installed(&mut self, report: ContentReport) {
+    fn start_next_content_install(&mut self) {
+        if self.inst.content.running.is_some() {
+            return;
+        }
+        while let Some(job) = self.inst.content.queue.pop_front() {
+            let target = &job.target.instance;
+            if job.projects.kind != ProjectType::Modpack
+                && !self.instance_by_id(&target.id).is_some_and(|current| {
+                    current.loader == target.loader
+                        && self.pack_game(current) == job.target.game
+                        && current.game_dir(&self.dirs) == target.game_dir(&self.dirs)
+                })
+            {
+                self.toasts.push(
+                    Kind::Error,
+                    tf!(
+                        "instances.hub.install_failed_for",
+                        title = job.request.hits[0].title
+                    ),
+                    t!("instances.hub.target_changed"),
+                );
+                continue;
+            }
+            self.inst.content.progress = Some(ContentProgress {
+                current: 1,
+                total: job.request.hits.len(),
+                title: job.request.hits[0].title.clone(),
+                share: 0.0,
+            });
+            if job.request.bulk {
+                self.inst.content.report = None;
+            }
+            let id = job.projects.job;
+            self.inst.content.running = Some(job.projects);
+            self.tasks
+                .install_content(id, job.request, job.choices, job.target);
+            break;
+        }
+    }
+
+    pub(super) fn on_content_item_installed(&mut self, job: u64, project: &str) {
+        let Some(running) = self
+            .inst
+            .content
+            .running
+            .as_mut()
+            .filter(|running| running.job == job)
+        else {
+            return;
+        };
+        running.ids.remove(project);
+        let kind = running.kind;
+        let target = running.target.clone();
+        if kind == ProjectType::Mod {
+            self.refresh_mods(&target);
+        } else if kind != ProjectType::Modpack
+            && let Some(instance) = self.instance_by_id(&target)
+        {
+            self.inst
+                .hub
+                .installed
+                .refresh(kind, &instance.game_dir(&self.dirs));
+        }
+        let browser = self.inst.search.instance.as_deref();
+        let discover = browser == Some(SEARCH_OWNER)
+            && kind == self.inst.hub.section.project_type()
+            && (kind == ProjectType::Modpack || self.inst.hub.target.as_deref() == Some(&target));
+        if discover || browser == Some(&target) {
+            prune_selection(&mut self.inst.search.selected, |id| id == project);
+        }
+    }
+
+    pub(super) fn on_content_installed(&mut self, job: u64, report: ContentReport) {
+        if self
+            .inst
+            .content
+            .running
+            .as_ref()
+            .is_none_or(|running| running.job != job)
+        {
+            return;
+        }
+        self.inst.content.running = None;
         self.inst.content.progress = None;
         if report.kind == ProjectType::Modpack && report.succeeded > 0 {
             self.reload_instances();
@@ -486,19 +665,17 @@ impl ArcticApp {
         }
 
         if report.bulk {
-            self.toasts.push(
-                if report.failed.is_empty() {
-                    Kind::Success
-                } else {
-                    Kind::Error
-                },
-                tf!(
-                    "instances.hub.install_summary",
-                    installed = report.succeeded,
-                    failed = report.failed.len()
-                ),
-                "",
-            );
+            if !report.failed.is_empty() {
+                self.toasts.push(
+                    Kind::Error,
+                    tf!(
+                        "instances.hub.install_summary",
+                        installed = report.succeeded,
+                        failed = report.failed.len()
+                    ),
+                    "",
+                );
+            }
             self.inst.content.report = Some(report);
         } else if let Some((title, error)) = report.failed.into_iter().next() {
             self.toasts.push(
@@ -506,31 +683,126 @@ impl ArcticApp {
                 tf!("instances.hub.install_failed_for", title = title),
                 error,
             );
-        } else {
+        } else if report.kind == ProjectType::Modpack || !report.notes.is_empty() {
             self.toasts.push(
                 Kind::Success,
                 t!("instances.installed"),
                 report.notes.join(" "),
             );
         }
+        self.start_next_content_install();
     }
 }
 
+pub(super) fn prune_selection(selected: &mut Vec<ProjectHit>, installed: impl Fn(&str) -> bool) {
+    selected.retain(|hit| !installed(&hit.project_id));
+}
+
+const SELECT_SIZE: f32 = 28.0;
+
 /// Checkboxes retain selections across searches and pagination in the current browser.
-pub(super) fn select_content(ui: &mut egui::Ui, selected: &mut Vec<ProjectHit>, hit: &ProjectHit) {
+pub(super) fn select_content(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    selected: &mut Vec<ProjectHit>,
+    hit: &ProjectHit,
+    selectable: bool,
+) {
     let position = selected
         .iter()
         .position(|item| item.project_id == hit.project_id);
+    if !selectable {
+        ui.allocate_space(egui::Vec2::splat(SELECT_SIZE));
+        return;
+    }
+    let (_, rect) = ui.allocate_space(egui::Vec2::splat(SELECT_SIZE));
+    // The sticky bar can appear or disappear as this checkbox changes.
+    let id = ui.make_persistent_id(("select_content", &hit.project_id));
+    let response = ui.interact(rect, id, egui::Sense::click());
     let mut checked = position.is_some();
-    if ui
-        .checkbox(&mut checked, "")
-        .on_hover_text(t!("instances.hub.select_content"))
-        .changed()
-    {
+    if response.clicked() {
+        response.request_focus();
+        checked = !checked;
         if let Some(index) = position {
             selected.remove(index);
         } else {
             selected.push(hit.clone());
         }
+    }
+
+    let square = rect.shrink(4.0);
+    let fill = if checked { p.accent } else { p.surface };
+    let edge = if checked || response.hovered() {
+        p.accent
+    } else {
+        p.muted
+    };
+    ui.painter().rect(
+        square,
+        4,
+        fill,
+        egui::Stroke::new(1.5, edge),
+        egui::StrokeKind::Inside,
+    );
+    if checked {
+        icons::draw(ui.painter(), Icon::Check, square.shrink(3.0), p.on_accent);
+    }
+    widgets::focus_ring(ui, &response);
+    let label = t!("instances.hub.select_content");
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, checked, label)
+    });
+    response
+        .on_hover_text(label)
+        .on_hover_cursor(egui::CursorIcon::PointingHand);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hit(project: &str) -> ProjectHit {
+        ProjectHit {
+            project_id: project.into(),
+            slug: project.into(),
+            title: project.into(),
+            description: String::new(),
+            author: String::new(),
+            downloads: 0,
+            follows: 0,
+            icon_url: None,
+            featured_gallery: None,
+            categories: Vec::new(),
+            game_versions: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn newly_installed_items_drop_out_of_selection_even_offscreen() {
+        let mut selected = vec![hit("offscreen"), hit("still selected"), hit("installed")];
+        let installed = HashSet::from(["offscreen", "installed"]);
+        prune_selection(&mut selected, |id| installed.contains(id));
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].project_id, "still selected");
+    }
+
+    #[test]
+    fn running_install_is_scoped_to_its_projects_and_target() {
+        let ui = ContentUi {
+            running: Some(ContentProjects {
+                job: 1,
+                target: "fabric".into(),
+                kind: ProjectType::Mod,
+                ids: HashSet::from(["first".into(), "second".into()]),
+                bulk: true,
+            }),
+            ..ContentUi::default()
+        };
+        assert!(ui.installing("fabric", ProjectType::Mod, "first"));
+        assert!(ui.installing("fabric", ProjectType::Mod, "second"));
+        assert!(!ui.installing("fabric", ProjectType::Mod, "unrelated"));
+        assert!(!ui.installing("forge", ProjectType::Mod, "first"));
+        assert!(!ui.installing("fabric", ProjectType::DataPack, "first"));
+        assert!(ui.batch_pending());
     }
 }

@@ -47,7 +47,8 @@ pub(crate) fn tracked_files(index: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 use modrinth::{Project, Version};
-use resolve::{Planned, Target};
+pub use resolve::BatchResolver;
+use resolve::{CachedSource, Planned, Target, VersionSource};
 
 /// How search results are ordered.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -275,8 +276,7 @@ pub fn install(
     progress: Progress,
 ) -> Result<Vec<InstalledMod>> {
     install_selected(
-        project_id,
-        None,
+        InstallChoice::Project(project_id),
         game_version,
         loader,
         mods_dir,
@@ -296,8 +296,7 @@ pub fn install_version(
     progress: Progress,
 ) -> Result<Vec<InstalledMod>> {
     install_selected(
-        "",
-        Some(version_id),
+        InstallChoice::Version(version_id, None),
         game_version,
         loader,
         mods_dir,
@@ -306,9 +305,35 @@ pub fn install_version(
     )
 }
 
+impl BatchResolver {
+    /// Install a selected root using this batch's shared dependency lookups.
+    pub fn install_mod(
+        &self,
+        version_id: &str,
+        game_version: &str,
+        loader: LoaderKind,
+        mods_dir: &Path,
+        index: &Path,
+        progress: Progress,
+    ) -> Result<Vec<InstalledMod>> {
+        install_selected(
+            InstallChoice::Version(version_id, Some(self)),
+            game_version,
+            loader,
+            mods_dir,
+            index,
+            progress,
+        )
+    }
+}
+
+enum InstallChoice<'a> {
+    Project(&'a str),
+    Version(&'a str, Option<&'a BatchResolver>),
+}
+
 fn install_selected(
-    project_id: &str,
-    version_id: Option<&str>,
+    choice: InstallChoice<'_>,
     game_version: &str,
     loader: LoaderKind,
     mods_dir: &Path,
@@ -328,9 +353,18 @@ fn install_selected(
         loaders: &loaders,
         game_version,
     };
-    let plan = match version_id {
-        Some(id) => resolve::resolve_version(id, target, &installed, &source)?,
-        None => resolve::resolve(project_id, target, &installed, &source)?,
+    let plan = match choice {
+        InstallChoice::Project(project) => resolve::resolve(project, target, &installed, &source)?,
+        InstallChoice::Version(id, batch) => {
+            let cached = batch.map(|batch| CachedSource {
+                batch,
+                target,
+                source: &source,
+            });
+            let source: &dyn VersionSource =
+                cached.as_ref().map_or(&source as &dyn VersionSource, |c| c);
+            resolve::resolve_version(id, target, &installed, source)?
+        }
     };
     let (mods, jobs) = prepare(&plan, mods_dir)?;
     let mods = with_project_info(mods);
