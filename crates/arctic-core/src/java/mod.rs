@@ -82,6 +82,76 @@ struct RawDownload {
     url: String,
 }
 
+pub(crate) fn native_x86_64() -> bool {
+    if !cfg!(target_arch = "x86_64") {
+        return false;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::ffi::{c_char, c_int, c_void};
+
+        unsafe extern "C" {
+            fn sysctlbyname(
+                name: *const c_char,
+                oldp: *mut c_void,
+                oldlenp: *mut usize,
+                newp: *mut c_void,
+                newlen: usize,
+            ) -> c_int;
+        }
+
+        let mut translated: c_int = 0;
+        let mut len = std::mem::size_of_val(&translated);
+        // SAFETY: The name is NUL-terminated and the output buffer is len bytes.
+        let result = unsafe {
+            sysctlbyname(
+                c"sysctl.proc_translated".as_ptr(),
+                (&mut translated as *mut c_int).cast(),
+                &mut len,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        // Intel Macs may lack this sysctl.
+        if result == 0 {
+            translated == 0
+        } else {
+            io::Error::last_os_error().kind() == io::ErrorKind::NotFound
+        }
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::HANDLE;
+        use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
+        use windows_sys::Win32::System::SystemInformation::IMAGE_FILE_MACHINE_AMD64;
+        use windows_sys::Win32::System::Threading::GetCurrentProcess;
+        use windows_sys::core::BOOL;
+
+        // SAFETY: kernel32 is loaded and both names are NUL-terminated.
+        let query = unsafe {
+            GetProcAddress(
+                GetModuleHandleA(c"kernel32.dll".as_ptr().cast()),
+                c"IsWow64Process2".as_ptr().cast(),
+            )
+        };
+        // Windows versions without this API predate x86-64 emulation on ARM64.
+        let Some(query) = query else { return true };
+        let mut process = 0;
+        let mut native = 0;
+        // SAFETY: This is the signature of IsWow64Process2 and both outputs are valid.
+        let result = unsafe {
+            let query = std::mem::transmute::<
+                unsafe extern "system" fn() -> isize,
+                unsafe extern "system" fn(HANDLE, *mut u16, *mut u16) -> BOOL,
+            >(query);
+            query(GetCurrentProcess(), &mut process, &mut native)
+        };
+        result != 0 && native == IMAGE_FILE_MACHINE_AMD64
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    true
+}
+
 /// Mojang platform key for the host.
 pub fn platform_key() -> &'static str {
     platform_key_for(false)
