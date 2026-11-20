@@ -17,6 +17,7 @@ pub mod progress;
 #[cfg(test)]
 mod repair_tests;
 mod runtime_repair;
+pub(crate) mod session;
 pub mod startup;
 pub mod startup_cache;
 mod truststore;
@@ -42,6 +43,7 @@ use crate::{
 use self::args::{JvmOptions, Placeholders, split_jvm_args, substitute};
 
 /// Everything needed to launch one version for one account.
+#[derive(Clone)]
 pub struct LaunchRequest<'a> {
     pub dirs: &'a DataDirs,
     pub version: &'a VersionEntry,
@@ -387,6 +389,33 @@ fn finish_assets_later(dirs: &DataDirs, index_name: String, later: Vec<DownloadJ
 /// installer needs its client jar and Java), then the loader profile is
 /// layered on top and its extra libraries are downloaded.
 pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
+    prepare_in(req, &req.instance.game_dir(req.dirs), progress)
+}
+
+/// Prepare a game whose lifetime will be watched by the launcher.
+pub fn prepare_watched(req: &LaunchRequest, progress: Progress) -> Result<WatchedLaunch> {
+    let (session, copy) =
+        session::GameSession::reserve(req.dirs, req.instance, req.settings.shared, req.copy)?;
+    let req = LaunchRequest {
+        copy,
+        ..req.clone()
+    };
+    let plan = prepare_in(&req, session.game_dir(), progress)?;
+    Ok(WatchedLaunch { plan, session })
+}
+
+pub struct WatchedLaunch {
+    pub plan: LaunchPlan,
+    session: session::GameSession,
+}
+
+impl WatchedLaunch {
+    pub fn spawn(self, on_event: impl Fn(GameEvent) + Send + Sync + 'static) -> Result<GameHandle> {
+        process::spawn_with_session(&self.plan, Some(self.session), on_event)
+    }
+}
+
+fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Result<LaunchPlan> {
     // "Play with Arctic Client" is off in Settings: the game starts as if the instance had no client
     // (the mod is taken out of its mods folder, no client flags or login sharing).
     if !req.settings.play_with_client && req.instance.arctic_mod {
@@ -402,7 +431,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
             copy: req.copy,
             quick_play: req.quick_play.clone(),
         };
-        return prepare(&without_client, progress);
+        return prepare_in(&without_client, game_dir, progress);
     }
     // "Gentle launch": few downloads at a time, and the game starts behind other programs.
     crate::net::set_gentle(req.settings.gentle_launch);
@@ -422,14 +451,13 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         )));
     }
     let dirs = req.dirs;
-    let game_dir = req.instance.game_dir(dirs);
     let repair = files::LibraryRepair::new(dirs)?;
     let mut timer = StepTimer::new();
     // The Arctic session (a network round trip) is fetched while the game files are checked.
     let mut share_session = false;
     // First start of this game folder: the profile's default game settings.
     match crate::game_defaults::Defaults::load(dirs)
-        .and_then(|d| d.apply_if_new(&game_dir, Some(&req.version.id)))
+        .and_then(|d| d.apply_if_new(game_dir, Some(&req.version.id)))
     {
         Ok(true) => log::info!("applied default game settings to {}", game_dir.display()),
         Ok(false) => {}
@@ -437,14 +465,14 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
     }
     timer.step("default settings");
     // What the profile's instances share: the newest copies, into this one.
-    if let Err(e) = crate::shared::sync(
+    if let Err(e) = crate::shared::sync_at(
         dirs,
         req.settings.shared,
-        Some((req.instance, &req.version.id)),
+        Some((req.instance, &req.version.id, game_dir.to_path_buf())),
     ) {
         log::warn!("sharing between instances: {e}");
     }
-    if let Err(e) = crate::game_defaults::skip_multiplayer_warning(&game_dir) {
+    if let Err(e) = crate::game_defaults::skip_multiplayer_warning(game_dir) {
         log::warn!("multiplayer warning: {e}");
     }
     timer.step("shared files sync");
@@ -464,10 +492,10 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         )?),
     };
     if let Some(runtime) = runtime {
-        runtime_repair::recover_detached(&runtime, &game_log_file(req), &game_dir);
+        runtime_repair::recover_detached(&runtime, &game_log_file(req), game_dir);
     }
     // Going up to a newer game version upgrades worlds for good: back the recent ones up first.
-    let backed_up = crate::worlds::backup_before_version_change(&game_dir, &vanilla.id);
+    let backed_up = crate::worlds::backup_before_version_change(game_dir, &vanilla.id);
     if backed_up > 0 {
         log::info!(
             "backing up {backed_up} recent world(s) before {}",
@@ -478,9 +506,9 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
     let launcher_owned_vanilla =
         req.instance.loader.kind().is_none() && req.instance.game_folder.is_none();
     if launcher_owned_vanilla {
-        crate::mods::performance::recover_vanilla_api(&game_dir)?;
+        crate::mods::performance::recover_vanilla_api(game_dir)?;
     }
-    let loader = effective_loader(dirs, req.instance, &vanilla.id);
+    let loader = effective_loader(dirs, req.instance, &vanilla.id, game_dir);
     timer.step("pick loader");
     let version = match loader
         .as_ref()
@@ -491,7 +519,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
             let base = install_with_repair(
                 dirs,
                 vanilla.clone(),
-                &game_dir,
+                game_dir,
                 java_override.clone(),
                 progress,
                 &repair,
@@ -534,7 +562,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 // Best effort, like the Forge branch: no Sodium is better than no game (an
                 // unreachable Modrinth CDN, a locked or truncated index).
                 if let Err(e) = crate::mods::performance::sync_for_launch(
-                    &game_dir,
+                    game_dir,
                     &vanilla.id,
                     req.instance,
                     progress,
@@ -552,7 +580,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 // the Fabric API modules those use, which starts the game noticeably faster.
                 if req.instance.loader.kind().is_none() {
                     crate::mods::performance::finish_vanilla(
-                        &game_dir,
+                        game_dir,
                         &vanilla.id,
                         launcher_owned_vanilla,
                         req.instance.performance,
@@ -573,7 +601,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 // 1.8.9: Patcher and Entity Culling for FPS (the Performance switch); never stops a start.
                 progress(ProgressInfo::stage("Checking performance mods"));
                 if let Err(e) = crate::mods::performance::sync_forge(
-                    &game_dir,
+                    game_dir,
                     &vanilla.id,
                     req.instance.performance,
                     progress,
@@ -607,7 +635,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         _ => {
             if launcher_owned_vanilla
                 && let Err(e) =
-                    crate::mods::performance::finish_vanilla(&game_dir, &vanilla.id, true, false)
+                    crate::mods::performance::finish_vanilla(game_dir, &vanilla.id, true, false)
             {
                 log::warn!("vanilla performance cleanup: {e}");
             }
@@ -615,9 +643,9 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         }
     };
     // The Arctic sign-in (a network round trip) runs while the game files are checked.
-    let session = share_session.then(|| start_cosmetics_session(req, &game_dir));
+    let session = share_session.then(|| start_cosmetics_session(req, game_dir));
     let installation =
-        install_with_repair(dirs, version, &game_dir, java_override, progress, &repair)?;
+        install_with_repair(dirs, version, game_dir, java_override, progress, &repair)?;
     if let Some(finished) = session {
         let _ = finished.recv_timeout(SESSION_WAIT);
     }
@@ -702,6 +730,7 @@ fn effective_loader(
     dirs: &DataDirs,
     instance: &Instance,
     game: &str,
+    game_dir: &Path,
 ) -> Option<(loaders::LoaderKind, String)> {
     if let (Some(kind), Some(version)) = (instance.loader.kind(), instance.loader.version()) {
         return Some((kind, version.to_owned()));
@@ -712,10 +741,9 @@ fn effective_loader(
         .flatten();
     if fabric.is_none() {
         // Pure vanilla: make sure earlier Fabric runs left nothing behind.
-        let game_dir = instance.game_dir(dirs);
         let _ = arctic_mod::sync(&game_dir.join("mods"), game, false);
         if let Err(e) =
-            crate::mods::performance::sync(&game_dir, game, false, false, &[], None, &|_| {})
+            crate::mods::performance::sync(game_dir, game, false, false, &[], None, &|_| {})
         {
             log::warn!("vanilla performance cleanup: {e}");
         }
@@ -1055,10 +1083,14 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
 }
 
 fn game_log_file(req: &LaunchRequest) -> PathBuf {
-    req.dirs.logs().join(match req.copy {
-        0 => format!("game-{}.log", req.instance.id),
-        n => format!("game-{}-{}.log", req.instance.id, n + 1),
-    })
+    let logs = req.dirs.logs();
+    if req.copy == 0 {
+        logs.join(format!("game-{}.log", req.instance.id))
+    } else {
+        logs.join("copies")
+            .join(&req.instance.id)
+            .join(format!("game-{}.log", req.copy))
+    }
 }
 
 /// Versions from 1.20 take `--quickPlay*`; older ones only know

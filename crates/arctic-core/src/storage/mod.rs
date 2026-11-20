@@ -217,6 +217,17 @@ pub fn load_json<T: DeserializeOwned>(path: &Path) -> Result<Option<T>> {
     }
 }
 
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(dir).at(dir)?;
+    let mut tmp = tempfile::NamedTempFile::new_in(dir).at(dir)?;
+    tmp.write_all(bytes).at(tmp.path())?;
+    tmp.as_file().sync_all().at(tmp.path())?;
+    tmp.persist(path).map_err(|e| Error::io(path, e.error))?;
+    Ok(())
+}
+
 /// Write JSON atomically (temp file + rename) so a crash never leaves a truncated settings/accounts
 /// file behind. The data is flushed to disk before the rename (a rename alone can survive a power cut
 /// while the new contents don't, which leaves an empty file), and the previous good copy is kept as

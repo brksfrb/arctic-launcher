@@ -1144,14 +1144,7 @@ public final class LegacyPlatform implements Platform {
 			List<ResourcePackLoader.Entry> selected = new ArrayList<ResourcePackLoader.Entry>(loader.getSelectedResourcePacks());
 			selected.remove(entry);
 			selected.add(entry);
-			loader.setSelectedResourcePacks(selected);
-			// Same order as the loader's list: bottom to top.
-			mc.options.resourcePacks.clear();
-			for (ResourcePackLoader.Entry e : selected) {
-				mc.options.resourcePacks.add(e.getName());
-			}
-			mc.options.save();
-			mc.reloadResources();
+			applyResourcePacks(mc, loader, selected);
 			return;
 		}
 		ArcticLegacy.LOG.warn("pack {} isn't available after the download", fileName);
@@ -1197,13 +1190,47 @@ public final class LegacyPlatform implements Platform {
 				}
 			}
 		}
-		loader.setSelectedResourcePacks(bottomFirst);
-		mc.options.resourcePacks.clear();
-		for (ResourcePackLoader.Entry e : bottomFirst) {
-			mc.options.resourcePacks.add(e.getName());
-		}
+		applyResourcePacks(mc, loader, bottomFirst);
+	}
+
+	private static void applyResourcePacks(MinecraftClient mc, ResourcePackLoader loader,
+			List<ResourcePackLoader.Entry> bottomFirst) {
+		loader.setSelectedResourcePacks(updateResourcePackOptions(mc.options, bottomFirst));
 		mc.options.save();
 		mc.reloadResources();
+	}
+
+	static List<ResourcePackLoader.Entry> updateResourcePackOptions(net.minecraft.client.option.GameOptions options,
+			List<ResourcePackLoader.Entry> bottomFirst) {
+		// Match the vanilla pack screen and the startup loader for this version.
+		//#if MC >= 1.11
+		int expectedFormat = 3;
+		//#elif MC >= 1.9
+		int expectedFormat = 2;
+		//#else
+		int expectedFormat = 1;
+		//#endif
+		List<ResourcePackLoader.Entry> selected = new ArrayList<>();
+		List<String> names = new ArrayList<>();
+		List<String> incompatible = new ArrayList<>();
+		for (ResourcePackLoader.Entry e : bottomFirst) {
+			int format;
+			try {
+				format = e.getFormat();
+			} catch (NullPointerException missingMetadata) {
+				// 1.8.9 dereferences the pack section even when pack.mcmeta has none.
+				ArcticLegacy.LOG.warn("Skipping resource pack {} with missing metadata", e.getName(), missingMetadata);
+				continue;
+			}
+			selected.add(e);
+			names.add(e.getName());
+			if (format != expectedFormat) {
+				incompatible.add(e.getName());
+			}
+		}
+		options.resourcePacks = names;
+		options.incompatibleResourcePacks = incompatible;
+		return selected;
 	}
 
 	@Override

@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/arctic-core", "crates/arctic-ping", "crates/arctic-voice", "crates/arctic-app", "crates/arctic-cli", "crates/arctic-share", "crates/arctic-mesh"]
 
 [workspace.package]
-version = "0.6.4"
+version = "0.6.5"
 edition = "2024"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/brksfrb/arctic-launcher"
@@ -21,7 +21,7 @@ opt-level = 2
 lto = "fat"
 codegen-units = 1
 strip = true
-opt-level = "s"
+opt-level = "z"
 
 [profile.release.package]
 sha1 = { opt-level = 3 }
@@ -30,6 +30,7 @@ lzma-rs = { opt-level = 3 }
 miniz_oxide = { opt-level = 3 }
 flate2 = { opt-level = 3 }
 zip = { opt-level = 3 }
+crc32fast = { opt-level = 3 }
 image = { opt-level = 3 }
 png = { opt-level = 3 }
 zune-jpeg = { opt-level = 3 }

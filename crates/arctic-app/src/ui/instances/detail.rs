@@ -62,12 +62,7 @@ impl ArcticApp {
                     ui.label(RichText::new(Self::instance_subtitle(&instance)).color(p.muted));
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let idle = !self.runs.instance_active(id);
-                    let play = ui
-                        .add_enabled_ui(idle, |ui| {
-                            widgets::button(ui, p, Some(Icon::Play), t!("instances.play"), true)
-                        })
-                        .inner;
+                    let play = widgets::button(ui, p, Some(Icon::Play), t!("instances.play"), true);
                     if play.clicked() {
                         self.settings.last_instance =
                             (!instance.is_default()).then(|| id.to_owned());
@@ -257,6 +252,26 @@ impl ArcticApp {
         self.performance_card(ui, instance);
         self.extras_card(ui, instance);
         self.settings_card(ui, instance);
+        ui.add_space(12.0);
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            if widgets::button(ui, p, None, t!("instances.create_desktop_shortcut"), false)
+                .clicked()
+            {
+                match crate::desktop_shortcut::create_instance(instance) {
+                    Ok(path) => self.toasts.push(
+                        Kind::Success,
+                        t!("settings.desktop_shortcut_made"),
+                        path.display().to_string(),
+                    ),
+                    Err(error) => self.toasts.push(
+                        Kind::Error,
+                        t!("play.couldnt_make_the_desktop_shortcut"),
+                        error,
+                    ),
+                }
+            }
+        });
         if instance.is_default() {
             return;
         }

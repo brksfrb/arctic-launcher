@@ -67,6 +67,8 @@ jobs:
           set -euo pipefail
           cp audio-test-bin/arctic-client.pack mod/dist/arctic-client.pack
           export CARGO_TARGET_DIR="$HOME/arctic-target"
+          # Use the target rustflags in .cargo/config.toml even on a shared runner.
+          unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS
           cargo xwin build --release --locked --target x86_64-pc-windows-msvc -p arctic-app -p arctic-cli
           mkdir windows-test
           cp "$CARGO_TARGET_DIR/x86_64-pc-windows-msvc/release/arctic-launcher.exe" windows-test/arctic-launcher-windows-x64.exe

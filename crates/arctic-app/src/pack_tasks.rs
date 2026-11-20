@@ -138,8 +138,7 @@ impl Tasks {
             Some(selected) => packs::install_selected(selected, &game_dir, progress)?,
             None => packs::install(kind, project, game, &game_dir, progress)?,
         };
-        let file = installed.file_name;
-        if let Err(e) = packs::set_active(kind, &game_dir, &file, true) {
+        if let Err(e) = installed.activate(&game_dir, game) {
             note = tf!("tasks.installed_but_not_switched_on", e = e);
         }
         if installed.used_fallback {
@@ -153,7 +152,7 @@ impl Tasks {
             });
         }
         Ok(PackDone {
-            file,
+            file: installed.file_name,
             note,
             shaders_switched_on,
         })

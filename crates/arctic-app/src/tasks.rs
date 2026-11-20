@@ -151,7 +151,9 @@ pub enum Event {
     LoaderSwitched(String, LoaderKind, Outcome<Retargeted>),
     /// Icon bytes for a URL.
     ModIcon(String, Outcome<Vec<u8>>),
-    ModGalleryImage(String, Outcome<Vec<u8>>),
+    ModGalleryImage(String, Outcome<Arc<[u8]>>),
+    /// Fallback gallery URL for a Discover project with no featured search image.
+    HubBanner(String, Option<String>),
     /// Skin and capes of an account (account id, result).
     SkinAccount(String, Outcome<crate::skin_tasks::AccountSkin>),
     /// Another player's skin by name.
@@ -438,6 +440,8 @@ impl Tasks {
         settings: &Settings,
         start: StartAt,
     ) -> Result<(GameHandle, PathBuf, String)> {
+        // Launches can share installer caches, and a new copy snapshots the instance's mods.
+        let _content = self.content_lock();
         let tracker = Mutex::new(LaunchProgress::new(LaunchSteps::from_instance(instance)));
         let progress = |p: ProgressInfo| {
             let percent = tracker
@@ -466,9 +470,11 @@ impl Tasks {
             copy: start.copy,
             quick_play: start.quick_play,
         };
-        let plan = launch::prepare(&req, &progress)?;
+        let prepared = launch::prepare_watched(&req, &progress)?;
+        let log_file = prepared.plan.log_file.clone();
+        let java = prepared.plan.java_summary();
         let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
-        let game = launch::spawn(&plan, move |event| {
+        let game = prepared.spawn(move |event| {
             let _ = tx.send(Event::Game(id, event));
             ctx.request_repaint();
         })?;
@@ -485,7 +491,7 @@ impl Tasks {
                 ..ProgressSnapshot::default()
             },
         ));
-        Ok((game, plan.log_file.clone(), plan.java_summary()))
+        Ok((game, log_file, java))
     }
 
     pub fn login_device_code(&self, attempt: LoginAttempt, cancel: Arc<AtomicBool>) {
@@ -834,8 +840,18 @@ impl Tasks {
     pub fn mod_gallery_image(&self, url: String) {
         self.run(move |t| {
             let result = mods::gallery_image(&url, &t.dirs.cache().join("gallery"))
+                .map(Arc::from)
                 .map_err(|e| e.to_string());
             t.send(Event::ModGalleryImage(url, result));
+        });
+    }
+
+    pub fn hub_banner(&self, project: String) {
+        self.run(move |t| {
+            let url = mods::project_detail(&project)
+                .ok()
+                .and_then(|detail| detail.banner_url().map(str::to_owned));
+            t.send(Event::HubBanner(project, url));
         });
     }
 

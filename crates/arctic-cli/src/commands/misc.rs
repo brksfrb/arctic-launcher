@@ -89,6 +89,9 @@ pub fn update_check(ctx: &Ctx, beta: bool) -> Result<i32> {
 pub fn open(ctx: &Ctx, args: &OpenArgs) -> Result<i32> {
     let exe = launcher_exe()?;
     let mut cmd = Command::new(&exe);
+    if let Some(id) = &args.instance {
+        cmd.args(["--instance", id]);
+    }
     if let Some(v) = &args.launch {
         cmd.args(["--launch", v]);
     }

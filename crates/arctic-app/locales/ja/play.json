@@ -154,7 +154,7 @@
   "play.pick_an_instance_and_jump_in": "インスタンスを選んで飛び込みましょう。",
   "play.play": "プレイ",
   "play.play_2": "{name} をプレイ",
-  "play.play_another_copy_switch_account_first_for_a": "もう1つ起動する（2人目は先にアカウントを切り替えてください）",
+  "play.play_another_copy": "別のコピーを起動",
   "play.play_that_instance_once_first": "先にそのインスタンスを一度プレイしてください。",
   "play.play_with_the_arctic_client": "Arctic Clientでプレイ",
   "play.played_session_last.one": "{format_duration} プレイ · 1 回 · 最後 {value2}",

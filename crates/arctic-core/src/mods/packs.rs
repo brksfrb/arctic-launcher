@@ -5,8 +5,8 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use super::modrinth;
 use super::resolve::{self, Planned, Target};
+use super::{modrinth, pack_index};
 use crate::loaders::LoaderKind;
 use crate::net::{DownloadJob, download_all};
 use crate::{Error, Progress, ProgressInfo, Result};
@@ -67,6 +67,28 @@ pub struct Pack {
 pub struct InstalledPack {
     pub file_name: String,
     pub used_fallback: bool,
+    kind: PackKind,
+    dependencies: Vec<String>,
+}
+
+impl InstalledPack {
+    /// Enable resource-pack dependencies below the pack in the same options edit.
+    pub fn activate(&self, game_dir: &Path, game: &str) -> Result<()> {
+        if self.dependencies.is_empty() {
+            return set_active(self.kind, game_dir, game, &self.file_name, true);
+        }
+        let _reservation = reserve_for_edit(game_dir)?;
+        let names: Vec<&str> = self
+            .dependencies
+            .iter()
+            .map(String::as_str)
+            .chain(std::iter::once(self.file_name.as_str()))
+            .collect();
+        for name in &names {
+            pack_path(self.kind, game_dir, name)?;
+        }
+        set_resource_packs(game_dir, game, &names, true)
+    }
 }
 
 /// Prefer an exact game version, then the newest file for these pack loaders,
@@ -205,32 +227,47 @@ fn download_version(
     game_dir: &Path,
     progress: Progress,
 ) -> Result<InstalledPack> {
-    let job = download_job(version, &game_dir.join(kind.folder()))?;
+    download_versions(
+        std::iter::once(version),
+        &game_dir.join(kind.folder()),
+        progress,
+    )?;
     let file_name = version
         .primary_file()
         .expect("validated file")
         .filename
         .clone();
-    download_all("Downloading", vec![job], progress)?;
     Ok(InstalledPack {
         file_name,
         used_fallback,
+        kind,
+        dependencies: Vec::new(),
     })
 }
 
-fn download_job(version: &modrinth::Version, dest: &Path) -> Result<DownloadJob> {
+fn prepare_archive(
+    version: &modrinth::Version,
+    dir: &Path,
+) -> Result<(DownloadJob, pack_index::PackFile)> {
     let file = version
         .primary_file()
         .ok_or_else(|| Error::Other("it has no file to download".into()))?;
     super::files::check_pack_name(&file.filename)?;
-    Ok(DownloadJob {
-        url: file.url.clone(),
-        dest: dest.join(&file.filename),
-        sha1: file.hashes.sha1.clone(),
-        size: file.size,
-        lzma: None,
-        md5: None,
-    })
+    Ok((
+        DownloadJob {
+            url: file.url.clone(),
+            dest: dir.join(&file.filename),
+            sha1: file.hashes.sha1.clone(),
+            size: file.size,
+            lzma: None,
+            md5: None,
+        },
+        pack_index::PackFile {
+            project_id: version.project_id.clone(),
+            file_name: file.filename.clone(),
+            sha1: file.hashes.sha1.clone(),
+        },
+    ))
 }
 
 /// Install the selected archive and the required Modrinth archives that go with it.
@@ -256,16 +293,21 @@ pub fn install_with_dependencies(
         .filename
         .clone();
     download_archives(&plan, &dest, progress)?;
-    if selected.kind == PackKind::Resource {
-        for dep in plan.iter().skip(1).rev() {
-            if let Some(file) = dep.version.primary_file() {
-                set_active(selected.kind, game_dir, &file.filename, true)?;
-            }
-        }
-    }
+    let dependencies = if selected.kind == PackKind::Resource {
+        plan.iter()
+            .skip(1)
+            .rev()
+            .filter_map(|dep| dep.version.primary_file())
+            .map(|file| file.filename.clone())
+            .collect()
+    } else {
+        Vec::new()
+    };
     Ok(InstalledPack {
         file_name,
         used_fallback: selected.other_game,
+        kind: selected.kind,
+        dependencies,
     })
 }
 
@@ -300,22 +342,55 @@ pub(super) fn plan_archives(
 }
 
 pub(super) fn download_archives(plan: &[Planned], dest: &Path, progress: Progress) -> Result<()> {
-    let mut jobs = plan
-        .iter()
+    download_versions(plan.iter().map(|planned| &planned.version), dest, progress)
+}
+
+fn download_versions<'a>(
+    versions: impl DoubleEndedIterator<Item = &'a modrinth::Version>,
+    dest: &Path,
+    progress: Progress,
+) -> Result<()> {
+    let mut plan = versions
         .rev()
-        .map(|planned| download_job(&planned.version, dest))
+        .map(|version| prepare_archive(version, dest))
         .collect::<Result<Vec<_>>>()?;
     // Validate every file first. A failed dependency download should not leave a new root.
-    let root = jobs.pop().expect("resolved root");
-    if !jobs.is_empty() {
-        download_all("Downloading", jobs, progress)?;
+    let (root, root_entry) = plan.pop().expect("resolved root");
+    let _lock = pack_index::lock(dest)?;
+    let mut seen = HashSet::new();
+    let (jobs, mut entries): (Vec<_>, Vec<_>) = plan
+        .into_iter()
+        .filter(|(job, _)| seen.insert(job.dest.clone()))
+        .unzip();
+    if !jobs.is_empty()
+        && let Err(error) = download_all("Downloading", jobs, progress)
+    {
+        // Some dependencies may have finished before the first download error.
+        entries.retain(|entry| {
+            entry.sha1.as_ref().is_some_and(|sha1| {
+                crate::net::sha1_file(&dest.join(&entry.file_name))
+                    .is_ok_and(|actual| actual.eq_ignore_ascii_case(sha1))
+            })
+        });
+        if !entries.is_empty() {
+            pack_index::record(dest, entries)?;
+        }
+        return Err(error);
     }
-    download_all("Downloading", vec![root], progress)
+    let result = download_all("Downloading", vec![root], progress);
+    if result.is_ok() {
+        entries.push(root_entry);
+    }
+    if entries.is_empty() {
+        return result;
+    }
+    let recorded = pack_index::record(dest, entries);
+    result.and(recorded)
 }
 
 /// Packs in the instance (files and unpacked folders), by name.
-pub fn list(kind: PackKind, game_dir: &Path) -> Vec<Pack> {
-    let active = active_names(kind, game_dir);
+pub fn list(kind: PackKind, game_dir: &Path, game: &str) -> Vec<Pack> {
+    let active = active_names(kind, game_dir, game);
     let mut out: Vec<Pack> = std::fs::read_dir(game_dir.join(kind.folder()))
         .map(|entries| {
             entries
@@ -338,9 +413,10 @@ pub fn list(kind: PackKind, game_dir: &Path) -> Vec<Pack> {
 }
 
 /// Delete a pack (and switch it off).
-pub fn remove(kind: PackKind, game_dir: &Path, file_name: &str) -> Result<()> {
+pub fn remove(kind: PackKind, game_dir: &Path, game: &str, file_name: &str) -> Result<()> {
+    let _reservation = reserve_for_edit(game_dir)?;
     let path = pack_path(kind, game_dir, file_name)?;
-    set_active(kind, game_dir, file_name, false)?;
+    update_active(kind, game_dir, game, file_name, false)?;
     if path.is_dir() {
         std::fs::remove_dir_all(&path).map_err(|e| Error::io(&path, e))
     } else {
@@ -350,16 +426,39 @@ pub fn remove(kind: PackKind, game_dir: &Path, file_name: &str) -> Result<()> {
 
 /// Switch a pack on or off for the game. Resource packs stack (the newest
 /// one switched on wins); only one shader pack is used at a time.
-pub fn set_active(kind: PackKind, game_dir: &Path, file_name: &str, on: bool) -> Result<()> {
+pub fn set_active(
+    kind: PackKind,
+    game_dir: &Path,
+    game: &str,
+    file_name: &str,
+    on: bool,
+) -> Result<()> {
+    let _reservation = reserve_for_edit(game_dir)?;
     pack_path(kind, game_dir, file_name)?;
-    if crate::sharing::client::in_use(game_dir) {
-        return Err(Error::Other(
-            "Minecraft is running from this instance; close it first (it saves its own settings when it quits)"
-                .into(),
-        ));
+    update_active(kind, game_dir, game, file_name, on)
+}
+
+fn reserve_for_edit(game_dir: &Path) -> Result<std::fs::File> {
+    if let Some(reservation) = crate::launch::session::try_reserve_dir(game_dir)?
+        && !crate::sharing::client::in_use(game_dir)
+    {
+        return Ok(reservation);
     }
+    Err(Error::Other(
+        "Minecraft is running from this instance; close it first (it saves its own settings when it quits)"
+            .into(),
+    ))
+}
+
+fn update_active(
+    kind: PackKind,
+    game_dir: &Path,
+    game: &str,
+    file_name: &str,
+    on: bool,
+) -> Result<()> {
     match kind {
-        PackKind::Resource => set_resource_pack(game_dir, file_name, on),
+        PackKind::Resource => set_resource_packs(game_dir, game, &[file_name], on),
         PackKind::Shader => set_shader(game_dir, file_name, on),
     }
 }
@@ -378,11 +477,20 @@ fn pack_path(kind: PackKind, game_dir: &Path, file_name: &str) -> Result<PathBuf
     }
 }
 
-fn active_names(kind: PackKind, game_dir: &Path) -> Vec<String> {
+fn active_names(kind: PackKind, game_dir: &Path, game: &str) -> Vec<String> {
     match kind {
         PackKind::Resource => resource_packs(&read(&game_dir.join(OPTIONS)))
+            .ok()
+            .flatten()
+            .unwrap_or_default()
             .into_iter()
-            .filter_map(|p| p.strip_prefix("file/").map(str::to_owned))
+            .filter_map(|p| {
+                if uses_bare_pack_names(game) {
+                    (!p.contains('/')).then_some(p)
+                } else {
+                    p.strip_prefix("file/").map(str::to_owned)
+                }
+            })
             .collect(),
         PackKind::Shader => {
             let props = read(&game_dir.join(IRIS_CONFIG));
@@ -406,31 +514,61 @@ fn read(path: &Path) -> String {
 }
 
 /// The `resourcePacks:[...]` list from options.txt.
-fn resource_packs(options: &str) -> Vec<String> {
+fn resource_packs(options: &str) -> Result<Option<Vec<String>>> {
     options
         .lines()
-        .find_map(|l| l.strip_prefix(RESOURCE_PACKS_KEY))
-        .and_then(|list| serde_json::from_str::<Vec<String>>(list.trim()).ok())
-        .unwrap_or_else(|| vec!["vanilla".into()])
+        .rev()
+        .find_map(|line| line.strip_prefix(RESOURCE_PACKS_KEY))
+        .map(serde_json::from_str)
+        .transpose()
+        .map_err(Error::from)
 }
 
-fn set_resource_pack(game_dir: &Path, file_name: &str, on: bool) -> Result<()> {
+// The file repository introduced in 1.13 uses file/ IDs. Older releases
+// match the saved selection directly against the filename.
+fn uses_bare_pack_names(game: &str) -> bool {
+    game.strip_prefix("1.")
+        .and_then(|version| version.split(['.', '-']).next()?.parse::<u32>().ok())
+        .is_some_and(|minor| minor < 13)
+}
+
+fn set_resource_packs(game_dir: &Path, game: &str, file_names: &[&str], on: bool) -> Result<()> {
     let path = game_dir.join(OPTIONS);
-    let options = read(&path);
-    let entry = format!("file/{file_name}");
-    let mut packs: Vec<String> = resource_packs(&options)
-        .into_iter()
-        .filter(|p| *p != entry)
-        .collect();
-    if on {
-        // Last in the list is on top.
-        packs.push(entry);
+    let options = match std::fs::read_to_string(&path) {
+        Ok(options) => options,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && !on => return Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(Error::io(&path, e)),
+    };
+    let bare_names = uses_bare_pack_names(game);
+    let mut packs = resource_packs(&options)?.unwrap_or_else(|| {
+        if bare_names {
+            Vec::new()
+        } else {
+            vec!["vanilla".into()]
+        }
+    });
+    let count = packs.len();
+    for &file_name in file_names {
+        let entry = format!("file/{file_name}");
+        packs.retain(|p| p != &entry && !(bare_names && p == file_name));
+        if on {
+            // Last in the list is on top.
+            packs.push(if bare_names {
+                file_name.to_owned()
+            } else {
+                entry
+            });
+        }
     }
-    let line = format!(
-        "{RESOURCE_PACKS_KEY}{}",
-        serde_json::to_string(&packs).unwrap_or_else(|_| "[]".into())
-    );
-    write_setting(&path, &options, RESOURCE_PACKS_KEY, &line)
+    if !on && packs.len() == count {
+        return Ok(());
+    }
+    let line = format!("{RESOURCE_PACKS_KEY}{}", serde_json::to_string(&packs)?);
+    crate::storage::write_atomic(
+        &path,
+        replace_or_add(&options, RESOURCE_PACKS_KEY, &line).as_bytes(),
+    )
 }
 
 fn set_shader(game_dir: &Path, file_name: &str, on: bool) -> Result<()> {
@@ -442,7 +580,7 @@ fn set_shader(game_dir: &Path, file_name: &str, on: bool) -> Result<()> {
     }
     let enabled = if on {
         "enableShaders=true"
-    } else if active_names(PackKind::Shader, game_dir).contains(&file_name.to_owned()) {
+    } else if active_names(PackKind::Shader, game_dir, "").contains(&file_name.to_owned()) {
         "enableShaders=false"
     } else {
         return Ok(());
@@ -452,10 +590,6 @@ fn set_shader(game_dir: &Path, file_name: &str, on: bool) -> Result<()> {
         std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
     }
     std::fs::write(&path, props).map_err(|e| Error::io(&path, e))
-}
-
-fn write_setting(path: &Path, text: &str, key: &str, line: &str) -> Result<()> {
-    std::fs::write(path, replace_or_add(text, key, line)).map_err(|e| Error::io(path, e))
 }
 
 /// `text` with the line starting `key` replaced by `line` (or added).
@@ -524,6 +658,41 @@ mod tests {
     }
 
     #[test]
+    fn single_and_dependency_installs_track_archives_already_on_disk() {
+        let game = tempfile::tempdir().unwrap();
+        let kind = PackKind::Resource;
+        let dir = game.path().join(kind.folder());
+        std::fs::create_dir(&dir).unwrap();
+        let cached = |name: &str| {
+            let path = dir.join(format!("{name}.zip"));
+            std::fs::write(&path, name).unwrap();
+            let mut version = version(name, "release", "2026", "1.21.4", "minecraft");
+            version.project_id = name.to_owned();
+            version.files[0].hashes.sha1 = Some(crate::net::sha1_file(&path).unwrap());
+            version.files[0].size = Some(name.len() as u64);
+            version
+        };
+        let single = cached("single");
+        download_version(kind, &single, false, game.path(), &|_| {}).unwrap();
+        let plan = ["root", "dependency"].map(|name| Planned {
+            version: cached(name),
+            dependency: name == "dependency",
+        });
+        download_archives(&plan, &dir, &|_| {}).unwrap();
+
+        let expected = HashSet::from(["single".into(), "root".into(), "dependency".into()]);
+        assert_eq!(
+            pack_index::installed_by_name(kind.project_type(), game.path(), &[]),
+            expected
+        );
+        std::fs::rename(dir.join("dependency.zip"), dir.join("renamed.zip")).unwrap();
+        assert_eq!(
+            pack_index::PackScan::default().installed(kind.project_type(), game.path(), &[]),
+            expected
+        );
+    }
+
+    #[test]
     fn selected_pack_targets_the_exact_file_and_content_folder() {
         for (kind, loader, folder) in [
             (PackKind::Resource, "minecraft", "resourcepacks"),
@@ -532,7 +701,7 @@ mod tests {
         ] {
             let selected = version("older", "beta", "2023", "1.21.4", loader);
             assert!(!check_selected_version(kind, &selected, "1.21.4", false).unwrap());
-            let job = download_job(
+            let (job, _) = prepare_archive(
                 &selected,
                 &Path::new("selected-instance").join(kind.folder()),
             )
@@ -728,16 +897,23 @@ mod tests {
             "fov:0.5\nresourcePacks:[\"vanilla\"]\nlang:en_us\n",
         )
         .unwrap();
-        set_active(PackKind::Resource, g.path(), "Faithful.zip", true).unwrap();
-        set_active(PackKind::Resource, g.path(), "Other.zip", true).unwrap();
+        set_active(PackKind::Resource, g.path(), "1.21.4", "Faithful.zip", true).unwrap();
+        set_active(PackKind::Resource, g.path(), "1.21.4", "Other.zip", true).unwrap();
         let options = read(&g.path().join(OPTIONS));
         assert!(
             options
                 .contains("resourcePacks:[\"vanilla\",\"file/Faithful.zip\",\"file/Other.zip\"]")
         );
         assert!(options.contains("fov:0.5") && options.contains("lang:en_us"));
-        set_active(PackKind::Resource, g.path(), "Faithful.zip", false).unwrap();
-        let on: Vec<_> = list(PackKind::Resource, g.path())
+        set_active(
+            PackKind::Resource,
+            g.path(),
+            "1.21.4",
+            "Faithful.zip",
+            false,
+        )
+        .unwrap();
+        let on: Vec<_> = list(PackKind::Resource, g.path(), "1.21.4")
             .into_iter()
             .filter(|p| p.active)
             .map(|p| p.file_name)
@@ -746,22 +922,119 @@ mod tests {
     }
 
     #[test]
+    fn legacy_pack_toggle_uses_bare_names_and_repairs_a_previous_toggle() {
+        let g = game();
+        let path = g.path().join(OPTIONS);
+        let kind = PackKind::Resource;
+        std::fs::write(
+            &path,
+            "resourcePacks:[\"Faithful.zip\",\"file/Other.zip\"]\n",
+        )
+        .unwrap();
+        assert!(list(kind, g.path(), "1.8.9")[0].active);
+        assert!(!list(kind, g.path(), "1.8.9")[1].active);
+        set_active(kind, g.path(), "1.8.9", "Other.zip", true).unwrap();
+        assert_eq!(
+            read(&path),
+            "resourcePacks:[\"Faithful.zip\",\"Other.zip\"]\n"
+        );
+        assert!(list(kind, g.path(), "1.8.9").iter().all(|pack| pack.active));
+        set_active(kind, g.path(), "1.8.9", "Faithful.zip", false).unwrap();
+        assert_eq!(read(&path), "resourcePacks:[\"Other.zip\"]\n");
+
+        std::fs::remove_file(&path).unwrap();
+        set_active(kind, g.path(), "1.12.2", "Faithful.zip", true).unwrap();
+        assert_eq!(read(&path), "resourcePacks:[\"Faithful.zip\"]\n");
+        std::fs::remove_file(&path).unwrap();
+        set_active(kind, g.path(), "1.13.2", "Faithful.zip", true).unwrap();
+        assert_eq!(
+            read(&path),
+            "resourcePacks:[\"vanilla\",\"file/Faithful.zip\"]\n"
+        );
+    }
+
+    #[test]
+    fn resource_pack_edit_preserves_unreadable_or_malformed_options() {
+        let g = game();
+        let path = g.path().join(OPTIONS);
+        for original in [
+            b"lang:en_us\nresourcePacks:[\"file/Other.zip\"\n".as_slice(),
+            b"lang:en_us\nresourcePacks:[\"file/\xe9t\xe9.zip\"]\n",
+        ] {
+            std::fs::write(&path, original).unwrap();
+            assert!(
+                set_active(PackKind::Resource, g.path(), "1.21.4", "Faithful.zip", true).is_err()
+            );
+            assert_eq!(std::fs::read(&path).unwrap(), original);
+        }
+    }
+
+    #[test]
+    fn cannot_edit_packs_while_a_watched_game_owns_the_folder() {
+        let g = game();
+        let path = g.path().join(OPTIONS);
+        let original = "resourcePacks:[\"vanilla\",\"file/Faithful.zip\"]\n";
+        std::fs::write(&path, original).unwrap();
+        let reservation = crate::launch::session::try_reserve_dir(g.path())
+            .unwrap()
+            .unwrap();
+        let kind = PackKind::Resource;
+        assert!(set_active(kind, g.path(), "1.21.4", "Other.zip", true).is_err());
+        assert!(remove(kind, g.path(), "1.21.4", "Faithful.zip").is_err());
+        assert_eq!(read(&path), original);
+        assert!(g.path().join("resourcepacks/Faithful.zip").is_file());
+        drop(reservation);
+        set_active(kind, g.path(), "1.21.4", "Other.zip", true).unwrap();
+    }
+
+    #[test]
+    fn discover_activates_the_whole_pack_stack_or_leaves_options_untouched() {
+        let g = game();
+        let options = g.path().join(OPTIONS);
+        let original = "resourcePacks:[\"vanilla\"]\n";
+        std::fs::write(&options, original).unwrap();
+        let mut installed = InstalledPack {
+            file_name: "Other.zip".into(),
+            used_fallback: false,
+            kind: PackKind::Resource,
+            dependencies: vec!["Faithful.zip".into(), "Missing.zip".into()],
+        };
+        assert!(installed.activate(g.path(), "1.21.4").is_err());
+        assert_eq!(read(&options), original);
+        installed.dependencies.pop();
+        installed.activate(g.path(), "1.21.4").unwrap();
+        assert_eq!(
+            read(&options),
+            "resourcePacks:[\"vanilla\",\"file/Faithful.zip\",\"file/Other.zip\"]\n"
+        );
+    }
+
+    #[test]
     fn one_shader_at_a_time_through_iris() {
         let g = game();
-        set_active(PackKind::Shader, g.path(), "BSL v8.2.zip", true).unwrap();
+        set_active(PackKind::Shader, g.path(), "1.21.4", "BSL v8.2.zip", true).unwrap();
         let props = read(&g.path().join(IRIS_CONFIG));
         assert!(props.contains("shaderPack=BSL v8.2.zip") && props.contains("enableShaders=true"));
-        assert!(list(PackKind::Shader, g.path())[0].active);
-        set_active(PackKind::Shader, g.path(), "BSL v8.2.zip", false).unwrap();
-        assert!(!list(PackKind::Shader, g.path())[0].active);
+        assert!(list(PackKind::Shader, g.path(), "1.21.4")[0].active);
+        set_active(PackKind::Shader, g.path(), "1.21.4", "BSL v8.2.zip", false).unwrap();
+        assert!(!list(PackKind::Shader, g.path(), "1.21.4")[0].active);
     }
 
     #[test]
     fn refuses_paths_and_missing_packs() {
         let g = game();
-        assert!(set_active(PackKind::Resource, g.path(), "../options.txt", true).is_err());
-        assert!(remove(PackKind::Resource, g.path(), "nope.zip").is_err());
-        remove(PackKind::Resource, g.path(), "Other.zip").unwrap();
-        assert_eq!(list(PackKind::Resource, g.path()).len(), 1);
+        assert!(
+            set_active(
+                PackKind::Resource,
+                g.path(),
+                "1.21.4",
+                "../options.txt",
+                true
+            )
+            .is_err()
+        );
+        assert!(remove(PackKind::Resource, g.path(), "1.21.4", "nope.zip").is_err());
+        remove(PackKind::Resource, g.path(), "1.21.4", "Other.zip").unwrap();
+        assert_eq!(list(PackKind::Resource, g.path(), "1.21.4").len(), 1);
     }
 }

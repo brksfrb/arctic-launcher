@@ -56,6 +56,8 @@ pub(super) struct SearchHit {
     #[serde(default)]
     pub icon_url: Option<String>,
     #[serde(default)]
+    pub featured_gallery: Option<String>,
+    #[serde(default)]
     pub categories: Vec<String>,
     #[serde(default, rename = "versions")]
     pub game_versions: Vec<String>,
@@ -81,6 +83,7 @@ impl SearchHit {
             downloads: self.downloads,
             follows: self.follows,
             icon_url: non_empty(self.icon_url),
+            featured_gallery: non_empty(self.featured_gallery),
             categories: self.categories,
             game_versions: self.game_versions,
         }

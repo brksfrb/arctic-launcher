@@ -8,6 +8,7 @@ import com.arcticlauncher.client.hud.Hud;
 import com.arcticlauncher.client.looks.Looks;
 import com.arcticlauncher.client.menu.Menus;
 import com.arcticlauncher.client.menu.TitleMenu;
+import com.arcticlauncher.client.notice.Notices;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Page;
 
@@ -226,6 +227,15 @@ public final class ArcticClient {
 
 	// ---- Hooks for adapters ----------------------------------------------------
 
+	private static final LauncherNotice LAUNCHER_NOTICE = new LauncherNotice(System.getProperty("arctic.launcher"));
+
+	/** Draw notices above the title screen's own artwork and buttons. */
+	public static void renderTitleNotices(Gfx g) {
+		com.arcticlauncher.client.gfx.Draw.fancy = config.fancy;
+		LAUNCHER_NOTICE.show(Notices::post);
+		Notices.render(g, style());
+	}
+
 	/** Draw the HUD over the game (skip while F1 or F3 is up). */
 	public static void renderHud(Gfx g) {
 		com.arcticlauncher.client.gfx.Draw.fancy = config.fancy;
@@ -259,6 +269,8 @@ public final class ArcticClient {
 			}
 		}
 		if (platform.inWorld()) {
+			// Quick Play can reach a world without drawing the title screen.
+			LAUNCHER_NOTICE.show(Notices::post);
 			if (!platform.hudHidden()) {
 				drawVoice(g);
 				PICKUPS.render(g, style());
