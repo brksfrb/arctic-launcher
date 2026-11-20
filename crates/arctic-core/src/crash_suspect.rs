@@ -226,8 +226,11 @@ struct Frame {
 }
 
 fn frame(line: &str) -> Option<Frame> {
+    parse_frame(line.trim_start().strip_prefix("at ")?)
+}
+
+fn parse_frame(rest: &str) -> Option<Frame> {
     static JAR: OnceLock<Regex> = OnceLock::new();
-    let rest = line.trim_start().strip_prefix("at ")?;
     let (token, tail) = rest.split_once('(')?;
     let mut parts: Vec<&str> = token.split('/').collect();
     let call = parts.pop()?;
@@ -384,6 +387,117 @@ fn arctic(id: &str) -> Suspect {
         .to_owned(),
         ours: true,
     }
+}
+
+pub(crate) struct HangCulprit<'a> {
+    pub mod_info: Suspect,
+    pub class: String,
+    pub method: String,
+    pub percent: u8,
+    pub sample: &'a str,
+}
+
+/// Find the one mod whose code appears in most of the frozen client-thread samples.
+pub(crate) fn hang_culprit<'a>(text: &'a str, mods_dir: Option<&Path>) -> Option<HangCulprit<'a>> {
+    let snapshot = if let Some((_, snapshot)) = text.rsplit_once("---- logs/arctic-freezes/") {
+        let snapshot = snapshot.split("\n---- ").next()?;
+        // A finished freeze can establish a hang with the Windows exit code, but its
+        // samples may be from an earlier, recovered stall.
+        if snapshot
+            .lines()
+            .find(|l| l.starts_with("duration: "))
+            .is_some_and(|l| !l.ends_with(" (still frozen when written)"))
+        {
+            return None;
+        }
+        snapshot
+    } else {
+        // Uploaded reports can retain the samples even if the snapshot header was trimmed.
+        text
+    };
+    let (_, rows) =
+        snapshot.rsplit_once("== Where the time went (frames present in the most samples) ==")?;
+    let mut frames = rows
+        .lines()
+        .skip(1)
+        .take_while(|l| !l.trim().is_empty() && !l.starts_with("== "))
+        .filter_map(|line| {
+            let (percent, entry) = line.trim().split_once('%')?;
+            let percent: u8 = percent.parse().ok()?;
+            if !(60..=100).contains(&percent) {
+                return None;
+            }
+            let frame = parse_frame(entry.trim())?;
+            if NOT_MODS.iter().any(|p| frame.class.starts_with(p))
+                || frame.class.starts_with("net.fabricmc.fabric.")
+            {
+                return None;
+            }
+            Some((frame, percent, line.trim()))
+        })
+        .peekable();
+    frames.peek()?;
+    let mods = mods_dir.map(scan).unwrap_or_default();
+    let index = Index::new(&mods);
+    let startup = crate::crash::compact_mod_inventory(text, "");
+    let report = text
+        .split_once("---- full mod list (id version) ----")
+        .and_then(|(_, list)| list.split_once('\n'))
+        .map_or("", |(_, list)| list.split("\n---- ").next().unwrap_or(list));
+    let inventory: HashMap<_, _> = startup
+        .lines()
+        .chain(report.lines())
+        .filter_map(|line| line.split_once(' ').map(|(id, _)| (norm(id), id)))
+        .collect();
+    let mut culprit: Option<HangCulprit<'_>> = None;
+    for (frame, percent, sample) in frames {
+        let Some((package, _)) = frame.class.rsplit_once('.') else {
+            continue;
+        };
+        let mod_info = if frame.class.starts_with(POLARIUM_PACKAGE) {
+            arctic("polarium")
+        } else if frame.class.starts_with(ARCTIC_PACKAGE) {
+            arctic("arctic")
+        } else if let Some(i) = index.owner(&frame) {
+            let m = &mods[i];
+            if BASE_IDS.contains(&m.id.as_str()) {
+                continue;
+            }
+            Suspect {
+                id: m.id.clone(),
+                name: m.name.clone(),
+                ours: is_arctic_id(&m.id),
+            }
+        } else {
+            // Match a complete package component to an installed id, falling back to the package.
+            let id = package
+                .rsplit('.')
+                .find_map(|p| inventory.get(&norm(p)).copied())
+                .unwrap_or(package);
+            Suspect {
+                id: id.to_owned(),
+                name: id.to_owned(),
+                ours: is_arctic_id(id),
+            }
+        };
+        if let Some(best) = &culprit {
+            // Each number is a share of stacks containing the frame. The shares can overlap.
+            if best.mod_info.id != mod_info.id {
+                return None;
+            }
+            if percent <= best.percent {
+                continue;
+            }
+        }
+        culprit = Some(HangCulprit {
+            mod_info,
+            class: frame.class,
+            method: frame.method,
+            percent,
+            sample,
+        });
+    }
+    culprit
 }
 
 /// The mod to blame for the crash in `text`, if the evidence is clear.
