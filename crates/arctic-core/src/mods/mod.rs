@@ -128,6 +128,7 @@ pub struct ProjectHit {
     pub downloads: u64,
     pub follows: u64,
     pub icon_url: Option<String>,
+    pub featured_gallery: Option<String>,
     pub categories: Vec<String>,
     /// Minecraft versions tagged on the project's files.
     pub game_versions: Vec<String>,
@@ -179,6 +180,17 @@ pub struct ProjectDetail {
     pub gallery: Vec<GalleryImage>,
 }
 
+impl ProjectDetail {
+    /// The featured gallery thumbnail, or the first gallery thumbnail if none is featured.
+    pub fn banner_url(&self) -> Option<&str> {
+        self.gallery
+            .iter()
+            .find(|image| image.featured)
+            .or_else(|| self.gallery.first())
+            .map(|image| image.url.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct GalleryImage {
     pub url: String,
@@ -207,9 +219,9 @@ pub fn project_detail(id: &str) -> Result<ProjectDetail> {
     Ok(project)
 }
 
-/// Gallery images share the URL-keyed disk cache, with a larger download limit.
+/// Gallery images use a URL-keyed disk cache with a larger download limit and a total size cap.
 pub fn gallery_image(url: &str, cache_dir: &Path) -> Result<Vec<u8>> {
-    files::cached_image(url, cache_dir, 20 * 1024 * 1024)
+    files::cached_image(url, cache_dir, 20 * 1024 * 1024, Some(256 * 1024 * 1024))
 }
 
 /// A Modrinth mod installed into an instance (from `mods.json`).

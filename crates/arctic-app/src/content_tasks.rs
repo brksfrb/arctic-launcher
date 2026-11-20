@@ -310,6 +310,7 @@ mod tests {
                     downloads: 0,
                     follows: 0,
                     icon_url: None,
+                    featured_gallery: None,
                     categories: vec![],
                     game_versions: vec![],
                 })

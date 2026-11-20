@@ -12,6 +12,7 @@ use eframe::egui::{self, RichText};
 
 use super::Load;
 use super::browse::compact;
+use super::hub_cards::HubBanners;
 use super::mods_page::mod_icon;
 use crate::app::ArcticApp;
 use crate::art::icons::Icon;
@@ -186,6 +187,7 @@ pub struct HubUi {
     pub section: Section,
     /// The instance supplying search defaults and the default install target.
     pub target: Option<String>,
+    pub(super) banners: HubBanners,
     tags: Option<Load<Arc<Tags>>>,
     filters: [Filters; Section::ALL.len()],
     showing: Option<Section>,
@@ -548,18 +550,24 @@ impl ArcticApp {
             Some(Ok(page)) => page.hits.clone(),
         };
         let target = self.hub_target();
-        let installed = self.hub_installed(target.as_ref());
-        theme::card(p).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            for hit in &hits {
-                if section == Section::Modpacks {
-                    self.pack_row(ui, hit);
-                } else if let Some(target) = &target {
-                    self.hub_row(ui, section, target, hit, &installed);
-                }
-                ui.separator();
+        if let Some(kind) = section.pack_kind() {
+            if let Some(target) = &target {
+                self.hub_card_grid(ui, kind, target, &hits);
             }
-        });
+        } else {
+            let installed = self.hub_installed(target.as_ref());
+            theme::card(p).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                for hit in &hits {
+                    if section == Section::Modpacks {
+                        self.pack_row(ui, hit);
+                    } else if let Some(target) = &target {
+                        self.hub_row(ui, section, target, hit, &installed);
+                    }
+                    ui.separator();
+                }
+            });
+        }
         if let Some(from) = super::more_on_scroll(ui, p, &self.inst.search) {
             self.run_hub_search(from);
         }
@@ -600,7 +608,6 @@ impl ArcticApp {
         installed: &HashSet<String>,
     ) {
         let p = self.palette();
-        let kind = section.pack_kind();
         let game = self.pack_game(target);
         let mut open = false;
         widgets::row(ui, |ui| {
@@ -645,56 +652,72 @@ impl ArcticApp {
                     ));
                 }
                 ui.label(RichText::new(stats_line(hit)).small().color(p.muted));
-                if section == Section::Shaders
-                    && let Some(note) = self.shader_note(target)
-                {
-                    ui.label(RichText::new(note).small().color(p.accent));
-                }
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let busy = match kind {
-                    Some(_) => self.inst.packs.installing.contains(&hit.project_id),
-                    None => self.inst.installing.contains(&hit.project_id),
-                };
-                if busy {
-                    ui.spinner();
-                } else if ui
-                    .add_enabled_ui(self.inst.content.progress.is_none(), |ui| {
-                        widgets::button(ui, p, Some(Icon::Plus), t!("instances.install"), true)
-                    })
-                    .inner
-                    .clicked()
-                {
-                    self.pick_single_content(ui.ctx(), section.project_type(), hit, None, target);
-                }
+                self.hub_install_button(ui, section.project_type(), target, hit);
                 if section == Section::Mods && installed.contains(&hit.project_id) {
                     ui.label(RichText::new(t!("instances.installed")).color(p.accent));
                 }
             });
         });
         if open {
-            self.open_discover_project(ui.ctx(), target, hit, section.project_type(), kind);
+            self.open_discover_project(ui.ctx(), target, hit, section.project_type(), None);
+        }
+    }
+
+    pub(super) fn hub_install_button(
+        &mut self,
+        ui: &mut egui::Ui,
+        project_type: ProjectType,
+        target: &Instance,
+        hit: &ProjectHit,
+    ) {
+        let p = self.palette();
+        let installing = match project_type {
+            ProjectType::ResourcePack | ProjectType::Shader => &self.inst.packs.installing,
+            _ => &self.inst.installing,
+        };
+        if installing.contains(&hit.project_id) {
+            ui.spinner();
+        } else if ui
+            .add_enabled_ui(self.inst.content.progress.is_none(), |ui| {
+                widgets::button(ui, p, Some(Icon::Plus), t!("instances.install"), true)
+            })
+            .inner
+            .clicked()
+        {
+            self.pick_single_content(ui.ctx(), project_type, hit, None, target);
         }
     }
 }
 
 /// "1.2M downloads · 3.4K follows · Optimization, Utility".
 pub(super) fn stats_line(hit: &ProjectHit) -> String {
-    let mut parts = vec![
+    let counts = stats_counts(hit);
+    let tags = project_tags(hit);
+    if tags.is_empty() {
+        counts
+    } else {
+        format!("{counts} · {tags}")
+    }
+}
+
+pub(super) fn stats_counts(hit: &ProjectHit) -> String {
+    format!(
+        "{} · {}",
         tf!("instances.downloads", compact = compact(hit.downloads)),
         tf!("instances.hub.follows", compact = compact(hit.follows)),
-    ];
-    let categories: Vec<String> = hit
-        .categories
+    )
+}
+
+pub(super) fn project_tags(hit: &ProjectHit) -> String {
+    hit.categories
         .iter()
         .filter(|c| loader_kind(c).is_none())
         .take(3)
         .map(|c| discovery::pretty_name(c))
-        .collect();
-    if !categories.is_empty() {
-        parts.push(categories.join(", "));
-    }
-    parts.join(" · ")
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn loader_label(id: &str) -> String {
