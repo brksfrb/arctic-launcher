@@ -40,7 +40,7 @@ pub struct CosmeticCatalog {
 #[derive(Debug)]
 pub struct LoadedArcticState {
     pub look: ArcticState,
-    pub catalog: Result<CosmeticCatalog, String>,
+    pub catalog: std::result::Result<CosmeticCatalog, String>,
 }
 
 #[derive(Default)]
@@ -51,7 +51,7 @@ pub struct CatalogState {
 
 pub fn merge_catalog(
     previous: Option<CosmeticCatalog>,
-    result: Result<CosmeticCatalog, String>,
+    result: std::result::Result<CosmeticCatalog, String>,
 ) -> CatalogState {
     match result {
         Ok(catalog) => CatalogState {

@@ -552,7 +552,7 @@ impl ArcticApp {
     }
 
     fn without_cape_cosmetics(&self, ids: &mut Vec<String>) {
-        if let Some(state) = self.catalog_state() {
+        if let Some(state) = self.cosmetic_catalog() {
             ids.retain(|id| {
                 !state
                     .items
