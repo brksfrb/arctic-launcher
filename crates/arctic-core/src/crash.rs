@@ -5,6 +5,7 @@
 use std::{path::Path, sync::OnceLock};
 
 use regex::Regex;
+use sha2::{Digest, Sha256};
 
 use crate::launch::args::{CUSTOM_MAX_HEAP_SOURCE, heap_size_mb};
 
@@ -1006,7 +1007,9 @@ pub(crate) fn diagnose_with_java(
     java: Option<&str>,
     mods_dir: &Path,
 ) -> Option<Diagnosis> {
-    diagnose_rules(text, java, Some(mods_dir)).map(|(diagnosis, _)| diagnosis)
+    diagnose_rules(text, java)
+        .or_else(|| hang_diagnosis(tail_of(text, MAX_TEXT), Some(mods_dir)))
+        .map(|(diagnosis, _)| diagnosis)
 }
 
 const VANILLA_CRASH: &str = "[Arctic diagnostics] vanilla crash";
@@ -1554,11 +1557,15 @@ fn fabric_wrong_game(text: &str) -> Option<(Diagnosis, String)> {
 }
 
 fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
+    diagnose_crash_match(text, java).or_else(|| hang_diagnosis(tail_of(text, MAX_TEXT), None))
+}
+
+fn diagnose_crash_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
     if let Some(caller) = logged_vanilla_crash_save_failure(text) {
         let captured = captured_vanilla_crash(text);
         let (cause, matched) = captured
             .as_deref()
-            .and_then(|trace| diagnose_rules(trace, java, None))
+            .and_then(|trace| diagnose_rules(trace, java))
             .map_or_else(
                 || {
                     (
@@ -1571,14 +1578,10 @@ fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
             );
         return Some((vanilla_crash_diagnosis(text, cause), matched));
     }
-    diagnose_rules(text, java, None)
+    diagnose_rules(text, java)
 }
 
-fn diagnose_rules(
-    text: &str,
-    java: Option<&str>,
-    mods_dir: Option<&Path>,
-) -> Option<(Diagnosis, String)> {
+fn diagnose_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
     if let Some(fatal) = java_fatal_diagnosis(text) {
         return Some(fatal);
     }
@@ -1588,11 +1591,7 @@ fn diagnose_rules(
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
     }
-    let start = text.len().saturating_sub(MAX_TEXT);
-    let start = (start..text.len())
-        .find(|&i| text.is_char_boundary(i))
-        .unwrap_or(0);
-    let text = &text[start..];
+    let text = tail_of(text, MAX_TEXT);
 
     if let Some(quilt) = quilt_load_error(text) {
         return Some(quilt);
@@ -1619,7 +1618,7 @@ fn diagnose_rules(
         return Some(wrong_game);
     }
 
-    diagnose_log_rules(text, java).or_else(|| hang_diagnosis(text, mods_dir))
+    diagnose_log_rules(text, java)
 }
 
 fn diagnose_log_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
@@ -1704,6 +1703,90 @@ pub(crate) fn runtime_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
     ))
 }
 
+pub(crate) fn latest_freeze_snapshot(text: &str) -> &str {
+    text.rsplit_once("---- logs/arctic-freezes/")
+        .map_or(text, |(_, snapshot)| {
+            snapshot.split("\n---- ").next().unwrap_or(snapshot)
+        })
+}
+
+pub(crate) fn freeze_hot_frames(snapshot: &str) -> impl Iterator<Item = (u8, &str, &str)> {
+    const HEADING: &str = "== Where the time went (frames present in the most samples) ==";
+    snapshot
+        .rsplit_once(HEADING)
+        .into_iter()
+        .flat_map(|(_, rows)| {
+            rows.lines()
+                .skip(1)
+                .take_while(|line| !line.trim().is_empty() && !line.starts_with("== "))
+        })
+        .filter_map(|line| {
+            let (percent, frame) = line.trim().split_once('%')?;
+            Some((percent.parse().ok()?, frame.trim(), line.trim()))
+        })
+}
+
+fn freeze_frame(entry: &str) -> Option<&str> {
+    let (call, location) = entry.split_once('(')?;
+    location.split_once(')')?;
+    // Hidden lambda classes can carry a process-specific address after a slash.
+    if call.contains("$$Lambda") || call.contains("/0x") {
+        return None;
+    }
+    let call = call.rsplit('/').next()?;
+    let (class, _) = call.rsplit_once('.')?;
+    if ["java.", "javax.", "jdk.", "sun.", "com.sun."]
+        .iter()
+        .any(|prefix| class.starts_with(prefix))
+        || matches!(
+            class,
+            "net.minecraft.class_1255"
+                | "net.minecraft.util.thread.ThreadExecutor"
+                | "net.minecraft.util.thread.BlockableEventLoop"
+        )
+        || !call
+            .chars()
+            .all(|c| c.is_alphanumeric() || "._$<>".contains(c))
+    {
+        return None;
+    }
+    Some(call)
+}
+
+fn freeze_group_frame<'a>(text: &'a str, snapshot: &'a str) -> Option<&'a str> {
+    let top = snapshot.lines().find_map(|line| {
+        line.strip_prefix("Arctic: game froze for ")?
+            .split_once(", mostly in ")
+            .map(|(_, frame)| frame)
+    });
+    let hot = freeze_hot_frames(snapshot).map(|(_, frame, _)| frame);
+    let stack = snapshot
+        .split_once("== Distinct client-thread stacks")
+        .into_iter()
+        .flat_map(|(_, stacks)| {
+            stacks
+                .lines()
+                .skip_while(|line| !line.starts_with('[') && !line.starts_with("== "))
+                .skip(1)
+                .map_while(|line| line.trim_start().strip_prefix("at "))
+        });
+    // The long-hang dump writes the client thread first, followed by the other threads.
+    let dump = text
+        .rsplit_once("[Arctic diagnostics] hang begin")
+        .into_iter()
+        .flat_map(|(_, dump)| {
+            dump.lines()
+                .skip_while(|line| !line.starts_with("[Arctic diagnostics] thread \""))
+                .skip(1)
+                .map_while(|line| line.trim_start().strip_prefix("at "))
+        });
+    top.into_iter()
+        .chain(hot)
+        .chain(stack)
+        .chain(dump)
+        .find_map(freeze_frame)
+}
+
 fn hang_diagnosis(text: &str, mods_dir: Option<&Path>) -> Option<(Diagnosis, String)> {
     if !freeze_evidence(text)
         || text.contains("---- Minecraft Crash Report ----")
@@ -1732,7 +1815,18 @@ fn hang_diagnosis(text: &str, mods_dir: Option<&Path>) -> Option<(Diagnosis, Str
             })
         })
         .unwrap_or("The run contains an unrecovered watchdog freeze.");
-    if let Some(culprit) = crate::crash_suspect::hang_culprit(text, mods_dir) {
+    let snapshot = latest_freeze_snapshot(text);
+    let short_menu_freeze = snapshot.contains("not in a world (menu/loading)")
+        || snapshot.contains("no world (menu/loading screen)");
+    // A first snapshot at about three seconds gives little evidence about who caused a menu stall.
+    let short_menu_freeze = short_menu_freeze
+        && snapshot.lines().any(|line| {
+            line.strip_prefix("duration: ")
+                .and_then(|duration| duration.split_once('s'))
+                .is_some_and(|(seconds, _)| seconds.parse::<f32>().is_ok_and(|s| s <= 4.0))
+        });
+    if !short_menu_freeze && let Some(culprit) = crate::crash_suspect::hang_culprit(text, mods_dir)
+    {
         let owner = if culprit.mod_info.ours {
             "This is an Arctic bug."
         } else {
@@ -1786,8 +1880,22 @@ fn hang_diagnosis(text: &str, mods_dir: Option<&Path>) -> Option<(Diagnosis, Str
             format!("{summary}\nmatched: {}", &memory[0]),
         ))
     } else {
+        let create_world = short_menu_freeze
+            && snapshot.contains("(still frozen when written)")
+            && freeze_hot_frames(snapshot).any(|(percent, frame, _)| {
+                percent >= 60
+                    && freeze_frame(frame).is_some_and(|call| {
+                        call.starts_with("net.minecraft.class_525.")
+                            || call.contains(".CreateWorldScreen.")
+                    })
+            });
+        let title = if create_world {
+            "The game was closed while the Create World screen was loading"
+        } else {
+            "The game froze and was closed"
+        };
         Some((
-            Diagnosis::new("The game froze and was closed", summary, Vec::new()),
+            Diagnosis::new(title, summary, Vec::new()),
             summary.to_owned(),
         ))
     }
@@ -1905,14 +2013,6 @@ impl Report {
         let mods = compact_mod_inventory(&all, crash_report.unwrap_or(""));
         let mixin = mixin_failure_evidence(&all);
         let mut priority = String::new();
-        // Put the fatal exception before the log tail so summary consumers cannot pick an
-        // earlier handled metadata warning. Keep the original warnings in the log for context.
-        if let Some(error) = first_error(&all, crash_report) {
-            priority.push_str(&format!(
-                "\n---- first error ----\n{}\n",
-                scrub(head_of(error, 2048), &Own::this_pc())
-            ));
-        }
         let diagnosis_text = format!(
             "{all}\n{}\n{}\n{}",
             crash_report
@@ -1922,11 +2022,45 @@ impl Report {
             java.unwrap_or("")
         );
         // Keep the exact triggering line even when it falls outside the uploaded log tail.
-        let diagnosis = diagnose_match(&diagnosis_text, java);
+        let crash = diagnose_crash_match(&diagnosis_text, java);
+        let diagnosis_tail = tail_of(&diagnosis_text, MAX_TEXT);
+        let watchdog = if crash.is_none() {
+            hang_diagnosis(diagnosis_tail, None)
+        } else {
+            None
+        };
+        let freeze_frame = if watchdog.is_some() && title != SAVE_FAILED_TITLE {
+            freeze_group_frame(diagnosis_tail, latest_freeze_snapshot(diagnosis_tail))
+        } else {
+            None
+        };
+        let diagnosis = crash.or(watchdog);
         let failed_save = title == SAVE_FAILED_TITLE
             || diagnosis
                 .as_ref()
                 .is_some_and(|(d, _)| d.title == SAVE_FAILED_TITLE);
+        if let Some(frame) = freeze_frame {
+            // The server groups by the first Error: line or exception and strips digits before
+            // hashing. Encode the frame with letters so intermediary class/method numbers survive.
+            let signature: String = Sha256::digest(frame.as_bytes())[..8]
+                .iter()
+                .flat_map(|byte| {
+                    [
+                        char::from(b'a' + (byte >> 4)),
+                        char::from(b'a' + (byte & 15)),
+                    ]
+                })
+                .collect();
+            priority.push_str(&format!("\nError: Watchdog freeze at exit [{signature}]\n"));
+        }
+        // Put the fatal exception before the log tail so summary consumers cannot pick an
+        // earlier handled metadata warning. Keep the original warnings in the log for context.
+        if let Some(error) = first_error(&all, crash_report) {
+            priority.push_str(&format!(
+                "\n---- first error ----\n{}\n",
+                scrub(head_of(error, 2048), &Own::this_pc())
+            ));
+        }
         if let Some((diagnosis, matched)) = diagnosis {
             priority.push_str(&format!(
                 "\n---- diagnosis ----\n{}\nmatched: {}\n",
@@ -1974,10 +2108,14 @@ impl Report {
         let remaining = (47 * 1024usize).saturating_sub(priority.len() + 512);
         let skip = lines.len().saturating_sub(REPORT_LOG_LINES);
         let tail = lines[skip..].join("\n");
-        // The first-exceptions section takes its room out of the tail.
+        // Preserve the latest bounded snapshot when earlier, handled errors fill their section.
+        let freeze_bytes = freeze_frame
+            .and_then(|_| tail.rfind("---- logs/arctic-freezes/"))
+            .map_or(0, |start| (tail.len() - start).min(REPORT_LOG_BYTES));
         let tail_bytes = REPORT_LOG_BYTES
             .saturating_sub(early.len())
-            .max(REPORT_LOG_BYTES / 4);
+            .max(REPORT_LOG_BYTES / 4)
+            .max(freeze_bytes);
         let mut text = tail_of(&tail, tail_bytes).to_owned();
         text.push_str("\n\n---- initial output ----\n");
         text.push_str(head_of(&all, 2 * 1024));
@@ -2577,6 +2715,94 @@ pub fn scrub(text: &str, own: &Own) -> String {
 mod tests {
     const VANILLA_EXIT_398: &str = include_str!("../tests/fixtures/crash-398-vanilla-exit.log");
     const HANG_436: &str = include_str!("../tests/fixtures/crash-436-customrecipe-hang.log");
+    const FREEZE_440: &str = include_str!("../tests/fixtures/crash-440-create-world-freeze.log");
+
+    #[test]
+    fn create_world_freeze_groups_by_the_client_call_site() {
+        let upload = |snapshot: &str| {
+            Report::build(
+                "1.21.11",
+                "Fabric",
+                "",
+                &[
+                    "[15:57:49] [Download-2/ERROR] Failed to fetch user properties",
+                    "    com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+                    "    java.io.IOException: unrelated background error",
+                    "---- logs/arctic-freezes/freeze-test.txt ----",
+                    snapshot,
+                ],
+                &[],
+                None,
+                Some("exit code -805306369 (0xCFFFFFFF)"),
+            )
+        };
+        fn fingerprint_input(report: &Report) -> &str {
+            // The server reads Error: lines before falling back to the title.
+            let line = report.log.lines().find(|line| !line.is_empty()).unwrap();
+            assert!(line.starts_with("Error: Watchdog freeze at exit ["));
+            assert!(!line.contains(|c: char| c.is_ascii_digit()));
+            line
+        }
+        let report = upload(FREEZE_440);
+        assert_eq!(
+            report.title,
+            "The game was closed while the Create World screen was loading"
+        );
+        assert_eq!(
+            freeze_group_frame(FREEZE_440, FREEZE_440),
+            Some("net.minecraft.class_525.method_64244")
+        );
+        let repeat = FREEZE_440
+            .replace("3c4e4871", "abcdef12")
+            .replace("class_525.java:374", "class_525.java:375")
+            .replace("    at knot//", "    at app//")
+            .replace(
+                "100%  knot//net.minecraft.class_525",
+                "100%  app//net.minecraft.class_525",
+            );
+        assert_eq!(
+            fingerprint_input(&report),
+            fingerprint_input(&upload(&repeat))
+        );
+
+        let other_call = FREEZE_440.replace("method_64244", "method_64245");
+        let driver_hang = "Arctic: game froze for 3.0s, mostly in org.lwjgl.opengl.GL20C.nglGetProgramiv(Native Method)\nduration: 3.00s (still frozen when written)\n";
+        for different in [other_call.as_str(), driver_hang] {
+            assert_ne!(
+                fingerprint_input(&report),
+                fingerprint_input(&upload(different))
+            );
+        }
+    }
+
+    #[test]
+    fn brief_menu_wait_does_not_attribute_the_freeze_to_arctic() {
+        let snapshot = FREEZE_440.replace(
+            "knot//net.minecraft.class_437.method_25423(class_437.java:326)",
+            "knot//com.arcticlauncher.client.Example.open(Example.java:12)",
+        );
+        let diagnosis = diagnose(&snapshot).unwrap();
+        assert!(diagnosis.title.contains("Create World"));
+        assert!(diagnosis.mods.is_empty());
+        assert!(!diagnosis.detail.contains("Arctic bug"));
+
+        let fatal = "Exception in thread \"Render thread\" java.lang.IllegalStateException: crashed\n    at example.Game.stop(Game.java:42)";
+        let report = Report::build(
+            "1.21.11",
+            "Fabric",
+            "Crash",
+            &[FREEZE_440, fatal],
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(report.title, "Crash");
+        assert!(
+            report
+                .log
+                .starts_with("\n---- first error ----\njava.lang.IllegalStateException: crashed")
+        );
+    }
 
     #[test]
     fn report_436_names_the_frozen_mod_over_the_optional_mixin_warning() {
