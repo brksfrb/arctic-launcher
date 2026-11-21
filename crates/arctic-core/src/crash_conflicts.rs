@@ -566,7 +566,9 @@ fn clash_mattered(text: &str, c: &Conflict, mods: &[InstalledMod]) -> bool {
 pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
     // The exit diagnosis already ran the rules on the captured throwable.
     if base.as_ref().is_some_and(|d| {
-        d.title == crate::crash::SAVE_FAILED_TITLE || d.title.ends_with(CONFIG_CORRUPT)
+        d.title == crate::crash::SAVE_FAILED_TITLE
+            || d.title == crate::crash_suspect::UNASSIGNED_ENTITY_TITLE
+            || d.title.ends_with(CONFIG_CORRUPT)
     }) {
         return base;
     }
@@ -1120,6 +1122,44 @@ mod tests {
     use std::io::Write;
 
     const REPORT_443: &str = include_str!("../tests/fixtures/crash-443-config.log");
+
+    #[test]
+    fn report_451_attributes_the_unassigned_entity_to_the_cutscene() {
+        let text = include_str!("../tests/fixtures/crash-451-unassigned-entity.log");
+        let dir = tempfile::tempdir().unwrap();
+        let d = diagnose_exit_in(text, -805306369, dir.path()).unwrap();
+        assert_eq!(
+            d.title,
+            "A mod created an entity without an ID (26.2+ change)"
+        );
+        assert_eq!(d.mods, ["Random Cutscene"]);
+        assert!(
+            d.detail
+                .contains("Update it for this Minecraft version or remove it")
+        );
+        assert_eq!(diagnose_in(text, dir.path()), Some(d.clone()));
+        assert_eq!(crate::crash::diagnose(text), Some(d.clone()));
+
+        let (log, report) = text.split_once("---- crash report ----\n").unwrap();
+        let lines: Vec<_> = log.lines().collect();
+        let uploaded = crate::crash::Report::build(
+            "26.3",
+            "Fabric",
+            "Iris crashed the game",
+            &lines,
+            &[],
+            Some(report),
+            None,
+        );
+        assert_eq!(uploaded.title, d.title);
+        assert!(uploaded.log.starts_with("\n---- first error ----\njava.lang.IllegalStateException: Tried to access entity ID before ID assignment\n"));
+        assert!(
+            uploaded
+                .log
+                .contains("Random Cutscene appears to have created the entity")
+        );
+        assert!(!uploaded.log.contains("---- first exceptions ----"));
+    }
 
     #[test]
     fn report_443_identifies_performants_config_through_the_kubejs_consequence() {
