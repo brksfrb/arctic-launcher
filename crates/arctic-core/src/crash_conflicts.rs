@@ -4,6 +4,7 @@
 
 use std::cmp::Ordering;
 use std::path::Path;
+use std::sync::OnceLock;
 
 use regex::Regex;
 
@@ -21,7 +22,7 @@ const KNOWN_FORKS: &[(&str, &str)] = &[("noisium", "noisiumed")];
 /// A mod found in the instance's mods folder (or in a crash report's mod list).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct InstalledMod {
-    /// The jar's file name; empty when read from a crash report.
+    /// The jar's file name, if available.
     pub file: String,
     pub id: String,
     pub name: String,
@@ -156,8 +157,7 @@ pub(crate) fn from_mods_toml(file: &str, text: &str) -> Option<InstalledMod> {
     })
 }
 
-/// The mods a crash report lists ("\t\tnoisium: Noisium 2.7.0+mc1.21-1.21.1"): ids, names and
-/// versions only. A fallback for when the instance's mods folder can't be read.
+/// Read Fabric's mod list and Forge's pipe-delimited `Mod List` table from a crash report.
 pub fn from_crash_report(text: &str) -> Vec<InstalledMod> {
     let Ok(re) = Regex::new(r"(?m)^\t+([a-z][a-z0-9_\-]*): (.+) (\S+)\r?$") else {
         return Vec::new();
@@ -169,6 +169,24 @@ pub fn from_crash_report(text: &str) -> Vec<InstalledMod> {
                 id: c[1].to_owned(),
                 name: c[2].to_owned(),
                 version: c[3].to_owned(),
+                ..InstalledMod::default()
+            });
+        }
+    }
+    static FORGE: OnceLock<Regex> = OnceLock::new();
+    let forge = FORGE.get_or_init(|| {
+        Regex::new(
+            r"(?m)^[\t ]+([^|\r\n]+\.jar) *\|([^|\r\n]+)\| *([a-z][a-z0-9_-]*) *\|([^|\r\n]+)\|",
+        )
+        .unwrap()
+    });
+    for c in forge.captures_iter(text) {
+        if !out.iter().any(|m| m.id == c[3]) {
+            out.push(InstalledMod {
+                file: c[1].trim().to_owned(),
+                name: c[2].trim().to_owned(),
+                id: c[3].to_owned(),
+                version: c[4].trim().to_owned(),
                 ..InstalledMod::default()
             });
         }
@@ -304,7 +322,9 @@ fn mixin_failure(text: &str) -> Option<MixinFailure<'_>> {
         "MixinPreProcessorStandard|MixinApplicatorStandard|Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinTransformerError|InjectionError|{FABRIC_MIXIN_APPLY_FAILURE}|{MIXIN_APPLY_FAILURE}"
     ))
     .ok()?;
-    let text = if let Some(stack) = crate::crash::crash_exception(text) {
+    let text = if let Some(stack) =
+        crate::crash::crash_exception(text).filter(|s| !crate::crash::secondary_stack(s))
+    {
         // A handled startup mixin failure cannot explain an unrelated fatal exception.
         // Forge's {re:mixin, pl:mixin:APP:...} metadata merely lists applied mixins.
         let mixin_crash = stack.lines().any(|line| {
@@ -545,10 +565,9 @@ fn clash_mattered(text: &str, c: &Conflict, mods: &[InstalledMod]) -> bool {
 /// run before they can explain an otherwise unknown crash.
 pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
     // The exit diagnosis already ran the rules on the captured throwable.
-    if base
-        .as_ref()
-        .is_some_and(|d| d.title == crate::crash::SAVE_FAILED_TITLE)
-    {
+    if base.as_ref().is_some_and(|d| {
+        d.title == crate::crash::SAVE_FAILED_TITLE || d.title.ends_with(CONFIG_CORRUPT)
+    }) {
         return base;
     }
     if let Some((runtime, _)) = crate::crash::runtime_diagnosis(text) {
@@ -860,6 +879,136 @@ pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagno
     ))
 }
 
+pub(crate) const CONFIG_CORRUPT: &str = "config file is corrupt or empty";
+
+/// Use a config parser's cause stack. A fatal report limits the search to that exception,
+/// unless its exception explicitly points to an earlier mod-loading failure.
+pub(crate) fn diagnose_config<'a>(
+    text: &'a str,
+    mods: &[InstalledMod],
+) -> Option<(Diagnosis, &'a str)> {
+    use crate::crash_suspect::frame;
+
+    static PARSE: OnceLock<Regex> = OnceLock::new();
+    static FORGE: OnceLock<Regex> = OnceLock::new();
+    static CONFIG_PATH: OnceLock<Regex> = OnceLock::new();
+    let parse = PARSE.get_or_init(|| {
+        Regex::new(r"\b(?:com\.electronwill\.nightconfig\.core\.io\.ParsingException|JsonSyntaxException|MalformedJsonException|JsonParseException|TomlParseException|TomlParseError):").unwrap()
+    });
+    let forge = FORGE.get_or_init(|| {
+        Regex::new(r"Failed loading config file ([\w.-]+\.(?:toml|json5?)) of type (?:CLIENT|COMMON|STARTUP) for modid ([\w-]+)").unwrap()
+    });
+    let path = CONFIG_PATH.get_or_init(|| {
+        Regex::new(r#"(?i)(?:^|[/\\\s\x22'`=:(\[])(config[/\\](?:[\w-][\w.-]*[/\\])*[\w.-]+\.(?:toml|json5?))(?:$|[\s\x22'`,;:)\]])"#).unwrap()
+    });
+    let stack = crate::crash::crash_exception(text);
+    let primary = stack.filter(|s| !crate::crash::secondary_stack(s));
+    let mut lines = primary.unwrap_or(text).lines();
+    let mut header = "";
+    let mut warning = false;
+    while let Some(line) = lines.next() {
+        let line = line.trim();
+        if line.starts_with('[') || line.is_empty() {
+            warning = mixin_warning(line);
+        }
+        if !line.starts_with("at ") && !line.starts_with("Caused by:") && !line.starts_with("... ")
+        {
+            header = line;
+        }
+        if !parse.is_match(line) || warning || line.starts_with("at ") {
+            continue;
+        }
+        let explicit = forge.captures(header).or_else(|| forge.captures(line));
+        let file = explicit.as_ref().and_then(|c| c.get(1)).map(|m| m.as_str());
+        let mod_id = explicit.as_ref().and_then(|c| c.get(2)).map(|m| m.as_str());
+        let relative_path = [line, header]
+            .into_iter()
+            .find_map(|l| path.captures(l)?.get(1))
+            .map(|m| m.as_str());
+        let mut frames = lines.clone().map_while(frame);
+        let mut file_load = false;
+        let caller = frames.find(|f| {
+            file_load |= f
+                .class
+                .starts_with("com.electronwill.nightconfig.core.file.")
+                && f.method == "load";
+            !f.is_platform()
+                && !f.class.starts_with("com.fasterxml.jackson.")
+                && !f.class.starts_with("org.tomlj.")
+        });
+        let config_caller = caller.as_ref().is_some_and(|f| {
+            f.class.to_ascii_lowercase().contains("config")
+                || f.method.to_ascii_lowercase().contains("config")
+        });
+        if !(file_load || config_caller || mod_id.is_some() || relative_path.is_some()) {
+            continue;
+        }
+
+        let reported = from_crash_report(text);
+        let owner_in = |inventory| {
+            if let Some(id) = mod_id {
+                owner_of(None, Some(id), inventory)
+            } else {
+                caller.as_ref()?.config_owner(inventory)
+            }
+        };
+        let owner = owner_in(mods).or_else(|| owner_in(&reported));
+        // Early Forge failures can truncate the inventory. A class named for its own package
+        // (e.g. com.performant.coremod.Performant is listed in the invoking stack) identifies it.
+        let inferred = caller
+            .as_ref()
+            .filter(|_| owner.is_none() && mod_id.is_none())
+            .and_then(|caller| {
+                let (namespace, _) = caller.class.rsplit_once('.')?;
+                let infer = |f: &crate::crash_suspect::Frame| {
+                    let (package, name) = f.class.rsplit_once('.')?;
+                    (package
+                        .split('.')
+                        .any(|component| component.eq_ignore_ascii_case(name))
+                        && namespace
+                            .strip_prefix(package)
+                            .is_some_and(|tail| tail.is_empty() || tail.starts_with('.')))
+                    .then(|| name.to_owned())
+                };
+                infer(caller).or_else(|| frames.find_map(|f| infer(&f)))
+            });
+        let name = owner
+            .map(|m| m.name.as_str())
+            .or(mod_id)
+            .or(inferred.as_deref());
+        let title = name.map_or_else(
+            || format!("A mod's {CONFIG_CORRUPT}"),
+            |name| format!("{name}'s {CONFIG_CORRUPT}"),
+        );
+        let folder = if relative_path.is_some() {
+            "the instance folder"
+        } else {
+            "the instance's `config` folder"
+        };
+        let target = if let Some(file) = relative_path.or(file) {
+            format!("`{file}`")
+        } else if let Some(name) = name {
+            format!("{name}'s config file")
+        } else {
+            "the affected mod's config file".to_owned()
+        };
+        let ids = owner
+            .map(|m| m.id.clone())
+            .or_else(|| mod_id.or(inferred.as_deref()).map(str::to_ascii_lowercase));
+        return Some((
+            Diagnosis::new(
+                title,
+                format!(
+                    "Delete {target} from {folder}, then launch the game again so the mod can regenerate it."
+                ),
+                ids.into_iter().collect(),
+            ),
+            line,
+        ));
+    }
+    None
+}
+
 /// `crash::diagnose` plus the clash check against the mods in `mods_dir`.
 pub fn diagnose_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
     if crate::crash::logged_vanilla_crash_save_failure(text).is_some() {
@@ -882,7 +1031,7 @@ fn diagnose_with_mods(
     mods: &[InstalledMod],
     java: Option<&str>,
 ) -> Option<Diagnosis> {
-    let base = crate::crash::diagnose_with_java(text, java, mods_dir);
+    let base = crate::crash::diagnose_with_java(text, java, mods_dir, mods);
     if base.as_ref().is_some_and(|d| {
         d.title.starts_with("A mod needs ") || d.title == "A mod dependency is missing"
     }) && let Some(game_dir) = mods_dir.parent()
@@ -962,6 +1111,91 @@ pub fn diagnose_exit_in_with_java(
 mod tests {
     use super::*;
     use std::io::Write;
+
+    const REPORT_443: &str = include_str!("../tests/fixtures/crash-443-config.log");
+
+    #[test]
+    fn report_443_identifies_performants_config_through_the_kubejs_consequence() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = diagnose_exit_in(REPORT_443, -1, &dir.path().join("mods")).unwrap();
+        assert_eq!(d.title, "Performant's config file is corrupt or empty");
+        assert_eq!(d.mods, ["performant"]);
+        assert_eq!(
+            d.detail,
+            "Delete Performant's config file from the instance's `config` folder, then launch the game again so the mod can regenerate it."
+        );
+        assert!(d.fix.is_none());
+        assert_eq!(crate::crash::diagnose(REPORT_443), Some(d));
+
+        let (log, report) = REPORT_443.split_once("---- crash report ----\n").unwrap();
+        let lines: Vec<_> = log.lines().collect();
+        let uploaded = crate::crash::Report::build(
+            "1.16.5",
+            "forge",
+            "KubeJS crashed the game",
+            &lines,
+            &[],
+            Some(report),
+            None,
+        );
+        assert_eq!(
+            uploaded.title,
+            "Performant's config file is corrupt or empty"
+        );
+        assert!(uploaded.log.starts_with("\n---- first error ----\nCaused by: com.electronwill.nightconfig.core.io.ParsingException: Not enough data available\n"));
+    }
+
+    #[test]
+    fn json_config_uses_its_callers_mod_list_entry_and_logged_path() {
+        let log = "---- Minecraft Crash Report ----\n\n\
+            com.google.gson.JsonSyntaxException: Unexpected EOF in config/example/settings.json\n\
+            \tat com.google.gson.Gson.fromJson(Gson.java:10)\n\
+            \tat com.example.settingsbridge.config.Store.load(Store.java:20)\n\
+            \tat com.example.launchhelper.Start.run(Start.java:30)\n\n\
+            \tMod List:\n\
+            \t\tlaunchhelper.jar | Launch Helper | launchhelper | 1.0 | DONE\n\
+            \t\tbridge.jar | Settings Bridge | settings_bridge | 2.0 | DONE";
+        let d = crate::crash::diagnose(log).unwrap();
+        assert_eq!(d.title, "Settings Bridge's config file is corrupt or empty");
+        assert_eq!(d.mods, ["settings_bridge"]);
+        assert!(d.detail.contains("`config/example/settings.json`"));
+    }
+
+    #[test]
+    fn unrelated_or_non_config_parse_errors_are_ignored() {
+        let asset_error = "com.google.gson.JsonSyntaxException: Unexpected EOF\n\
+            \tat com.google.gson.Gson.fromJson(Gson.java:10)\n\
+            \tat com.example.assets.ModelReader.read(ModelReader.java:20)";
+        assert!(diagnose_config(asset_error, &[]).is_none());
+
+        let handled = asset_error.replace("assets.ModelReader.read", "config.Store.load");
+        assert!(
+            diagnose_config(
+                &format!("[main/WARN] Reverting to defaults\n    {handled}"),
+                &[]
+            )
+            .is_none()
+        );
+        let log = format!(
+            "{handled}\n\n---- Minecraft Crash Report ----\n\njava.lang.IllegalStateException: Rendering failed\n\tat com.example.renderer.Renderer.draw(Renderer.java:30)"
+        );
+        assert!(diagnose_config(&log, &[]).is_none());
+    }
+
+    #[test]
+    fn forge_can_name_the_file_and_mod_without_a_mod_frame() {
+        let log = "net.minecraftforge.fml.config.ConfigFileTypeHandler$ConfigLoadingException: Failed loading config file sample-common.toml of type COMMON for modid sample\n\
+            \tat net.minecraftforge.fml.config.ConfigFileTypeHandler.reader(ConfigFileTypeHandler.java:46)\n\
+            Caused by: com.electronwill.nightconfig.core.io.ParsingException: Not enough data available\n\
+            \tat com.electronwill.nightconfig.core.file.WriteSyncFileConfig.load(WriteSyncFileConfig.java:73)\n\n\
+            \tMod List:\n\t\tsample.jar | Sample Mod | sample | 1.0 | DONE";
+        let d = crate::crash::diagnose(log).unwrap();
+        assert_eq!(d.title, "Sample Mod's config file is corrupt or empty");
+        assert!(
+            d.detail
+                .contains("`sample-common.toml` from the instance's `config` folder")
+        );
+    }
 
     fn jar(dir: &Path, file: &str, manifest: &str) {
         let mut zip = zip::ZipWriter::new(std::fs::File::create(dir.join(file)).unwrap());

@@ -9,7 +9,8 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 
-use crate::crash::Diagnosis;
+use crate::crash::{Diagnosis, secondary_mod_failure, secondary_stack};
+use crate::crash_conflicts::InstalledMod;
 
 /// Name shown for the Arctic mod's own frames.
 const ARCTIC_NAME: &str = "Arctic Client";
@@ -216,17 +217,38 @@ fn read_known(jar: &Path) -> Option<Known> {
 }
 
 /// One stack frame, reduced to what identifies its owner.
-struct Frame {
-    class: String,
-    method: String,
+pub(crate) struct Frame {
+    pub(crate) class: String,
+    pub(crate) method: String,
     /// Module/mod id written into the frame (`TRANSFORMER/modid@1.0/...`).
     module: Option<String>,
     /// Jar named at the end of the frame (`~[file.jar:?]`).
     jar: Option<String>,
 }
 
-fn frame(line: &str) -> Option<Frame> {
+pub(crate) fn frame(line: &str) -> Option<Frame> {
     parse_frame(line.trim_start().strip_prefix("at ")?)
+}
+
+impl Frame {
+    pub(crate) fn is_platform(&self) -> bool {
+        NOT_MODS.iter().any(|p| self.class.starts_with(p))
+    }
+
+    pub(crate) fn config_owner<'a>(&self, mods: &'a [InstalledMod]) -> Option<&'a InstalledMod> {
+        if let Some(owner) = mods.iter().find(|m| {
+            self.module.as_ref().is_some_and(|id| id == &m.id)
+                || self.jar.as_ref().is_some_and(|jar| jar == &m.file)
+        }) {
+            return Some(owner);
+        }
+        let (package, _) = self.class.rsplit_once('.')?;
+        package.rsplit('.').find_map(|part| {
+            let part = norm(part);
+            mods.iter()
+                .find(|m| part == norm(&m.id) || part == norm(&m.name))
+        })
+    }
 }
 
 fn parse_frame(rest: &str) -> Option<Frame> {
@@ -284,7 +306,7 @@ fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
             let next_is_frame = lines
                 .peek()
                 .is_some_and(|n| n.trim_start().starts_with("at "));
-            if next_is_frame && head.is_match(line.trim_end()) {
+            if next_is_frame && head.is_match(line.trim_end()) && !secondary_mod_failure(line) {
                 start = Some(pos);
             }
             pos += line.len();
@@ -308,11 +330,12 @@ fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
         }
         &rest[..end]
     };
+    let secondary = secondary_stack(region);
     let mut chain: Vec<Vec<&str>> = vec![Vec::new()];
     for (i, line) in region.lines().enumerate() {
         if i > 0
             && line.trim_start().starts_with("Caused by:")
-            && !line.starts_with(char::is_whitespace)
+            && (!line.starts_with(char::is_whitespace) || secondary)
         {
             chain.push(Vec::new());
         }
@@ -321,6 +344,13 @@ fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
         }
     }
     chain.reverse();
+    if let Some(secondary) = chain.iter().position(|block| {
+        block
+            .first()
+            .is_some_and(|line| secondary_mod_failure(line))
+    }) {
+        chain.truncate(secondary);
+    }
     Some(chain)
 }
 
@@ -511,7 +541,12 @@ pub fn suspect(text: &str, mods: &[Known]) -> Option<Suspect> {
             ours: is_arctic_id(&m.id),
         }
     };
-    let by_game = suspected_line(text);
+    let secondary_report = crate::crash::crash_exception(text).is_some_and(secondary_stack);
+    let by_game = if secondary_report {
+        Vec::new()
+    } else {
+        suspected_line(text)
+    };
     let mut game_library = None;
     for (id, name) in &by_game {
         let known = index.by_id(id);
@@ -531,36 +566,39 @@ pub fn suspect(text: &str, mods: &[Known]) -> Option<Suspect> {
             return Some(s);
         }
     }
-    if let Some(chain) = fatal_chain(text) {
-        for block in &chain {
-            for line in block {
-                let Some(f) = frame(line) else {
-                    continue;
-                };
-                if let Some(owner) = mixin_owner(&f.method) {
-                    if is_arctic_id(owner) {
-                        return Some(arctic(owner));
-                    }
-                    match index.by_id(owner) {
-                        Some(i) if !mods[i].library => return Some(named(i)),
-                        _ => continue,
-                    }
+    let chain = fatal_chain(text);
+    let earlier = text
+        .rsplit_once("---- Minecraft Crash Report ----")
+        .filter(|_| secondary_report)
+        .and_then(|(earlier, _)| fatal_chain(earlier));
+    for block in chain.iter().chain(&earlier).flatten() {
+        for line in block {
+            let Some(f) = frame(line) else {
+                continue;
+            };
+            if let Some(owner) = mixin_owner(&f.method) {
+                if is_arctic_id(owner) {
+                    return Some(arctic(owner));
                 }
-                if f.class.starts_with(POLARIUM_PACKAGE) {
-                    return Some(arctic("polarium"));
+                match index.by_id(owner) {
+                    Some(i) if !mods[i].library => return Some(named(i)),
+                    _ => continue,
                 }
-                if f.class.starts_with(ARCTIC_PACKAGE) {
-                    return Some(arctic("arctic"));
-                }
-                if NOT_MODS.iter().any(|p| f.class.starts_with(p)) {
-                    continue;
-                }
-                match index.owner(&f) {
-                    Some(i) if BASE_IDS.contains(&mods[i].id.as_str()) => {}
-                    Some(i) if mods[i].library => {}
-                    Some(i) => return Some(named(i)),
-                    None => {}
-                }
+            }
+            if f.class.starts_with(POLARIUM_PACKAGE) {
+                return Some(arctic("polarium"));
+            }
+            if f.class.starts_with(ARCTIC_PACKAGE) {
+                return Some(arctic("arctic"));
+            }
+            if f.is_platform() {
+                continue;
+            }
+            match index.owner(&f) {
+                Some(i) if BASE_IDS.contains(&mods[i].id.as_str()) => {}
+                Some(i) if mods[i].library => {}
+                Some(i) => return Some(named(i)),
+                None => {}
             }
         }
     }
@@ -698,6 +736,22 @@ mod tests {
             r#","custom":{"modmenu":{"badges":["library"]}}"#,
         );
         dir
+    }
+
+    #[test]
+    fn a_secondary_report_skips_its_frames_and_suspected_mods() {
+        let dir = pack();
+        let report = "---- Minecraft Crash Report ----\n\n\
+            java.lang.IllegalStateException: Another mod has failed to load\n\
+            \tat me.jellysquid.mods.sodium.client.render.Renderer.start(Renderer.java:12)\n\n\
+            Suspected Mods: Sodium (sodium)";
+        assert!(diagnose_in(report, dir.path()).is_none());
+
+        let earlier = "Exception in thread \"main\" java.lang.IllegalStateException: Startup failed\n\
+            \tat me.jellysquid.mods.lithium.common.Startup.init(Startup.java:25)";
+        let log = format!("{earlier}\n\n{report}");
+        let d = diagnose_in(&log, dir.path()).unwrap();
+        assert_eq!(d.title, "Lithium crashed the game");
     }
 
     const EBE: &str = "---- Minecraft Crash Report ----\n\
