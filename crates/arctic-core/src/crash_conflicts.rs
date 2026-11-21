@@ -7,7 +7,7 @@ use std::path::Path;
 
 use regex::Regex;
 
-use crate::crash::{Diagnosis, Fix};
+use crate::crash::{Diagnosis, Fix, warning_log_line};
 
 /// Mods that are forks of one another and break when both are installed: (original, fork).
 ///
@@ -551,6 +551,9 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
     {
         return base;
     }
+    if let Some((fatal, _)) = crate::crash::java_fatal_diagnosis(text) {
+        return Some(fatal);
+    }
     if let Some((runtime, _)) = crate::crash::runtime_diagnosis(text) {
         return Some(runtime);
     }
@@ -600,14 +603,18 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
 /// Legacy Mixin can fail while resolving an invocation owner before injection begins.
 pub(crate) fn preprocessing_class_failure(text: &str) -> bool {
     let text = crate::crash::crash_exception(text).unwrap_or(text);
-    text.contains("ClassNotFoundException")
-        && [
-            "MixinTransformerError",
-            "MixinPreProcessorStandard",
-            "MixinApplicatorStandard",
-        ]
-        .iter()
-        .any(|marker| text.contains(marker))
+    text.lines()
+        .any(|line| line.contains("ClassNotFoundException") && !warning_log_line(line))
+        && text.lines().any(|line| {
+            [
+                "MixinTransformerError",
+                "MixinPreProcessorStandard",
+                "MixinApplicatorStandard",
+            ]
+            .iter()
+            .any(|marker| line.contains(marker))
+                && !warning_log_line(line)
+        })
 }
 
 /// Another mod targeting the same failed class can explain a missing injection target. Match

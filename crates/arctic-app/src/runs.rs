@@ -121,8 +121,8 @@ impl Run {
         let mut lines: Vec<&str> = self.log.iter().map(|l| l.text.as_str()).collect();
         let latest = read_latest_log(&self.game_dir, self.started).unwrap_or_default();
         let latest_lines = log_without_html(&latest);
-        let written = newest_crash_report(&self.game_dir, self.started)
-            .or_else(|| newest_hs_err(&self.game_dir, self.started));
+        let written = newest_hs_err(&self.game_dir, self.started)
+            .or_else(|| newest_crash_report(&self.game_dir, self.started));
         let exit_context = (code.is_some_and(|code| code != 0) && written.is_none())
             .then(|| crash::exit_context(&lines, &latest_lines, self.started, ended_at));
         let mixin =
@@ -238,12 +238,6 @@ impl Run {
             .map(|l| l.text.as_str())
             .collect::<Vec<_>>()
             .join("\n");
-        if let Some(report) = newest_crash_report(&self.game_dir, self.started)
-            .or_else(|| newest_hs_err(&self.game_dir, self.started))
-        {
-            text.push('\n');
-            text.push_str(&report);
-        }
         let own_log = latest_log_tail(&self.game_dir, self.started);
         if !own_log.is_empty() {
             text.push('\n');
@@ -266,6 +260,12 @@ impl Run {
             }) {
                 text.push_str(&format!("\n{}", line.text));
             }
+        }
+        if let Some(report) = newest_hs_err(&self.game_dir, self.started)
+            .or_else(|| newest_crash_report(&self.game_dir, self.started))
+        {
+            text.push('\n');
+            text.push_str(&report);
         }
         text
     }
@@ -1169,6 +1169,110 @@ mod tests {
         assert!(
             latest_log_tail(dir.path(), SystemTime::now() + Duration::from_secs(60)).is_empty()
         );
+    }
+
+    #[test]
+    fn report_414_uses_the_jvm_crash_over_the_pehkui_warning() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.16.5", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        let warning = "[16:53:41] [main/WARN]: @Mixin target net.minecraft.block.entity.LecternBlockEntity$1 was not found pehkui.mixins.json:reach.LecternBlockEntityMixin";
+        run.push_log([LogLine {
+            level: Level::Warn,
+            text: warning.into(),
+        }]);
+
+        std::fs::create_dir(dir.path().join("logs")).unwrap();
+        std::fs::write(
+            dir.path().join("logs/latest.log"),
+            format!(
+                "[16:53:40] [main/WARN]: Error loading class: slimeknights/mantle/client/model/connected/ConnectedModel$Baked (java.lang.ClassNotFoundException: null)\n{warning}"
+            ),
+        )
+        .unwrap();
+        let hs_err = r#"#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  EXCEPTION_ACCESS_VIOLATION (0xc0000005) at pc=0x0000004c206fb350, pid=6832, tid=0x0000000000001efc
+#
+# JRE version: OpenJDK Runtime Environment (8.0_512-b09) (build 1.8.0_512-b09)
+# Problematic frame:
+# C  0x0000004c206fb350
+#
+---------------  T H R E A D  ---------------
+
+Current thread (0x000001ad6162a800):  JavaThread "C2 CompilerThread5" daemon [_thread_in_native, id=7932]
+
+Current CompileTask:
+C2:  13971 9500       4       org.objectweb.asm.tree.AnnotationNode::accept (134 bytes)
+"#;
+        std::fs::write(dir.path().join("hs_err_pid6832.log"), hs_err).unwrap();
+
+        let diagnosis = run.exit_diagnosis(Some(1), false).unwrap();
+        assert_eq!(diagnosis.title, "Java's JIT compiler crashed");
+        assert!(diagnosis.mods.is_empty());
+        assert!(!diagnosis.detail.to_lowercase().contains("pehkui"));
+        assert!(
+            diagnosis
+                .detail
+                .contains("org.objectweb.asm.tree.AnnotationNode::accept")
+        );
+        let report = run.crash_report(&diagnosis.title, Some(1));
+        assert_eq!(report.title, diagnosis.title);
+        assert!(
+            report.log.starts_with(
+                "\n---- first error ----\n#  EXCEPTION_ACCESS_VIOLATION (0xc0000005)\n"
+            )
+        );
+        assert!(
+            report
+                .log
+                .contains("matched: #  EXCEPTION_ACCESS_VIOLATION")
+        );
+        assert!(report.log.contains(warning));
+    }
+
+    #[test]
+    fn report_441_uses_the_mod_native_crash_over_earlier_log_errors() {
+        let fixture = include_str!("../../arctic-core/tests/fixtures/crash-441-native-mod.log");
+        let (log, hs_err) = fixture.split_once("\n---- crash report ----\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.21.11", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        std::fs::create_dir(dir.path().join("logs")).unwrap();
+        std::fs::write(dir.path().join("logs/latest.log"), log).unwrap();
+        std::fs::write(dir.path().join("hs_err_pid11989.log"), hs_err).unwrap();
+
+        let diagnosis = run.exit_diagnosis(Some(134), false).unwrap();
+        assert_eq!(
+            diagnosis.title,
+            "super_resolution crashed in native library libSuperResolution+linux64+release.so"
+        );
+        assert_eq!(diagnosis.mods, ["super_resolution"]);
+        assert!(
+            diagnosis
+                .detail
+                .contains("Intel(R) Pentium(R) Silver N5000")
+        );
+        assert!(diagnosis.detail.contains("doesn't support"));
+        assert!(
+            diagnosis
+                .detail
+                .contains("Remove super_resolution or replace it")
+        );
+
+        let report = run.crash_report("oωo failed to change the game", Some(134));
+        assert_eq!(report.title, diagnosis.title);
+        assert!(
+            report
+                .log
+                .starts_with("\n---- first error ----\n#  SIGILL (0x4)\n")
+        );
+        assert!(report.log.contains("matched: #  SIGILL"));
     }
 
     #[test]
