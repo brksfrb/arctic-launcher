@@ -25,6 +25,12 @@ public final class BadgeTexture {
 	private static final DynamicTexture[][] TEXTURES = new DynamicTexture[SLOTS][Badge.MAX_RASTER_SIZE + 1];
 	private static final Identifier[][] IDS = new Identifier[SLOTS][Badge.MAX_RASTER_SIZE + 1];
 	private static final BakedGlyph[][] GUI_QUADS = new BakedGlyph[SLOTS][Badge.MAX_RASTER_SIZE + 1];
+	private static final java.util.Set<Object> BADGE_GLYPHS =
+			java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Object, Boolean>());
+
+	public static boolean isBadge(Object glyph) {
+		return glyph != null && BADGE_GLYPHS.contains(glyph);
+	}
 
 	//#if MC >= 1.21.11
 	private static final java.util.Set<Object> LINEAR_GUI_VIEWS =
@@ -63,10 +69,9 @@ public final class BadgeTexture {
 		float pixelsPerUnit = TextDrawScale.framebufferPixels();
 		if (pixelsPerUnit <= 0) pixelsPerUnit = (float) Minecraft.getInstance().getWindow().getGuiScale();
 		int resolution = Badge.rasterSize(tab, pixelsPerUnit);
-		float side = resolution / pixelsPerUnit;
-		if (Math.abs(side - Badge.size(tab)) > .0001f) {
-			return bake(slot, resolution, side);
-		}
+		// Bin-center side equals Badge.size: exact 1:1 at the center of the per-pixel size
+		// bucket, at most half a framebuffer pixel of stretch at the edges. Cached so a
+		// nametag that is walked up to never allocates or uploads again for the same size.
 		BakedGlyph quad = GUI_QUADS[slot][resolution];
 		if (quad == null) {
 			quad = bake(slot, resolution, Badge.size(tab));
@@ -113,7 +118,7 @@ public final class BadgeTexture {
 		//#else
 		float top = tab ? -1 : 0;
 		//#endif
-		return new
+		BakedGlyph quad = new
 				//#if MC >= 1.21.9
 				BakedSheetGlyph(() -> Badge.advance(tab),
 				//#else
@@ -132,5 +137,7 @@ public final class BadgeTexture {
 				texture.getTextureView(),
 				//#endif
 				0, 1, 0, 1, 0, side, top, top + side);
+		BADGE_GLYPHS.add(quad);
+		return quad;
 	}
 }

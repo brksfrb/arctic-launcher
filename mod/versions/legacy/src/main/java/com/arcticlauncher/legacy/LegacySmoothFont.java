@@ -107,6 +107,11 @@ public final class LegacySmoothFont {
 		com.arcticlauncher.client.feature.TextPixelScale.multiply(PROJECTION, MODEL, CLIP);
 	}
 
+	static boolean snapOrigin(float x, float y, float[] out) {
+		return com.arcticlauncher.client.feature.TextPixelScale.snapOrigin(
+				CLIP, x, y, VIEWPORT.get(2), VIEWPORT.get(3), out);
+	}
+
 	static float badgePixels(float x, float y) {
 		readTextTransform();
 		return projectedPixels(x, y);

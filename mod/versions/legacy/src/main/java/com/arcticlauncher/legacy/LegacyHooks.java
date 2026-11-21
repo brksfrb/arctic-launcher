@@ -37,6 +37,8 @@ public final class LegacyHooks {
 	/** The held-item layer of players and mobs is drawing an item (see OldHeldLayerMixin). */
 	public static volatile boolean heldLayerActive;
 
+	private static final float[] BADGE_SNAP = new float[2];
+
 	private LegacyHooks() {}
 
 	/** Where the camera is this frame (called as the world's camera is set up). */
@@ -329,6 +331,10 @@ public final class LegacyHooks {
 		if (pixelsPerUnit <= 0) return;
 		int resolution = Badge.rasterSize(tab, pixelsPerUnit);
 		float side = resolution / pixelsPerUnit;
+		if (LegacySmoothFont.snapOrigin(x, y, BADGE_SNAP)) {
+			x = BADGE_SNAP[0];
+			y = BADGE_SNAP[1];
+		}
 		Identifier texture = LegacyTextures.badge(style, resolution, role);
 		if (texture == null) {
 			return;

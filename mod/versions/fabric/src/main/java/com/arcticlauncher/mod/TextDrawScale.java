@@ -22,6 +22,8 @@ public final class TextDrawScale {
 	private static final FloatBuffer MODEL = BufferUtils.createFloatBuffer(16);
 	private static final FloatBuffer PROJECTION = BufferUtils.createFloatBuffer(16);
 	private static final float[] CLIP = new float[16];
+	private static int viewWidth, viewHeight;
+	private static boolean clipReady;
 	//#if MC >= 1.19.3
 	private static final Matrix4f COMBINED = new Matrix4f();
 	//#elif MC >= 1.15
@@ -162,7 +164,17 @@ public final class TextDrawScale {
 		GL11.glGetFloatv(GL11.GL_MODELVIEW_MATRIX, MODEL);
 		//#endif
 		TextPixelScale.multiply(PROJECTION, MODEL, CLIP);
-		return TextPixelScale.projected(CLIP, x, y, Minecraft.getInstance().getWindow().getWidth(),
-				Minecraft.getInstance().getWindow().getHeight());
+		viewWidth = Minecraft.getInstance().getWindow().getWidth();
+		viewHeight = Minecraft.getInstance().getWindow().getHeight();
+		clipReady = true;
+		return TextPixelScale.projected(CLIP, x, y, viewWidth, viewHeight);
+	}
+
+	/** Snap a badge origin to a whole framebuffer pixel when the projected quad is axis-aligned. */
+	public static boolean snapOrigin(float x, float y, float[] out) {
+		if (!clipReady) {
+			return false;
+		}
+		return TextPixelScale.snapOrigin(CLIP, x, y, viewWidth, viewHeight, out);
 	}
 }

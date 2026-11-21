@@ -101,7 +101,8 @@
 		"WorldTextScaleMixin",<% } %><% if (nameTagTextScale) { %>
 		"NameTagTextScaleMixin",<% } %><% if (oldScaledFont) { %>
 		"ScaledFontSetMixin",
-		"BadgeQuadMixin",<% } %><% if (oldScaledTexture) { %>
+		"BadgeQuadMixin",<% } %><% if (badgeSnap) { %>
+		"BadgeSnapMixin",<% } %><% if (oldScaledTexture) { %>
 		"ScaledFontTextureMixin",<% } %><% if (gpuFontTexture && !scaledFont) { %>
 		"FontTextureMixin",<% } %><% if (textShader) { %>
 		"TextShaderMixin",<% } %><% if (textShaderOld) { %>

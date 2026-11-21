@@ -8,7 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class BrandMark {
 	private static final int MAX_SIZE = 1024;
 	private static final int SS = 4;
-	/** Official icon.png / badge.png size; in-game badges are box-filtered down from this master. */
+	/** Official icon.png / badge.png size; in-game badges are Lanczos-3 downscaled from this master. */
 	public static final int MASTER_SIZE = 256;
 	private static final int TILE_SAMPLES = 8;
 	private static final float TILE_MARK = .72f;
@@ -24,7 +24,16 @@ public final class BrandMark {
 	private static final float[][] CORE = new float[6][2];
 	private static final float[] SIN = new float[6], COS = new float[6];
 	private static final Map<Integer, int[]> MASTERS = new ConcurrentHashMap<Integer, int[]>();
-	private static final Map<Integer, int[]> BADGES = new ConcurrentHashMap<Integer, int[]>();
+	/** Small cap: unique (style, role, size) rasters kept on the render path. */
+	public static final int RASTER_CACHE_CAP = 64;
+	private static final int LANCZOS_A = 3;
+	private static final Object RASTER_LOCK = new Object();
+	private static final int[] RASTER_KEYS = new int[RASTER_CACHE_CAP];
+	private static final int[][] RASTER_VALS = new int[RASTER_CACHE_CAP][];
+	private static final int[] RASTER_STAMP = new int[RASTER_CACHE_CAP];
+	private static int rasterCount;
+	private static int rasterClock;
+	private static float[] lanczosScratch = new float[0];
 	private static final Map<Integer, int[]> RASTERS = new ConcurrentHashMap<Integer, int[]>();
 
 	static {
@@ -62,13 +71,93 @@ public final class BrandMark {
 		});
 	}
 
-	/** Unpremultiplied ARGB at the projected framebuffer size, box-filtered from the 256×256 master. */
+	/** Unpremultiplied ARGB at the projected framebuffer size, Lanczos-3 downscaled from the 256×256 master. */
 	public static int[] badgeRaster(int size, int style, int role) {
 		int side = Math.max(1, Math.min(Badge.MAX_RASTER_SIZE, size));
 		int kind = Badge.normalize(style);
 		int color = role >= 0 && role < Badge.COLORS.length ? role : 0;
 		int key = (side * Badge.STYLES.size() + kind) * Badge.COLORS.length + color;
-		return BADGES.computeIfAbsent(key, k -> downscale(badgeMaster(kind, color), MASTER_SIZE, side));
+		synchronized (RASTER_LOCK) {
+			int[] hit = rasterHit(key);
+			if (hit != null) {
+				return hit;
+			}
+			int[] raster = downscaleLanczos(badgeMaster(kind, color), MASTER_SIZE, side);
+			rasterPut(key, raster);
+			return raster;
+		}
+	}
+
+	/** Box-filtered comparison raster; not cached (sheet / tests only). */
+	public static int[] badgeRasterBox(int size, int style, int role) {
+		int side = Math.max(1, Math.min(Badge.MAX_RASTER_SIZE, size));
+		return downscaleBox(badgeMaster(style, role), MASTER_SIZE, side);
+	}
+
+	public static int rasterCacheSize() {
+		synchronized (RASTER_LOCK) {
+			return rasterCount;
+		}
+	}
+
+	/** Test hook: drops every downscale so the next call is a miss. Masters stay warm. */
+	public static void clearRasterCache() {
+		synchronized (RASTER_LOCK) {
+			for (int i = 0; i < rasterCount; i++) {
+				RASTER_VALS[i] = null;
+			}
+			rasterCount = 0;
+			rasterClock = 0;
+		}
+	}
+
+	private static int[] rasterHit(int key) {
+		for (int i = 0; i < rasterCount; i++) {
+			if (RASTER_KEYS[i] == key) {
+				RASTER_STAMP[i] = nextStamp();
+				return RASTER_VALS[i];
+			}
+		}
+		return null;
+	}
+
+	private static void rasterPut(int key, int[] raster) {
+		if (rasterCount < RASTER_CACHE_CAP) {
+			RASTER_KEYS[rasterCount] = key;
+			RASTER_VALS[rasterCount] = raster;
+			RASTER_STAMP[rasterCount] = nextStamp();
+			rasterCount++;
+			return;
+		}
+		int evict = 0;
+		int oldest = RASTER_STAMP[0];
+		for (int i = 1; i < rasterCount; i++) {
+			if (RASTER_STAMP[i] < oldest) {
+				oldest = RASTER_STAMP[i];
+				evict = i;
+			}
+		}
+		RASTER_KEYS[evict] = key;
+		RASTER_VALS[evict] = raster;
+		RASTER_STAMP[evict] = nextStamp();
+	}
+
+	private static int nextStamp() {
+		if (rasterClock == Integer.MAX_VALUE) {
+			int[] order = new int[rasterCount];
+			for (int i = 0; i < rasterCount; i++) order[i] = i;
+			for (int i = 1; i < rasterCount; i++) {
+				int v = order[i], j = i;
+				while (j > 0 && RASTER_STAMP[order[j - 1]] > RASTER_STAMP[v]) {
+					order[j] = order[j - 1];
+					j--;
+				}
+				order[j] = v;
+			}
+			for (int i = 0; i < rasterCount; i++) RASTER_STAMP[order[i]] = i + 1;
+			rasterClock = rasterCount;
+		}
+		return ++rasterClock;
 	}
 
 	private static int[] styleMaster(int style) {
@@ -131,8 +220,12 @@ public final class BrandMark {
 		return out;
 	}
 
-	/** Area-average (box) downsample with premultiplied alpha. */
+	/** Area-average (box) downsample with premultiplied alpha. Kept for comparison sheets. */
 	static int[] downscale(int[] src, int srcSize, int dstSize) {
+		return downscaleBox(src, srcSize, dstSize);
+	}
+
+	static int[] downscaleBox(int[] src, int srcSize, int dstSize) {
 		if (dstSize == srcSize) return src;
 		int[] dst = new int[dstSize * dstSize];
 		double scale = (double) srcSize / dstSize;
@@ -171,6 +264,130 @@ public final class BrandMark {
 			}
 		}
 		return dst;
+	}
+
+	/**
+	 * Separable Lanczos-3 downsample with premultiplied alpha. Each destination pixel's unpremultiplied
+	 * RGB is clamped to the source image's opaque min/max so the negative lobes cannot
+	 * ring into a halo (a per-neighborhood gather was too expensive for a size-cache miss). Scratch buffers grow once and are reused; this must not be called every frame.
+	 */
+	static int[] downscaleLanczos(int[] src, int srcSize, int dstSize) {
+		if (dstSize == srcSize) {
+			return src;
+		}
+		int[] dst = new int[dstSize * dstSize];
+		double scale = (double) srcSize / dstSize;
+		double support = LANCZOS_A * Math.max(scale, 1.0);
+		float[] range = opaqueRange(src);
+		float[] tmp = lanczosScratch(dstSize * srcSize * 4);
+		for (int y = 0; y < srcSize; y++) {
+			int srcRow = y * srcSize;
+			for (int x = 0; x < dstSize; x++) {
+				double center = (x + 0.5) * scale - 0.5;
+				int i0 = (int) Math.floor(center - support);
+				int i1 = (int) Math.ceil(center + support);
+				float sr = 0, sg = 0, sb = 0, sa = 0, sw = 0;
+				for (int i = i0; i <= i1; i++) {
+					float w = lanczos((float) ((i - center) / Math.max(scale, 1.0)));
+					if (w == 0f) continue;
+					int ii = i < 0 ? 0 : (i >= srcSize ? srcSize - 1 : i);
+					int p = src[srcRow + ii];
+					float a = (p >>> 24) * (1f / 255f);
+					sr += ((p >>> 16) & 255) * (1f / 255f) * a * w;
+					sg += ((p >>> 8) & 255) * (1f / 255f) * a * w;
+					sb += (p & 255) * (1f / 255f) * a * w;
+					sa += a * w;
+					sw += w;
+				}
+				int ti = (y * dstSize + x) * 4;
+				if (sw != 0f) {
+					tmp[ti] = sr / sw;
+					tmp[ti + 1] = sg / sw;
+					tmp[ti + 2] = sb / sw;
+					tmp[ti + 3] = sa / sw;
+				} else {
+					tmp[ti] = tmp[ti + 1] = tmp[ti + 2] = tmp[ti + 3] = 0f;
+				}
+			}
+		}
+		for (int x = 0; x < dstSize; x++) {
+			for (int y = 0; y < dstSize; y++) {
+				double center = (y + 0.5) * scale - 0.5;
+				int i0 = (int) Math.floor(center - support);
+				int i1 = (int) Math.ceil(center + support);
+				float sr = 0, sg = 0, sb = 0, sa = 0, sw = 0;
+				for (int i = i0; i <= i1; i++) {
+					float w = lanczos((float) ((i - center) / Math.max(scale, 1.0)));
+					if (w == 0f) continue;
+					int ii = i < 0 ? 0 : (i >= srcSize ? srcSize - 1 : i);
+					int ti = (ii * dstSize + x) * 4;
+					sr += tmp[ti] * w;
+					sg += tmp[ti + 1] * w;
+					sb += tmp[ti + 2] * w;
+					sa += tmp[ti + 3] * w;
+					sw += w;
+				}
+				float r = 0, g = 0, b = 0, a = 0;
+				if (sw != 0f) {
+					a = sa / sw;
+					if (a > 1e-8f) {
+						r = (sr / sw) / a;
+						g = (sg / sw) / a;
+						b = (sb / sw) / a;
+					}
+					a = a < 0f ? 0f : (a > 1f ? 1f : a);
+				}
+				if (a > 0f && range[6] > 0f) {
+					if (r < range[0]) r = range[0];
+					if (g < range[1]) g = range[1];
+					if (b < range[2]) b = range[2];
+					if (r > range[3]) r = range[3];
+					if (g > range[4]) g = range[4];
+					if (b > range[5]) b = range[5];
+				}
+				dst[y * dstSize + x] = clampByte(Math.round(a * 255f)) << 24
+						| clampByte(Math.round(r * 255f)) << 16
+						| clampByte(Math.round(g * 255f)) << 8
+						| clampByte(Math.round(b * 255f));
+			}
+		}
+		return dst;
+	}
+
+	/** Min/max unpremultiplied RGB of opaque source pixels; [minR,G,B, maxR,G,B, any]. */
+	private static float[] opaqueRange(int[] src) {
+		float minR = 1f, minG = 1f, minB = 1f, maxR = 0f, maxG = 0f, maxB = 0f;
+		float any = 0f;
+		for (int p : src) {
+			if ((p >>> 24) == 0) continue;
+			float r = ((p >>> 16) & 255) / 255f;
+			float g = ((p >>> 8) & 255) / 255f;
+			float b = (p & 255) / 255f;
+			if (any == 0f || r < minR) minR = r;
+			if (any == 0f || g < minG) minG = g;
+			if (any == 0f || b < minB) minB = b;
+			if (any == 0f || r > maxR) maxR = r;
+			if (any == 0f || g > maxG) maxG = g;
+			if (any == 0f || b > maxB) maxB = b;
+			any = 1f;
+		}
+		return new float[] {minR, minG, minB, maxR, maxG, maxB, any};
+	}
+
+	private static float lanczos(float x) {
+		x = Math.abs(x);
+		if (x < 1e-8f) return 1f;
+		if (x >= LANCZOS_A) return 0f;
+		double px = Math.PI * x;
+		double pa = px / LANCZOS_A;
+		return (float) (Math.sin(px) / px * Math.sin(pa) / pa);
+	}
+
+	private static float[] lanczosScratch(int floats) {
+		if (lanczosScratch.length < floats) {
+			lanczosScratch = new float[floats];
+		}
+		return lanczosScratch;
 	}
 
 	private static int brandRgb(float cx, float cy) {

@@ -110,6 +110,11 @@ public final class Badge {
 	}
 
 	/** Bound the texture cache while retaining integer framebuffer sizes at ordinary GUI scales. */
+	/**
+	 * Framebuffer pixels of one badge, quantized to a whole pixel from the projected size
+	 * ({@code size(tab) * pixelsPerUnit}). {@code pixelsPerUnit} is {@link TextPixelScale#projected}:
+	 * camera distance, FOV, Arctic zoom, sprint FOV and GUI scale are already in that number.
+	 */
 	public static int rasterSize(boolean tab, float pixelsPerUnit) {
 		return Math.max(1, Math.min(MAX_RASTER_SIZE, Math.round(size(tab) * pixelsPerUnit)));
 	}
