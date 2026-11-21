@@ -2106,9 +2106,7 @@ impl Report {
                 scrub(head_of(error, 2048), &Own::this_pc())
             ));
         }
-        priority.push_str("
----- last output ----
-");
+        priority.push_str("\n---- last output ----\n");
         priority.push_str(&scrub(&last_output(&all), &Own::this_pc()));
         priority.push('\n');
         if let Some((diagnosis, matched)) = diagnosis {
