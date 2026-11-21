@@ -15,13 +15,17 @@ mod panels;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
+use arctic_core::auth::Account;
 use arctic_core::cosmetics::{CapeChoice, NewLook, Texture};
 use arctic_core::skins::{self, Library, SkinEntry, Variant};
 use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
 
 use crate::app::ArcticApp;
-use crate::skin_tasks::{AccountSkin, ArcticState, SkinChange};
+use crate::skin_tasks::{
+    AccountSkin, ArcticState, CatalogState, CosmeticCatalog, SkinChange, merge_catalog,
+};
 use crate::tasks::Event;
 use crate::toasts::Kind;
 use crate::{t, tf};
@@ -125,7 +129,7 @@ pub struct SkinsUi {
     /// Library skin id -> the hash the server would store it under.
     lib_hashes: HashMap<String, String>,
     /// The frame this tab was last drawn in (to notice it being reopened).
-    last_pass: u64,
+    last_pass: Option<u64>,
     /// Account id → Minecraft skin state (Microsoft accounts).
     pub account: HashMap<String, Result<AccountSkin, String>>,
     pub busy: bool,
@@ -136,8 +140,12 @@ pub struct SkinsUi {
     /// blip at startup doesn't leave the tab unable to wear anything for the rest of the session.
     arctic_asked_at: Option<std::time::Instant>,
     /// Public catalog shown before sign-in (or when account look loading fails).
-    pub public_catalog: Option<Result<ArcticState, String>>,
-    pub public_catalog_busy: bool,
+    public_catalog: Option<Result<ArcticState, String>>,
+    public_catalog_busy: bool,
+    /// 3D assets are shared across accounts and the signed-out collection.
+    cosmetic_catalog: CatalogState,
+    catalog_finished_at: Option<Instant>,
+    catalog_failures: usize,
     pub player_name: String,
     pub looking_up: bool,
     pub yaw: f32,
@@ -284,22 +292,56 @@ impl ArcticApp {
         self.ensure_skin_library();
         // Opened again: start from what you're wearing, not half-done edits.
         let pass = ui.ctx().cumulative_pass_nr();
-        if pass > self.skins.last_pass + 1 {
+        let opened = self.skins.last_pass.is_none_or(|last| pass > last + 1);
+        if opened {
             self.skins.renaming = None;
         }
-        self.skins.last_pass = pass;
-        self.request_skin_state(false);
+        self.skins.last_pass = Some(pass);
+        let refresh = self.catalog_refresh_due(ui.ctx(), opened);
+        self.request_skin_state(refresh);
         self.skins_page(ui);
         self.accept_dropped_skins(ui.ctx());
     }
 
-    /// Fetch the active account's Arctic look (and Minecraft skin) once, or
-    /// again with `force`.
+    fn catalog_refresh_due(&self, ctx: &egui::Context, opened: bool) -> bool {
+        let Some(finished) = self.skins.catalog_finished_at else {
+            return false;
+        };
+        if self.skin_state_busy() {
+            return false;
+        }
+        if self.skins.cosmetic_catalog.error.is_some() {
+            let delay = RETRY_CATALOG_AFTER[self.skins.catalog_failures - 1];
+            let remaining = delay.saturating_sub(finished.elapsed());
+            if opened || remaining.is_zero() {
+                return true;
+            }
+            ctx.request_repaint_after(remaining);
+            return false;
+        }
+        opened && finished.elapsed() >= CATALOG_MAX_AGE
+    }
+
+    fn skin_state_busy(&self) -> bool {
+        self.skins.arctic_busy || self.skins.public_catalog_busy
+    }
+
+    fn request_arctic_look(&mut self, account: Account) {
+        self.skins.arctic_busy = true;
+        self.skins.arctic_asked_at = Some(Instant::now());
+        self.tasks.arctic_look(account);
+    }
+
+    fn request_public_catalog(&mut self) {
+        self.skins.public_catalog_busy = true;
+        self.tasks.arctic_catalog();
+    }
+
+    /// Fetch the active account's look and catalog, or the public collection when signed out.
     fn request_skin_state(&mut self, force: bool) {
         let Some(account) = self.accounts.active().cloned() else {
-            if (force || self.skins.public_catalog.is_none()) && !self.skins.public_catalog_busy {
-                self.skins.public_catalog_busy = true;
-                self.tasks.arctic_catalog();
+            if (force || self.skins.public_catalog.is_none()) && !self.skin_state_busy() {
+                self.request_public_catalog();
             }
             return;
         };
@@ -307,26 +349,18 @@ impl ArcticApp {
         // or timed-out sign-in means nothing can be worn until the launcher is restarted. The
         // sign-in itself keeps its own back-off (see `cosmetics::token_for`), so this costs little.
         let stale = matches!(self.skins.arctic.get(&account.id), Some(Err(_)))
+            && self.skins.cosmetic_catalog.error.is_none()
             && self
                 .skins
                 .arctic_asked_at
                 .is_none_or(|at| at.elapsed() >= RETRY_LOOK_AFTER);
         if (force || stale || !self.skins.arctic.contains_key(&account.id))
-            && !self.skins.arctic_busy
+            && !self.skin_state_busy()
         {
-            self.skins.arctic_busy = true;
-            self.skins.arctic_asked_at = Some(std::time::Instant::now());
-            self.tasks.arctic_look(account.clone(), None, None);
-        }
-        if matches!(self.skins.arctic.get(&account.id), Some(Err(_)))
-            && self.skins.public_catalog.is_none()
-            && !self.skins.public_catalog_busy
-        {
-            self.skins.public_catalog_busy = true;
-            self.tasks.arctic_catalog();
+            self.request_arctic_look(account.clone());
         }
         if account.is_microsoft()
-            && (force || !self.skins.account.contains_key(&account.id))
+            && !self.skins.account.contains_key(&account.id)
             && !self.skins.busy
         {
             self.skins.busy = true;
@@ -390,14 +424,14 @@ impl ArcticApp {
         }
     }
 
-    /// Read-only assets for the cards and preview; wearing still needs `arctic_state`.
+    /// Preset capes and their textures; wearing still needs `arctic_state`.
     pub(crate) fn catalog_state(&self) -> Option<&ArcticState> {
-        self.arctic_state().or_else(|| {
-            self.skins
-                .public_catalog
-                .as_ref()
-                .and_then(|result| result.as_ref().ok())
-        })
+        self.arctic_state()
+            .or_else(|| self.skins.public_catalog.as_ref()?.as_ref().ok())
+    }
+
+    fn cosmetic_catalog(&self) -> Option<&CosmeticCatalog> {
+        self.skins.cosmetic_catalog.catalog.as_ref()
     }
 
     /// Wear a change right away (`show` puts it in the preview) and save it:
@@ -422,7 +456,7 @@ impl ArcticApp {
             self.skins.queued = Some(look);
         } else {
             self.skins.arctic_busy = true;
-            self.tasks.arctic_look(account, Some(look), Some(state));
+            self.tasks.save_arctic_look(account, look, state);
         }
     }
 
@@ -456,10 +490,9 @@ impl ArcticApp {
             // The look isn't loaded yet (the Cosmetics tab never opened): load
             // it, then wear this.
             if let Some(account) = self.accounts.active().cloned()
-                && !self.skins.arctic_busy
+                && !self.skin_state_busy()
             {
-                self.skins.arctic_busy = true;
-                self.tasks.arctic_look(account, None, None);
+                self.request_arctic_look(account);
             }
             self.skins.from_game = Some(Some(id));
             return;
@@ -671,7 +704,7 @@ impl ArcticApp {
         if let Some(rest) = key.strip_prefix("amesh:") {
             let (hash, number) = rest.split_once(':')?;
             let (_, mesh) = self
-                .catalog_state()?
+                .cosmetic_catalog()?
                 .meshes
                 .iter()
                 .find(|(item, _)| item.mesh == hash)?;
@@ -691,10 +724,16 @@ impl ArcticApp {
                 .and_then(|r| r.as_ref().ok())
                 .and_then(|png| png.clone());
         }
+        if let Some(hash) = key.strip_prefix("acos:") {
+            return self
+                .cosmetic_catalog()?
+                .textures
+                .iter()
+                .find_map(|(h, png)| (h == hash).then(|| png.clone()));
+        }
         if let Some(hash) = key
             .strip_prefix("askin:")
             .or_else(|| key.strip_prefix("acape:"))
-            .or_else(|| key.strip_prefix("acos:"))
         {
             return self.catalog_state()?.png(hash).map(<[u8]>::to_vec);
         }
@@ -784,8 +823,6 @@ impl ArcticApp {
         }
     }
 
-    /// A load or save came back: show the server's look, or send the change
-    /// that was queued meanwhile.
     /// An offline account's avatar is the face of the skin it wears (Microsoft accounts get theirs
     /// from Mojang).
     fn update_offline_face(&mut self, account_id: &str, state: &ArcticState) {
@@ -809,7 +846,13 @@ impl ArcticApp {
         }
     }
 
-    fn on_look_saved(&mut self, account_id: String, result: Result<ArcticState, String>) {
+    /// Show the server's look and send any change queued while the request was in progress.
+    fn on_look_finished(
+        &mut self,
+        account_id: String,
+        result: Result<ArcticState, String>,
+        saving: bool,
+    ) {
         // Once, when the result is stored: the notice that shows it is drawn every frame.
         if let Err(e) = &result {
             log::info!("looks server: {e}");
@@ -823,7 +866,7 @@ impl ArcticApp {
             .is_some_and(Result::is_ok);
         let queued = self.skins.queued.take();
         match result {
-            Err(e) if had_look => {
+            Err(e) if had_look && saving => {
                 // A save failed: back to the look the server has.
                 self.skins.intended = None;
                 self.skins.trying = Trying::default();
@@ -835,27 +878,47 @@ impl ArcticApp {
                 if let Ok(state) = &result {
                     self.update_offline_face(&account_id, state);
                 }
-                self.skins.arctic.insert(account_id.clone(), result);
+                if ok || !had_look {
+                    self.skins.arctic.insert(account_id.clone(), result);
+                }
                 let active = self.accounts.active().cloned();
                 let state = self.arctic_state().cloned();
                 match (queued, active, state) {
-                    (Some(next), Some(account), Some(state)) if ok && account.id == account_id => {
+                    (Some(next), Some(account), Some(state)) if account.id == account_id => {
                         self.skins.arctic_busy = true;
-                        self.tasks.arctic_look(account, Some(next), Some(state));
+                        self.tasks.save_arctic_look(account, next, state);
                     }
                     _ => {
                         self.skins.intended = None;
                         self.skins.trying = Trying::default();
-                        if ok && had_look {
+                        if saving && ok {
                             self.skins.saved_at = Some(now_secs_f64());
                         }
-                        if ok && let Some(picked) = self.skins.from_game.take() {
+                        if ok
+                            && self
+                                .accounts
+                                .active()
+                                .is_some_and(|account| account.id == account_id)
+                            && let Some(picked) = self.skins.from_game.take()
+                        {
                             self.wear_skin_from_game(picked);
                         }
                     }
                 }
             }
         }
+    }
+
+    fn on_catalog_loaded(&mut self, result: Result<CosmeticCatalog, String>) {
+        self.skins.catalog_finished_at = Some(Instant::now());
+        self.skins.catalog_failures = if result.is_ok() {
+            0
+        } else {
+            (self.skins.catalog_failures + 1).min(RETRY_CATALOG_AFTER.len())
+        };
+        self.skins.cosmetic_catalog =
+            merge_catalog(self.skins.cosmetic_catalog.catalog.take(), result);
+        self.skins.failed.clear();
     }
 
     pub(crate) fn on_skins_event(&mut self, event: Event) {
@@ -873,13 +936,46 @@ impl ArcticApp {
                 }
                 self.skins.account.insert(account_id, result);
             }
-            Event::ArcticLook(account_id, result) => self.on_look_saved(account_id, result),
+            Event::ArcticLook(account_id, result) => {
+                let result = result.map(|loaded| {
+                    self.on_catalog_loaded(loaded.catalog);
+                    loaded.look
+                });
+                if result.is_err() {
+                    self.request_public_catalog();
+                }
+                self.on_look_finished(account_id, result, false);
+            }
+            Event::ArcticLookSaved(account_id, result) => {
+                self.on_look_finished(account_id, result, true);
+            }
             Event::ArcticCatalog(result) => {
                 self.skins.public_catalog_busy = false;
-                if let Err(e) = &result {
-                    log::warn!("public looks catalog: {e}");
+                match result {
+                    Ok(loaded) => {
+                        self.on_catalog_loaded(loaded.catalog);
+                        self.skins.public_catalog = Some(Ok(loaded.look));
+                    }
+                    Err(e) => {
+                        log::warn!("public looks catalog: {e}");
+                        self.on_catalog_loaded(Err(e.clone()));
+                        if !self
+                            .skins
+                            .public_catalog
+                            .as_ref()
+                            .is_some_and(Result::is_ok)
+                        {
+                            self.skins.public_catalog = Some(Err(e));
+                        }
+                    }
                 }
-                self.skins.public_catalog = Some(result);
+                if self.skins.from_game.is_some()
+                    && !self.skin_state_busy()
+                    && let Some(account) = self.accounts.active().cloned()
+                    && !self.skins.arctic.contains_key(&account.id)
+                {
+                    self.request_arctic_look(account);
+                }
             }
             Event::PlayerSkin(name, result) => {
                 self.skins.looking_up = false;
@@ -1135,6 +1231,12 @@ const UNUSED_TEXTURE: std::time::Duration = std::time::Duration::from_secs(20);
 const UNUSED_GALLERY: std::time::Duration = std::time::Duration::from_secs(60);
 /// A look that failed to load is asked for again this long after the last try.
 const RETRY_LOOK_AFTER: std::time::Duration = std::time::Duration::from_secs(30);
+const CATALOG_MAX_AGE: Duration = Duration::from_secs(5 * 60);
+const RETRY_CATALOG_AFTER: [Duration; 3] = [
+    Duration::from_secs(5),
+    Duration::from_secs(15),
+    Duration::from_secs(60),
+];
 
 fn is_cape(key: &str) -> bool {
     key.starts_with("mccape:") || key.starts_with("acape:") || key.starts_with("ofcape:")

@@ -29,6 +29,7 @@ pub enum Icon {
     ChevronLeft,
     Close,
     Copy,
+    Refresh,
     External,
     Stop,
     /// A picture: a frame with a mountain and a sun.
@@ -253,6 +254,14 @@ pub fn draw(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
                 &[vec2(-0.75, 0.3), vec2(-0.75, -0.75), vec2(0.3, -0.75)],
                 false,
             );
+        }
+        Icon::Refresh => {
+            let tip = vec2(0.72, 0.0);
+            let arc: Vec<Vec2> = (0..=20)
+                .map(|i| Vec2::angled((0.16 + 0.84 * i as f32 / 20.0) * TAU) * 0.72)
+                .collect();
+            poly(&arc, false);
+            poly(&[vec2(0.40, -0.30), tip, vec2(0.98, -0.33)], false);
         }
         Icon::External => {
             poly(&[vec2(0.1, -0.7), vec2(0.7, -0.7), vec2(0.7, -0.1)], false);

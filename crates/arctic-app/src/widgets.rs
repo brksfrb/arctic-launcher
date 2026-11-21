@@ -356,11 +356,33 @@ pub fn hover_card(ui: &mut Ui, p: &Palette, size: Vec2, selected: bool) -> (Rect
 
 /// Heading + optional subtitle used at the top of every tab.
 pub fn page_header(ui: &mut Ui, p: &Palette, title: &str, subtitle: &str) {
+    page_title(ui, p, title);
+    page_subtitle(ui, p, subtitle);
+}
+
+pub fn page_header_with_action(
+    ui: &mut Ui,
+    p: &Palette,
+    title: &str,
+    subtitle: &str,
+    action: impl FnOnce(&mut Ui),
+) {
+    ui.horizontal(|ui| {
+        page_title(ui, p, title);
+        action(ui);
+    });
+    page_subtitle(ui, p, subtitle);
+}
+
+fn page_title(ui: &mut Ui, p: &Palette, title: &str) {
     ui.label(
         egui::RichText::new(title)
             .font(crate::fonts::heading(30.0))
             .color(p.text),
     );
+}
+
+fn page_subtitle(ui: &mut Ui, p: &Palette, subtitle: &str) {
     if !subtitle.is_empty() {
         ui.label(egui::RichText::new(subtitle).color(p.muted));
     }
