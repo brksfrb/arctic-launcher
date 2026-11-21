@@ -53,6 +53,7 @@
 		"TerrainBuildTimeMixin",
 		"TerrainSyncBuildMixin",
 		"WorldSwitchGcMixin",
+		"BadgeTextureLifecycleMixin",
 		"PlayerListHudMixin",
 		"PlayerTierMixin",
 		"ScreenClickInvoker",

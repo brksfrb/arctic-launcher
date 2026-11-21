@@ -22,7 +22,7 @@ abstract class WorldTextScaleMixin {
 	@ModifyExpressionValue(method = "buildGroup", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/renderer/feature/TextFeatureRenderer$Submit;pose()Lorg/joml/Matrix4fc;"))
 	private Matrix4fc arctic$pose(Matrix4fc pose) {
-		arctic$pixels = TextDrawScale.on() ? TextDrawScale.pixels(pose, 0, 0) : 0;
+		arctic$pixels = TextDrawScale.pixels(pose, 0, 0);
 		return pose;
 	}
 
@@ -40,9 +40,6 @@ abstract class WorldTextScaleMixin {
 	private Font.PreparedText arctic$text(Font font, FormattedCharSequence text, float x, float y,
 	//#endif
 			int color, boolean shadow, boolean includeEmpty, int background) {
-		if (!TextDrawScale.on()) {
-			return font.prepareText(text, x, y, color, shadow, includeEmpty, background);
-		}
 		float previous = TextDrawScale.set(arctic$pixels);
 		try {
 			return font.prepareText(text, x, y, color, shadow, includeEmpty, background);
@@ -62,9 +59,6 @@ abstract class WorldTextScaleMixin {
 	//#else
 	private Font.PreparedText arctic$outline(Font font, FormattedCharSequence text, float x, float y, int color) {
 	//#endif
-		if (!TextDrawScale.on()) {
-			return font.prepare8xTextOutline(text, x, y, color);
-		}
 		float previous = TextDrawScale.set(arctic$pixels);
 		try {
 			return font.prepare8xTextOutline(text, x, y, color);
