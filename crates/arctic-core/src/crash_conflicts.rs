@@ -568,6 +568,7 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
     if base.as_ref().is_some_and(|d| {
         d.title == crate::crash::SAVE_FAILED_TITLE
             || d.title == crate::crash_suspect::UNASSIGNED_ENTITY_TITLE
+            || d.title == crate::crash_suspect::THREADING_TITLE
             || d.title.ends_with(CONFIG_CORRUPT)
     }) {
         return base;
