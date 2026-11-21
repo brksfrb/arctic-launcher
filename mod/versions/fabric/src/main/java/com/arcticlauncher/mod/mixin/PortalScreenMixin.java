@@ -2,6 +2,7 @@
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
+import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.gui.screens.Screen;
 //#if MC >= 26.2
@@ -11,7 +12,6 @@ import net.minecraft.client.Minecraft;
 //#endif
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
  * Portal Screens: standing in a nether portal makes the game close any screen you open (the portal effect
@@ -26,24 +26,18 @@ abstract class PortalScreenMixin {
 	//#endif
 
 	//#if MC >= 1.21.5
-	@Redirect(method = "handlePortalTransitionEffect", at = @At(value = "INVOKE", target = CLOSE), require = 0)
+	@WrapWithCondition(method = "handlePortalTransitionEffect", at = @At(value = "INVOKE", target = CLOSE), require = 0)
 	//#elif MC >= 1.21
-	@Redirect(method = "handleConfusionTransitionEffect", at = @At(value = "INVOKE", target = CLOSE), require = 0)
+	@WrapWithCondition(method = "handleConfusionTransitionEffect", at = @At(value = "INVOKE", target = CLOSE), require = 0)
 	//#else
-	@Redirect(method = "handleNetherPortalClient", at = @At(value = "INVOKE", target = CLOSE), require = 0)
+	@WrapWithCondition(method = "handleNetherPortalClient", at = @At(value = "INVOKE", target = CLOSE), require = 0)
 	//#endif
 	//#if MC >= 26.2
-	private void arctic$keepScreens(Gui gui, Screen screen) {
-		if (screen != null || ArcticClient.config() == null || !ArcticClient.config().portalScreens) {
-			gui.setScreen(screen);
-		}
-	}
+	private boolean arctic$shouldSetScreen(Gui gui, Screen screen) {
 	//#else
-	private void arctic$keepScreens(Minecraft mc, Screen screen) {
-		if (screen != null || ArcticClient.config() == null || !ArcticClient.config().portalScreens) {
-			mc.setScreen(screen);
-		}
-	}
+	private boolean arctic$shouldSetScreen(Minecraft mc, Screen screen) {
 	//#endif
+		return screen != null || ArcticClient.config() == null || !ArcticClient.config().portalScreens;
+	}
 }
 //#endif
