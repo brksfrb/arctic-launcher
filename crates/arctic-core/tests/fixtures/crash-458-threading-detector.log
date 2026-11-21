@@ -1,0 +1,23 @@
+
+---- first error ----
+java.lang.IllegalStateException: Accessing LegacyRandomSource from multiple threads
+(exit code -1 (0xFFFFFFFF; no known NTSTATUS name))
+---- crash report ----
+---- Minecraft Crash Report ----
+// Everything's going to plan. No, really, that was supposed to happen.
+
+Time: 2026-11-21 11:19:23
+Description: Accessing LegacyRandomSource from multiple threads
+
+java.lang.IllegalStateException: Accessing LegacyRandomSource from multiple threads
+	at knot//net.minecraft.class_5798.method_33564(class_5798.java:84)
+	at knot//net.minecraft.class_5820.method_43156(class_5820.java:49)
+	at knot//net.minecraft.class_6566.method_43048(class_6566.java:27)
+	at knot//net.minecraft.class_638.method_2943(class_638.java:383)
+	at knot//net.minecraft.class_638.method_2941(class_638.java:364)
+	at knot//net.minecraft.class_310.method_1574(class_310.java:1942)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1181)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:802)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:517)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)

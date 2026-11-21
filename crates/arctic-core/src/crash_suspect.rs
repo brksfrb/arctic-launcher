@@ -520,6 +520,131 @@ fn uploaded_mod_inventory(text: &str) -> &str {
         .map_or("", |(_, list)| list.split("\n---- ").next().unwrap_or(list))
 }
 
+pub(crate) const THREADING_TITLE: &str = "A mod used the world's random/data from another thread";
+
+/// ThreadingDetector prints each thread's name with a colon, followed by its Java frames.
+fn threading_worker_frame(report: &str) -> Option<Frame> {
+    use crate::crash::minecraft_report_section;
+
+    let lines = report
+        .lines()
+        .skip_while(|line| minecraft_report_section(line) != Some("Thread dumps"))
+        .skip(1)
+        .map(str::trim)
+        .take_while(|line| {
+            minecraft_report_section(line).is_none()
+                && *line != "Stacktrace:"
+                && !line.starts_with("Mixins in Stack")
+                && !line.starts_with("Suspected Mod")
+        });
+    let mut worker = false;
+    for line in lines {
+        if line.is_empty() || line == "Details:" {
+            continue;
+        }
+        if let Some(frame) = frame(line) {
+            if worker
+                && frame.class.contains('.')
+                && !frame.is_platform()
+                && !frame.class.starts_with("net.fabricmc.fabric.")
+            {
+                return Some(frame);
+            }
+        } else {
+            let name = line.strip_prefix("Thread dumps:").unwrap_or(line).trim();
+            worker = name.strip_suffix(':').is_some_and(|name| {
+                let name = name.trim().trim_matches('"');
+                ![
+                    "main",
+                    "main thread",
+                    "render thread",
+                    "client thread",
+                    "server thread",
+                ]
+                .iter()
+                .any(|main| name.eq_ignore_ascii_case(main))
+            });
+        }
+    }
+    None
+}
+
+pub(crate) fn diagnose_threading<'a>(
+    text: &'a str,
+    mods_dir: Option<&Path>,
+    installed: &[InstalledMod],
+) -> Option<(Diagnosis, &'a str)> {
+    if !text.contains(" from multiple threads") {
+        return None;
+    }
+    static EXCEPTION: OnceLock<Regex> = OnceLock::new();
+    let exception = EXCEPTION.get_or_init(|| {
+        Regex::new(r#"^(?:Caused by: |Exception in thread "[^"]+" |(?:\[[^\]]+\] )?\[[^\]]+/(?:ERROR|FATAL)\]:? )?java\.lang\.IllegalStateException: Accessing .+ from multiple threads$"#).unwrap()
+    });
+    let report = text.rsplit_once("---- Minecraft Crash Report ----");
+    let crash = report.map_or(text, |(_, report)| report);
+    let preamble = crash.lines().take_while(|line| {
+        crate::crash::minecraft_report_section(line).is_none()
+            && !line.starts_with("A detailed walkthrough of the error")
+    });
+    let error = preamble
+        .clone()
+        .map(str::trim)
+        .find(|line| exception.is_match(line))
+        .or_else(|| {
+            preamble.map(str::trim).find(|line| {
+                line.strip_prefix("Description: ")
+                    .unwrap_or(line)
+                    .strip_prefix("Accessing ")
+                    .and_then(|name| name.strip_suffix(" from multiple threads"))
+                    .is_some_and(|name| !name.is_empty())
+            })
+        })?;
+
+    let Some(frame) = threading_worker_frame(crash) else {
+        return Some((
+            Diagnosis::new(
+                THREADING_TITLE,
+                "The culprit is unknown. This usually happens when a content or particle mod uses world.random off-thread. Disable half of those mods at a time and retest to narrow it down, then update or remove the mod you identify.",
+                Vec::new(),
+            ),
+            error,
+        ));
+    };
+    let known = mods_dir.map(scan).unwrap_or_default();
+    let index = Index::new(&known);
+    let reported = crate::crash_conflicts::from_crash_report(text);
+    let (package, _) = frame.class.rsplit_once('.')?;
+    let inventory = crate::crash::compact_mod_inventory(text, "");
+    let ids: HashMap<_, _> = inventory
+        .lines()
+        .chain(uploaded_mod_inventory(text).lines())
+        .filter_map(|line| line.split_once(' ').map(|(id, _)| (norm(id), id)))
+        .collect();
+    let (id, name) = if let Some(i) = index.owner(&frame) {
+        (known[i].id.as_str(), known[i].name.as_str())
+    } else if let Some(owner) = frame
+        .config_owner(installed)
+        .or_else(|| frame.config_owner(&reported))
+    {
+        (owner.id.as_str(), owner.name.as_str())
+    } else {
+        let id = package
+            .rsplit('.')
+            .find_map(|part| ids.get(&norm(part)).copied())
+            .unwrap_or(package);
+        (id, id)
+    };
+    Some((
+        Diagnosis::new(
+            THREADING_TITLE,
+            format!("{name} appears in the worker-thread stack. Update or remove that mod."),
+            vec![id.to_owned()],
+        ),
+        error,
+    ))
+}
+
 pub(crate) const UNASSIGNED_ENTITY_TITLE: &str =
     "A mod created an entity without an ID (26.2+ change)";
 
@@ -803,6 +928,66 @@ mod tests {
     use super::*;
     use crate::crash_conflicts::{diagnose_exit_in, diagnose_in};
     use std::io::Write;
+
+    const REPORT_458: &str = include_str!("../tests/fixtures/crash-458-threading-detector.log");
+    const THREADING_REPORT: &str =
+        include_str!("../tests/fixtures/threading-detector-with-worker.log");
+
+    #[test]
+    fn report_458_explains_the_threading_crash_without_a_culprit() {
+        let dir = tempfile::tempdir().unwrap();
+        let diagnosis = diagnose_exit_in(REPORT_458, -1, dir.path()).unwrap();
+        assert_eq!(diagnosis.title, THREADING_TITLE);
+        assert!(diagnosis.mods.is_empty());
+        assert!(diagnosis.detail.contains("The culprit is unknown"));
+        assert!(diagnosis.detail.contains("world.random off-thread"));
+        assert!(diagnosis.detail.contains("Disable half"));
+
+        let (log, report) = REPORT_458.split_once("---- crash report ----\n").unwrap();
+        assert_eq!(crate::crash::diagnose(log), Some(diagnosis.clone()));
+        let upload = crate::crash::Report::build(
+            "1.20.1",
+            "Fabric",
+            "Game exited with code -1 (0xFFFFFFFF)",
+            &[log],
+            &[],
+            Some(report),
+            None,
+        );
+        assert_eq!(upload.title, diagnosis.title);
+        assert!(upload.log.contains("matched: java.lang.IllegalStateException: Accessing LegacyRandomSource from multiple threads"));
+    }
+
+    #[test]
+    fn threading_detector_uses_the_first_worker_mod_frame() {
+        let dir = tempfile::tempdir().unwrap();
+        jar(
+            dir.path(),
+            "example.jar",
+            "different_mod_id",
+            "Spark Particles",
+            &["com.example.sparkparticles.async"],
+            "",
+        );
+        let diagnosis = diagnose_exit_in(THREADING_REPORT, -1, dir.path()).unwrap();
+        assert_eq!(diagnosis.title, THREADING_TITLE);
+        assert_eq!(diagnosis.mods, ["different_mod_id"]);
+        assert!(diagnosis.detail.contains("Spark Particles"));
+        assert!(diagnosis.detail.contains("Update or remove that mod"));
+
+        let uploaded = crate::crash::diagnose(THREADING_REPORT).unwrap();
+        assert_eq!(uploaded.mods, ["spark_particles"]);
+
+        let (main, worker) = THREADING_REPORT
+            .split_once("Particle worker #1:\n")
+            .unwrap();
+        let (_, rest) = worker.split_once("Stacktrace:\n").unwrap();
+        let render_only = format!("{main}Stacktrace:\n{rest}");
+        let diagnosis = diagnose_exit_in(&render_only, -1, dir.path()).unwrap();
+        assert_eq!(diagnosis.title, THREADING_TITLE);
+        assert!(diagnosis.mods.is_empty());
+        assert!(diagnosis.detail.contains("The culprit is unknown"));
+    }
 
     /// A mod jar with a fabric.mod.json and empty class files in the given packages.
     fn jar(dir: &Path, file: &str, id: &str, name: &str, packages: &[&str], extra: &str) {

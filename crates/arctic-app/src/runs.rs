@@ -1170,6 +1170,74 @@ mod tests {
     }
 
     #[test]
+    fn threading_dump_and_crash_stacks_survive_a_busy_run_upload() {
+        let dir = tempfile::tempdir().unwrap();
+        let reports = dir.path().join("crash-reports");
+        std::fs::create_dir(&reports).unwrap();
+        let written =
+            include_str!("../../arctic-core/tests/fixtures/threading-detector-with-worker.log")
+                .replace(
+                    "Caused by: java.lang.IllegalStateException: Example inner cause",
+                    &format!(
+                        "{}Caused by: java.lang.IllegalStateException: Example inner cause",
+                        "\tat knot//net.minecraft.class_638.method_2941(class_638.java:364)\r\n"
+                            .repeat(400)
+                    ),
+                )
+                .replace(
+                    "-- Thread dumps --",
+                    &format!(
+                        "-- Affected level --\nDetails:\n\t{}\n\n-- Thread dumps --",
+                        "verbose world state 💠 ".repeat(4000)
+                    ),
+                );
+        std::fs::write(reports.join("crash.txt"), written).unwrap();
+
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.20.1", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        run.java = Some(format!(
+            "Java java, flags: -Xmx4096M {}",
+            "flag ".repeat(1500)
+        ));
+        let noise = format!("[Render thread/INFO]: {}", "frame 💠 ".repeat(140));
+        run.push_log((0..600).map(|_| LogLine {
+            level: Level::Info,
+            text: noise.clone(),
+        }));
+
+        let diagnosis = run.exit_diagnosis(Some(-1), false).unwrap();
+        assert_eq!(diagnosis.mods, ["spark_particles"]);
+        let report = run.crash_report(&diagnosis.title, Some(-1));
+        assert!(report.log.len() <= 47 * 1024);
+        let (_, attachment) = report.log.split_once("---- crash report ----\n").unwrap();
+        for required in [
+            "Description: Accessing PalettedContainer from multiple threads",
+            "Caused by: java.lang.IllegalStateException: Accessing PalettedContainer from multiple threads",
+            "Caused by: java.lang.IllegalStateException: Example inner cause",
+            "class_638.method_2943(class_638.java:383)",
+            "-- Head --\nThread: Render thread\nStacktrace:",
+            "-- Thread dumps --",
+            "BlockSampler.sample(BlockSampler.java:17)",
+            "Mixins in Stacktrace:",
+            "ClientWorldMixin (render.mixins.json)",
+            "Suspected Mods: Render Hooks (render_hooks)",
+        ] {
+            assert!(attachment.contains(required), "missing {required}");
+        }
+        assert_eq!(attachment.matches("method_2941").count(), 400);
+        assert!(!attachment.contains("verbose world state"));
+        assert!(!attachment.contains("Operating System:"));
+        assert!(!attachment.contains("Fabric Mods:"));
+        assert!(report.log.contains("spark_particles 2.0.0"));
+        assert_eq!(
+            crash::diagnose(&report.log).unwrap().mods,
+            ["spark_particles"]
+        );
+    }
+
+    #[test]
     fn registry_warnings_before_latest_log_tail_reach_diagnosis_and_upload() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("logs")).unwrap();

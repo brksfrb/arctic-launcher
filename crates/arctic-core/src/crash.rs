@@ -1613,6 +1613,10 @@ fn diagnose_rules(
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
     }
+    if let Some((diagnosis, error)) = crate::crash_suspect::diagnose_threading(text, mods_dir, mods)
+    {
+        return Some((diagnosis, head_of(error, 2048).to_owned()));
+    }
     if let Some((diagnosis, error)) =
         crate::crash_suspect::diagnose_unassigned_entity(text, mods_dir, mods)
     {
@@ -1957,9 +1961,10 @@ pub struct Report {
 
 /// Lines of the game log's end that are sent.
 const REPORT_LOG_LINES: usize = 150;
-/// Most of the log's end, and of the crash report's start, that are sent (bytes). All together they
-/// stay under what the server keeps (48 KB).
+/// Leave room under the server's 48 KB cap.
+const REPORT_BYTES: usize = 47 * 1024;
 const REPORT_LOG_BYTES: usize = 8 * 1024;
+/// Usual size of the crash attachment. Its stacks may borrow from the rest of the upload.
 const REPORT_CRASH_BYTES: usize = 16 * 1024;
 /// Latest registry warnings/errors, reserved ahead of verbose log tails and crash inventories.
 const REPORT_REGISTRY_BYTES: usize = 6 * 1024;
@@ -2054,6 +2059,7 @@ impl Report {
         crash_report: Option<&str>,
         java: Option<&str>,
     ) -> Self {
+        let own = Own::this_pc();
         let all = lines.join("\n");
         // Reserve the resolved mod inventory and agent failure context before trimming verbose
         // logs/reports. Fabric's mod list often starts beyond the old 16 KB report prefix.
@@ -2112,22 +2118,29 @@ impl Report {
         if let Some(error) = error {
             priority.push_str(&format!(
                 "\n---- first error ----\n{}\n",
-                scrub(head_of(error, 2048), &Own::this_pc())
+                scrub(head_of(error, 2048), &own)
             ));
         }
         if let Some((diagnosis, matched)) = &diagnosis {
             priority.push_str(&format!(
                 "\n---- diagnosis ----\n{}\nmatched: {}\n",
                 diagnosis.title,
-                scrub(matched, &Own::this_pc())
+                scrub(matched, &own)
             ));
             if (diagnosis.title == SAVE_FAILED_TITLE && vanilla_crash_trace(&all).next().is_some())
                 || diagnosis.title == crate::crash_suspect::UNASSIGNED_ENTITY_TITLE
             {
-                priority.push_str(&scrub(head_of(&diagnosis.detail, 2048), &Own::this_pc()));
+                priority.push_str(&scrub(head_of(&diagnosis.detail, 2048), &own));
                 priority.push('\n');
             }
         }
+        let (crash_core, crash_details) = crash_report.map_or_else(
+            || (String::new(), String::new()),
+            |report| {
+                crash_report_excerpt(report, REPORT_BYTES.saturating_sub(priority.len()), &own)
+            },
+        );
+        let priority_budget = REPORT_BYTES - crash_core.len();
         let vanilla_evidence = all
             .lines()
             .filter(|line| line.starts_with(VANILLA_CRASH))
@@ -2135,33 +2148,30 @@ impl Report {
             .join("\n");
         if !vanilla_evidence.is_empty() {
             priority.push_str("\n---- vanilla crash ----\n");
-            priority.push_str(&scrub(
-                head_of(&vanilla_evidence, 18 * 1024),
-                &Own::this_pc(),
-            ));
+            priority.push_str(&scrub(head_of(&vanilla_evidence, 18 * 1024), &own));
             priority.push('\n');
         }
         let registry = registry_failure_evidence(&all);
         if !registry.is_empty() {
             priority.push_str("\n---- registry failure context ----\n");
-            priority.push_str(&scrub(&registry, &Own::this_pc()));
+            priority.push_str(&scrub(&registry, &own));
         }
         if !mods.is_empty() {
             priority.push_str(&mod_inventory_section(&mods));
         }
         if !mixin.is_empty() {
             priority.push_str("\n---- mixin failure context ----\n");
-            priority.push_str(&scrub(&mixin, &Own::this_pc()));
+            priority.push_str(&scrub(&mixin, &own));
         }
         let early = first_exceptions(&all);
         if !early.is_empty() {
             priority.push_str("\n---- first exceptions ----\n");
-            priority.push_str(&scrub(&early, &Own::this_pc()));
+            priority.push_str(&scrub(&early, &own));
         }
         let ram_total_mb = crate::system::total_memory_mb();
         let ram_free_mb = crate::system::free_memory_mb();
         priority.push_str(&memory_section(ram_total_mb, ram_free_mb));
-        let remaining = (47 * 1024usize).saturating_sub(priority.len() + 512);
+        let remaining = priority_budget.saturating_sub(priority.len());
         let skip = lines.len().saturating_sub(REPORT_LOG_LINES);
         let tail = lines[skip..].join("\n");
         // Preserve the latest bounded snapshot when earlier, handled errors fill their section.
@@ -2172,7 +2182,7 @@ impl Report {
             .saturating_sub(early.len())
             .max(REPORT_LOG_BYTES / 4)
             .max(freeze_bytes);
-        let mut text = tail_of(&tail, tail_bytes).to_owned();
+        let mut text = format!("\n{}", tail_of(&tail, tail_bytes));
         text.push_str("\n\n---- initial output ----\n");
         text.push_str(head_of(&all, 2 * 1024));
         let launcher_compact = launcher_lines
@@ -2184,32 +2194,27 @@ impl Report {
             .collect::<Vec<_>>()
             .join("\n");
         let reserved = launcher_compact.len().min(REPORT_LAUNCHER_BYTES)
-            + java.map_or(0, |s| s.len().min(REPORT_JAVA_BYTES))
-            + crash_report.map_or(0, |s| s.len().min(REPORT_CRASH_BYTES));
-        let evidence_budget = (48 * 1024usize).saturating_sub(text.len() + reserved + 1024);
+            + java.map_or(0, |s| s.len().min(REPORT_JAVA_BYTES));
+        let evidence_budget = remaining.saturating_sub(text.len() + reserved + 512);
         let evidence = diagnostic_evidence(&all, evidence_budget);
         if !evidence.is_empty() {
             text.push_str("\n\n---- diagnostics ----\n");
             text.push_str(head_of(&evidence, evidence_budget));
         }
         if !launcher_lines.is_empty() {
-            let skip = launcher_lines.len().saturating_sub(REPORT_LAUNCHER_LINES);
-            let launcher = launcher_lines[skip..]
-                .iter()
-                .map(|l| compact_launch(l))
-                .collect::<Vec<_>>()
-                .join("\n");
             text.push_str("\n\n---- launcher log ----\n");
-            text.push_str(tail_of(&launcher, REPORT_LAUNCHER_BYTES));
+            text.push_str(tail_of(&launcher_compact, REPORT_LAUNCHER_BYTES));
         }
         if let Some(java) = java {
             text.push_str("\n\n---- java ----\n");
             text.push_str(head_of(java, REPORT_JAVA_BYTES));
         }
-        if let Some(report) = crash_report {
-            text.push_str("\n\n---- crash report ----\n");
-            text.push_str(head_of(report, REPORT_CRASH_BYTES));
-        }
+        let text = scrub(&text, &own);
+        let text = head_of(&text, remaining);
+        let crash_details = head_of(
+            &crash_details,
+            (remaining - text.len()).min(REPORT_CRASH_BYTES.saturating_sub(crash_core.len())),
+        );
         let title = exit_title(title, &all, java.unwrap_or(""));
         let title =
             if title.is_empty() || title == "unknown" || title.starts_with("Game exited with code")
@@ -2231,11 +2236,16 @@ impl Report {
             .as_ref()
             .filter(|(d, _)| {
                 d.title == crate::crash_suspect::UNASSIGNED_ENTITY_TITLE
+                    || d.title == crate::crash_suspect::THREADING_TITLE
                     || (d.title.ends_with(crate::crash_conflicts::CONFIG_CORRUPT)
                         && !title.ends_with(crate::crash_conflicts::CONFIG_CORRUPT))
             })
             .map_or(title, |(d, _)| d.title.clone());
-        let title = registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
+        let title = if title == crate::crash_suspect::THREADING_TITLE {
+            title
+        } else {
+            registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title)
+        };
         let title = java_fatal_diagnosis(&diagnosis_text)
             .or_else(|| runtime_diagnosis(&diagnosis_text))
             .or_else(|| native_diagnosis(&diagnosis_text))
@@ -2266,23 +2276,110 @@ impl Report {
                 } else {
                     &title
                 },
-                &Own::this_pc(),
+                &own,
             ),
             // Mod ids/versions are public loader metadata. Keep version strings verbatim;
             // the generic scrubber would mistake four-part versions for IP addresses.
-            log: head_of(
-                &format!(
-                    "{priority}\n{}",
-                    scrub(head_of(&text, remaining), &Own::this_pc())
-                ),
-                47 * 1024,
-            )
-            .to_owned(),
+            log: format!(
+                "{}{text}{crash_core}{crash_details}",
+                head_of(&priority, priority_budget)
+            ),
             ram_total_mb,
             ram_free_mb,
             contact: String::new(),
         }
     }
+}
+
+pub(crate) fn minecraft_report_section(line: &str) -> Option<&str> {
+    line.trim().strip_prefix("-- ")?.strip_suffix(" --")
+}
+
+/// Budget the exception and diagnostic sections before spending space on supplemental logs.
+fn crash_report_excerpt(report: &str, budget: usize, own: &Own) -> (String, String) {
+    const HEADER: &str = "\n\n---- crash report ----\n";
+    let Some(mut budget) = budget.checked_sub(HEADER.len()) else {
+        return (String::new(), String::new());
+    };
+    let mut excerpt = HEADER.to_owned();
+    if !report.contains("---- Minecraft Crash Report ----") {
+        excerpt.push_str(head_of(&scrub(report, own), budget.min(REPORT_CRASH_BYTES)));
+        return (excerpt, String::new());
+    }
+
+    // The preamble holds the complete exception chain. Mods can put their diagnostic fields
+    // inside otherwise optional sections, with the value on more deeply indented lines.
+    let mut required = vec![String::new()];
+    let mut details = String::new();
+    let mut required_section = true;
+    let mut section = "";
+    let mut field_indent = None;
+    for line in report.split_inclusive('\n') {
+        let trimmed = line.trim();
+        if let Some(name) = minecraft_report_section(line) {
+            section = name;
+            required_section = matches!(name, "Head" | "Thread dumps")
+                || name.starts_with("Mixins in Stack")
+                || matches!(name, "Suspected Mod" | "Suspected Mods");
+            field_indent = None;
+            if required_section {
+                required.push(String::new());
+            }
+        } else if required_section {
+            // Keep the start of each cause/thread if the stacks themselves need trimming.
+            if trimmed.starts_with("Caused by: ")
+                || (section == "Thread dumps" && trimmed.ends_with(':') && trimmed != "Details:")
+            {
+                required.push(String::new());
+            }
+        } else {
+            let indent = line.len() - line.trim_start().len();
+            if trimmed.split_once(':').is_some_and(|(name, _)| {
+                name.starts_with("Mixins in Stack")
+                    || matches!(name, "Suspected Mod" | "Suspected Mods")
+            }) {
+                field_indent = Some(indent);
+                required.push(String::new());
+            } else if !trimmed.is_empty() && field_indent.is_some_and(|field| indent <= field) {
+                field_indent = None;
+            }
+        }
+        if required_section || field_indent.is_some() {
+            required.last_mut().unwrap().push_str(line);
+        } else {
+            details.push_str(line);
+        }
+    }
+
+    let mut blocks: Vec<_> = required.iter().map(|part| scrub(part, own)).collect();
+    // If the diagnostic sections alone exceed the upload, preserve the short sections in full
+    // and split the remaining space between the oversized stacks.
+    let mut by_size: Vec<_> = (0..blocks.len()).collect();
+    by_size.sort_unstable_by_key(|&i| blocks[i].len());
+    let count = by_size.len();
+    for (rank, i) in by_size.into_iter().enumerate() {
+        let part = &mut blocks[i];
+        let allowance = budget / (count - rank);
+        if part.len() > allowance {
+            const CUT: &str = "\n[crash report section truncated]\n";
+            if allowance > CUT.len() {
+                let prefix = head_of(part, allowance - CUT.len());
+                let end = prefix.rfind('\n').unwrap_or(prefix.len());
+                part.truncate(end);
+                part.push_str(CUT);
+            } else {
+                part.clear();
+            }
+        }
+        budget -= part.len();
+    }
+    for part in blocks {
+        excerpt.push_str(&part);
+    }
+    if !details.is_empty() {
+        details.insert(0, '\n');
+    }
+    (excerpt, scrub(&details, own))
 }
 
 /// "---- memory ----\n16384 MB total, 4096 MB free\n", with "unknown" for what couldn't be read.
@@ -4848,6 +4945,32 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
             first_exceptions(&all).matches("Error on GameJoin").count(),
             1
         );
+    }
+
+    #[test]
+    fn oversized_crash_stacks_keep_later_causes_and_worker_frames() {
+        let long_stack =
+            "\tat knot//net.minecraft.class_638.method_2941(class_638.java:364)\n".repeat(1200);
+        let written = include_str!("../tests/fixtures/threading-detector-with-worker.log")
+            .replace("Caused by:", &format!("{long_stack}Caused by:"))
+            .replace(
+                "Particle worker #1:",
+                &format!("{long_stack}Particle worker #1:"),
+            );
+        let report = Report::build("1.20.1", "fabric", "", &[], &[], Some(&written), None);
+        assert!(report.log.len() <= REPORT_BYTES);
+        assert!(report.log.contains("[crash report section truncated]"));
+        assert!(report.log.contains("Example inner cause"));
+        assert!(report.log.contains("-- Head --\nThread: Render thread"));
+        assert!(report.log.contains("-- Thread dumps --"));
+        assert!(report.log.contains("Particle worker #1:"));
+        assert!(
+            report
+                .log
+                .contains("BlockSampler.sample(BlockSampler.java:17)")
+        );
+        assert!(report.log.contains("Mixins in Stacktrace:"));
+        assert!(report.log.contains("Suspected Mods:"));
     }
 
     #[test]
