@@ -1164,6 +1164,47 @@ C2:  13971 9500       4       org.objectweb.asm.tree.AnnotationNode::accept (134
     }
 
     #[test]
+    fn report_441_uses_the_mod_native_crash_over_earlier_log_errors() {
+        let fixture = include_str!("../../arctic-core/tests/fixtures/crash-441-native-mod.log");
+        let (log, hs_err) = fixture.split_once("\n---- crash report ----\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.21.11", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        std::fs::create_dir(dir.path().join("logs")).unwrap();
+        std::fs::write(dir.path().join("logs/latest.log"), log).unwrap();
+        std::fs::write(dir.path().join("hs_err_pid11989.log"), hs_err).unwrap();
+
+        let diagnosis = run.exit_diagnosis(Some(134), false).unwrap();
+        assert_eq!(
+            diagnosis.title,
+            "super_resolution crashed in native library libSuperResolution+linux64+release.so"
+        );
+        assert_eq!(diagnosis.mods, ["super_resolution"]);
+        assert!(
+            diagnosis
+                .detail
+                .contains("Intel(R) Pentium(R) Silver N5000")
+        );
+        assert!(diagnosis.detail.contains("doesn't support"));
+        assert!(
+            diagnosis
+                .detail
+                .contains("Remove super_resolution or replace it")
+        );
+
+        let report = run.crash_report("oωo failed to change the game", Some(134));
+        assert_eq!(report.title, diagnosis.title);
+        assert!(
+            report
+                .log
+                .starts_with("\n---- first error ----\n#  SIGILL (0x4)\n")
+        );
+        assert!(report.log.contains("matched: #  SIGILL"));
+    }
+
+    #[test]
     fn a_force_close_is_not_a_crash() {
         let mut runs = Runs::default();
         let id = runs.start("x", "1.0", "X".into(), PathBuf::new());
