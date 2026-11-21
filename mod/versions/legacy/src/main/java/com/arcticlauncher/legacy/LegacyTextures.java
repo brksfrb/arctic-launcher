@@ -76,8 +76,11 @@ final class LegacyTextures {
 	public static final int GPU_CACHE_CAP = 64;
 	private static final Identifier[] BADGE_IDS = new Identifier[GPU_CACHE_CAP];
 	private static final int[] BADGE_STAMP = new int[GPU_CACHE_CAP];
-	private static int badgeCount, badgeClock;
+	private static final int[] BADGE_GEN = new int[GPU_CACHE_CAP];
+	private static int badgeCount, badgeClock, badgeTick;
 	private static final int[] READY_SIZE = new int[1];
+	private static final Identifier[] GRAVE_IDS = new Identifier[GPU_CACHE_CAP + 8];
+	private static int graveCount;
 
 	static Identifier badge(int style, int size, int role) {
 		int[] pixels = BrandMark.badgeReady(size, style, role, READY_SIZE);
@@ -96,10 +99,25 @@ final class LegacyTextures {
 		return id;
 	}
 
+	private static int nextBadgeStamp() {
+		if (badgeClock == Integer.MAX_VALUE) {
+			int min = badgeClock;
+			for (int i = 0; i < badgeCount; i++) {
+				if (BADGE_STAMP[i] < min) min = BADGE_STAMP[i];
+			}
+			for (int i = 0; i < badgeCount; i++) {
+				BADGE_STAMP[i] -= min;
+			}
+			badgeClock -= min;
+		}
+		return ++badgeClock;
+	}
+
 	private static void badgeTouch(Identifier id) {
 		for (int i = 0; i < badgeCount; i++) {
 			if (BADGE_IDS[i] == id) {
-				BADGE_STAMP[i] = ++badgeClock;
+				BADGE_STAMP[i] = nextBadgeStamp();
+				BADGE_GEN[i] = badgeTick;
 				return;
 			}
 		}
@@ -108,33 +126,59 @@ final class LegacyTextures {
 	private static void badgeRemember(Identifier id) {
 		for (int i = 0; i < badgeCount; i++) {
 			if (BADGE_IDS[i] == id) {
-				BADGE_STAMP[i] = ++badgeClock;
+				BADGE_STAMP[i] = nextBadgeStamp();
+				BADGE_GEN[i] = badgeTick;
 				return;
 			}
 		}
 		if (badgeCount == GPU_CACHE_CAP) {
-			int evict = 0, oldest = BADGE_STAMP[0];
-			for (int i = 1; i < badgeCount; i++) {
+			int evict = -1, oldest = Integer.MAX_VALUE;
+			for (int i = 0; i < badgeCount; i++) {
+				if (BADGE_GEN[i] == badgeTick) continue;
 				if (BADGE_STAMP[i] < oldest) { oldest = BADGE_STAMP[i]; evict = i; }
+			}
+			if (evict < 0) {
+				return;
 			}
 			badgeDrop(BADGE_IDS[evict]);
 			BADGE_IDS[evict] = id;
-			BADGE_STAMP[evict] = ++badgeClock;
+			BADGE_STAMP[evict] = nextBadgeStamp();
+			BADGE_GEN[evict] = badgeTick;
 			return;
 		}
 		BADGE_IDS[badgeCount] = id;
-		BADGE_STAMP[badgeCount] = ++badgeClock;
+		BADGE_STAMP[badgeCount] = nextBadgeStamp();
+		BADGE_GEN[badgeCount] = badgeTick;
 		badgeCount++;
 	}
 
 	private static void badgeDrop(Identifier id) {
+		if (id == null) return;
+		LOADED.remove(id);
+		if (graveCount < GRAVE_IDS.length) {
+			GRAVE_IDS[graveCount++] = id;
+			return;
+		}
+		freeBadge(id);
+	}
+
+	private static void freeBadge(Identifier id) {
 		if (id == null) return;
 		try {
 			MinecraftClient.getInstance().getTextureManager().close(id);
 		} catch (Exception ignored) {
 			// The texture may already have been dropped by a resource reload.
 		}
-		LOADED.remove(id);
+	}
+
+	/** Releases textures evicted on the previous tick. */
+	static void reapBadges() {
+		for (int i = 0; i < graveCount; i++) {
+			freeBadge(GRAVE_IDS[i]);
+			GRAVE_IDS[i] = null;
+		}
+		graveCount = 0;
+		badgeTick++;
 	}
 
 	/** Drops every uploaded badge texture (resource reload or leaving a world). */
@@ -145,6 +189,7 @@ final class LegacyTextures {
 		}
 		badgeCount = 0;
 		badgeClock = 0;
+		reapBadges();
 	}
 
 	private static void linear(Identifier id) {

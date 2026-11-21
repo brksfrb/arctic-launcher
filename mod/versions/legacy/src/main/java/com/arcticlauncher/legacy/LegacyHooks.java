@@ -241,6 +241,7 @@ public final class LegacyHooks {
 		syncChunkBorders();
 		com.arcticlauncher.legacy.replay.LegacyReplayRecording.tick();
 		ArcticClient.tick(screenOpen);
+		LegacyTextures.reapBadges();
 		// Features can reassert bindings (e.g. toggled sneak); release after those updates.
 		// Keep ticking in-world as well, so window events recover keys even without chat.
 		cursorGuard(screenOpen || MinecraftClient.getInstance().currentScreen != null, resized);

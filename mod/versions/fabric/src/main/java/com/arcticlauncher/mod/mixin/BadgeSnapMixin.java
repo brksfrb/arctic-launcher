@@ -8,7 +8,8 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 //#if MC >= 1.21.4
-import org.spongepowered.asm.mixin.injection.Redirect;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 //#endif
 //#if MC >= 1.21.9
 import net.minecraft.client.gui.font.glyphs.BakedSheetGlyph;
@@ -23,8 +24,8 @@ import net.minecraft.client.gui.font.glyphs.BakedGlyph;
  *
  * <p>On 1.21.4+, the public entry is {@code renderChar}, which reads the glyph instance's x/y and
  * then calls the (private) {@code render} overload with those values. The hook on {@code render}
- * is therefore on the path. A {@code renderChar} invoker redirect is also applied so a future
- * inlined renderChar cannot bypass snap. 1.13–1.14 use the older {@code render(TextureManager, …)}
+ * is therefore on the path. A chain-friendly {@code @WrapOperation} on {@code renderChar}'s x()/y()
+ * calls covers a future inlined renderChar. 1.13–1.14 use the older {@code render(TextureManager, …)}
  * signature and the same x/y modification.
  */
 //#if MC >= 1.21.9
@@ -63,35 +64,35 @@ abstract class BadgeSnapMixin {
 
 	//#if MC >= 1.21.4
 	//#if MC >= 1.21.9
-	@Redirect(method = "renderChar", at = @At(value = "INVOKE",
+	@WrapOperation(method = "renderChar", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/gui/font/glyphs/BakedSheetGlyph$GlyphInstance;x()F"))
 	//#else
-	@Redirect(method = "renderChar", at = @At(value = "INVOKE",
+	@WrapOperation(method = "renderChar", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/gui/font/glyphs/BakedGlyph$GlyphInstance;x()F"))
 	//#endif
-	private float arctic$charX(BadgeGlyphInstanceAccess inst) {
-		return arctic$snapInstance(inst)[0];
+	private float arctic$charX(Object inst, Operation<Float> original) {
+		float x = original.call(inst);
+		if (!BadgeTexture.isBadge(this)) {
+			return x;
+		}
+		float y = ((BadgeGlyphInstanceAccess) inst).arctic$y();
+		return TextDrawScale.snapOrigin(x, y, arctic$snap) ? arctic$snap[0] : x;
 	}
 
 	//#if MC >= 1.21.9
-	@Redirect(method = "renderChar", at = @At(value = "INVOKE",
+	@WrapOperation(method = "renderChar", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/gui/font/glyphs/BakedSheetGlyph$GlyphInstance;y()F"))
 	//#else
-	@Redirect(method = "renderChar", at = @At(value = "INVOKE",
+	@WrapOperation(method = "renderChar", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/gui/font/glyphs/BakedGlyph$GlyphInstance;y()F"))
 	//#endif
-	private float arctic$charY(BadgeGlyphInstanceAccess inst) {
-		return arctic$snapInstance(inst)[1];
-	}
-
-	@Unique
-	private float[] arctic$snapInstance(BadgeGlyphInstanceAccess inst) {
-		arctic$snap[0] = inst.arctic$x();
-		arctic$snap[1] = inst.arctic$y();
-		if (BadgeTexture.isBadge(this)) {
-			TextDrawScale.snapOrigin(inst.arctic$x(), inst.arctic$y(), arctic$snap);
+	private float arctic$charY(Object inst, Operation<Float> original) {
+		float y = original.call(inst);
+		if (!BadgeTexture.isBadge(this)) {
+			return y;
 		}
-		return arctic$snap;
+		float x = ((BadgeGlyphInstanceAccess) inst).arctic$x();
+		return TextDrawScale.snapOrigin(x, y, arctic$snap) ? arctic$snap[1] : y;
 	}
 	//#endif
 }
