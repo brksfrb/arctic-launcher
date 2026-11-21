@@ -575,12 +575,12 @@ public final class Compat {
 		//#else
 		net.minecraft.network.chat.Style badge = net.minecraft.network.chat.Style.EMPTY.withFont(font);
 		//#endif
-		// The player list draws names with a shadow; the picture beside them has none (names keep theirs).
-		// Before 1.21.4 a style can't say so, and the picture keeps the text's shadow.
+		// The badge picture has no drop shadow; the name text beside it keeps its own.
+		// Before 1.21.4 a style can't say so, so BadgeShadowMixin omits the shadow-pass quad.
 		//#if MC >= 1.21.11
-		return tab ? badge.withoutShadow() : badge;
+		return badge.withoutShadow();
 		//#elif MC >= 1.21.4
-		return tab ? badge.withShadowColor(0) : badge;
+		return badge.withShadowColor(0);
 		//#else
 		return badge;
 		//#endif

@@ -340,7 +340,7 @@ public final class LegacyHooks {
 		com.mojang.blaze3d.platform.GlStateManager.enableBlend();
 		com.mojang.blaze3d.platform.GlStateManager.blendFuncSeparate(GL11.GL_SRC_ALPHA,
 				GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
-		// The player list's picture has no shadow, its names do.
+		// The badge picture has no drop shadow; the name text keeps its own.
 		if (Badge.drawShadow(tab, shadow)) {
 			com.mojang.blaze3d.platform.GlStateManager.color(0.25f, 0.25f, 0.25f, a);
 			badgeQuad(x + 1, y + 1, side);

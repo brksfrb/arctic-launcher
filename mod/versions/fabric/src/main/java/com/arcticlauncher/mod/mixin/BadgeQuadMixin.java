@@ -48,8 +48,8 @@ abstract class BadgeQuadMixin {
 		int slot = BadgeTexture.slot(codepoint, name);
 		if (slot >= 0) cir.setReturnValue(BadgeTexture.tab(slot) ? ARCTIC_TAB_ADVANCE : ARCTIC_TAG_ADVANCE);
 		//#if MC < 1.16
-		if (codepoint == BadgeShadow13Mixin.ARCTIC_BLANK && SmoothFont.isDefault(name)) {
-			cir.setReturnValue(ARCTIC_TAB_ADVANCE);
+		if (SmoothFont.isDefault(name) && (codepoint == BadgeShadow13Mixin.ARCTIC_BLANK || codepoint == BadgeShadow13Mixin.ARCTIC_BLANK_TAG)) {
+			cir.setReturnValue(codepoint == BadgeShadow13Mixin.ARCTIC_BLANK ? ARCTIC_TAB_ADVANCE : ARCTIC_TAG_ADVANCE);
 		}
 		//#endif
 	}
@@ -65,7 +65,7 @@ abstract class BadgeQuadMixin {
 		int slot = BadgeTexture.slot(codepoint, name);
 		if (slot >= 0) cir.setReturnValue(BadgeTexture.quad(slot));
 		//#if MC < 1.16
-		if (codepoint == BadgeShadow13Mixin.ARCTIC_BLANK && SmoothFont.isDefault(name)) {
+		if (SmoothFont.isDefault(name) && (codepoint == BadgeShadow13Mixin.ARCTIC_BLANK || codepoint == BadgeShadow13Mixin.ARCTIC_BLANK_TAG)) {
 			cir.setReturnValue(ARCTIC_EMPTY);
 		}
 		//#endif

@@ -8,10 +8,11 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
-/** Keep the tab badge's advance in the shadow pass while omitting its quad. */
+/** Keep the badge's advance in the shadow pass while omitting its quad. The name text still has a shadow. */
 @Mixin(Font.class)
 abstract class BadgeShadow13Mixin {
 	static final char ARCTIC_BLANK = '\uE0C0';
+	static final char ARCTIC_BLANK_TAG = '\uE0C1';
 
 	//#if MC >= 1.15
 	@ModifyArg(method = "drawInternal(Ljava/lang/String;FFIZLcom/mojang/math/Matrix4f;Lnet/minecraft/client/renderer/MultiBufferSource;ZII)I",
@@ -27,11 +28,11 @@ abstract class BadgeShadow13Mixin {
 		for (int i = 0; i < text.length(); i++) {
 			char c = text.charAt(i);
 			int slot = Badge.glyphSlot(c);
-			if (slot >= 0 && BadgeTexture.tab(slot)) {
+			if (slot >= 0) {
 				if (out == null) {
 					out = new StringBuilder(text);
 				}
-				out.setCharAt(i, ARCTIC_BLANK);
+				out.setCharAt(i, BadgeTexture.tab(slot) ? ARCTIC_BLANK : ARCTIC_BLANK_TAG);
 			}
 		}
 		return out == null ? text : out.toString();

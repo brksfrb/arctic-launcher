@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 
-/** Keep the tab badge's advance in the shadow pass while omitting its quad. */
+/** Keep the badge's advance in the shadow pass while omitting its quad. The name text still has a shadow. */
 @Mixin(targets = "net.minecraft.client.gui.Font$StringRenderOutput")
 abstract class BadgeShadowMixin {
 	@Shadow @Final private boolean dropShadow;
@@ -24,7 +24,7 @@ abstract class BadgeShadowMixin {
 	private BakedGlyph arctic$omitShadow(BakedGlyph quad, int index, Style style, int codepoint) {
 		if (dropShadow) {
 			int slot = BadgeTexture.slot(codepoint, style.getFont());
-			if (slot >= 0 && BadgeTexture.tab(slot)) return ARCTIC_EMPTY;
+			if (slot >= 0) return ARCTIC_EMPTY;
 		}
 		return quad;
 	}

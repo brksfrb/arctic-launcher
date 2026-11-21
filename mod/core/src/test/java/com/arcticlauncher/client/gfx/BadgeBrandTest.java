@@ -32,7 +32,7 @@ class BadgeBrandTest {
 		assertEquals(9, Badge.size(true));
 		assertEquals(10, Badge.advance(false));
 		assertEquals(11, Badge.advance(true));
-		assertTrue(Badge.drawShadow(false, true));
+		assertFalse(Badge.drawShadow(false, true));
 		assertFalse(Badge.drawShadow(false, false));
 		assertFalse(Badge.drawShadow(true, true));
 		assertFalse(Badge.drawShadow(true, false));

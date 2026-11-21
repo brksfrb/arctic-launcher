@@ -114,8 +114,9 @@ public final class Badge {
 		return Math.max(1, Math.min(MAX_RASTER_SIZE, Math.round(size(tab) * pixelsPerUnit)));
 	}
 
+	/** The badge picture never has a drop shadow; the name text keeps its own. */
 	public static boolean drawShadow(boolean tab, boolean textShadow) {
-		return textShadow && !tab;
+		return false;
 	}
 
 	/** Carry wearer and placement through old String text APIs; never consult a local style while drawing. */
