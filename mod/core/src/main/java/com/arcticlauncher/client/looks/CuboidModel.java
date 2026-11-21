@@ -23,6 +23,15 @@ public final class CuboidModel {
 	/** Floats per quad: 4 × (x, y, z, u, v), then the normal. */
 	private static final int QUAD = 4 * 5 + 3;
 
+	/** Draws are synchronous once a version's vertex callback begins. */
+	private static final ThreadLocal<Scratch> SCRATCH = ThreadLocal.withInitial(Scratch::new);
+
+	private static final class Scratch {
+		float[] world = new float[12];
+		final float[] local = new float[9];
+		final float[] sample = new float[3];
+	}
+
 	private CuboidModel() {}
 
 	/** One root bone's model (with its child bones), drawn attached to a player part. */
@@ -53,15 +62,25 @@ public final class CuboidModel {
 		 * the packed light; glow pieces pass fullbright.
 		 */
 		public void emit(Xform xf, int light) {
-			float t = idle == null ? 0f : (System.currentTimeMillis() % 3_600_000L) / 1000f;
+			emit(xf, light, time());
+		}
+
+		public void emit(Xform xf, int light, float t) {
 			emit(xf, light, idle, t);
+		}
+
+		public static float time() {
+			return (System.currentTimeMillis() % 3_600_000L) / 1000f;
 		}
 
 		/** Draws the piece with its bones posed by {@code motion} (bones by name) at {@code t} seconds. */
 		public void emit(Xform xf, int light, Animation motion, float t) {
-			Animation idle = motion;
 			int n = parent.length;
-			float[] world = new float[n * 12];
+			Scratch scratch = SCRATCH.get();
+			if (scratch.world.length < n * 12) {
+				scratch.world = new float[n * 12];
+			}
+			float[] world = scratch.world;
 			for (int i = 0; i < n; i++) {
 				float rx = rotation[i][0];
 				float ry = rotation[i][1];
@@ -69,21 +88,21 @@ public final class CuboidModel {
 				float ox = offset[i][0];
 				float oy = offset[i][1];
 				float oz = offset[i][2];
-				if (idle != null) {
-					float[] r = idle.rotation(names[i], t);
+				if (motion != null) {
+					float[] r = motion.rotation(names[i], t, scratch.sample);
 					if (r != null) {
 						rx += r[0] * DEG;
 						ry += r[1] * DEG;
 						rz += r[2] * DEG;
 					}
-					float[] p = idle.position(names[i], t);
+					float[] p = motion.position(names[i], t, scratch.sample);
 					if (p != null) {
 						ox += p[0];
 						oy -= p[1];
 						oz += p[2];
 					}
 				}
-				place(world, i, parent[i], rx, ry, rz, ox, oy, oz);
+				place(world, scratch.local, i, parent[i], rx, ry, rz, ox, oy, oz);
 			}
 			for (int i = 0; i < n; i++) {
 				float[] q = quads[i];
@@ -113,7 +132,7 @@ public final class CuboidModel {
 		}
 
 		/** Bone {@code i}'s world matrix (3×3 rows, then the translation) from its parent's. */
-		private static void place(float[] world, int i, int parent, float rx, float ry, float rz, float ox, float oy, float oz) {
+		private static void place(float[] world, float[] l, int i, int parent, float rx, float ry, float rz, float ox, float oy, float oz) {
 			float sx = (float) Math.sin(rx);
 			float cx = (float) Math.cos(rx);
 			float sy = (float) Math.sin(ry);
@@ -121,9 +140,15 @@ public final class CuboidModel {
 			float sz = (float) Math.sin(rz);
 			float cz = (float) Math.cos(rz);
 			// Z·Y·X, like Minecraft's rotationZYX.
-			float[] l = {cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx,
-					sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx,
-					-sy, cy * sx, cy * cx};
+			l[0] = cz * cy;
+			l[1] = cz * sy * sx - sz * cx;
+			l[2] = cz * sy * cx + sz * sx;
+			l[3] = sz * cy;
+			l[4] = sz * sy * sx + cz * cx;
+			l[5] = sz * sy * cx - cz * sx;
+			l[6] = -sy;
+			l[7] = cy * sx;
+			l[8] = cy * cx;
 			int w = i * 12;
 			if (parent < 0) {
 				System.arraycopy(l, 0, world, w, 9);

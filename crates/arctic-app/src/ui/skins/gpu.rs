@@ -51,8 +51,8 @@ pub fn draw(painter: &egui::Painter, faces: &[Face], project: &impl Fn(V3) -> Po
     });
 }
 
-/// Consecutive faces with the same texture: (texture, first vertex, vertex count).
-type Batch = (TextureId, i32, i32);
+/// Consecutive faces with the same color and glow textures.
+type Batch = (TextureId, Option<TextureId>, i32, i32);
 
 fn vertices(faces: &[Face], project: &impl Fn(V3) -> Pos2, area: Rect) -> (Vec<f32>, Vec<Batch>) {
     let mut out = Vec::with_capacity(faces.len() * 6 * STRIDE);
@@ -74,8 +74,10 @@ fn vertices(faces: &[Face], project: &impl Fn(V3) -> Pos2, area: Rect) -> (Vec<f
             out.extend_from_slice(&color);
         }
         match batches.last_mut() {
-            Some((texture, _, count)) if *texture == face.texture => *count += 6,
-            _ => batches.push((face.texture, start, 6)),
+            Some((texture, glow, _, count)) if *texture == face.texture && *glow == face.glow => {
+                *count += 6;
+            }
+            _ => batches.push((face.texture, face.glow, start, 6)),
         }
     }
     (out, batches)
@@ -91,6 +93,7 @@ struct Renderer {
     buffer: glow::Buffer,
     vao: Option<glow::VertexArray>,
     pass: glow::UniformLocation,
+    has_glow: glow::UniformLocation,
     attributes: [(u32, i32, usize); 3],
 }
 
@@ -116,10 +119,15 @@ impl Renderer {
         );
         // Colors are premultiplied and in gamma space, as egui paints them.
         let fragment = format!(
-            "{}{precision}{frag}uniform sampler2D u_sampler;\nuniform float u_pass;\n\
+            "{}{precision}{frag}uniform sampler2D u_sampler;\nuniform sampler2D u_glow;\nuniform float u_has_glow;\nuniform float u_pass;\n\
              {fin} vec2 v_uv;\n{fin} vec4 v_color;\n\
              void main() {{\n\
-               vec4 c = v_color * texture2D(u_sampler, v_uv);\n\
+               vec4 base = texture2D(u_sampler, v_uv);\n\
+               vec4 c = v_color * base;\n\
+               if (u_has_glow > 0.5) {{\n\
+                 float e = clamp(texture2D(u_glow, v_uv).a / max(base.a, 0.001), 0.0, 1.0);\n\
+                 c.rgb = mix(c.rgb, base.rgb, e);\n\
+               }}\n\
                if (u_pass < 0.5 ? c.a < 0.99 : (c.a >= 0.99 || c.a < 0.01)) discard;\n\
                gl_FragColor = c;\n\
              }}\n",
@@ -164,7 +172,12 @@ impl Renderer {
                 (attribute("a_uv")?, 2, 3),
                 (attribute("a_color")?, 4, 5),
             ];
+            gl.use_program(Some(program));
+            gl.uniform_1_i32(gl.get_uniform_location(program, "u_glow").as_ref(), 1);
             Ok(Self {
+                has_glow: gl
+                    .get_uniform_location(program, "u_has_glow")
+                    .ok_or("no u_has_glow in the preview shader")?, // i18n-ignore
                 pass: gl
                     .get_uniform_location(program, "u_pass")
                     .ok_or("no u_pass in the preview shader")?, // i18n-ignore
@@ -218,11 +231,21 @@ impl Renderer {
             for (pass, writes_depth) in [(0.0, true), (1.0, false)] {
                 gl.uniform_1_f32(Some(&self.pass), pass);
                 gl.depth_mask(writes_depth);
-                for &(texture, first, count) in batches {
+                for &(texture, glow_texture, first, count) in batches {
                     let Some(texture) = painter.texture(texture) else {
                         continue;
                     };
                     gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+                    let glow_texture = glow_texture.and_then(|id| painter.texture(id));
+                    if let Some(glow_texture) = glow_texture {
+                        gl.active_texture(glow::TEXTURE1);
+                        gl.bind_texture(glow::TEXTURE_2D, Some(glow_texture));
+                        gl.active_texture(glow::TEXTURE0);
+                    }
+                    gl.uniform_1_f32(
+                        Some(&self.has_glow),
+                        if glow_texture.is_some() { 1.0 } else { 0.0 },
+                    );
                     gl.draw_arrays(glow::TRIANGLES, first, count);
                 }
             }

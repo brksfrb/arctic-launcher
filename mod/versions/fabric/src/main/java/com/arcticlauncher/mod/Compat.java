@@ -246,13 +246,9 @@ public final class Compat {
 	/** Turn the pose Z, then Y, then X (radians), the order a model part turns in. */
 	public static void turnZYX(com.mojang.blaze3d.vertex.PoseStack pose, float x, float y, float z) {
 		//#if MC >= 26.3
-		pose.rotate(com.mojang.math.Axis.ZP.rotation(z));
-		pose.rotate(com.mojang.math.Axis.YP.rotation(y));
-		pose.rotate(com.mojang.math.Axis.XP.rotation(x));
+		pose.rotate(TURN.rotationZYX(z, y, x));
 		//#elif MC >= 1.19.3
-		pose.mulPose(com.mojang.math.Axis.ZP.rotation(z));
-		pose.mulPose(com.mojang.math.Axis.YP.rotation(y));
-		pose.mulPose(com.mojang.math.Axis.XP.rotation(x));
+		pose.mulPose(TURN.rotationZYX(z, y, x));
 		//#elif MC >= 1.15
 		pose.mulPose(com.mojang.math.Vector3f.ZP.rotation(z));
 		pose.mulPose(com.mojang.math.Vector3f.YP.rotation(y));

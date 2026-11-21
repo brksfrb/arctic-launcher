@@ -3,7 +3,7 @@
 //! each cosmetic slot) next to the list for the one picked. Pointing at
 //! something tries it on in the preview; clicking wears it.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use arctic_core::skins::Variant;
 use eframe::egui::{
@@ -34,7 +34,16 @@ const ZOOM: std::ops::RangeInclusive<f32> = 0.4..=4.0;
 /// at the face and what's worn there, not the belt.
 const ZOOM_FOCUS: f32 = 28.0;
 /// Cosmetic slots in the order they're listed.
-pub(super) const SLOTS: [&str; 6] = ["head", "face", "back", "shoulders", "arms", "body"];
+pub(super) const SLOTS: [&str; 8] = [
+    "head",
+    "face",
+    "cape",
+    "back",
+    "shoulders",
+    "arms",
+    "body",
+    "aura",
+];
 
 /// How far the idle auto-turn moves the preview this frame: nothing while locked, or until
 /// `AUTO_TURN_AFTER` seconds after the last drag (`dragged_at < 0` = never auto-turn yet).
@@ -112,7 +121,8 @@ impl ArcticApp {
                         match self.skins.section {
                             Section::Skins => self.skins_header(ui),
                             Section::Capes => self.capes_header(ui),
-                            Section::Slot(slot) => self.cosmetics_header(ui, slot),
+                            Section::Slot(slot) => self.cosmetics_header(ui, slot_name(slot)),
+                            Section::Legacy => self.cosmetics_header(ui, t!("skins.legacy")),
                         }
                         egui::ScrollArea::vertical()
                             .id_salt(("cosmetics_items", format!("{:?}", self.skins.section)))
@@ -121,7 +131,9 @@ impl ArcticApp {
                                 ui.vertical(|ui| match self.skins.section {
                                     Section::Skins => self.skins_body(ui),
                                     Section::Capes => self.capes_body(ui),
-                                    Section::Slot(slot) => self.cosmetics_body(ui, slot),
+                                    section @ (Section::Slot(_) | Section::Legacy) => {
+                                        self.cosmetics_body(ui, section)
+                                    }
                                 });
                             });
                     });
@@ -269,7 +281,10 @@ impl ArcticApp {
                 current.skin_key = Some(key.clone());
                 current.variant = Some(*variant);
             }
-            Some(Hover::Cape(key)) => current.cape_key = key.clone(),
+            Some(Hover::Cape(key)) => {
+                current.cape_key = key.clone();
+                self.without_cape_cosmetics(&mut worn_ids);
+            }
             Some(Hover::Cosmetics(ids)) => worn_ids = ids.clone(),
             None => {}
         }
@@ -349,17 +364,12 @@ impl ArcticApp {
             swing: model::idle_swing(now),
         };
         let wearing = self.cosmetic_models(&ctx, &worn_ids);
+        let motion = (!arctic_core::cosmetics::reduce_cape_motion()).then_some(now);
         let worn: Vec<model::Worn> = wearing
             .cuboids
             .iter()
-            .map(|(geometry, texture, fit)| model::Worn {
-                geometry,
-                texture: *texture,
-                fit: *fit,
-            })
+            .map(|cuboid| cuboid.preview(motion, pose.swing))
             .collect();
-        // Sculpted cosmetics play their idle animation (still, if the viewer froze motion).
-        let motion = (!arctic_core::cosmetics::reduce_cape_motion()).then_some(now);
         let worn_meshes: Vec<model::WornMesh> = wearing
             .meshes
             .iter()
@@ -602,29 +612,25 @@ impl ArcticApp {
         }
     }
 
-    /// Skins, Capes, then one row per cosmetic slot (with how many there are).
+    /// Skins, Capes, the cosmetic slots, and the Legacy category.
     fn category_rail(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        let mut counts = [0; SLOTS.len()];
+        let mut counts = HashMap::new();
         if let Some(state) = self.catalog_state() {
             let mut seen = HashSet::new();
-            for (id, slot) in state
+            for (id, slot, legacy) in state
                 .meshes
                 .iter()
-                .map(|(item, _)| (item.id.as_str(), item.slot.as_str()))
-                .chain(
-                    state
-                        .items
-                        .iter()
-                        .map(|(item, _)| (item.id.as_str(), item.slot.as_str())),
-                )
+                .map(|(item, _)| (&item.id, &item.slot, item.legacy))
+                .chain(state.items.iter().map(|asset| {
+                    let item = &asset.item;
+                    (&item.id, &item.slot, item.legacy)
+                }))
             {
-                if seen.insert(id)
-                    && let Some(index) = SLOTS
-                        .iter()
-                        .position(|candidate| *candidate == slot_key(slot))
-                {
-                    counts[index] += 1;
+                if seen.insert(id) {
+                    *counts
+                        .entry(Section::for_cosmetic(slot, legacy))
+                        .or_default() += 1;
                 }
             }
         }
@@ -663,15 +669,19 @@ impl ArcticApp {
                 .color(p.muted),
         );
         ui.add_space(2.0);
-        for (slot, n) in SLOTS.into_iter().zip(counts) {
+        let categories = SLOTS
+            .into_iter()
+            .map(|slot| (Section::Slot(slot), slot_name(slot)))
+            .chain([(Section::Legacy, t!("skins.legacy"))]);
+        for (section, name) in categories {
             if rail_row(
                 ui,
                 p,
-                slot_name(slot),
-                Some(n),
-                self.skins.section == Section::Slot(slot),
+                name,
+                Some(counts.get(&section).copied().unwrap_or_default()),
+                self.skins.section == section,
             ) {
-                pick = Some(Section::Slot(slot));
+                pick = Some(section);
             }
         }
         if let Some(section) = pick
@@ -810,6 +820,8 @@ pub(super) fn slot_name(slot: &str) -> &'static str {
         "head" => t!("skins.head"),
         "face" => t!("skins.face"),
         "back" => t!("skins.back"),
+        "cape" => t!("skins.capes_3d"),
+        "aura" => t!("skins.auras"),
         "shoulders" => t!("skins.shoulders"),
         "arms" => t!("skins.arms"),
         _ => t!("skins.body"),

@@ -3,6 +3,7 @@
 //! Microsoft), looking up other players and picking files.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 #[cfg(feature = "offline-accounts")]
 use arctic_core::Error;
@@ -24,12 +25,19 @@ pub struct ArcticState {
     /// (texture hash, PNG) for the presets, cosmetics and the current look.
     pub textures: Vec<(String, Vec<u8>)>,
     /// 3D cosmetics with their parsed models (items that failed are left out).
-    pub items: Vec<(cosmetic_models::Item, cosmetic_models::Geometry)>,
+    pub items: Vec<CuboidAsset>,
     /// Sculpted cosmetics (mesh-only ones, and the meshes of cuboid items that also have one).
     pub meshes: Vec<(
         cosmetic_models::MeshItem,
         std::sync::Arc<cosmetic_models::Mesh>,
     )>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CuboidAsset {
+    pub item: cosmetic_models::Item,
+    pub geometry: Arc<cosmetic_models::Geometry>,
+    pub animation: Option<Arc<cosmetic_models::Animation>>,
 }
 
 impl ArcticState {
@@ -224,6 +232,7 @@ impl Tasks {
                 id: i.id.clone(),
                 name: i.name.clone(),
                 slot: i.slot.clone(),
+                legacy: i.legacy,
                 mesh,
             })
         }));
@@ -243,12 +252,25 @@ impl Tasks {
             let geometry = cosmetic_models::Geometry::parse(&bytes)
                 .inspect_err(|e| log::warn!("cosmetic {}: {e}", item.id))
                 .ok()?;
-            Some((item, geometry))
+            let animation = item.animation.as_ref().and_then(|hash| {
+                let bytes = cached(&cache, hash, || cosmetic_models::asset(base, hash))?;
+                cosmetic_models::Animation::parse(&bytes)
+                    .inspect_err(|e| log::warn!("cosmetic {} (idle): {e}", item.id))
+                    .ok()
+                    .map(Arc::new)
+            });
+            Some(CuboidAsset {
+                item,
+                geometry: Arc::new(geometry),
+                animation,
+            })
         });
         let mut wanted: Vec<String> = presets.iter().map(|p| p.texture.clone()).collect();
         // Each animated cape's still image too (worn when its wearer turns Animate off).
         wanted.extend(presets.iter().filter_map(|p| p.still.clone()));
-        wanted.extend(items.iter().map(|(i, _)| i.texture.clone()));
+        wanted.extend(items.iter().flat_map(|asset| {
+            std::iter::once(asset.item.texture.clone()).chain(asset.item.glow.clone())
+        }));
         wanted.extend(look.skin.clone());
         wanted.extend(look.cape.clone());
         let mut seen = HashSet::new();

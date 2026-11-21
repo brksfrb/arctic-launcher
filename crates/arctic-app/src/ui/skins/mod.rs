@@ -26,13 +26,24 @@ use crate::tasks::Event;
 use crate::toasts::Kind;
 use crate::{t, tf};
 /// The category picked in the rail on the right.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum Section {
     #[default]
     Skins,
     Capes,
     /// 3D cosmetics of one slot (`head`, `face`...).
     Slot(&'static str),
+    Legacy,
+}
+
+impl Section {
+    fn for_cosmetic(slot: &str, legacy: bool) -> Self {
+        if legacy {
+            Self::Legacy
+        } else {
+            Self::Slot(panels::slot_key(slot))
+        }
+    }
 }
 
 /// Something pointed at in a list, shown on the preview (not saved).
@@ -246,6 +257,7 @@ impl ArcticApp {
             Some("shoulders") => Section::Slot("shoulders"),
             Some("arms") => Section::Slot("arms"),
             Some("body") => Section::Slot("body"),
+            Some("legacy") => Section::Legacy,
             _ => Section::default(),
         };
         self.skins = SkinsUi {
@@ -484,7 +496,37 @@ impl ArcticApp {
 
     /// `key`: the cape's texture key for the preview (`None`: no cape).
     fn set_arctic_cape(&mut self, cape: Option<CapeChoice>, key: Option<String>) {
-        self.change_look(|l| l.cape = cape, |t| t.cape = Some(key));
+        let cosmetics = cape.is_some().then(|| {
+            let mut ids = self.worn_ids();
+            self.without_cape_cosmetics(&mut ids);
+            ids
+        });
+        let shown = cosmetics.clone();
+        self.change_look(
+            |l| {
+                l.cape = cape;
+                if let Some(ids) = cosmetics {
+                    l.cosmetics = Some(ids);
+                }
+            },
+            |t| {
+                t.cape = Some(key);
+                if shown.is_some() {
+                    t.cosmetics = shown;
+                }
+            },
+        );
+    }
+
+    fn without_cape_cosmetics(&self, ids: &mut Vec<String>) {
+        if let Some(state) = self.catalog_state() {
+            ids.retain(|id| {
+                !state
+                    .items
+                    .iter()
+                    .any(|asset| asset.item.id == *id && asset.item.slot == "cape")
+            });
+        }
     }
 
     /// Turn "Animate" on or off for one cape (remembered per cape); if it is
@@ -501,7 +543,10 @@ impl ArcticApp {
                 (Some(still), false) => still.clone(),
                 _ => preset.texture.clone(),
             };
-            self.set_arctic_cape(Some(preset.choice(on)), Some(format!("acape:{shown}")));
+            self.change_look(
+                |look| look.cape = Some(preset.choice(on)),
+                |trying| trying.cape = Some(Some(format!("acape:{shown}"))),
+            );
         }
     }
 
