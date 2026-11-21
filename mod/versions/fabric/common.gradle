@@ -322,6 +322,7 @@ processResources {
 			// Scaled-up smooth-font text drawn from letters rasterized near their size on screen (ScaledInter):
 			// needs 1.21.9+'s glyph API (baked glyphs that carry their metrics) and GUI text render states.
 			scaledFont: atLeast('1.21.9'),
+			badgeGuiFilter: atLeast('1.21.11'),
 			textProjection: atLeast('1.21.6'),
 			worldTextScale: atLeast('26.2'),
 			// 26.2 only: name tags have their own feature renderer (26.3 folded them back into TextFeatureRenderer).

@@ -3,13 +3,9 @@ package com.arcticlauncher.legacy;
 import com.arcticlauncher.client.gfx.BrandMark;
 import com.arcticlauncher.client.feature.Badge;
 
-import java.awt.AlphaComposite;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,7 +14,6 @@ import javax.imageio.ImageIO;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.util.Identifier;
-import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 
 /**
@@ -66,9 +61,7 @@ final class LegacyTextures {
 				image.setRGB(0, 0, size, size, BrandMark.raster(size), 0, size);
 				if (!register(id, image)) return null;
 				if (smooth) {
-					MinecraftClient.getInstance().getTextureManager().bindTexture(id);
-					org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
-					org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
+					linear(id);
 				}
 			}
 			return id;
@@ -80,14 +73,21 @@ final class LegacyTextures {
 		return ICON;
 	}
 
-	static Identifier badge(int style, int size) {
-		Identifier id = dyn(Badge.name(style) + "-" + size);
+	static Identifier badge(int style, int size, int role) {
+		Identifier id = dyn(Badge.name(style) + "-" + size + "-" + role);
 		if (LOADED.contains(id)) return id;
 
 		BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
-		// Future role tint belongs here, before the common nearest-sampled upload.
-		image.setRGB(0, 0, size, size, BrandMark.badgeRaster(size, style), 0, size);
-		return register(id, image) ? id : null;
+		image.setRGB(0, 0, size, size, BrandMark.badgeRaster(size, style, role), 0, size);
+		if (!register(id, image)) return null;
+		linear(id);
+		return id;
+	}
+
+	private static void linear(Identifier id) {
+		MinecraftClient.getInstance().getTextureManager().bindTexture(id);
+		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
 	}
 
 	private static Identifier asset(String name) {
@@ -100,9 +100,7 @@ final class LegacyTextures {
 		Identifier result = LOADED.contains(id) ? id : null;
 		if (result != null && name.startsWith("icon-")) {
 			// The spinning snowflake is drawn turned: filter it linearly (the default is nearest).
-			MinecraftClient.getInstance().getTextureManager().bindTexture(id);
-			org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
-			org.lwjgl.opengl.GL11.glTexParameteri(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER, org.lwjgl.opengl.GL11.GL_LINEAR);
+			linear(id);
 		}
 		ASSETS.put(name, result);
 		return result;
@@ -114,45 +112,10 @@ final class LegacyTextures {
 				ArcticLegacy.LOG.warn("Arctic texture {} is missing", resource);
 				return;
 			}
-			BufferedImage image = ImageIO.read(in);
-			if (register(id, image) && resource.startsWith("/assets/arctic/badge")
-					&& (resource.endsWith("_tab.png") || resource.endsWith("_tag.png"))) {
-				MinecraftClient.getInstance().getTextureManager().bindTexture(id);
-				// Apply any future role tint to the source image before generating its mip chain.
-				badgeMipmaps(image);
-			}
+			register(id, ImageIO.read(in));
 		} catch (Exception e) {
 			ArcticLegacy.LOG.warn("Arctic texture {}: {}", resource, e.toString());
 		}
-	}
-
-	/** Upload the complete chain without requiring framebuffer extensions on legacy hardware. */
-	private static void badgeMipmaps(BufferedImage image) {
-		int level = 0;
-		while (image.getWidth() > 1 || image.getHeight() > 1) {
-			int width = Math.max(1, image.getWidth() / 2);
-			int height = Math.max(1, image.getHeight() / 2);
-			BufferedImage next = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB_PRE);
-			Graphics2D graphics = next.createGraphics();
-			try {
-				graphics.setComposite(AlphaComposite.Src);
-				graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-				graphics.drawImage(image, 0, 0, width, height, null);
-			} finally {
-				graphics.dispose();
-			}
-			ByteBuffer rgba = BufferUtils.createByteBuffer(width * height * 4);
-			for (int pixel : next.getRGB(0, 0, width, height, null, 0, width)) {
-				rgba.put((byte) (pixel >> 16)).put((byte) (pixel >> 8))
-						.put((byte) pixel).put((byte) (pixel >>> 24));
-			}
-			rgba.flip();
-			GL11.glTexImage2D(GL11.GL_TEXTURE_2D, ++level, GL11.GL_RGBA, width, height, 0,
-					GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, rgba);
-			image = next;
-		}
-		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR_MIPMAP_LINEAR);
-		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
 	}
 
 	/** Upload an image (render thread). */

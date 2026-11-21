@@ -56,6 +56,34 @@ class BadgeLooksTest {
 	}
 
 	@Test
+	void publishedRolesAndTextMarkersAreAllowlisted() throws Exception {
+		Looks looks = new Looks(platform(), new ClientConfig(), "http://127.0.0.1:1", "fixture");
+		try {
+			for (String role : new String[] {"founder", "dev", "admin", "mod", "beta"}) {
+				Look look = looks.parseLook(new JsonParser().parse("{\"badge_role\":\"" + role + "\",\"badge_style\":2}"), 1);
+				assertEquals(role, look.badgeRole);
+				assertEquals(2, look.badgeStyle);
+				int index = Badge.roleIndex(role);
+				for (Badge.Style style : Badge.STYLES) {
+					for (boolean tab : new boolean[] {false, true}) {
+						String mark = Badge.mark(tab, style.id, role);
+						assertTrue(Badge.marked(mark));
+						assertEquals(style.id, Badge.markedStyle(mark));
+						assertEquals(role, Badge.markedRole(mark));
+						assertEquals(tab, Badge.markedTab(mark));
+						assertEquals("brksfrb2", Badge.unmark(mark + "brksfrb2"));
+						assertEquals(Badge.slot(style.id, index, tab), Badge.glyphSlot(Badge.glyph(style.id, index, tab)));
+					}
+				}
+			}
+			for (String json : new String[] {"{}", "{\"badge_role\":null}", "{\"badge_role\":\"owner\"}", "{\"badge_role\":12}"}) {
+				assertNull(looks.parseLook(new JsonParser().parse(json), 1).badgeRole);
+			}
+			assertEquals("", Badge.markedRole(Badge.mark(false, 0, "owner")));
+		} finally { close(looks); }
+	}
+
+	@Test
 	void aFailedLookupKeepsTheBadgeAlreadyShownAndRetriesSoon() throws Exception {
 		java.util.concurrent.atomic.AtomicInteger status = new java.util.concurrent.atomic.AtomicInteger(200);
 		HttpServer server = players(() -> "{\"" + Looks.compact(B) + "\":{\"badge_style\":1,\"arctic\":true}}", status::get);

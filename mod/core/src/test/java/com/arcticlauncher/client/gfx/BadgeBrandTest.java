@@ -6,7 +6,7 @@ import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Style 0 nametag/tab/picker art is the BrandMark gradient, not the flat SVG fill. */
+/** Verify the compatibility art and the in-game layout and framebuffer sizes. */
 class BadgeBrandTest {
 	@Test
 	void pickerAndNametagMatchBrandMark() throws Exception {
@@ -46,20 +46,10 @@ class BadgeBrandTest {
 	}
 
 	@Test
-	void nativePixelArtUsesHardEdgesForEveryPlacementAndStyle() throws Exception {
-		for (Badge.Style style : Badge.STYLES) {
-			for (boolean tab : new boolean[] {false, true}) {
-				String path = "/assets/arctic/" + style.texture + (tab ? "_tab" : "_tag") + "_pixel.png";
-				int[] art = pixels(path, Badge.size(tab));
-				int visible = 0;
-				for (int pixel : art) {
-					int alpha = pixel >>> 24;
-					assertTrue(alpha == 0 || alpha == 255, path);
-					if (alpha == 255) visible++;
-				}
-				assertTrue(visible > 0 && visible < art.length, path);
-			}
-		}
+	void projectedNametagsUseFramebufferPixelsBetweenGuiScales() {
+		assertEquals(32, Badge.rasterSize(false, 4));
+		assertEquals(19, Badge.rasterSize(false, 2.4f));
+		assertEquals(10, Badge.rasterSize(false, 1.23f));
 	}
 
 	private static int[] pixels(String path, int size) throws Exception {

@@ -20,7 +20,7 @@ abstract class ScaledGlyphMixin {
 			method = "accept(ILnet/minecraft/network/chat/Style;I)Z",
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Font;getGlyph(ILnet/minecraft/network/chat/Style;)Lnet/minecraft/client/gui/font/glyphs/BakedGlyph;"))
 	private BakedGlyph arctic$scaled(BakedGlyph original, int index, Style style, int codepoint) {
-		if (codepoint == BadgeTexture.SPACER && style.getFont() instanceof FontDescription.Resource font) {
+		if (style.getFont() instanceof FontDescription.Resource font) {
 			int slot = BadgeTexture.slot(codepoint, font.id());
 			if (slot >= 0) return BadgeTexture.quad(slot);
 		}

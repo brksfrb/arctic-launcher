@@ -92,7 +92,8 @@
 		"SmoothFontManagerMixin",<% } %><% if (glowText) { %>
 		"GlowTextMixin",<% } %><% if (scaledFont) { %>
 		"FontTextureMixin",
-		"ScaledGlyphMixin",<% } %><% if (!worldTextScale) { %>
+		"ScaledGlyphMixin",<% } %><% if (badgeGuiFilter) { %>
+		"BadgeGuiFilterMixin",<% } %><% if (!worldTextScale) { %>
 		"FontDrawScaleMixin",<% } %><% if (textProjection) { %>
 		"ScaledTextStateMixin",
 		"TextProjectionMixin",

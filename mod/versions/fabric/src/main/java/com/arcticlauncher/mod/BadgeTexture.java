@@ -20,26 +20,34 @@ import net.minecraft.client.gui.font.glyphs.BakedSheetGlyph;
 /** Draws a full-texture quad at the spacer's position in the vanilla text batch. */
 public final class BadgeTexture {
 	public static final char SPACER = '\uE002';
-	private static final int TAB_OFFSET = 0x10;
 	private static final int PLACEMENTS = 2;
-	private static final BakedGlyph[][] QUADS = new BakedGlyph[Badge.STYLES.size() * PLACEMENTS][129];
+	private static final int SLOTS = Badge.STYLES.size() * Badge.ROLES.length * PLACEMENTS;
+	private static final DynamicTexture[][] TEXTURES = new DynamicTexture[SLOTS][Badge.MAX_RASTER_SIZE + 1];
+	private static final Identifier[][] IDS = new Identifier[SLOTS][Badge.MAX_RASTER_SIZE + 1];
+	private static final BakedGlyph[][] GUI_QUADS = new BakedGlyph[SLOTS][Badge.MAX_RASTER_SIZE + 1];
+
+	//#if MC >= 1.21.11
+	private static final java.util.Set<Object> LINEAR_GUI_VIEWS =
+			java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+
+	public static boolean isBadgeView(Object view) {
+		return LINEAR_GUI_VIEWS.contains(view);
+	}
+	//#endif
 
 	private BadgeTexture() {}
 
 	public static int slot(int codepoint, Identifier font) {
 		//#if MC < 1.16
-		int code = codepoint - Badge.GLYPH_BASE;
-		boolean tab = code >= TAB_OFFSET;
-		int style = code - (tab ? TAB_OFFSET : 0);
-		return style >= 0 && style < Badge.STYLES.size() && SmoothFont.isDefault(font)
-				? style * PLACEMENTS + (tab ? 1 : 0) : -1;
+		return SmoothFont.isDefault(font) ? Badge.glyphSlot(codepoint) : -1;
 		//#else
-		if (codepoint != SPACER || font == null || !ArcticMod.ID.equals(font.getNamespace())) return -1;
+		int role = codepoint - SPACER;
+		if (role < 0 || role >= Badge.ROLES.length || font == null || !ArcticMod.ID.equals(font.getNamespace())) return -1;
 		String path = font.getPath();
 		boolean tab = path.endsWith("_tab");
 		for (Badge.Style style : Badge.STYLES) {
 			if (path.equals(style.font) || (tab && path.length() == style.font.length() + 4 && path.startsWith(style.font))) {
-				return style.id * PLACEMENTS + (tab ? 1 : 0);
+				return Badge.slot(style.id, role, tab);
 			}
 		}
 		return -1;
@@ -55,17 +63,22 @@ public final class BadgeTexture {
 		float pixelsPerUnit = TextDrawScale.framebufferPixels();
 		if (pixelsPerUnit <= 0) pixelsPerUnit = (float) Minecraft.getInstance().getWindow().getGuiScale();
 		int resolution = Badge.rasterSize(tab, pixelsPerUnit);
-		BakedGlyph quad = QUADS[slot][resolution];
+		float side = resolution / pixelsPerUnit;
+		if (Math.abs(side - Badge.size(tab)) > .0001f) {
+			return bake(slot, resolution, side);
+		}
+		BakedGlyph quad = GUI_QUADS[slot][resolution];
 		if (quad == null) {
-			quad = upload(slot / PLACEMENTS, tab, resolution);
-			QUADS[slot][resolution] = quad;
+			quad = bake(slot, resolution, Badge.size(tab));
+			GUI_QUADS[slot][resolution] = quad;
 		}
 		return quad;
 	}
 
-	private static BakedGlyph upload(int style, boolean tab, int resolution) {
-		// Future role tint belongs on this same upload.
-		int[] pixels = BrandMark.badgeRaster(resolution, style);
+	private static void upload(int slot, int resolution) {
+		int style = slot / PLACEMENTS / Badge.ROLES.length;
+		int role = slot / PLACEMENTS % Badge.ROLES.length;
+		int[] pixels = BrandMark.badgeRaster(resolution, style, role);
 		NativeImage image = new NativeImage(resolution, resolution, false);
 		for (int y = 0; y < resolution; y++) {
 			for (int x = 0; x < resolution; x++) {
@@ -78,15 +91,22 @@ public final class BadgeTexture {
 				//#endif
 			}
 		}
-		Identifier id = Compat.id(ArcticMod.ID, "dyn/badge_" + style + "_" + tab + "_" + resolution);
-		DynamicTexture texture = Compat.texture("Arctic badge", image);
-		//#if MC < 1.21.5
-		texture.setFilter(false, false);
-		//#endif
+		Identifier id = Compat.id(ArcticMod.ID, "dyn/badge_" + slot + "_" + resolution);
+		DynamicTexture texture = Compat.smoothTexture("Arctic badge", image);
 		TextureManager textures = Minecraft.getInstance().getTextureManager();
 		textures.register(id, texture);
+		//#if MC >= 1.21.11
+		LINEAR_GUI_VIEWS.add(texture.getTextureView());
+		//#endif
+		TEXTURES[slot][resolution] = texture;
+		IDS[slot][resolution] = id;
+	}
 
-		int side = Badge.size(tab);
+	private static BakedGlyph bake(int slot, int resolution, float side) {
+		if (TEXTURES[slot][resolution] == null) upload(slot, resolution);
+		DynamicTexture texture = TEXTURES[slot][resolution];
+		Identifier id = IDS[slot][resolution];
+		boolean tab = tab(slot);
 		//#if MC < 1.20.5
 		// Older text quads subtract three from their vertical bounds.
 		float top = tab ? 2 : 3;

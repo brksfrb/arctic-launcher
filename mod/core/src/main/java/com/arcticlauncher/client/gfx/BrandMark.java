@@ -1,5 +1,6 @@
 package com.arcticlauncher.client.gfx;
 
+import com.arcticlauncher.client.feature.Badge;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -7,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class BrandMark {
 	private static final int MAX_SIZE = 1024;
 	private static final int SS = 4;
+	private static final int BADGE_SAMPLES = 12;
 	private static final float PI = (float) Math.PI;
 	private static final float TAU = PI * 2f;
 	private static final float[][] KITE = {{0, -.46f}, {.075f, -.22f}, {0, -.10f}, {-.075f, -.22f}};
@@ -14,6 +16,7 @@ public final class BrandMark {
 	private static final float[][] BARBS = {{.04f, -.33f, .13f, -.38f}, {-.04f, -.33f, -.13f, -.38f}};
 	private static final float[][] CORE = new float[6][2];
 	private static final float[] SIN = new float[6], COS = new float[6];
+	private static final Map<Integer, int[]> COVERAGE = new ConcurrentHashMap<Integer, int[]>();
 	private static final Map<Integer, int[]> BADGES = new ConcurrentHashMap<Integer, int[]>();
 	private static final Map<Integer, int[]> RASTERS = new ConcurrentHashMap<Integer, int[]>();
 
@@ -36,14 +39,63 @@ public final class BrandMark {
 
 	/** Cached unpremultiplied ARGB pixels; callers must not modify them. */
 	public static int[] raster(int size) {
-		return RASTERS.computeIfAbsent(clampSize(size), n -> generate(n, -1));
+		return RASTERS.computeIfAbsent(clampSize(size), n -> generateIcon(n));
 	}
 
-	/** At text sizes, connect the blades to the core and give each spoke a readable stem. */
-	public static int[] badgeRaster(int size, int style) {
-		int side = clampSize(size);
-		int kind = com.arcticlauncher.client.feature.Badge.normalize(style);
-		return BADGES.computeIfAbsent(side * 3 + kind, key -> generate(side, kind));
+	/** Unpremultiplied ARGB at the projected framebuffer size. Roles share the same coverage. */
+	public static int[] badgeRaster(int size, int style, int role) {
+		int side = Math.max(1, Math.min(Badge.MAX_RASTER_SIZE, size));
+		int kind = Badge.normalize(style);
+		int color = role >= 0 && role < Badge.COLORS.length ? role : 0;
+		int geometry = side * Badge.STYLES.size() + kind;
+		return BADGES.computeIfAbsent(geometry * Badge.COLORS.length + color, key -> {
+			int[] coverage = COVERAGE.computeIfAbsent(geometry, shape -> badgeCoverage(side, kind));
+			return tint(coverage, kind, Badge.COLORS[color]);
+		});
+	}
+
+	private static int[] badgeCoverage(int size, int style) {
+		int[] coverage = new int[size * size];
+		float markScale = style == 0 ? 1f : .72f;
+		for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) {
+			int mark = 0, background = 0;
+			// Box-filter the vector geometry directly into each framebuffer texel.
+			for (int sy = 0; sy < BADGE_SAMPLES; sy++) for (int sx = 0; sx < BADGE_SAMPLES; sx++) {
+				float u = (x + (sx + .5f) / BADGE_SAMPLES) / size - .5f;
+				float v = (y + (sy + .5f) / BADGE_SAMPLES) / size - .5f;
+				if (inside(u / markScale, v / markScale, .022f)) {
+					mark++;
+				} else if (style > 0 && tile(u, v, .47f, .22f)
+						&& (style == 1 || !tile(u, v, .38f, .13f))) {
+					background++;
+				}
+			}
+			coverage[y * size + x] = mark | (background << 8);
+		}
+		return coverage;
+	}
+
+	private static int[] tint(int[] coverage, int style, int rgb) {
+		int[] pixels = new int[coverage.length];
+		int area = BADGE_SAMPLES * BADGE_SAMPLES;
+		for (int i = 0; i < pixels.length; i++) {
+			int mark = coverage[i] & 255;
+			int background = coverage[i] >>> 8;
+			int samples = mark + background;
+			int color = rgb;
+			if (style == 1) {
+				color = 0;
+				for (int shift = 0; shift <= 16; shift += 8) {
+					int channel = (rgb >>> shift) & 255;
+					int dark = channel * 3 / 5;
+					int ice = (channel + 255 * 2) / 3;
+					color |= (samples == 0 ? ice : (mark * dark + background * ice) / samples) << shift;
+				}
+			}
+			int alpha = (samples * 255 + area / 2) / area;
+			pixels[i] = alpha << 24 | color;
+		}
+		return pixels;
 	}
 
 	public static void draw(Gfx g, float x, float y, int guiSize) {
@@ -74,22 +126,15 @@ public final class BrandMark {
 		return dx * dx + dy * dy <= radius * radius;
 	}
 
-	private static int[] generate(int size, int style) {
+	private static int[] generateIcon(int size) {
 		int[] pixels = new int[size * size];
 		float n = size;
-		float markScale = style > 0 ? .72f : 1f;
-		float stem = style < 0 ? 0f : Math.max(.040f, .70f / (n * markScale));
 		for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) {
-			int hits = 0, background = 0;
+			int hits = 0;
 			for (int sy = 0; sy < SS; sy++) for (int sx = 0; sx < SS; sx++) {
 				float u = (x + (sx + .5f) / SS) / n - .5f;
 				float v = (y + (sy + .5f) / SS) / n - .5f;
-				if (inside(u / markScale, v / markScale, stem)) {
-					hits++;
-				} else if (style > 0 && tile(u, v, .47f, .22f)
-						&& (style == 1 || !tile(u, v, .38f, .13f))) {
-					background++;
-				}
+				if (inside(u, v, 0f)) hits++;
 			}
 			float cx = (x + .5f) / n - .5f, cy = (y + .5f) / n - .5f;
 			float t = Math.min(1f, (float) Math.sqrt(cx * cx + cy * cy) / .46f);
@@ -97,17 +142,6 @@ public final class BrandMark {
 			int g = (int) (234f + (165f - 234f) * t);
 			int b = (int) (254f + (233f - 254f) * t);
 			int a = (int) (hits / (float) (SS * SS) * 255f);
-			if (style == 1 && hits + background > 0) {
-				int samples = hits + background;
-				r = (hits * 12 + background * 168) / samples;
-				g = (hits * 102 + background * 220) / samples;
-				b = (hits * 156 + background * 244) / samples;
-			} else if (style == 2) {
-				r = 65;
-				g = 186;
-				b = 245;
-			}
-			if (style > 0) a = (hits + background) * 255 / (SS * SS);
 			pixels[y * size + x] = a << 24 | r << 16 | g << 8 | b;
 		}
 		return pixels;

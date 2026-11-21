@@ -1,5 +1,6 @@
 package com.arcticlauncher.mod;
 
+import com.arcticlauncher.client.feature.Badge;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
@@ -210,13 +211,7 @@ public final class Compat {
 
 	/** Like {@link #texture}, but filtered linearly: for a picture that is drawn turned. */
 	public static DynamicTexture smoothTexture(String name, NativeImage image) {
-		//#if MC >= 1.21.11
 		return new SmoothTexture(name, image);
-		//#else
-		DynamicTexture texture = texture(name, image);
-		texture.setFilter(true, false);
-		return texture;
-		//#endif
 	}
 
 	//#if MC >= 1.19.3
@@ -559,21 +554,22 @@ public final class Compat {
 
 	/** The wearer's badge spacer and its two-pixel gap. The draw path supplies the textured quad. */
 	public static net.minecraft.network.chat.MutableComponent arcticBadgeWithGap(java.util.UUID wearer, boolean tab) {
-		int style = com.arcticlauncher.client.feature.Badge.normalize(com.arcticlauncher.client.feature.Badge.style(wearer));
+		int style = Badge.style(wearer);
+		int role = Badge.roleIndex(Badge.role(wearer));
 		//#if MC < 1.16
 		if (net.minecraft.client.Minecraft.getInstance().options.forceUnicodeFont) {
 			return literal("");
 		}
-		return literal("\u00a7r" + (char) (com.arcticlauncher.client.feature.Badge.GLYPH_BASE + style + (tab ? 0x10 : 0)) + "\u00a7r");
+		return literal("\u00a7r" + Badge.glyph(style, role, tab) + "\u00a7r");
 		//#else
-		return literal(String.valueOf(BadgeTexture.SPACER)).withStyle(badgeStyle(style, tab));
+		return literal(String.valueOf((char) (BadgeTexture.SPACER + role))).withStyle(badgeStyle(style, tab));
 		//#endif
 	}
 
 	//#if MC >= 1.16
 	/** The text style that puts a text in the font of badge picture {@code style}. */
 	public static net.minecraft.network.chat.Style badgeStyle(int style, boolean tab) {
-		net.minecraft.resources.Identifier font = id(ArcticMod.ID, com.arcticlauncher.client.feature.Badge.definition(style).font + (tab ? "_tab" : ""));
+		net.minecraft.resources.Identifier font = id(ArcticMod.ID, Badge.definition(style).font + (tab ? "_tab" : ""));
 		//#if MC >= 1.21.9
 		net.minecraft.network.chat.Style badge = net.minecraft.network.chat.Style.EMPTY.withFont(new net.minecraft.network.chat.FontDescription.Resource(font));
 		//#else

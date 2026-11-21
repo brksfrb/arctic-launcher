@@ -1,5 +1,6 @@
 package com.arcticlauncher.client.gfx;
 
+import com.arcticlauncher.client.feature.Badge;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
@@ -24,6 +25,27 @@ class BrandMarkTest {
 		assertSame(pixels, BrandMark.raster(256));
 		assertEquals(1024, BrandMark.clampSize(Integer.MAX_VALUE));
 		assertEquals(1, BrandMark.clampSize(0));
+	}
+
+	@Test
+	void roleTintOnlyChangesRgbAtEveryStyleAndPhysicalSize() {
+		for (Badge.Style style : Badge.STYLES) {
+			for (int size : new int[] {10, 18, 19, 27, 32, 36, 39}) {
+				int[] blue = BrandMark.badgeRaster(size, style.id, 0);
+				assertEquals(size * size, blue.length);
+				assertTrue(java.util.Arrays.stream(blue).anyMatch(p -> (p >>> 24) > 0 && (p >>> 24) < 255));
+				for (int role = 1; role < Badge.ROLES.length; role++) {
+					int[] colored = BrandMark.badgeRaster(size, style.id, role);
+					assertSame(colored, BrandMark.badgeRaster(size, style.id, role));
+					for (int i = 0; i < blue.length; i++) {
+						assertEquals(blue[i] >>> 24, colored[i] >>> 24);
+						if ((blue[i] >>> 24) > 0) assertNotEquals(blue[i], colored[i]);
+					}
+				}
+			}
+		}
+		assertEquals(0xFF2EB1EC, BrandMark.badgeRaster(36, 0, 0)[18 * 37]);
+		assertEquals(0xFFD99A0B, BrandMark.badgeRaster(36, 0, 1)[18 * 37]);
 	}
 
 	@Test

@@ -5,15 +5,20 @@ import java.util.Date;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
+import com.arcticlauncher.client.feature.Badge;
 import com.arcticlauncher.client.feature.Features;
 import com.arcticlauncher.client.feature.Mentions;
 import com.arcticlauncher.client.feature.Streamer;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.BufferBuilder;
+import net.minecraft.client.render.Tessellator;
+import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.util.DefaultSkinHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.text.LiteralText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
+import org.lwjgl.opengl.GL11;
 
 import com.arcticlauncher.client.Lang;
 /** What the 1.8.9 hooks call: small, so each mixin stays a one-liner. */
@@ -318,11 +323,13 @@ public final class LegacyHooks {
 	}
 
 	/** Draw the Arctic badge at the top left of the text line, using the text opacity. */
-	public static void drawBadge(float x, float y, int argb, boolean shadow, int style, boolean tab) {
+	public static void drawBadge(float x, float y, int argb, boolean shadow, int style, int role, boolean tab) {
 		y -= tab ? 1 : 0;
-		int side = com.arcticlauncher.client.feature.Badge.size(tab);
-		int resolution = com.arcticlauncher.client.feature.Badge.rasterSize(tab, LegacySmoothFont.badgePixels(x, y));
-		net.minecraft.util.Identifier texture = LegacyTextures.badge(style, resolution);
+		float pixelsPerUnit = LegacySmoothFont.badgePixels(x, y);
+		if (pixelsPerUnit <= 0) return;
+		int resolution = Badge.rasterSize(tab, pixelsPerUnit);
+		float side = resolution / pixelsPerUnit;
+		Identifier texture = LegacyTextures.badge(style, resolution, role);
 		if (texture == null) {
 			return;
 		}
@@ -331,15 +338,26 @@ public final class LegacyHooks {
 		float a = alpha == 0 ? 1f : alpha / 255f;
 		MinecraftClient.getInstance().getTextureManager().bindTexture(texture);
 		com.mojang.blaze3d.platform.GlStateManager.enableBlend();
-		com.mojang.blaze3d.platform.GlStateManager.blendFuncSeparate(org.lwjgl.opengl.GL11.GL_SRC_ALPHA,
-				org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA, org.lwjgl.opengl.GL11.GL_ONE, org.lwjgl.opengl.GL11.GL_ZERO);
+		com.mojang.blaze3d.platform.GlStateManager.blendFuncSeparate(GL11.GL_SRC_ALPHA,
+				GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
 		// The player list's picture has no shadow, its names do.
-		if (com.arcticlauncher.client.feature.Badge.drawShadow(tab, shadow)) {
+		if (Badge.drawShadow(tab, shadow)) {
 			com.mojang.blaze3d.platform.GlStateManager.color(0.25f, 0.25f, 0.25f, a);
-			net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x) + 1, Math.round(y) + 1, 0f, 0f, resolution, resolution, side, side, resolution, resolution);
+			badgeQuad(x + 1, y + 1, side);
 		}
 		com.mojang.blaze3d.platform.GlStateManager.color(1f, 1f, 1f, a);
-		net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x), Math.round(y), 0f, 0f, resolution, resolution, side, side, resolution, resolution);
+		badgeQuad(x, y, side);
+	}
+
+	private static void badgeQuad(float x, float y, float side) {
+		Tessellator tessellator = Tessellator.getInstance();
+		BufferBuilder buffer = tessellator.getBuffer();
+		buffer.begin(GL11.GL_QUADS, VertexFormats.POSITION_TEXTURE);
+		buffer.vertex(x, y + side, 0).texture(0, 1).next();
+		buffer.vertex(x + side, y + side, 0).texture(1, 1).next();
+		buffer.vertex(x + side, y, 0).texture(1, 0).next();
+		buffer.vertex(x, y, 0).texture(0, 0).next();
+		tessellator.draw();
 	}
 
 	/** RGBA chat glyph, using the same one-texture path as the badge. */
