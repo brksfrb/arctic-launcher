@@ -1966,6 +1966,8 @@ const REPORT_BYTES: usize = 47 * 1024;
 const REPORT_LOG_BYTES: usize = 8 * 1024;
 /// Usual size of the crash attachment. Its stacks may borrow from the rest of the upload.
 const REPORT_CRASH_BYTES: usize = 16 * 1024;
+/// Maximum crash excerpt, leaving at least 19 KiB for priority evidence and logs.
+const REPORT_CRASH_CORE_BYTES: usize = 28 * 1024;
 /// Latest registry warnings/errors, reserved ahead of verbose log tails and crash inventories.
 const REPORT_REGISTRY_BYTES: usize = 6 * 1024;
 /// How Java was started: its flags and the classpath's file names.
@@ -2134,13 +2136,6 @@ impl Report {
                 priority.push('\n');
             }
         }
-        let (crash_core, crash_details) = crash_report.map_or_else(
-            || (String::new(), String::new()),
-            |report| {
-                crash_report_excerpt(report, REPORT_BYTES.saturating_sub(priority.len()), &own)
-            },
-        );
-        let priority_budget = REPORT_BYTES - crash_core.len();
         let vanilla_evidence = all
             .lines()
             .filter(|line| line.starts_with(VANILLA_CRASH))
@@ -2171,6 +2166,17 @@ impl Report {
         let ram_total_mb = crate::system::total_memory_mb();
         let ram_free_mb = crate::system::free_memory_mb();
         priority.push_str(&memory_section(ram_total_mb, ram_free_mb));
+
+        // Reserve the completed priority sections first, and leave room for logs when stacks
+        // are large and priority evidence is small.
+        let crash_budget = REPORT_BYTES
+            .saturating_sub(priority.len())
+            .min(REPORT_CRASH_CORE_BYTES);
+        let (crash_core, crash_details) = crash_report.map_or_else(
+            || (String::new(), String::new()),
+            |report| crash_report_excerpt(report, crash_budget, &own),
+        );
+        let priority_budget = REPORT_BYTES - crash_core.len();
         let remaining = priority_budget.saturating_sub(priority.len());
         let skip = lines.len().saturating_sub(REPORT_LOG_LINES);
         let tail = lines[skip..].join("\n");
@@ -2352,7 +2358,7 @@ fn crash_report_excerpt(report: &str, budget: usize, own: &Own) -> (String, Stri
     }
 
     let mut blocks: Vec<_> = required.iter().map(|part| scrub(part, own)).collect();
-    // If the diagnostic sections alone exceed the upload, preserve the short sections in full
+    // If the diagnostic sections exceed their budget, preserve the short sections in full
     // and split the remaining space between the oversized stacks.
     let mut by_size: Vec<_> = (0..blocks.len()).collect();
     by_size.sort_unstable_by_key(|&i| blocks[i].len());
@@ -4971,6 +4977,50 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
         );
         assert!(report.log.contains("Mixins in Stacktrace:"));
         assert!(report.log.contains("Suspected Mods:"));
+    }
+
+    #[test]
+    fn oversized_thread_dump_keeps_inventory_and_first_error_in_the_upload() {
+        let stack =
+            "\tat knot//net.minecraft.class_638.method_2941(class_638.java:364)\n".repeat(45);
+        let threads: String = (0..20).map(|i| format!("Worker #{i}:\n{stack}")).collect();
+        let written = include_str!("../tests/fixtures/threading-detector-with-worker.log").replace(
+            "Particle worker #1:",
+            &format!("{threads}Particle worker #1:"),
+        );
+        let registry = "[Render thread/WARN] Registry minecraft:item ID mismatch";
+        let log = [
+            registry,
+            "[Arctic mixin] example.mixins.json:ExampleMixin",
+            "[Render thread/INFO]: Latest game output",
+        ];
+        let report = Report::build("1.20.1", "fabric", "", &log, &[], Some(&written), None);
+
+        assert!(report.log.len() <= REPORT_BYTES);
+        assert!(report.log.contains(
+            "---- first error ----\nCaused by: java.lang.IllegalStateException: Example inner cause"
+        ));
+        assert!(report.log.contains(
+            "---- full mod list (id version) ----\nrender_hooks 1.0.0\nscheduler 3.0.0\nspark_particles 2.0.0\n"
+        ));
+        assert!(
+            report
+                .log
+                .contains(&format!("---- registry failure context ----\n{registry}"))
+        );
+        assert!(
+            report
+                .log
+                .contains("---- mixin failure context ----\nexample.mixins.json:ExampleMixin")
+        );
+        assert!(
+            report
+                .log
+                .contains("[Render thread/INFO]: Latest game output")
+        );
+        assert!(report.log.contains("-- Thread dumps --"));
+        assert!(report.log.contains("[crash report section truncated]"));
+        assert_eq!(diagnose(&report.log).unwrap().mods, ["spark_particles"]);
     }
 
     #[test]
