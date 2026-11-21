@@ -289,12 +289,20 @@ struct MixinFailure<'a> {
 pub(crate) const MIXIN_CONFIG_PATTERN: &str = r"[\w.-]+\.mixins\.json|mixins\.[\w.-]+\.json";
 pub(crate) const EXPLICIT_MIXIN_FAILURE_PATTERN: &str =
     r"(?:InjectionError|InvalidInjectionException):[^\r\n]*\bfrom mod [\w-]+";
+pub(crate) const FABRIC_MIXIN_APPLY_FAILURE: &str = r"Mixin apply for mod ([\w-]+) failed\b";
+pub(crate) const MIXIN_APPLY_FAILURE: &str = r"Mixin \[[^\]\r\n]+\] from mod ([\w-]+) failed\b";
+
+pub(crate) fn mixin_warning(line: &str) -> bool {
+    line.trim_start().starts_with("@Mixin target ")
+        || line.contains("/WARN]")
+        || line.contains("[WARN]")
+}
 
 /// Prefer the explicit owner in the deepest injection error over outer transformation failures.
 fn mixin_failure(text: &str) -> Option<MixinFailure<'_>> {
-    let gate = Regex::new(
-        r"MixinPreProcessorStandard|MixinApplicatorStandard|Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinTransformerError|@Mixin target \S+ was not found|Mixin apply for mod|InjectionError",
-    )
+    let gate = Regex::new(&format!(
+        "MixinPreProcessorStandard|MixinApplicatorStandard|Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinTransformerError|InjectionError|{FABRIC_MIXIN_APPLY_FAILURE}|{MIXIN_APPLY_FAILURE}"
+    ))
     .ok()?;
     let text = if let Some(stack) = crate::crash::crash_exception(text) {
         // A handled startup mixin failure cannot explain an unrelated fatal exception.
@@ -306,7 +314,7 @@ fn mixin_failure(text: &str) -> Option<MixinFailure<'_>> {
                 frame.contains("org.spongepowered.asm.mixin.")
                     || frame.contains("getPostMixinClassByteArray")
             } else {
-                !warning_log_line(line)
+                !mixin_warning(line)
                     && (gate.is_match(line) || line.contains("Mixin transformation of "))
             }
         });
@@ -325,7 +333,7 @@ fn mixin_failure(text: &str) -> Option<MixinFailure<'_>> {
         .rev()
         .filter(|l| injection.is_match(l))
         .chain(text.lines().filter(|l| gate.is_match(l)))
-        .filter(|line| !warning_log_line(line))
+        .filter(|line| !mixin_warning(line))
         .find_map(|line| {
             let owner = from_mod
                 .captures(line)
@@ -881,7 +889,7 @@ fn diagnose_with_mods(
     mods: &[InstalledMod],
     java: Option<&str>,
 ) -> Option<Diagnosis> {
-    let base = crate::crash::diagnose_with_java(text, java);
+    let base = crate::crash::diagnose_with_java(text, java, mods_dir);
     if base.as_ref().is_some_and(|d| {
         d.title.starts_with("A mod needs ") || d.title == "A mod dependency is missing"
     }) && let Some(game_dir) = mods_dir.parent()

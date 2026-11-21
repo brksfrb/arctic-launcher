@@ -133,7 +133,8 @@ impl ArcticApp {
 
     pub(super) fn refresh_packs(&mut self, instance: &Instance) {
         let game_dir = instance.game_dir(&self.dirs);
-        self.inst.packs.installed = packs::list(self.inst.packs.kind, &game_dir);
+        self.inst.packs.installed =
+            packs::list(self.inst.packs.kind, &game_dir, &self.pack_game(instance));
         self.inst.packs.groups = PackGroups::load(&game_dir);
     }
 
@@ -141,6 +142,7 @@ impl ArcticApp {
         let p = self.palette();
         let kind = self.inst.packs.kind;
         let game_dir = instance.game_dir(&self.dirs);
+        let game = self.pack_game(instance);
         let list = self.inst.packs.installed.clone();
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -188,7 +190,7 @@ impl ArcticApp {
                         if widgets::icon_button(ui, p, Icon::Trash, t!("instances.delete"))
                             .clicked()
                         {
-                            match packs::remove(kind, &game_dir, &pack.file_name) {
+                            match packs::remove(kind, &game_dir, &game, &pack.file_name) {
                                 Ok(()) => self.refresh_packs(instance),
                                 Err(e) => self.toasts.push(
                                     Kind::Error,
@@ -204,8 +206,13 @@ impl ArcticApp {
                             t!("instances.off")
                         };
                         if widgets::button(ui, p, None, label, pack.active).clicked() {
-                            match packs::set_active(kind, &game_dir, &pack.file_name, !pack.active)
-                            {
+                            match packs::set_active(
+                                kind,
+                                &game_dir,
+                                &game,
+                                &pack.file_name,
+                                !pack.active,
+                            ) {
                                 Ok(()) => self.refresh_packs(instance),
                                 Err(e) => self.toasts.push(
                                     Kind::Error,

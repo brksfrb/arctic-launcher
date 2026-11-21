@@ -149,7 +149,9 @@ pub enum Event {
     LoaderSwitched(String, LoaderKind, Outcome<Retargeted>),
     /// Icon bytes for a URL.
     ModIcon(String, Outcome<Vec<u8>>),
-    ModGalleryImage(String, Outcome<Vec<u8>>),
+    ModGalleryImage(String, Outcome<Arc<[u8]>>),
+    /// Fallback gallery URL for a Discover project with no featured search image.
+    HubBanner(String, Option<String>),
     /// Skin and capes of an account (account id, result).
     SkinAccount(String, Outcome<crate::skin_tasks::AccountSkin>),
     /// Another player's skin by name.
@@ -824,8 +826,18 @@ impl Tasks {
     pub fn mod_gallery_image(&self, url: String) {
         self.run(move |t| {
             let result = mods::gallery_image(&url, &t.dirs.cache().join("gallery"))
+                .map(Arc::from)
                 .map_err(|e| e.to_string());
             t.send(Event::ModGalleryImage(url, result));
+        });
+    }
+
+    pub fn hub_banner(&self, project: String) {
+        self.run(move |t| {
+            let url = mods::project_detail(&project)
+                .ok()
+                .and_then(|detail| detail.banner_url().map(str::to_owned));
+            t.send(Event::HubBanner(project, url));
         });
     }
 

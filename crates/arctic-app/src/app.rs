@@ -23,7 +23,7 @@ use eframe::egui;
 
 use crate::art::splash::Splash;
 use crate::session::ProfileData;
-use crate::startup::StartupOptions;
+use crate::startup::{LaunchRequest, StartupOptions};
 use crate::tasks::{Event, LaunchId, LoginAttempt, Tasks};
 use crate::theme::{self, Palette};
 use crate::toasts::{Kind, ToastAction, Toasts};
@@ -246,7 +246,7 @@ pub struct ArcticApp {
     /// unreliable on Windows: wrong restore size, flicker).
     maximize_pending: bool,
     /// Launch requested on the command line, run once versions are loaded.
-    pending_launch: Option<String>,
+    pending_launch: Option<LaunchRequest>,
     login_attempts: LoginAttempt,
     /// When the world trash was last purged of worlds older than 14 days.
     pub(crate) world_purge_at: std::time::Instant,
@@ -334,7 +334,7 @@ impl ArcticApp {
             software_gl: false,
             gl_checked: false,
             maximize_pending: data.settings.start_maximized,
-            pending_launch: startup.launch.clone(),
+            pending_launch: startup.launch_request(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
             installed,
             custom_instances: Vec::new(),
@@ -387,7 +387,7 @@ impl ArcticApp {
         };
         app.apply_profile_data(data);
         app.purge_world_trash();
-        app.maybe_start_onboarding(startup.launch.is_some());
+        app.maybe_start_onboarding(app.pending_launch.is_some());
         if let Some(query) = &startup.account {
             match app.accounts.find(query).map(|a| a.id.clone()) {
                 Some(id) => {
@@ -947,9 +947,9 @@ impl ArcticApp {
             {
                 self.accounts.set_active(&id);
             }
-            if opts.launch.is_some() {
-                self.pending_launch = opts.launch;
-                self.run_pending_launch();
+            if let Some(request) = opts.launch_request() {
+                self.pending_launch = Some(request);
+                self.run_pending_launch(now);
             }
         }
     }
@@ -1038,11 +1038,47 @@ impl ArcticApp {
         }
     }
 
-    /// `--launch` from the command line: pick the version, then Play.
-    fn run_pending_launch(&mut self) {
-        let Some(query) = self.pending_launch.take() else {
+    /// Apply a cold or forwarded launch request once the manifest has finished loading.
+    fn run_pending_launch(&mut self, now: f64) {
+        if matches!(self.manifest, ManifestState::Loading) {
+            return;
+        }
+        let Some(request) = self.pending_launch.take() else {
             return;
         };
+        match request {
+            LaunchRequest::Instance(id) => {
+                let Some(instance) = self.instance_by_id(&id) else {
+                    self.toasts
+                        .push(Kind::Error, t!("instances.shortcut_instance_not_found"), id);
+                    return;
+                };
+                self.settings.last_instance = (!instance.is_default()).then_some(id);
+                self.set_tab(Tab::Play, now);
+            }
+            LaunchRequest::Version(query) => {
+                self.launch_requested_version(query);
+                return;
+            }
+        }
+        if let ManifestState::Failed(e) = &self.manifest {
+            self.toasts
+                .push(Kind::Error, tf!("play.could_not_load_versions", e = e), "");
+        } else if self.update_required() {
+            self.toasts.push(
+                Kind::Info,
+                t!("play.a_required_launcher_update_must_be_installed"),
+                "",
+            );
+        } else if self.accounts.active().is_none() {
+            self.toasts
+                .push(Kind::Info, t!("tasks.choose_an_account_to_play"), "");
+        } else {
+            self.launch_selected();
+        }
+    }
+
+    fn launch_requested_version(&mut self, query: String) {
         let ManifestState::Ready(manifest) = &self.manifest else {
             return;
         };
@@ -1075,9 +1111,14 @@ impl ArcticApp {
                     self.settings.last_version = Some(m.latest.release.clone());
                 }
                 self.manifest = ManifestState::Ready(m);
-                self.run_pending_launch();
+                self.run_pending_launch(now);
             }
-            Event::Manifest(Err(e)) => self.manifest = ManifestState::Failed(e),
+            Event::Manifest(Err(e)) => {
+                self.manifest = ManifestState::Failed(e);
+                if matches!(self.pending_launch, Some(LaunchRequest::Instance(_))) {
+                    self.run_pending_launch(now);
+                }
+            }
             Event::LaunchProgress(id, snapshot) => self.on_launch_progress(id, snapshot, now),
             Event::UpdateProgress(p) => {
                 if let UpdateState::Installing { done, total, .. } = &mut self.update {
@@ -1162,6 +1203,7 @@ impl ArcticApp {
             | Event::Retargeted(..)
             | Event::LoaderChecked(..)
             | Event::LoaderSwitched(..)
+            | Event::HubBanner(..)
             | Event::ModIcon(..)
             | Event::ModGalleryImage(..)) => self.on_instances_event(e, ctx),
             Event::Share(id, event) => self.on_share_event(id, event),

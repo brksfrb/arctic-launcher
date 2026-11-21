@@ -12,7 +12,7 @@ use crate::theme;
 use crate::toasts::Kind;
 use crate::widgets;
 use crate::{t, tf, tn};
-const ICON: f32 = 36.0;
+pub(super) const ICON: f32 = 36.0;
 
 /// Where an instance's "look for newer mods" stands.
 pub(crate) enum UpdateState {
@@ -443,14 +443,23 @@ pub(super) fn mod_icon(ui: &mut egui::Ui, app: &mut ArcticApp, url: Option<&str>
 
 /// Use the page's existing scroll area, but only create widgets and request
 /// icons for visible rows. The full height keeps its scrollbar accurate.
-fn visible_rows(ui: &mut egui::Ui, count: usize, mut draw: impl FnMut(&mut egui::Ui, usize)) {
-    if count == 0 {
-        return;
-    }
+fn visible_rows(ui: &mut egui::Ui, count: usize, draw: impl FnMut(&mut egui::Ui, usize)) {
     let text_height = ui.text_style_height(&egui::TextStyle::Body)
         + ui.text_style_height(&egui::TextStyle::Small)
         + ui.spacing().item_spacing.y;
     let height = ICON.max(text_height) + 12.0;
+    visible_rows_with_height(ui, count, height, draw);
+}
+
+pub(super) fn visible_rows_with_height(
+    ui: &mut egui::Ui,
+    count: usize,
+    height: f32,
+    mut draw: impl FnMut(&mut egui::Ui, usize),
+) {
+    if count == 0 {
+        return;
+    }
     let (rect, _) = ui.allocate_exact_size(
         vec2(ui.available_width(), count as f32 * height),
         Sense::hover(),

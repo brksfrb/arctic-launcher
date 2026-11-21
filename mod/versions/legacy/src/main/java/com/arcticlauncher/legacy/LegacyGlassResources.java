@@ -71,7 +71,12 @@ public final class LegacyGlassResources {
 				return result;
 			}
 			@Override public InputStream open(String name) throws IOException {
+				//#if MC >= 1.9
+				net.minecraft.resource.Resource resource = manager.getResource(new Identifier(name));
+				return GlassPacks.ownedStream(resource.getInputStream(), resource);
+				//#else
 				return manager.getResource(new Identifier(name)).getInputStream();
+				//#endif
 			}
 		});
 	}

@@ -23,6 +23,8 @@
   "common.ok": "OK",
   "common.on": "オン",
   "common.open_folder": "フォルダーを開く",
+  "common.outside_arctic_launcher": "Arctic Launcher 未使用",
+  "common.outside_arctic_launcher_details": "ログイン、外見変更、同期が使えない場合があります。 arcticlauncher.com",
   "common.refresh": "更新",
   "common.remove": "削除",
   "common.reset": "リセット",

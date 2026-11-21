@@ -137,6 +137,22 @@ mod tests {
     }
 
     #[test]
+    fn forwards_instance_launch() {
+        let dir = tempfile::tempdir().unwrap();
+        let Claim::Primary(rx) = claim(dir.path(), &[]) else {
+            panic!("first start should be primary");
+        };
+        let args = ["--instance", "my-instance", "--no-intro"].map(str::to_owned);
+        assert!(matches!(claim(dir.path(), &args), Claim::Forwarded));
+        let received = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(received, args);
+        let options = crate::startup::StartupOptions::parse(received);
+        assert!(
+            matches!(options.launch_request(), Some(crate::startup::LaunchRequest::Instance(id)) if id == "my-instance")
+        );
+    }
+
+    #[test]
     fn stale_port_file_is_ignored() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join(PORT_FILE), "1 nope").unwrap();

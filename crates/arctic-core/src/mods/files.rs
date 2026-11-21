@@ -1,9 +1,10 @@
 //! The mods folder itself: listing, enabling/disabling, deleting, plus the
-//! on-disk icon cache.
+//! on-disk image cache.
 
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use sha1::{Digest, Sha1};
 
@@ -18,6 +19,8 @@ const JAR: &str = ".jar";
 const DISABLED: &str = ".disabled";
 /// Icons are small PNG/WebP files; anything larger is not an icon.
 const MAX_ICON_BYTES: u64 = 2 * 1024 * 1024;
+/// Gallery downloads run in parallel. Eviction and writes must share the same budget.
+static IMAGE_CACHE_WRITE: Mutex<()> = Mutex::new(());
 
 /// `name` without a trailing `.disabled`.
 pub(super) fn base_name(name: &str) -> &str {
@@ -148,10 +151,15 @@ fn icon_cache_path(url: &str, cache_dir: &Path) -> PathBuf {
 
 /// Icon bytes, from `cache_dir` when fetched before.
 pub(super) fn icon(url: &str, cache_dir: &Path) -> Result<Vec<u8>> {
-    cached_image(url, cache_dir, MAX_ICON_BYTES)
+    cached_image(url, cache_dir, MAX_ICON_BYTES, None)
 }
 
-pub(super) fn cached_image(url: &str, cache_dir: &Path, limit: u64) -> Result<Vec<u8>> {
+pub(super) fn cached_image(
+    url: &str,
+    cache_dir: &Path,
+    limit: u64,
+    cache_limit: Option<u64>,
+) -> Result<Vec<u8>> {
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return Err(Error::Other(format!("invalid icon URL: {url}")));
     }
@@ -163,8 +171,48 @@ pub(super) fn cached_image(url: &str, cache_dir: &Path, limit: u64) -> Result<Ve
         Err(e) => return Err(Error::io(path, e)),
     }
     let bytes = fetch_image(url, limit)?;
-    store(&path, &bytes)?;
+    if let Some(cap) = cache_limit {
+        store_capped(cache_dir, &path, &bytes, cap)?;
+    } else {
+        store(&path, &bytes)?;
+    }
     Ok(bytes)
+}
+
+fn store_capped(cache_dir: &Path, path: &Path, bytes: &[u8], cap: u64) -> Result<()> {
+    let incoming = bytes.len() as u64;
+    if incoming > cap {
+        return Ok(());
+    }
+    let _write = IMAGE_CACHE_WRITE.lock().unwrap_or_else(|e| e.into_inner());
+    fs::create_dir_all(cache_dir).at(cache_dir)?;
+    let mut entries = Vec::new();
+    let mut total = incoming;
+    for entry in fs::read_dir(cache_dir).at(cache_dir)? {
+        let entry = entry.at(cache_dir)?;
+        let entry_path = entry.path();
+        if entry_path == path || !entry.file_type().at(&entry_path)?.is_file() {
+            continue;
+        }
+        let metadata = entry.metadata().at(&entry_path)?;
+        total += metadata.len();
+        entries.push((
+            metadata.modified().at(&entry_path)?,
+            metadata.len(),
+            entry_path,
+        ));
+    }
+    if total > cap {
+        entries.sort_unstable();
+        for (_, size, oldest) in entries {
+            fs::remove_file(&oldest).at(&oldest)?;
+            total -= size;
+            if total <= cap {
+                break;
+            }
+        }
+    }
+    store(path, bytes)
 }
 
 fn fetch_image(url: &str, limit: u64) -> Result<Vec<u8>> {
@@ -289,10 +337,36 @@ mod tests {
         store(&icon_cache_path(url, dir.path()), b"png").unwrap();
         assert_eq!(icon(url, dir.path()).unwrap(), b"png");
         assert!(icon("file:///etc/passwd", dir.path()).is_err());
-        assert_eq!(
-            cached_image(url, dir.path(), 20 * 1024 * 1024).unwrap(),
-            b"png"
-        );
-        assert!(cached_image("data:image/png;base64,AAAA", dir.path(), 20 * 1024 * 1024).is_err());
+        assert_eq!(crate::mods::gallery_image(url, dir.path()).unwrap(), b"png");
+        assert!(crate::mods::gallery_image("data:image/png;base64,AAAA", dir.path()).is_err());
+    }
+
+    #[test]
+    fn gallery_cache_evicts_oldest_files_to_fit_an_incoming_image() {
+        use std::time::{Duration, SystemTime};
+
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path();
+        for (name, seconds) in [("a-newest", 3), ("b-middle", 2), ("c-oldest", 1)] {
+            let path = cache.join(name);
+            fs::write(&path, b"1234").unwrap();
+            fs::File::options()
+                .write(true)
+                .open(path)
+                .unwrap()
+                .set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(seconds))
+                .unwrap();
+        }
+
+        let incoming = cache.join("incoming");
+        store_capped(cache, &incoming, b"12345678", 12).unwrap();
+        assert!(!cache.join("c-oldest").exists());
+        assert!(!cache.join("b-middle").exists());
+        assert_eq!(fs::read(cache.join("a-newest")).unwrap(), b"1234");
+        assert_eq!(fs::read(&incoming).unwrap(), b"12345678");
+
+        store_capped(cache, &incoming, b"87654321", 12).unwrap();
+        assert!(cache.join("a-newest").exists());
+        assert_eq!(fs::read(incoming).unwrap(), b"87654321");
     }
 }
