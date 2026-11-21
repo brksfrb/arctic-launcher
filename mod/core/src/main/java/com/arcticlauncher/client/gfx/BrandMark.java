@@ -33,7 +33,15 @@ public final class BrandMark {
 	private static final int[] RASTER_STAMP = new int[RASTER_CACHE_CAP];
 	private static int rasterCount;
 	private static int rasterClock;
-	private static float[] lanczosScratch = new float[0];
+	private static int rasterEpoch;
+	private static final boolean[] RASTER_PENDING = new boolean[4096];
+	private static final java.util.concurrent.Executor RASTER_WORKER = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+		Thread thread = new Thread(r, "arctic-badge-raster");
+		thread.setDaemon(true);
+		thread.setPriority(Thread.NORM_PRIORITY - 1);
+		return thread;
+	});
+	private static final ThreadLocal<float[]> LANCZOS_SCRATCH = new ThreadLocal<float[]>();
 	private static final Map<Integer, int[]> RASTERS = new ConcurrentHashMap<Integer, int[]>();
 
 	static {
@@ -71,21 +79,75 @@ public final class BrandMark {
 		});
 	}
 
-	/** Unpremultiplied ARGB at the projected framebuffer size, Lanczos-3 downscaled from the 256×256 master. */
-	public static int[] badgeRaster(int size, int style, int role) {
+	/** Key packing for a (size, style, role) raster; size is 1..MAX_RASTER_SIZE. */
+	private static int rasterKey(int side, int kind, int color) {
+		return (side * Badge.STYLES.size() + kind) * Badge.COLORS.length + color;
+	}
+
+	private static int keySize(int key) {
+		return key / (Badge.STYLES.size() * Badge.COLORS.length);
+	}
+
+	/**
+	 * Exact-size raster if it is already cached. Otherwise requests Lanczos off-thread and returns the
+	 * nearest ready size (the 256 master if nothing else is ready). Writes the actual pixel size of the
+	 * returned array into {@code actualSize[0]}. Never runs Lanczos on this thread.
+	 */
+	public static int[] badgeReady(int size, int style, int role, int[] actualSize) {
 		int side = Math.max(1, Math.min(Badge.MAX_RASTER_SIZE, size));
 		int kind = Badge.normalize(style);
 		int color = role >= 0 && role < Badge.COLORS.length ? role : 0;
-		int key = (side * Badge.STYLES.size() + kind) * Badge.COLORS.length + color;
+		int key = rasterKey(side, kind, color);
 		synchronized (RASTER_LOCK) {
-			int[] hit = rasterHit(key);
-			if (hit != null) {
-				return hit;
+			int[] exact = rasterHit(key);
+			if (exact != null) {
+				actualSize[0] = side;
+				return exact;
 			}
-			int[] raster = downscaleLanczos(badgeMaster(kind, color), MASTER_SIZE, side);
-			rasterPut(key, raster);
-			return raster;
+			requestAsync(side, kind, color, key);
+			int[] nearest = nearestHit(kind, color, side, actualSize);
+			if (nearest != null) {
+				return nearest;
+			}
 		}
+		actualSize[0] = MASTER_SIZE;
+		return badgeMaster(kind, color);
+	}
+
+	/**
+	 * Exact-size raster, waiting for the worker if needed. Tests and one-off dumps only — the render
+	 * path must use {@link #badgeReady}.
+	 */
+	public static int[] badgeRaster(int size, int style, int role) {
+		return badgeRasterAwait(size, style, role, 15_000);
+	}
+
+	public static int[] badgeRasterAwait(int size, int style, int role, long timeoutMs) {
+		int[] actual = new int[1];
+		int[] pixels = badgeReady(size, style, role, actual);
+		int side = Math.max(1, Math.min(Badge.MAX_RASTER_SIZE, size));
+		if (actual[0] == side) {
+			return pixels;
+		}
+		long deadline = System.nanoTime() + timeoutMs * 1_000_000L;
+		int kind = Badge.normalize(style);
+		int color = role >= 0 && role < Badge.COLORS.length ? role : 0;
+		int key = rasterKey(side, kind, color);
+		while (System.nanoTime() < deadline) {
+			synchronized (RASTER_LOCK) {
+				int[] exact = rasterHit(key);
+				if (exact != null) {
+					return exact;
+				}
+			}
+			try {
+				Thread.sleep(1);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				break;
+			}
+		}
+		throw new IllegalStateException("badge raster " + side + " did not finish in " + timeoutMs + " ms");
 	}
 
 	/** Box-filtered comparison raster; not cached (sheet / tests only). */
@@ -100,7 +162,23 @@ public final class BrandMark {
 		}
 	}
 
-	/** Test hook: drops every downscale so the next call is a miss. Masters stay warm. */
+	/** Test hook: waits until previously queued raster jobs have finished. */
+	public static void drainRasterWorker() {
+		java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+		RASTER_WORKER.execute(new Runnable() {
+			@Override public void run() { done.countDown(); }
+		});
+		try {
+			if (!done.await(15, java.util.concurrent.TimeUnit.SECONDS)) {
+				throw new IllegalStateException("badge raster worker did not drain");
+			}
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException("interrupted waiting for badge raster worker", e);
+		}
+	}
+
+	/** Test hook: drops every downscale so the next call is a miss. Masters stay warm. In-flight work is discarded. */
 	public static void clearRasterCache() {
 		synchronized (RASTER_LOCK) {
 			for (int i = 0; i < rasterCount; i++) {
@@ -108,7 +186,59 @@ public final class BrandMark {
 			}
 			rasterCount = 0;
 			rasterClock = 0;
+			rasterEpoch++;
+			for (int i = 0; i < RASTER_PENDING.length; i++) {
+				RASTER_PENDING[i] = false;
+			}
 		}
+	}
+
+	private static void requestAsync(int side, int kind, int color, int key) {
+		if (key < 0 || key >= RASTER_PENDING.length || RASTER_PENDING[key]) {
+			return;
+		}
+		RASTER_PENDING[key] = true;
+		final int epoch = rasterEpoch;
+		RASTER_WORKER.execute(new Runnable() {
+			@Override public void run() {
+				int[] raster = downscaleLanczos(badgeMaster(kind, color), MASTER_SIZE, side);
+				synchronized (RASTER_LOCK) {
+					if (key < RASTER_PENDING.length) {
+						RASTER_PENDING[key] = false;
+					}
+					if (epoch != rasterEpoch) {
+						return;
+					}
+					rasterPut(key, raster);
+				}
+			}
+		});
+	}
+
+	/** Closest cached raster of this style/role, or null. Caller holds {@link #RASTER_LOCK}. */
+	private static int[] nearestHit(int kind, int color, int wanted, int[] actualSize) {
+		int bestIndex = -1;
+		int bestDist = Integer.MAX_VALUE;
+		int styles = Badge.STYLES.size();
+		int colors = Badge.COLORS.length;
+		int suffix = kind * colors + color;
+		for (int i = 0; i < rasterCount; i++) {
+			int key = RASTER_KEYS[i];
+			if (key % (styles * colors) != suffix) {
+				continue;
+			}
+			int dist = Math.abs(keySize(key) - wanted);
+			if (dist < bestDist) {
+				bestDist = dist;
+				bestIndex = i;
+			}
+		}
+		if (bestIndex < 0) {
+			return null;
+		}
+		RASTER_STAMP[bestIndex] = nextStamp();
+		actualSize[0] = keySize(RASTER_KEYS[bestIndex]);
+		return RASTER_VALS[bestIndex];
 	}
 
 	private static int[] rasterHit(int key) {
@@ -384,10 +514,12 @@ public final class BrandMark {
 	}
 
 	private static float[] lanczosScratch(int floats) {
-		if (lanczosScratch.length < floats) {
-			lanczosScratch = new float[floats];
+		float[] scratch = LANCZOS_SCRATCH.get();
+		if (scratch == null || scratch.length < floats) {
+			scratch = new float[floats];
+			LANCZOS_SCRATCH.set(scratch);
 		}
-		return lanczosScratch;
+		return scratch;
 	}
 
 	private static int brandRgb(float cx, float cy) {

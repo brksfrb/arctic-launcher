@@ -119,6 +119,11 @@ public final class Badge {
 		return Math.max(1, Math.min(MAX_RASTER_SIZE, Math.round(size(tab) * pixelsPerUnit)));
 	}
 
+	/** Text-space side that covers exactly {@code resolution} framebuffer pixels at this scale. */
+	public static float quadSide(int resolution, float pixelsPerUnit) {
+		return pixelsPerUnit > 0f ? resolution / pixelsPerUnit : resolution;
+	}
+
 	/** The badge picture never has a drop shadow; the name text keeps its own. */
 	public static boolean drawShadow(boolean tab, boolean textShadow) {
 		return false;

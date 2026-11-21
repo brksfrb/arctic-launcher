@@ -73,15 +73,78 @@ final class LegacyTextures {
 		return ICON;
 	}
 
-	static Identifier badge(int style, int size, int role) {
-		Identifier id = dyn(Badge.name(style) + "-" + size + "-" + role);
-		if (LOADED.contains(id)) return id;
+	public static final int GPU_CACHE_CAP = 64;
+	private static final Identifier[] BADGE_IDS = new Identifier[GPU_CACHE_CAP];
+	private static final int[] BADGE_STAMP = new int[GPU_CACHE_CAP];
+	private static int badgeCount, badgeClock;
+	private static final int[] READY_SIZE = new int[1];
 
-		BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
-		image.setRGB(0, 0, size, size, BrandMark.badgeRaster(size, style, role), 0, size);
+	static Identifier badge(int style, int size, int role) {
+		int[] pixels = BrandMark.badgeReady(size, style, role, READY_SIZE);
+		int texSize = READY_SIZE[0];
+		if (texSize < 1) texSize = size;
+		Identifier id = dyn(Badge.name(style) + "-" + texSize + "-" + role);
+		if (LOADED.contains(id)) {
+			badgeTouch(id);
+			return id;
+		}
+		BufferedImage image = new BufferedImage(texSize, texSize, BufferedImage.TYPE_INT_ARGB);
+		image.setRGB(0, 0, texSize, texSize, pixels, 0, texSize);
 		if (!register(id, image)) return null;
 		linear(id);
+		badgeRemember(id);
 		return id;
+	}
+
+	private static void badgeTouch(Identifier id) {
+		for (int i = 0; i < badgeCount; i++) {
+			if (BADGE_IDS[i] == id) {
+				BADGE_STAMP[i] = ++badgeClock;
+				return;
+			}
+		}
+	}
+
+	private static void badgeRemember(Identifier id) {
+		for (int i = 0; i < badgeCount; i++) {
+			if (BADGE_IDS[i] == id) {
+				BADGE_STAMP[i] = ++badgeClock;
+				return;
+			}
+		}
+		if (badgeCount == GPU_CACHE_CAP) {
+			int evict = 0, oldest = BADGE_STAMP[0];
+			for (int i = 1; i < badgeCount; i++) {
+				if (BADGE_STAMP[i] < oldest) { oldest = BADGE_STAMP[i]; evict = i; }
+			}
+			badgeDrop(BADGE_IDS[evict]);
+			BADGE_IDS[evict] = id;
+			BADGE_STAMP[evict] = ++badgeClock;
+			return;
+		}
+		BADGE_IDS[badgeCount] = id;
+		BADGE_STAMP[badgeCount] = ++badgeClock;
+		badgeCount++;
+	}
+
+	private static void badgeDrop(Identifier id) {
+		if (id == null) return;
+		try {
+			MinecraftClient.getInstance().getTextureManager().close(id);
+		} catch (Exception ignored) {
+			// The texture may already have been dropped by a resource reload.
+		}
+		LOADED.remove(id);
+	}
+
+	/** Drops every uploaded badge texture (resource reload or leaving a world). */
+	static void releaseBadges() {
+		for (int i = 0; i < badgeCount; i++) {
+			badgeDrop(BADGE_IDS[i]);
+			BADGE_IDS[i] = null;
+		}
+		badgeCount = 0;
+		badgeClock = 0;
 	}
 
 	private static void linear(Identifier id) {

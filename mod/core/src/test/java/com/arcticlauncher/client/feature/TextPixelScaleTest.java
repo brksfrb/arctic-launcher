@@ -114,4 +114,9 @@ class TextPixelScaleTest {
 		assertFalse(TextPixelScale.snapOrigin(rot, 10.4f, 20.6f, 1920, 1080, out));
 		assertEquals(99f, out[0], 0f);
 	}
+
+	@Test void quadSideMatchesRasterPixels() {
+		assertEquals(27 / 3.4f, Badge.quadSide(27, 3.4f), 1e-6);
+		assertEquals(9f, Badge.quadSide(27, 3f), 1e-6);
+	}
 }
