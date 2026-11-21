@@ -3,6 +3,7 @@
 //! Microsoft), looking up other players and picking files.
 
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::Arc;
 
 use arctic_core::auth::microsoft::{self, MsaConfig};
@@ -20,8 +21,12 @@ use crate::{t, tf};
 pub struct ArcticState {
     pub presets: Vec<Preset>,
     pub look: Look,
-    /// (texture hash, PNG) for the presets, cosmetics and the current look.
+    /// (texture hash, PNG) for the presets and the current look.
     pub textures: Vec<(String, Vec<u8>)>,
+}
+
+#[derive(Debug, Default)]
+pub struct CosmeticCatalog {
     /// 3D cosmetics with their parsed models (items that failed are left out).
     pub items: Vec<CuboidAsset>,
     /// Sculpted cosmetics (mesh-only ones, and the meshes of cuboid items that also have one).
@@ -29,6 +34,35 @@ pub struct ArcticState {
         cosmetic_models::MeshItem,
         std::sync::Arc<cosmetic_models::Mesh>,
     )>,
+    pub textures: Vec<(String, Vec<u8>)>,
+}
+
+#[derive(Debug)]
+pub struct LoadedArcticState {
+    pub look: ArcticState,
+    pub catalog: Result<CosmeticCatalog, String>,
+}
+
+#[derive(Default)]
+pub struct CatalogState {
+    pub catalog: Option<CosmeticCatalog>,
+    pub error: Option<String>,
+}
+
+pub fn merge_catalog(
+    previous: Option<CosmeticCatalog>,
+    result: Result<CosmeticCatalog, String>,
+) -> CatalogState {
+    match result {
+        Ok(catalog) => CatalogState {
+            catalog: Some(catalog),
+            error: None,
+        },
+        Err(error) => CatalogState {
+            catalog: previous,
+            error: Some(error),
+        },
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -165,24 +199,22 @@ impl Tasks {
         }
     }
 
-    /// Read (after optionally publishing a new one) the Arctic look.
-    /// Load the Arctic look, or publish `change`. With `known` (the state
-    /// shown now) a change only saves the look and fetches textures that
-    /// aren't there yet, so trying things on stays quick.
-    pub fn arctic_look(
-        &self,
-        account: Account,
-        change: Option<NewLook>,
-        known: Option<ArcticState>,
-    ) {
+    pub fn arctic_look(&self, account: Account) {
         self.run(move |t| {
             let id = account.id.clone();
-            let result = match (change, known) {
-                (Some(change), Some(known)) => t.save_look_blocking(account, change, known),
-                (change, _) => t.arctic_look_blocking(account, change),
-            }
-            .map_err(|e| e.to_string());
+            let result = t.arctic_look_blocking(account).map_err(|e| e.to_string());
             t.send(Event::ArcticLook(id, result));
+        });
+    }
+
+    /// Save the look and fetch only its missing textures, so trying things on stays quick.
+    pub fn save_arctic_look(&self, account: Account, change: NewLook, known: ArcticState) {
+        self.run(move |t| {
+            let id = account.id.clone();
+            let result = t
+                .save_look_blocking(account, change, known)
+                .map_err(|e| e.to_string());
+            t.send(Event::ArcticLookSaved(id, result));
         });
     }
 
@@ -220,105 +252,43 @@ impl Tasks {
             presets: known.presets,
             look,
             textures,
-            items: known.items,
-            meshes: known.meshes,
         })
     }
 
-    fn arctic_look_blocking(
-        &self,
-        account: Account,
-        change: Option<NewLook>,
-    ) -> Result<ArcticState> {
+    fn arctic_look_blocking(&self, account: Account) -> Result<LoadedArcticState> {
         let base = cosmetics::base_url();
         let account = self.fresh_account(account)?;
-        let look = cosmetics::with_session(self.dirs(), &base, &account, |token| match &change {
-            Some(new) => cosmetics::set_look(&base, token, new),
-            None => cosmetics::my_look(&base, token),
+        let look = cosmetics::with_session(self.dirs(), &base, &account, |token| {
+            cosmetics::my_look(&base, token)
         })?;
         self.load_catalog_blocking(look)
     }
 
-    fn load_catalog_blocking(&self, look: Look) -> Result<ArcticState> {
+    fn load_catalog_blocking(&self, look: Look) -> Result<LoadedArcticState> {
         let api = cosmetics::base_url();
         let catalog_base = cosmetics::catalog_url();
         let presets = cosmetics::catalog(&api)?;
         // Models and textures never change once uploaded (they're named by
         // their hash): kept on disk, and fetched several at a time.
         let cache = self.dirs().cache().join("arctic-looks");
-        // 3D cosmetics are optional: an older server just has none.
-        let catalog = cosmetic_models::catalog(&catalog_base).unwrap_or_default();
-        // Meshes: the mesh-only items, and the sculpted version of any cuboid item that has one.
-        let mut mesh_items = catalog.meshes.clone();
-        mesh_items.extend(catalog.cosmetics.iter().filter_map(|i| {
-            i.mesh.clone().map(|mesh| cosmetic_models::MeshItem {
-                id: i.id.clone(),
-                name: i.name.clone(),
-                slot: i.slot.clone(),
-                legacy: i.legacy,
-                mesh,
-            })
-        }));
-        let meshes = in_parallel(mesh_items, |item| {
-            let bytes = cached(&cache, &item.mesh, || {
-                cosmetic_models::mesh_asset(&catalog_base, &item.mesh)
-            })?;
-            let mesh = cosmetic_models::mesh::parse(&bytes)
-                .inspect_err(|e| log::warn!("cosmetic {} (mesh): {e}", item.id))
-                .ok()?;
-            Some((item, std::sync::Arc::new(mesh)))
-        });
-        let items: Vec<_> = in_parallel(catalog.cosmetics, |item| {
-            let bytes = cached(&cache, &item.model, || {
-                cosmetic_models::asset(&catalog_base, &item.model)
-            })?;
-            let geometry = cosmetic_models::Geometry::parse(&bytes)
-                .inspect_err(|e| log::warn!("cosmetic {}: {e}", item.id))
-                .ok()?;
-            let animation = item.animation.as_ref().and_then(|hash| {
-                let bytes = cached(&cache, hash, || cosmetic_models::asset(&catalog_base, hash))?;
-                cosmetic_models::Animation::parse(&bytes)
-                    .inspect_err(|e| log::warn!("cosmetic {} (idle): {e}", item.id))
-                    .ok()
-                    .map(Arc::new)
-            });
-            Some(CuboidAsset {
-                item,
-                geometry: Arc::new(geometry),
-                animation,
-            })
+        // 3D cosmetics come from catalog_url (staging in personal test builds).
+        let catalog = load_cosmetic_catalog(&catalog_base, &cache).map_err(|e| {
+            log::warn!("3D cosmetics catalog: {e}");
+            e.to_string()
         });
         let mut wanted: Vec<String> = presets.iter().map(|p| p.texture.clone()).collect();
         // Each animated cape's still image too (worn when its wearer turns Animate off).
         wanted.extend(presets.iter().filter_map(|p| p.still.clone()));
-        wanted.extend(items.iter().flat_map(|asset| {
-            std::iter::once(asset.item.texture.clone()).chain(asset.item.glow.clone())
-        }));
         wanted.extend(look.skin.clone());
         wanted.extend(look.cape.clone());
-        let mut seen = HashSet::new();
-        wanted.retain(|h| seen.insert(h.clone()));
-        let item_hashes: HashSet<String> = items
-            .iter()
-            .flat_map(|asset| {
-                std::iter::once(asset.item.texture.clone()).chain(asset.item.glow.clone())
-            })
-            .collect();
-        let textures = in_parallel(wanted, |h| {
-            let from = if item_hashes.contains(&h) {
-                &catalog_base
-            } else {
-                &api
-            };
-            let png = cached(&cache, &h, || cosmetics::texture(from, &h))?;
-            Some((h, png))
-        });
-        Ok(ArcticState {
-            presets,
-            look,
-            textures,
-            items,
-            meshes,
+        let textures = load_textures(&api, &cache, wanted);
+        Ok(LoadedArcticState {
+            look: ArcticState {
+                presets,
+                look,
+                textures,
+            },
+            catalog,
         })
     }
 
@@ -357,6 +327,74 @@ impl Tasks {
             t.send(Event::CapeFile(result));
         });
     }
+}
+
+fn load_cosmetic_catalog(base: &str, cache: &Path) -> Result<CosmeticCatalog> {
+    let catalog = cosmetic_models::catalog(base)?;
+    // Meshes: the mesh-only items, and the sculpted version of any cuboid item that has one.
+    let mut mesh_items = catalog.meshes;
+    mesh_items.extend(catalog.cosmetics.iter().filter_map(|i| {
+        i.mesh.clone().map(|mesh| cosmetic_models::MeshItem {
+            id: i.id.clone(),
+            name: i.name.clone(),
+            slot: i.slot.clone(),
+            legacy: i.legacy,
+            mesh,
+        })
+    }));
+    let meshes = in_parallel(mesh_items, |item| {
+        let bytes = cached(cache, &item.mesh, || {
+            cosmetic_models::mesh_asset(base, &item.mesh)
+        })?;
+        let mesh = cosmetic_models::mesh::parse(&bytes)
+            .inspect_err(|e| log::warn!("cosmetic {} (mesh): {e}", item.id))
+            .ok()?;
+        Some((item, std::sync::Arc::new(mesh)))
+    });
+    let items: Vec<_> = in_parallel(catalog.cosmetics, |item| {
+        let bytes = cached(cache, &item.model, || {
+            cosmetic_models::asset(base, &item.model)
+        })?;
+        let geometry = cosmetic_models::Geometry::parse(&bytes)
+            .inspect_err(|e| log::warn!("cosmetic {}: {e}", item.id))
+            .ok()?;
+        let animation = item.animation.as_ref().and_then(|hash| {
+            let bytes = cached(cache, hash, || cosmetic_models::asset(base, hash))?;
+            cosmetic_models::Animation::parse(&bytes)
+                .inspect_err(|e| log::warn!("cosmetic {} (idle): {e}", item.id))
+                .ok()
+                .map(Arc::new)
+        });
+        Some(CuboidAsset {
+            item,
+            geometry: Arc::new(geometry),
+            animation,
+        })
+    });
+    let textures = load_textures(
+        base,
+        cache,
+        items
+            .iter()
+            .flat_map(|asset| {
+                std::iter::once(asset.item.texture.clone()).chain(asset.item.glow.clone())
+            })
+            .collect(),
+    );
+    Ok(CosmeticCatalog {
+        items,
+        meshes,
+        textures,
+    })
+}
+
+fn load_textures(base: &str, cache: &Path, mut wanted: Vec<String>) -> Vec<(String, Vec<u8>)> {
+    let mut seen = HashSet::new();
+    wanted.retain(|h| seen.insert(h.clone()));
+    in_parallel(wanted, |h| {
+        let png = cached(cache, &h, || cosmetics::texture(base, &h))?;
+        Some((h, png))
+    })
 }
 
 type Picked = std::result::Result<Option<(String, Vec<u8>)>, String>;
@@ -494,5 +532,74 @@ mod refresh_cooldown {
             forget(id);
             assert_eq!(wait(id), None);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmetic_models::{Geometry, Item, Mesh, MeshItem};
+    use std::sync::Arc;
+
+    #[test]
+    fn failed_catalog_load_keeps_assets_until_a_successful_refresh() {
+        let catalog = CosmeticCatalog {
+            items: vec![CuboidAsset {
+                item: Item {
+                    id: "hat".into(),
+                    name: "hat".into(),
+                    slot: "head".into(),
+                    legacy: false,
+                    model: "model".into(),
+                    texture: "texture".into(),
+                    glow: None,
+                    animation: None,
+                    mesh: None,
+                },
+                geometry: Arc::new(Geometry {
+                    texture_width: 16,
+                    texture_height: 16,
+                    bones: vec![],
+                }),
+                animation: None,
+            }],
+            meshes: vec![(
+                MeshItem {
+                    id: "pet".into(),
+                    name: "pet".into(),
+                    slot: "shoulders".into(),
+                    legacy: false,
+                    mesh: "mesh".into(),
+                },
+                Arc::new(Mesh {
+                    nodes: vec![],
+                    primitives: vec![],
+                    materials: vec![],
+                    images: vec![vec![1, 2, 3]],
+                    animation: None,
+                    sheen: None,
+                }),
+            )],
+            textures: vec![("texture".into(), vec![4, 5, 6])],
+        };
+
+        let failed = merge_catalog(None, Err("timeout".into()));
+        assert!(failed.catalog.is_none());
+        assert_eq!(failed.error.as_deref(), Some("timeout"));
+
+        let good = merge_catalog(failed.catalog, Ok(catalog));
+        let failed = merge_catalog(good.catalog, Err("timeout".into()));
+        assert_eq!(failed.error.as_deref(), Some("timeout"));
+        let retained = failed.catalog.unwrap();
+        assert_eq!(retained.items[0].item.id, "hat");
+        assert_eq!(retained.meshes[0].1.images, [vec![1, 2, 3]]);
+        assert_eq!(retained.textures, [("texture".into(), vec![4, 5, 6])]);
+
+        let empty = merge_catalog(Some(retained), Ok(CosmeticCatalog::default()));
+        assert!(empty.error.is_none());
+        let empty = empty.catalog.unwrap();
+        assert!(empty.items.is_empty());
+        assert!(empty.meshes.is_empty());
+        assert!(empty.textures.is_empty());
     }
 }

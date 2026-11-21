@@ -1327,6 +1327,7 @@ impl ArcticApp {
             | Event::PlayerSkin(..)
             | Event::SkinFile(..)
             | Event::ArcticLook(..)
+            | Event::ArcticLookSaved(..)
             | Event::ArcticCatalog(..)
             | Event::CapeFile(..)
             | Event::OptifineCape(..)

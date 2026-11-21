@@ -160,10 +160,12 @@ pub enum Event {
     SkinAccount(String, Outcome<crate::skin_tasks::AccountSkin>),
     /// Another player's skin by name.
     PlayerSkin(String, Outcome<(Vec<u8>, arctic_core::skins::Variant)>),
-    /// The Arctic look of an account (account id, result).
-    ArcticLook(String, Outcome<crate::skin_tasks::ArcticState>),
+    /// The Arctic look and catalog (account id, result).
+    ArcticLook(String, Outcome<crate::skin_tasks::LoadedArcticState>),
+    /// The result of publishing a change to an account's look.
+    ArcticLookSaved(String, Outcome<crate::skin_tasks::ArcticState>),
     /// Public capes and cosmetics, available without an account.
-    ArcticCatalog(Outcome<crate::skin_tasks::ArcticState>),
+    ArcticCatalog(Outcome<crate::skin_tasks::LoadedArcticState>),
     /// A picked cape image, or `None` if cancelled.
     CapeFile(Outcome<Option<Vec<u8>>>),
     /// The OptiFine cape of a player name (a Minecraft-layout PNG), `None` when there is none.
