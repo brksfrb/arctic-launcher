@@ -146,8 +146,8 @@ impl Run {
         if let Some(summary) = &hang_at_exit {
             lines.push(summary);
         }
-        let written = newest_crash_report(&self.game_dir, self.started)
-            .or_else(|| newest_hs_err(&self.game_dir, self.started));
+        let written = newest_hs_err(&self.game_dir, self.started)
+            .or_else(|| newest_crash_report(&self.game_dir, self.started));
         // What the launcher itself logged (a failed sign-in, a download, a launch step) often explains
         // a crash the game's own log doesn't.
         let launcher = crate::logbook::snapshot_if_changed(0)
@@ -229,12 +229,6 @@ impl Run {
             .map(|l| l.text.as_str())
             .collect::<Vec<_>>()
             .join("\n");
-        if let Some(report) = newest_crash_report(&self.game_dir, self.started)
-            .or_else(|| newest_hs_err(&self.game_dir, self.started))
-        {
-            text.push('\n');
-            text.push_str(&report);
-        }
         let own_log = latest_log_tail(&self.game_dir, self.started);
         if !own_log.is_empty() {
             text.push('\n');
@@ -257,6 +251,12 @@ impl Run {
             }) {
                 text.push_str(&format!("\n{}", line.text));
             }
+        }
+        if let Some(report) = newest_hs_err(&self.game_dir, self.started)
+            .or_else(|| newest_crash_report(&self.game_dir, self.started))
+        {
+            text.push('\n');
+            text.push_str(&report);
         }
         text
     }
@@ -316,38 +316,146 @@ fn fresh_freeze_files(game_dir: &std::path::Path, since: SystemTime) -> Vec<Stri
 }
 
 /// Keep the header and lock/deadlock evidence before spending bytes on sampled stacks.
-/// An unusually large owner stack can itself exceed the budget; its lock and cycle edges come first.
+/// For a parked client without a known owner, retain likely worker stacks alongside the hot frames.
 fn freeze_snapshot(text: &str) -> String {
     const LIMIT: usize = 3 * 1024;
     // i18n-ignore: crash-report diagnostic, not UI text
     const TRUNCATED: &str = "\n[snapshot truncated; full file saved locally]";
+    const WORKER_HEADING: &str = "\n== Likely awaited threads (from the first sample) ==\n"; // i18n-ignore: diagnostics
+    const MIN_WORKER_BYTES: usize = 128;
     if text.len() <= LIMIT {
         return text.to_owned();
     }
     let budget = LIMIT - TRUNCATED.len();
     let header_end = text.find("\n== ").unwrap_or(text.len());
     let (header, body) = text.split_at(header_end);
-    let blocked_start = body.find("\n== Blocked on ==");
+    let blocked = freeze_section(body, "\n== Blocked on ==");
     let mut snapshot = String::with_capacity(LIMIT);
-    if let Some(start) = blocked_start {
-        let end = body[start + 1..]
-            .find("\n== ")
-            .map_or(body.len(), |offset| start + 1 + offset);
-        // Keep both in full whenever they fit; reserve lock evidence for oversized headers/stacks.
-        let header_limit = if header.len() + end - start <= budget {
-            budget
-        } else {
-            budget.min(1024)
-        };
-        append_snapshot_part(&mut snapshot, header, header_limit);
-        append_snapshot_part(&mut snapshot, &body[start..end], budget);
-        append_snapshot_part(&mut snapshot, &body[..start], budget);
-        append_snapshot_part(&mut snapshot, &body[end..], budget);
+    // Keep both in full whenever they fit; reserve lock evidence for oversized headers/stacks.
+    let header_limit = if blocked.is_some_and(|(_, section)| header.len() + section.len() > budget)
+    {
+        1024
     } else {
-        append_snapshot_part(&mut snapshot, text, budget);
+        budget
+    };
+    append_snapshot_part(&mut snapshot, header, header_limit);
+    if let Some((_, section)) = blocked {
+        append_snapshot_part(&mut snapshot, section, budget);
+    }
+    let parked = header.lines().next().is_some_and(|line| {
+        line.split_once(", mostly in ").is_some_and(|(_, frame)| {
+            frame.contains(".Unsafe.park(") || frame.contains(".LockSupport.park")
+        })
+    });
+    let owner_known = blocked.is_some_and(|(_, section)| section.contains("\n  Owner \""));
+    if parked
+        && !owner_known
+        && budget - snapshot.len() >= 2 * (WORKER_HEADING.len() + MIN_WORKER_BYTES)
+        && let Some(workers) = freeze_section(body, "\n== All other threads")
+            .map(|(_, others)| awaited_worker_stacks(others))
+            .filter(|workers| !workers.is_empty())
+    {
+        let hot = freeze_section(body, "\n== Where the time went");
+        if let Some((_, section)) = hot {
+            let hot_limit = snapshot.len() + (budget - snapshot.len()).div_ceil(2);
+            append_snapshot_lines(&mut snapshot, section, hot_limit);
+        }
+        snapshot.push_str(WORKER_HEADING);
+        let worker_bytes = budget - snapshot.len();
+        let worker_count = workers.len().min(worker_bytes / MIN_WORKER_BYTES);
+        let worker_budget = worker_bytes / worker_count;
+        for worker in workers.into_iter().take(worker_count) {
+            let limit = snapshot.len() + worker_budget;
+            append_snapshot_lines(&mut snapshot, worker, limit);
+        }
+        if let Some((_, section)) = freeze_section(body, "\n== Distinct client-thread stacks") {
+            append_snapshot_part(&mut snapshot, section, budget);
+        }
+    } else if let Some((start, section)) = blocked {
+        append_snapshot_part(&mut snapshot, &body[..start], budget);
+        append_snapshot_part(&mut snapshot, &body[start + section.len()..], budget);
+    } else {
+        append_snapshot_part(&mut snapshot, body, budget);
     }
     snapshot.push_str(TRUNCATED);
     snapshot
+}
+
+fn freeze_section<'a>(body: &'a str, heading: &str) -> Option<(usize, &'a str)> {
+    let start = body.find(heading)?;
+    let end = body[start + 1..]
+        .find("\n== ")
+        .map_or(body.len(), |offset| start + 1 + offset);
+    Some((start, &body[start..end]))
+}
+
+fn awaited_worker_stacks(others: &str) -> Vec<&str> {
+    let mut workers = Vec::new();
+    for (start, _) in others.match_indices("\nthread \"") {
+        let rest = &others[start + 1..];
+        let stack = rest
+            .find("\nthread \"")
+            .map_or(rest, |end| &rest[..end + 1]);
+        let Some((header, frames)) = stack.split_once('\n') else {
+            continue;
+        };
+        let Some((name, state)) = header
+            .strip_prefix("thread \"")
+            .and_then(|header| header.rsplit_once("\" "))
+        else {
+            continue;
+        };
+        let kind = if name.starts_with("Worker-Main") {
+            0
+        } else if name == "Server thread" {
+            1
+        } else if name.starts_with("Download")
+            || name.starts_with("IO-Worker")
+            || name.starts_with("Worker-IO")
+        {
+            2
+        } else {
+            continue;
+        };
+        if frames.is_empty()
+            || ["ForkJoinPool.awaitWork(", "ThreadPoolExecutor.getTask("]
+                .iter()
+                .any(|idle| frames.contains(idle))
+        {
+            continue;
+        }
+        workers.push((state != "RUNNABLE", kind, name, stack));
+    }
+    workers.sort_unstable();
+    let mut seen = [false; 3];
+    let mut selected = Vec::new();
+    // Keep one from each pool first, then use any slots left for additional workers.
+    workers.retain(|&(_, kind, _, stack)| {
+        if std::mem::replace(&mut seen[kind], true) {
+            return true;
+        }
+        selected.push(stack);
+        false
+    });
+    selected.extend(
+        workers
+            .into_iter()
+            .take(3 - selected.len())
+            .map(|(_, _, _, stack)| stack),
+    );
+    selected
+}
+
+fn append_snapshot_lines(snapshot: &mut String, part: &str, limit: usize) {
+    for line in part
+        .split_inclusive('\n')
+        .take_while(|line| line.ends_with('\n'))
+    {
+        if snapshot.len() + line.len() > limit {
+            break;
+        }
+        snapshot.push_str(line);
+    }
 }
 
 fn append_snapshot_part(snapshot: &mut String, part: &str, limit: usize) {
@@ -1101,6 +1209,110 @@ mod tests {
     }
 
     #[test]
+    fn report_414_uses_the_jvm_crash_over_the_pehkui_warning() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.16.5", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        let warning = "[16:53:41] [main/WARN]: @Mixin target net.minecraft.block.entity.LecternBlockEntity$1 was not found pehkui.mixins.json:reach.LecternBlockEntityMixin";
+        run.push_log([LogLine {
+            level: Level::Warn,
+            text: warning.into(),
+        }]);
+
+        std::fs::create_dir(dir.path().join("logs")).unwrap();
+        std::fs::write(
+            dir.path().join("logs/latest.log"),
+            format!(
+                "[16:53:40] [main/WARN]: Error loading class: slimeknights/mantle/client/model/connected/ConnectedModel$Baked (java.lang.ClassNotFoundException: null)\n{warning}"
+            ),
+        )
+        .unwrap();
+        let hs_err = r#"#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  EXCEPTION_ACCESS_VIOLATION (0xc0000005) at pc=0x0000004c206fb350, pid=6832, tid=0x0000000000001efc
+#
+# JRE version: OpenJDK Runtime Environment (8.0_512-b09) (build 1.8.0_512-b09)
+# Problematic frame:
+# C  0x0000004c206fb350
+#
+---------------  T H R E A D  ---------------
+
+Current thread (0x000001ad6162a800):  JavaThread "C2 CompilerThread5" daemon [_thread_in_native, id=7932]
+
+Current CompileTask:
+C2:  13971 9500       4       org.objectweb.asm.tree.AnnotationNode::accept (134 bytes)
+"#;
+        std::fs::write(dir.path().join("hs_err_pid6832.log"), hs_err).unwrap();
+
+        let diagnosis = run.exit_diagnosis(Some(1), false).unwrap();
+        assert_eq!(diagnosis.title, "Java's JIT compiler crashed");
+        assert!(diagnosis.mods.is_empty());
+        assert!(!diagnosis.detail.to_lowercase().contains("pehkui"));
+        assert!(
+            diagnosis
+                .detail
+                .contains("org.objectweb.asm.tree.AnnotationNode::accept")
+        );
+        let report = run.crash_report(&diagnosis.title, Some(1));
+        assert_eq!(report.title, diagnosis.title);
+        assert!(
+            report.log.starts_with(
+                "\n---- first error ----\n#  EXCEPTION_ACCESS_VIOLATION (0xc0000005)\n"
+            )
+        );
+        assert!(
+            report
+                .log
+                .contains("matched: #  EXCEPTION_ACCESS_VIOLATION")
+        );
+        assert!(report.log.contains(warning));
+    }
+
+    #[test]
+    fn report_441_uses_the_mod_native_crash_over_earlier_log_errors() {
+        let fixture = include_str!("../../arctic-core/tests/fixtures/crash-441-native-mod.log");
+        let (log, hs_err) = fixture.split_once("\n---- crash report ----\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.21.11", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        std::fs::create_dir(dir.path().join("logs")).unwrap();
+        std::fs::write(dir.path().join("logs/latest.log"), log).unwrap();
+        std::fs::write(dir.path().join("hs_err_pid11989.log"), hs_err).unwrap();
+
+        let diagnosis = run.exit_diagnosis(Some(134), false).unwrap();
+        assert_eq!(
+            diagnosis.title,
+            "super_resolution crashed in native library libSuperResolution+linux64+release.so"
+        );
+        assert_eq!(diagnosis.mods, ["super_resolution"]);
+        assert!(
+            diagnosis
+                .detail
+                .contains("Intel(R) Pentium(R) Silver N5000")
+        );
+        assert!(diagnosis.detail.contains("doesn't support"));
+        assert!(
+            diagnosis
+                .detail
+                .contains("Remove super_resolution or replace it")
+        );
+
+        let report = run.crash_report("oωo failed to change the game", Some(134));
+        assert_eq!(report.title, diagnosis.title);
+        assert!(
+            report
+                .log
+                .starts_with("\n---- first error ----\n#  SIGILL (0x4)\n")
+        );
+        assert!(report.log.contains("matched: #  SIGILL"));
+    }
+
+    #[test]
     fn a_force_close_is_not_a_crash() {
         let mut runs = Runs::default();
         let id = runs.start("x", "1.0", "X".into(), PathBuf::new());
@@ -1257,6 +1469,90 @@ mod tests {
             let snapshot = freeze_snapshot(&text);
             assert!(snapshot.len() <= 3 * 1024);
             assert!(snapshot.ends_with("[snapshot truncated; full file saved locally]"));
+        }
+    }
+
+    #[test]
+    fn create_world_report_keeps_likely_workers_within_the_snapshot_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let freezes = dir.path().join("logs/arctic-freezes");
+        std::fs::create_dir_all(&freezes).unwrap();
+        let client =
+            include_str!("../../arctic-core/tests/fixtures/crash-440-create-world-freeze.log");
+        // Report 440 lost the worker section. Add representative first-sample stacks to replay
+        // the upload path from the untrimmed sidecar.
+        let idle = "thread \"Worker-Main-1\" WAITING\n    at java.base/java.util.concurrent.ForkJoinPool.awaitWork(ForkJoinPool.java:1726)\n";
+        let workers = [
+            (
+                "Worker-Main-4",
+                "    at example.PackLoader.read(PackLoader.java:42)",
+            ),
+            (
+                "Server thread",
+                "    at example.WorldSetup.start(WorldSetup.java:12)",
+            ),
+            (
+                "Download-2",
+                "    at example.Download.get(Download.java:42)",
+            ),
+        ];
+        let mut full = format!(
+            "{client}{}\n== All other threads (captured once, at the first sample) ==\n{idle}{}",
+            "    at example.Game.open(Game.java:42)\n".repeat(50),
+            "thread \"Reference Handler\" RUNNABLE\n    at java.base/java.lang.ref.Reference.waitForReferencePendingList(Native Method)\n".repeat(30),
+        );
+        for (name, frame) in workers {
+            full.push_str(&format!("thread \"{name}\" RUNNABLE\n{frame}\n"));
+        }
+        std::fs::write(freezes.join("freeze-440.txt"), full).unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.21.11", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        run.java = Some("Java 21".into());
+
+        run.push_log((1..=3).map(|task| LogLine {
+            level: Level::Error,
+            text: format!(
+                "[15:57:49] [Download-2/ERROR] Task {task} failed\n    java.io.IOException: background error\n{}",
+                "    at example.downloads.BackgroundDownloadWorker.retryRequestAfterTransientFailure(BackgroundDownloadWorker.java:100)\n".repeat(25),
+            ),
+        }));
+        run.push_log([LogLine {
+            level: Level::Info,
+            text: "[15:57:50] [Render thread/INFO] Returned to title screen".into(),
+        }]);
+
+        let snapshots = fresh_freeze_files(dir.path(), run.started);
+        let (_, snapshot) = snapshots[0].split_once('\n').unwrap();
+        assert!(snapshot.len() <= 3 * 1024);
+        assert!(snapshot.contains("Owner unavailable"));
+        assert!(
+            snapshot.find("== Likely awaited threads").unwrap()
+                < snapshot.find("== Distinct client-thread stacks").unwrap()
+        );
+        assert!(!snapshot.contains("Worker-Main-1"));
+        assert!(!snapshot.contains("Reference Handler"));
+        let code = Some(-805306369);
+        let diagnosis = run.exit_diagnosis(code, false).unwrap();
+        let report = run.crash_report(&diagnosis.title, code);
+        assert!(report.title.contains("Create World"));
+        assert!(
+            report
+                .log
+                .contains("duration: 3.00s (still frozen when written)")
+        );
+        assert!(
+            report
+                .log
+                .contains("Hang at exit: client hung for at least 3.00s")
+        );
+        for (name, frame) in workers {
+            assert!(
+                report
+                    .log
+                    .contains(&format!("thread \"{name}\" RUNNABLE\n{frame}"))
+            );
         }
     }
 
