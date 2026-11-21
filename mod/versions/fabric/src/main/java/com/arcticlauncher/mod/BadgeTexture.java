@@ -34,7 +34,7 @@ public final class BadgeTexture {
 	private static final int[] GPU_KEYS = new int[GPU_CACHE_CAP];
 	private static final int[] GPU_STAMP = new int[GPU_CACHE_CAP];
 	private static final int[] GPU_GEN = new int[GPU_CACHE_CAP];
-	private static int gpuCount, gpuClock, gpuTick;
+	private static int gpuCount, gpuClock, gpuTick, uploadSeq;
 	private static final int[] READY_SIZE = new int[1];
 	private static final DynamicTexture[][] MASTER_TEXTURES =
 			new DynamicTexture[Badge.STYLES.size()][Badge.ROLES.length];
@@ -43,9 +43,15 @@ public final class BadgeTexture {
 	private static final java.util.Set<Object> BADGE_GLYPHS =
 			java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Object, Boolean>());
 	/** Textures evicted this tick; released on the next tick so in-flight quads stay valid. */
-	private static final Identifier[] GRAVE_IDS = new Identifier[GPU_CACHE_CAP + 8];
-	private static final DynamicTexture[] GRAVE_TEX = new DynamicTexture[GPU_CACHE_CAP + 8];
+	private static final int GRAVE_CAP = 128;
+	private static final Identifier[] GRAVE_IDS = new Identifier[GRAVE_CAP];
+	private static final DynamicTexture[] GRAVE_TEX = new DynamicTexture[GRAVE_CAP];
+	private static final int[] GRAVE_SLOT = new int[GRAVE_CAP];
+	private static final int[] GRAVE_SIZE = new int[GRAVE_CAP];
 	private static int graveCount;
+	private static final java.util.Set<Object> RETIRED_GLYPHS =
+			java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Object, Boolean>());
+	private static final int[][][] QUAD_STAMP = new int[SLOTS][Badge.MAX_RASTER_SIZE + 1][QUAD_VARIANTS];
 
 	public static boolean isBadge(Object glyph) {
 		return glyph != null && BADGE_GLYPHS.contains(glyph);
@@ -65,6 +71,10 @@ public final class BadgeTexture {
 	/** Reap textures evicted on the previous tick. Called from the client tick, on the render thread. */
 	public static void onTick() {
 		reapGraveyard();
+		for (Object glyph : RETIRED_GLYPHS) {
+			BADGE_GLYPHS.remove(glyph);
+		}
+		RETIRED_GLYPHS.clear();
 		gpuTick++;
 	}
 
@@ -100,20 +110,43 @@ public final class BadgeTexture {
 		BrandMark.badgeReady(resolution, style, role, READY_SIZE);
 		int texSize = READY_SIZE[0];
 		if (texSize < 1) texSize = BrandMark.MASTER_SIZE;
+		if (texSize >= 1 && texSize <= Badge.MAX_RASTER_SIZE) {
+			if (TEXTURES[slot][texSize] == null) {
+				resurrect(slot, texSize);
+			}
+			if (TEXTURES[slot][texSize] != null) {
+				gpuRemember(slot, texSize);
+			}
+		}
 		int sideBits = Float.floatToIntBits(side);
 		int count = QUAD_COUNT[slot][resolution];
+		int oldest = 0, oldestStamp = Integer.MAX_VALUE;
 		for (int i = 0; i < count; i++) {
+			if (QUAD_STAMP[slot][resolution][i] < oldestStamp) {
+				oldestStamp = QUAD_STAMP[slot][resolution][i];
+				oldest = i;
+			}
 			if (QUAD_TEX[slot][resolution][i] == texSize && QUAD_SIDE[slot][resolution][i] == sideBits) {
+				QUAD_STAMP[slot][resolution][i] = nextGpuStamp();
 				return GUI_QUADS[slot][resolution][i];
 			}
 		}
 		BakedGlyph quad = bake(slot, texSize, side);
+		int index;
 		if (count < QUAD_VARIANTS) {
-			GUI_QUADS[slot][resolution][count] = quad;
-			QUAD_TEX[slot][resolution][count] = texSize;
-			QUAD_SIDE[slot][resolution][count] = sideBits;
+			index = count;
 			QUAD_COUNT[slot][resolution] = count + 1;
+		} else {
+			index = oldest;
+			BakedGlyph evicted = GUI_QUADS[slot][resolution][index];
+			if (evicted != null) {
+				RETIRED_GLYPHS.add(evicted);
+			}
 		}
+		GUI_QUADS[slot][resolution][index] = quad;
+		QUAD_TEX[slot][resolution][index] = texSize;
+		QUAD_SIDE[slot][resolution][index] = sideBits;
+		QUAD_STAMP[slot][resolution][index] = nextGpuStamp();
 		return quad;
 	}
 
@@ -136,7 +169,7 @@ public final class BadgeTexture {
 				//#endif
 			}
 		}
-		Identifier id = Compat.id(ArcticMod.ID, "dyn/badge_" + slot + "_" + resolution);
+		Identifier id = Compat.id(ArcticMod.ID, "dyn/badge_" + slot + "_" + resolution + "_" + (++uploadSeq));
 		DynamicTexture texture = Compat.smoothTexture("Arctic badge", image);
 		TextureManager textures = Minecraft.getInstance().getTextureManager();
 		textures.register(id, texture);
@@ -176,14 +209,16 @@ public final class BadgeTexture {
 			}
 		}
 		if (gpuCount == GPU_CACHE_CAP) {
-			int evict = -1, oldest = Integer.MAX_VALUE;
-			for (int i = 0; i < gpuCount; i++) {
-				if (GPU_GEN[i] == gpuTick) continue;
-				if (GPU_STAMP[i] < oldest) { oldest = GPU_STAMP[i]; evict = i; }
-			}
-			if (evict < 0) {
-				// Every cached texture was drawn this tick; keep it until a later tick.
-				return;
+			int evict = 0, oldest = GPU_STAMP[0];
+			for (int i = 1; i < gpuCount; i++) {
+				// Prefer textures not drawn this tick; otherwise evict the oldest into the graveyard
+				// (freed next tick, or resurrected if this slot/size is requested again).
+				boolean older = GPU_STAMP[i] < oldest;
+				boolean safer = GPU_GEN[evict] == gpuTick && GPU_GEN[i] != gpuTick;
+				if (safer || (older && GPU_GEN[i] == GPU_GEN[evict])) {
+					oldest = GPU_STAMP[i];
+					evict = i;
+				}
 			}
 			int old = GPU_KEYS[evict];
 			gpuDrop(old >>> 8, old & 255);
@@ -209,28 +244,55 @@ public final class BadgeTexture {
 			int w = 0;
 			for (int i = 0; i < n; i++) {
 				if (QUAD_TEX[slot][r][i] == resolution || r == resolution) {
+					BakedGlyph evicted = GUI_QUADS[slot][r][i];
+					if (evicted != null) {
+						RETIRED_GLYPHS.add(evicted);
+					}
 					continue;
 				}
 				GUI_QUADS[slot][r][w] = GUI_QUADS[slot][r][i];
 				QUAD_TEX[slot][r][w] = QUAD_TEX[slot][r][i];
 				QUAD_SIDE[slot][r][w] = QUAD_SIDE[slot][r][i];
+				QUAD_STAMP[slot][r][w] = QUAD_STAMP[slot][r][i];
 				w++;
 			}
 			for (int i = w; i < n; i++) {
 				GUI_QUADS[slot][r][i] = null;
 				QUAD_TEX[slot][r][i] = 0;
 				QUAD_SIDE[slot][r][i] = 0;
+				QUAD_STAMP[slot][r][i] = 0;
 			}
 			QUAD_COUNT[slot][r] = w;
 		}
-		bury(id, texture);
+		bury(id, texture, slot, resolution);
 	}
 
-	private static void bury(Identifier id, DynamicTexture texture) {
+	private static boolean resurrect(int slot, int resolution) {
+		for (int i = 0; i < graveCount; i++) {
+			if (GRAVE_SLOT[i] != slot || GRAVE_SIZE[i] != resolution) {
+				continue;
+			}
+			TEXTURES[slot][resolution] = GRAVE_TEX[i];
+			IDS[slot][resolution] = GRAVE_IDS[i];
+			graveCount--;
+			GRAVE_IDS[i] = GRAVE_IDS[graveCount];
+			GRAVE_TEX[i] = GRAVE_TEX[graveCount];
+			GRAVE_SLOT[i] = GRAVE_SLOT[graveCount];
+			GRAVE_SIZE[i] = GRAVE_SIZE[graveCount];
+			GRAVE_IDS[graveCount] = null;
+			GRAVE_TEX[graveCount] = null;
+			return TEXTURES[slot][resolution] != null;
+		}
+		return false;
+	}
+
+	private static void bury(Identifier id, DynamicTexture texture, int slot, int resolution) {
 		if (id == null && texture == null) return;
 		if (graveCount < GRAVE_IDS.length) {
 			GRAVE_IDS[graveCount] = id;
 			GRAVE_TEX[graveCount] = texture;
+			GRAVE_SLOT[graveCount] = slot;
+			GRAVE_SIZE[graveCount] = resolution;
 			graveCount++;
 			return;
 		}
@@ -277,6 +339,7 @@ public final class BadgeTexture {
 		}
 		reapGraveyard();
 		BADGE_GLYPHS.clear();
+		RETIRED_GLYPHS.clear();
 		for (int slot = 0; slot < SLOTS; slot++) {
 			for (int r = 0; r <= Badge.MAX_RASTER_SIZE; r++) {
 				QUAD_COUNT[slot][r] = 0;
@@ -284,6 +347,7 @@ public final class BadgeTexture {
 					GUI_QUADS[slot][r][i] = null;
 					QUAD_TEX[slot][r][i] = 0;
 					QUAD_SIDE[slot][r][i] = 0;
+					QUAD_STAMP[slot][r][i] = 0;
 				}
 			}
 		}
@@ -320,7 +384,7 @@ public final class BadgeTexture {
 		DynamicTexture texture = MASTER_TEXTURES[style][role];
 		MASTER_TEXTURES[style][role] = null;
 		MASTER_IDS[style][role] = null;
-		bury(id, texture);
+		bury(id, texture, -1, -1);
 	}
 
 	private static BakedGlyph bake(int slot, int texSize, float side) {

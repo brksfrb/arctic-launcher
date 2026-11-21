@@ -103,7 +103,6 @@
 		"ScaledFontSetMixin",
 		"BadgeQuadMixin",<% } %><% if (badgeSnap) { %>
 		"BadgeSnapMixin",
-		"BadgeGlyphBoundsMixin",
 		"BadgeTextureLifecycleMixin",<% } %><% if (badgeGlyphInstance) { %>
 		"BadgeGlyphInstanceAccess",<% } %><% if (oldScaledTexture) { %>
 		"ScaledFontTextureMixin",<% } %><% if (gpuFontTexture && !scaledFont) { %>

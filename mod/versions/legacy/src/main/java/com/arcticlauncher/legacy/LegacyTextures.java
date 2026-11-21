@@ -77,24 +77,37 @@ final class LegacyTextures {
 	private static final Identifier[] BADGE_IDS = new Identifier[GPU_CACHE_CAP];
 	private static final int[] BADGE_STAMP = new int[GPU_CACHE_CAP];
 	private static final int[] BADGE_GEN = new int[GPU_CACHE_CAP];
-	private static int badgeCount, badgeClock, badgeTick;
+	private static int badgeCount, badgeClock, badgeTick, badgeSeq;
 	private static final int[] READY_SIZE = new int[1];
-	private static final Identifier[] GRAVE_IDS = new Identifier[GPU_CACHE_CAP + 8];
+	private static final int GRAVE_CAP = 128;
+	private static final Identifier[] GRAVE_IDS = new Identifier[GRAVE_CAP];
+	private static final String[] GRAVE_KEYS = new String[GRAVE_CAP];
 	private static int graveCount;
+	private static final java.util.Map<String, Identifier> LIVE = new java.util.HashMap<String, Identifier>();
 
 	static Identifier badge(int style, int size, int role) {
 		int[] pixels = BrandMark.badgeReady(size, style, role, READY_SIZE);
 		int texSize = READY_SIZE[0];
 		if (texSize < 1) texSize = size;
-		Identifier id = dyn(Badge.name(style) + "-" + texSize + "-" + role);
-		if (LOADED.contains(id)) {
+		String key = Badge.name(style) + "-" + texSize + "-" + role;
+		Identifier id = LIVE.get(key);
+		if (id != null && LOADED.contains(id)) {
 			badgeTouch(id);
 			return id;
 		}
+		id = takeGrave(key);
+		if (id != null) {
+			LOADED.add(id);
+			LIVE.put(key, id);
+			badgeRemember(id);
+			return id;
+		}
+		id = dyn(key + "-" + (++badgeSeq));
 		BufferedImage image = new BufferedImage(texSize, texSize, BufferedImage.TYPE_INT_ARGB);
 		image.setRGB(0, 0, texSize, texSize, pixels, 0, texSize);
 		if (!register(id, image)) return null;
 		linear(id);
+		LIVE.put(key, id);
 		badgeRemember(id);
 		return id;
 	}
@@ -132,13 +145,14 @@ final class LegacyTextures {
 			}
 		}
 		if (badgeCount == GPU_CACHE_CAP) {
-			int evict = -1, oldest = Integer.MAX_VALUE;
-			for (int i = 0; i < badgeCount; i++) {
-				if (BADGE_GEN[i] == badgeTick) continue;
-				if (BADGE_STAMP[i] < oldest) { oldest = BADGE_STAMP[i]; evict = i; }
-			}
-			if (evict < 0) {
-				return;
+			int evict = 0, oldest = BADGE_STAMP[0];
+			for (int i = 1; i < badgeCount; i++) {
+				boolean older = BADGE_STAMP[i] < oldest;
+				boolean safer = BADGE_GEN[evict] == badgeTick && BADGE_GEN[i] != badgeTick;
+				if (safer || (older && BADGE_GEN[i] == BADGE_GEN[evict])) {
+					oldest = BADGE_STAMP[i];
+					evict = i;
+				}
 			}
 			badgeDrop(BADGE_IDS[evict]);
 			BADGE_IDS[evict] = id;
@@ -152,11 +166,41 @@ final class LegacyTextures {
 		badgeCount++;
 	}
 
+	private static String liveKey(Identifier id) {
+		for (java.util.Map.Entry<String, Identifier> e : LIVE.entrySet()) {
+			if (e.getValue() == id) {
+				return e.getKey();
+			}
+		}
+		return null;
+	}
+
+	private static Identifier takeGrave(String key) {
+		for (int i = 0; i < graveCount; i++) {
+			if (key.equals(GRAVE_KEYS[i])) {
+				Identifier found = GRAVE_IDS[i];
+				graveCount--;
+				GRAVE_IDS[i] = GRAVE_IDS[graveCount];
+				GRAVE_KEYS[i] = GRAVE_KEYS[graveCount];
+				GRAVE_IDS[graveCount] = null;
+				GRAVE_KEYS[graveCount] = null;
+				return found;
+			}
+		}
+		return null;
+	}
+
 	private static void badgeDrop(Identifier id) {
 		if (id == null) return;
 		LOADED.remove(id);
+		String key = liveKey(id);
+		if (key != null && LIVE.get(key) == id) {
+			LIVE.remove(key);
+		}
 		if (graveCount < GRAVE_IDS.length) {
-			GRAVE_IDS[graveCount++] = id;
+			GRAVE_IDS[graveCount] = id;
+			GRAVE_KEYS[graveCount] = key;
+			graveCount++;
 			return;
 		}
 		freeBadge(id);
@@ -189,6 +233,7 @@ final class LegacyTextures {
 		}
 		badgeCount = 0;
 		badgeClock = 0;
+		LIVE.clear();
 		reapBadges();
 	}
 

@@ -34,6 +34,7 @@ import net.minecraft.client.gui.font.glyphs.BakedGlyph;
 @Mixin(BakedGlyph.class)
 //#endif
 abstract class BadgeSnapMixin {
+	/** Render-thread only: text is prepared and drawn on the client thread. */
 	@Unique private static final float[] arctic$snap = new float[2];
 	@Unique private static float arctic$snappedY;
 	@Unique private static boolean arctic$didSnap;
