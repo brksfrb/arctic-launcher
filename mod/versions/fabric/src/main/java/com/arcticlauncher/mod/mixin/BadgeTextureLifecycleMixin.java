@@ -28,7 +28,7 @@ abstract class BadgeTextureLifecycleMixin {
 	private void arctic$badgeLeave(CallbackInfo ci) {
 		BadgeTexture.releaseAll();
 	}
-	//#elif MC >= 1.21.4
+	//#elif MC >= 1.20.2
 	@Inject(method = "disconnect()V", at = @At("HEAD"))
 	private void arctic$badgeLeave(CallbackInfo ci) {
 		BadgeTexture.releaseAll();

@@ -1,5 +1,6 @@
 package com.arcticlauncher.mod;
 
+import com.arcticlauncher.client.Lang;
 import com.arcticlauncher.client.feature.Badge;
 import com.arcticlauncher.client.gfx.BrandMark;
 import com.mojang.blaze3d.platform.NativeImage;
@@ -170,7 +171,7 @@ public final class BadgeTexture {
 			}
 		}
 		Identifier id = Compat.id(ArcticMod.ID, "dyn/badge_" + slot + "_" + resolution + "_" + (++uploadSeq));
-		DynamicTexture texture = Compat.smoothTexture("Arctic badge", image);
+		DynamicTexture texture = Compat.smoothTexture(Lang.t("platform.arctic_badge"), image);
 		TextureManager textures = Minecraft.getInstance().getTextureManager();
 		textures.register(id, texture);
 		//#if MC >= 1.21.11
@@ -370,7 +371,7 @@ public final class BadgeTexture {
 			}
 		}
 		Identifier id = Compat.id(ArcticMod.ID, "dyn/badge_master_" + style + "_" + role);
-		DynamicTexture texture = Compat.smoothTexture("Arctic badge", image);
+		DynamicTexture texture = Compat.smoothTexture(Lang.t("platform.arctic_badge"), image);
 		Minecraft.getInstance().getTextureManager().register(id, texture);
 		//#if MC >= 1.21.11
 		LINEAR_GUI_VIEWS.add(texture.getTextureView());
