@@ -353,11 +353,11 @@ const RULES: &[Rule] = &[
     Rule {
         // Fabric: "Mixin apply for mod sodium failed sodium.mixins.json:..."
         pattern: crate::crash_conflicts::FABRIC_MIXIN_APPLY_FAILURE,
-        explain: |c, text| broken_mod(&c[1], text),
+        explain: broken_mod,
     },
     Rule {
         pattern: crate::crash_conflicts::MIXIN_APPLY_FAILURE,
-        explain: |c, text| broken_mod(&c[1], text),
+        explain: broken_mod,
     },
     Rule {
         // Forge/NeoForge and generic Mixin failures often name only the config.
@@ -769,7 +769,13 @@ fn built_for_another_game(id: &str, text: &str) -> Option<(String, String, Strin
     other.then_some((version, built_for, game))
 }
 
-fn broken_mod(id: &str, text: &str) -> Diagnosis {
+fn broken_mod(c: &regex::Captures, text: &str) -> Diagnosis {
+    let before = &text[..c.get(0).expect("mixin failure match").start()];
+    let prefix = before.rsplit('\n').next().unwrap_or(before);
+    if warning_log_line(prefix) {
+        return Diagnosis::none();
+    }
+    let id = &c[1];
     if let Some((version, built_for, game)) = built_for_another_game(id, text) {
         return Diagnosis::new(
             format!("{id} is for another Minecraft version"),
@@ -786,6 +792,15 @@ fn broken_mod(id: &str, text: &str) -> Diagnosis {
         ),
         vec![id.to_owned()],
     )
+}
+
+pub(crate) fn warning_log_line(line: &str) -> bool {
+    static WARNING: OnceLock<Regex> = OnceLock::new();
+    WARNING
+        .get_or_init(|| {
+            Regex::new(r"^(?:\[[^\]\r\n]*\][ \t]*)*\[(?:[^\]\r\n]*/)?WARN(?:ING)?\]").unwrap()
+        })
+        .is_match(line.trim_start())
 }
 
 /// Every match of capture group `group` of the first rule (deduplicated).
@@ -1223,6 +1238,211 @@ fn fatal_linkage(text: &str, at: usize) -> bool {
             && !freeze_evidence(text))
 }
 
+const JAVA_FATAL_HEADER: &str =
+    "# A fatal error has been detected by the Java Runtime Environment:";
+
+fn java_fatal_error(text: &str) -> Option<(&str, &str)> {
+    // HotSpot can print the header to stderr as well as writing the fuller hs_err file.
+    // The file is appended after the process output.
+    let (start, _) = text
+        .rmatch_indices(JAVA_FATAL_HEADER)
+        .find(|&(start, _)| start == 0 || text.as_bytes()[start - 1] == b'\n')?;
+    let report = &text[start..];
+    let report = report.split("\n---- ").next()?;
+    let fatal = report
+        .lines()
+        .skip(1)
+        .map(str::trim)
+        .find(|line| !line.is_empty() && *line != "#")?;
+    fatal.starts_with("# ").then_some((report, fatal))
+}
+
+fn native_library_owner<'a>(
+    text: &str,
+    report: &str,
+    frame_path: &str,
+    library: &str,
+    inventory: &'a str,
+) -> Option<&'a str> {
+    let mods = || inventory.lines().filter_map(|line| line.split_once(' '));
+    let paths = text.replace('\\', "/");
+    // Match the full library name. Sibling libraries can differ only by a suffix.
+    let path = Regex::new(&format!(
+        r"(?:^|[\s/])(?:config|mods)/([^/\r\n]+)/(?:[^\r\n]*/)?{}(?:$|[\s+!\]])",
+        regex::escape(library)
+    ))
+    .ok()?;
+    let owner_for_dir = |directory: &str| {
+        mods().find_map(|(id, version)| {
+            let stem = directory
+                .strip_suffix(".jar!")
+                .or_else(|| directory.strip_suffix(".jar"));
+            (directory == id
+                || stem.is_some_and(|stem| stem == id || stem == format!("{id}-{version}")))
+            .then_some(id)
+        })
+    };
+    for source in [frame_path, &paths] {
+        let mut owners = path
+            .captures_iter(source)
+            .filter_map(|c| owner_for_dir(c.get(1)?.as_str()));
+        if let Some(owner) = owners.next() {
+            return owners.all(|other| other == owner).then_some(owner);
+        }
+    }
+
+    // The first Java frame is the Java side of the native call. Later frames can
+    // belong to callers in other mods.
+    let frame = report
+        .lines()
+        .skip_while(|line| !line.starts_with("Java frames:"))
+        .nth(1)?;
+    let mut words = frame.split_whitespace();
+    let method = match words.next()? {
+        "j" => words.next()?,
+        "J" => words.nth(2)?,
+        _ => return None,
+    };
+    let (method, _) = method.split_once('(')?;
+    let (package, _) = method.rsplit_once('.')?;
+    let (package, _) = package.rsplit_once('.')?;
+    let mut owners = mods().filter_map(|(id, _)| {
+        let normalized = id.bytes().filter(u8::is_ascii_alphanumeric);
+        package
+            .split(['.', '/'])
+            .any(|part| {
+                part.bytes()
+                    .filter(u8::is_ascii_alphanumeric)
+                    .map(|b| b.to_ascii_lowercase())
+                    .eq(normalized.clone())
+            })
+            .then_some(id)
+    });
+    let owner = owners.next()?;
+    owners.next().is_none().then_some(owner)
+}
+
+fn native_library_diagnosis(text: &str, report: &str, fatal: &str) -> Option<Diagnosis> {
+    let signal = fatal.strip_prefix("# ")?.split_whitespace().next()?;
+    if !matches!(
+        signal,
+        "SIGILL" | "SIGSEGV" | "SIGBUS" | "SIGFPE" | "SIGABRT" | "SIGTRAP"
+    ) && !signal.starts_with("EXCEPTION_")
+    {
+        return None;
+    }
+    let frame = crate::stability::problematic_frame(report)?;
+    let frame = frame.strip_prefix("C ")?.trim_start().strip_prefix('[')?;
+    let (frame_path, _) = frame.split_once(']')?;
+    let (frame_path, _) = frame_path.rsplit_once("+0x")?;
+    let frame_path = frame_path.replace('\\', "/");
+    let library = frame_path.rsplit('/').next()?;
+    if matches!(
+        library.to_ascii_lowercase().as_str(),
+        "libjvm.so" | "libjvm.dylib" | "libjvm.a" | "jvm.dll"
+    ) {
+        return None;
+    }
+
+    let inventory = compact_mod_inventory(text, text);
+    let uploaded_inventory = text
+        .split_once("---- full mod list (id version) ----\n")
+        .map_or("", |(_, tail)| {
+            tail.split("\n---- ").next().unwrap_or_default().trim()
+        });
+    let inventory = if inventory.is_empty() {
+        uploaded_inventory
+    } else {
+        &inventory
+    };
+    let owner = native_library_owner(text, report, &frame_path, library, inventory);
+    let title = match owner {
+        Some(mod_id) => format!("{mod_id} crashed in native library {library}"),
+        None => format!("Minecraft crashed in native library {library}"),
+    };
+    let detail = if matches!(signal, "SIGILL" | "EXCEPTION_ILLEGAL_INSTRUCTION") {
+        let cpu = report
+            .lines()
+            .find_map(|line| line.strip_prefix("Host: "))
+            .and_then(|host| host.split(',').next())
+            .filter(|cpu| !cpu.is_empty());
+        let cpu = cpu.map_or_else(|| "this CPU".to_owned(), |cpu| format!("this CPU ({cpu})"));
+        match owner {
+            Some(mod_id) => format!(
+                "{mod_id}'s native code uses instructions that {cpu} doesn't support. Remove {mod_id} or replace it with a version that supports your CPU."
+            ),
+            None => format!(
+                "{library} uses instructions that {cpu} doesn't support. If it came with a mod, remove that mod or replace it with a version that supports your CPU."
+            ),
+        }
+    } else if let Some(mod_id) = owner {
+        format!(
+            "The game stopped with {signal} in {mod_id}'s native library. Update {mod_id} or try launching without it."
+        )
+    } else if let Some((driver, _)) = diagnose_log_rules(report, None)
+        .filter(|(diagnosis, _)| diagnosis.title == "The graphics driver crashed")
+    {
+        return Some(Diagnosis::new(
+            format!("{} ({library})", driver.title),
+            driver.detail,
+            Vec::new(),
+        ));
+    } else {
+        format!("The game stopped with {signal} in {library}.")
+    };
+    Some(Diagnosis::new(
+        title,
+        detail,
+        owner.into_iter().map(str::to_owned).collect(),
+    ))
+}
+
+pub(crate) fn java_fatal_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    let (report, fatal) = java_fatal_error(text)?;
+    let compiler_thread = report.lines().any(|line| {
+        line.trim_start().starts_with("Current thread ")
+            && (line.contains("\"C2 CompilerThread") || line.contains("\"C1 CompilerThread"))
+    });
+    let mut lines = report.lines();
+    let compile_task = lines
+        .find_map(|line| line.trim_start().strip_prefix("Current CompileTask:"))
+        .map(|task| {
+            if task.trim().is_empty() {
+                lines.next().unwrap_or_default()
+            } else {
+                task
+            }
+        });
+    let diagnosis = if compiler_thread || compile_task.is_some() {
+        let method =
+            compile_task.and_then(|task| task.split_whitespace().find(|word| word.contains("::")));
+        let task = method.map_or_else(String::new, |method| {
+            format!(" Java was compiling {method} when it crashed.")
+        });
+        Diagnosis::new(
+            "Java's JIT compiler crashed",
+            format!(
+                "A Java runtime bug or unstable hardware can cause this.{task} Clear the instance's custom Java setting to use the Java runtime Arctic recommends for this Minecraft version. If it happens again, test your RAM and turn off any CPU or RAM overclock."
+            ),
+            Vec::new(),
+        )
+    } else if let Some(native) = native_library_diagnosis(text, report, fatal) {
+        native
+    } else {
+        diagnose_log_rules(report, None).map_or_else(
+            || {
+                Diagnosis::new(
+                    "The Java runtime crashed",
+                    "Java reported a fatal error. Try the Java runtime Arctic recommends for this Minecraft version.",
+                    Vec::new(),
+                )
+            },
+            |(diagnosis, _)| diagnosis,
+        )
+    };
+    Some((diagnosis, head_of(fatal, 2048).to_owned()))
+}
+
 pub(crate) fn native_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
     if text.contains("---- Minecraft Crash Report ----")
         || text.contains("---- crash report ----\n")
@@ -1359,6 +1579,9 @@ fn diagnose_rules(
     java: Option<&str>,
     mods_dir: Option<&Path>,
 ) -> Option<(Diagnosis, String)> {
+    if let Some(fatal) = java_fatal_diagnosis(text) {
+        return Some(fatal);
+    }
     if let Some(runtime) = runtime_diagnosis(text) {
         return Some(runtime);
     }
@@ -1396,6 +1619,10 @@ fn diagnose_rules(
         return Some(wrong_game);
     }
 
+    diagnose_log_rules(text, java).or_else(|| hang_diagnosis(text, mods_dir))
+}
+
+fn diagnose_log_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
     for (rule, re) in RULES.iter().zip(compiled()) {
         for c in re.captures_iter(text) {
             let matched = c.get(0)?;
@@ -1440,7 +1667,7 @@ fn diagnose_rules(
             }
         }
     }
-    hang_diagnosis(text, mods_dir)
+    None
 }
 
 /// The exception must name a native library in a managed JDK layout. Other
@@ -1600,6 +1827,13 @@ const REPORT_LAUNCHER_BYTES: usize = 6 * 1024;
 /// Prefer the captured exception or a crash document. In ordinary logs, require an exception
 /// followed by a Java stack frame in the same log record.
 fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a str> {
+    if let Some((_, error)) = crash_report
+        .and_then(java_fatal_error)
+        .or_else(|| java_fatal_error(log))
+    {
+        // The code is stable across runs. Fault addresses and process/thread IDs vary.
+        return Some(error.split_once(" at pc=").map_or(error, |(kind, _)| kind));
+    }
     if let Some(error) = vanilla_crash_trace(log).next() {
         return Some(error);
     }
@@ -1800,7 +2034,8 @@ impl Report {
             title
         };
         let title = registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
-        let title = runtime_diagnosis(&diagnosis_text)
+        let title = java_fatal_diagnosis(&diagnosis_text)
+            .or_else(|| runtime_diagnosis(&diagnosis_text))
             .or_else(|| native_diagnosis(&diagnosis_text))
             .map_or(title, |(d, _)| d.title);
         let title = if crash_report.is_none()
@@ -3972,6 +4207,26 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
     }
 
     #[test]
+    fn mixin_warnings_need_evidence_of_a_failure() {
+        for message in [
+            "@Mixin target net.minecraft.Foo was not found optional.mixins.json:FooMixin",
+            "Mixin apply for mod optional failed optional.mixins.json:FooMixin",
+            "Mixin [optional.mixins.json:FooMixin] from mod optional",
+            "MixinTransformerError: optional.mixins.json:FooMixin caused by ClassNotFoundException",
+            "InjectionError: Critical injection failure in optional.mixins.json:FooMixin from mod optional",
+        ] {
+            for prefix in ["[16:53:41] [main/WARN]:", "[main/WARN]", "[WARN]"] {
+                let log = format!("{prefix} {message}");
+                assert!(diagnose(&log).is_none(), "{log}");
+                assert!(crate::crash_conflicts::mixin_failure_line(&log).is_none());
+            }
+        }
+        let log = "[main/WARN] @Mixin target net.minecraft.Foo was not found optional.mixins.json:FooMixin\n\
+                   Caused by: org.spongepowered.asm.mixin.transformer.throwables.InvalidMixinException: @Mixin target net.minecraft.Foo was not found required.mixins.json:FooMixin";
+        assert_eq!(diagnose(log).unwrap().mods, ["required"]);
+    }
+
+    #[test]
     fn optional_mixin_warnings_never_supply_mixin_failure_evidence() {
         for warning in [
             "@Mixin target net.minecraft.Foo was not found optional.mixins.json:FooMixin",
@@ -4270,6 +4525,71 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
 #[cfg(test)]
 mod native_tests {
     use super::*;
+
+    #[test]
+    fn native_library_ownership_uses_the_path_or_the_first_java_frame() {
+        let fixture = include_str!("../tests/fixtures/crash-441-native-mod.log");
+        let no_package_match = fixture.replace("io.homo.superresolution.", "example.other.");
+        let no_path = fixture.replace("config/super_resolution/", "native/");
+        let jar_path = no_package_match.replace(
+            "config/super_resolution/",
+            r"mods\super_resolution-0.9.2-alpha.2+opengl.jar!\",
+        );
+        for text in [&no_package_match, &no_path, &jar_path] {
+            assert_eq!(diagnose(text).unwrap().mods, ["super_resolution"]);
+        }
+
+        let windows = no_path
+            .replace("SIGILL (0x4)", "EXCEPTION_ILLEGAL_INSTRUCTION (0xc000001d)")
+            .replace(
+                "libSuperResolution+linux64+release.so",
+                "superresolution.dll",
+            );
+        let diagnosis = diagnose(&windows).unwrap();
+        assert!(diagnosis.title.contains("superresolution.dll"));
+        assert!(diagnosis.detail.contains("doesn't support"));
+
+        let segfault = windows.replace(
+            "EXCEPTION_ILLEGAL_INSTRUCTION",
+            "EXCEPTION_ACCESS_VIOLATION",
+        );
+        assert!(
+            diagnose(&segfault)
+                .unwrap()
+                .detail
+                .contains("EXCEPTION_ACCESS_VIOLATION")
+        );
+
+        let jvm = fixture.replace("libSuperResolution+linux64+release.so", "libjvm.so");
+        assert_eq!(diagnose(&jvm).unwrap().title, "The Java runtime crashed");
+    }
+
+    #[test]
+    fn fatal_java_error_uses_the_crashing_thread_or_compile_task() {
+        let fatal = format!("{JAVA_FATAL_HEADER}\n#\n#  EXCEPTION_ACCESS_VIOLATION (0xc0000005)");
+        for clue in [
+            "Current thread (0x1): JavaThread \"C1 CompilerThread0\"",
+            "Current thread (0x1): JavaThread \"C2 CompilerThread5\"",
+            "Current CompileTask:\nC2: 123 4 example.Class::method (10 bytes)",
+        ] {
+            let text = format!("{fatal}\n\n{clue}");
+            let diagnosis = diagnose(&text).unwrap();
+            assert_eq!(diagnosis.title, "Java's JIT compiler crashed");
+            assert!(diagnosis.detail.contains("runtime Arctic recommends"));
+            assert!(diagnosis.detail.contains("test your RAM"));
+            if clue.starts_with("Current CompileTask:") {
+                assert!(diagnosis.detail.contains("example.Class::method"));
+            }
+        }
+        let text = format!(
+            "[main/WARN]: Mixin apply for mod optional failed optional.mixins.json:FooMixin\n{fatal}\nCurrent thread (0x1): JavaThread \"Render thread\""
+        );
+        assert_eq!(
+            diagnose(&text).unwrap().title,
+            "Minecraft crashed in native code"
+        );
+    }
+
     #[test]
     fn report_300_native_exit_outranks_resource_pack_and_logged_linkage() {
         let text = include_str!("../tests/fixtures/crash-300-failfast.log");
