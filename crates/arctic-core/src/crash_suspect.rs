@@ -458,13 +458,9 @@ pub(crate) fn hang_culprit<'a>(text: &'a str, mods_dir: Option<&Path>) -> Option
     let mods = mods_dir.map(scan).unwrap_or_default();
     let index = Index::new(&mods);
     let startup = crate::crash::compact_mod_inventory(text, "");
-    let report = text
-        .split_once("---- full mod list (id version) ----")
-        .and_then(|(_, list)| list.split_once('\n'))
-        .map_or("", |(_, list)| list.split("\n---- ").next().unwrap_or(list));
     let inventory: HashMap<_, _> = startup
         .lines()
-        .chain(report.lines())
+        .chain(uploaded_mod_inventory(text).lines())
         .filter_map(|line| line.split_once(' ').map(|(id, _)| (norm(id), id)))
         .collect();
     let mut culprit: Option<HangCulprit<'_>> = None;
@@ -518,8 +514,158 @@ pub(crate) fn hang_culprit<'a>(text: &'a str, mods_dir: Option<&Path>) -> Option
     culprit
 }
 
+fn uploaded_mod_inventory(text: &str) -> &str {
+    text.split_once("---- full mod list (id version) ----")
+        .and_then(|(_, list)| list.split_once('\n'))
+        .map_or("", |(_, list)| list.split("\n---- ").next().unwrap_or(list))
+}
+
+pub(crate) const UNASSIGNED_ENTITY_TITLE: &str =
+    "A mod created an entity without an ID (26.2+ change)";
+
+fn unassigned_entity_failure(text: &str) -> Option<(&str, impl Iterator<Item = &str>)> {
+    const EXCEPTION: &str =
+        "java.lang.IllegalStateException: Tried to access entity ID before ID assignment";
+    let mut lines = crate::crash::crash_exception(text).unwrap_or(text).lines();
+    let error = lines.find(|line| {
+        line.trim().strip_suffix(EXCEPTION).is_some_and(|prefix| {
+            prefix.is_empty()
+                || prefix == "Caused by: "
+                || prefix.starts_with("Exception in thread \"")
+                || prefix.ends_with("/ERROR] ")
+                || prefix.ends_with("/ERROR]: ")
+        })
+    })?;
+    Some((
+        error.trim(),
+        lines.take_while(|line| line.trim_start().starts_with("at ")),
+    ))
+}
+
+fn unassigned_entity_culprit<'a>(
+    text: &str,
+    frames: impl Iterator<Item = &'a str>,
+    known: &[Known],
+    installed: &[InstalledMod],
+) -> Option<Suspect> {
+    const RENDERERS: &[&str] = &[
+        "iris",
+        "sodium",
+        "sodiumextra",
+        "polarium",
+        "oculus",
+        "embeddium",
+        "rubidium",
+        "indium",
+        "vulkanmod",
+        "optifine",
+    ];
+    let screen = crate::crash::latest_freeze_snapshot(text)
+        .lines()
+        .rev()
+        .filter_map(|line| {
+            let line = line
+                .trim()
+                .strip_prefix("[Arctic diagnostics] ")
+                .unwrap_or(line.trim());
+            line.strip_prefix("screen: ").or_else(|| {
+                let (_, class) = line.strip_prefix("context: ")?.rsplit_once(", screen: ")?;
+                Some(class)
+            })
+        })
+        .next()
+        .filter(|class| class.contains('.') && !class.contains(char::is_whitespace))
+        .map(|class| Frame {
+            class: class.to_owned(),
+            method: String::new(),
+            module: None,
+            jar: None,
+        });
+    let index = Index::new(known);
+    let reported = crate::crash_conflicts::from_crash_report(text);
+    let inventory = crate::crash::compact_mod_inventory(text, "");
+    let ids: HashMap<_, _> = inventory
+        .lines()
+        .chain(uploaded_mod_inventory(text).lines())
+        .filter_map(|line| line.split_once(' ').map(|(id, _)| (norm(id), id)))
+        .collect();
+
+    screen
+        .into_iter()
+        .chain(frames.filter_map(frame))
+        .find_map(|f| {
+            if f.is_platform() || f.class.starts_with("net.fabricmc.fabric.") {
+                return None;
+            }
+            let (package, _) = f.class.rsplit_once('.')?;
+            if package
+                .rsplit('.')
+                .any(|part| RENDERERS.contains(&norm(part).as_str()))
+            {
+                return None;
+            }
+            let (id, name) = if let Some(i) = index.owner(&f) {
+                let m = &known[i];
+                if m.library {
+                    return None;
+                }
+                (m.id.as_str(), m.name.as_str())
+            } else if let Some(m) = f
+                .config_owner(installed)
+                .or_else(|| f.config_owner(&reported))
+            {
+                (m.id.as_str(), m.name.as_str())
+            } else if package.split('.').any(|part| part == "randomcutscene") {
+                ("randomcutscene", "Random Cutscene")
+            } else {
+                let id = package
+                    .rsplit('.')
+                    .find_map(|part| ids.get(&norm(part)).copied())
+                    .unwrap_or(package);
+                (id, id)
+            };
+            if BASE_IDS.contains(&id)
+                || is_library(id, false)
+                || RENDERERS.contains(&norm(id).as_str())
+            {
+                return None;
+            }
+            Some(Suspect {
+                id: id.to_owned(),
+                name: name.to_owned(),
+                ours: is_arctic_id(id),
+            })
+        })
+}
+
+pub(crate) fn diagnose_unassigned_entity<'a>(
+    text: &'a str,
+    mods_dir: Option<&Path>,
+    mods: &[InstalledMod],
+) -> Option<(Diagnosis, &'a str)> {
+    let (error, frames) = unassigned_entity_failure(text)?;
+    let known = mods_dir.map(scan).unwrap_or_default();
+    let (detail, names) = match unassigned_entity_culprit(text, frames, &known, mods) {
+        Some(culprit) => (
+            format!("{} appears to have created the entity. Update it for this Minecraft version or remove it.", culprit.name),
+            vec![culprit.name],
+        ),
+        None => (
+            "The log doesn't identify which mod created the entity. Check for updates to mods that spawn fake players, such as cutscene, replay, or NPC mods, or try disabling them one at a time.".to_owned(),
+            Vec::new(),
+        ),
+    };
+    Some((
+        Diagnosis::new(UNASSIGNED_ENTITY_TITLE, detail, names),
+        error,
+    ))
+}
+
 /// The mod to blame for the crash in `text`, if the evidence is clear.
 pub fn suspect(text: &str, mods: &[Known]) -> Option<Suspect> {
+    if let Some((_, frames)) = unassigned_entity_failure(text) {
+        return unassigned_entity_culprit(text, frames, mods, &[]);
+    }
     let index = Index::new(mods);
     let named = |i: usize| {
         let m = &mods[i];
@@ -674,6 +820,42 @@ mod tests {
             zip.write_all(b"\xca\xfe\xba\xbe").unwrap();
         }
         zip.finish().unwrap();
+    }
+
+    #[test]
+    fn unassigned_entity_uses_a_mod_caller_and_skips_renderer_frames() {
+        let dir = tempfile::tempdir().unwrap();
+        jar(
+            dir.path(),
+            "fake-players.jar",
+            "fake_players",
+            "Fake Players",
+            &["example.cinematic"],
+            "",
+        );
+        let text = "---- Minecraft Crash Report ----\n\
+            java.lang.RuntimeException: Ticking entity\n\
+            Caused by: java.lang.IllegalStateException: Tried to access entity ID before ID assignment\n\
+            \tat knot//net.minecraft.world.entity.Entity.getId(Entity.java:446)\n\
+            \tat knot//net.minecraft.client.renderer.entity.EntityRenderDispatcher.handler$abc000$sodium$render(EntityRenderDispatcher.java:10)\n\
+            \tat knot//net.irisshaders.iris.render.EntityTracker.add(EntityTracker.java:10)\n\
+            \tat knot//net.minecraft.client.multiplayer.ClientLevel.addEntity(ClientLevel.java:11)\n\
+            \tat knot//example.cinematic.PlayerSpawner.spawn(PlayerSpawner.java:12)\n\n\
+            Suspected Mods: Sodium (sodium)";
+        let d = diagnose_exit_in(text, 1, dir.path()).unwrap();
+        assert_eq!(d.title, UNASSIGNED_ENTITY_TITLE);
+        assert_eq!(d.mods, ["Fake Players"]);
+        assert_eq!(suspect(text, &scan(dir.path())).unwrap().id, "fake_players");
+
+        let text = text.replace(
+            "\tat knot//example.cinematic.PlayerSpawner.spawn(PlayerSpawner.java:12)\n",
+            "",
+        );
+        let d = diagnose_exit_in(&text, 1, dir.path()).unwrap();
+        assert_eq!(d.title, UNASSIGNED_ENTITY_TITLE);
+        assert!(d.mods.is_empty());
+        assert!(d.detail.contains("mods that spawn fake players"));
+        assert!(suspect(&text, &scan(dir.path())).is_none());
     }
 
     fn pack() -> tempfile::TempDir {

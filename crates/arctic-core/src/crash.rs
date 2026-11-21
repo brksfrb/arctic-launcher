@@ -1010,7 +1010,7 @@ pub(crate) fn diagnose_with_java(
     mods_dir: &Path,
     mods: &[crate::crash_conflicts::InstalledMod],
 ) -> Option<Diagnosis> {
-    diagnose_rules(text, java, mods)
+    diagnose_rules(text, java, Some(mods_dir), mods)
         .or_else(|| hang_diagnosis(tail_of(text, MAX_TEXT), Some(mods_dir)))
         .map(|(diagnosis, _)| diagnosis)
 }
@@ -1584,7 +1584,7 @@ fn diagnose_crash_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, St
         let captured = captured_vanilla_crash(text);
         let (cause, matched) = captured
             .as_deref()
-            .and_then(|trace| diagnose_rules(trace, java, &[]))
+            .and_then(|trace| diagnose_rules(trace, java, None, &[]))
             .map_or_else(
                 || {
                     (
@@ -1597,12 +1597,13 @@ fn diagnose_crash_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, St
             );
         return Some((vanilla_crash_diagnosis(text, cause), matched));
     }
-    diagnose_rules(text, java, &[])
+    diagnose_rules(text, java, None, &[])
 }
 
 fn diagnose_rules(
     text: &str,
     java: Option<&str>,
+    mods_dir: Option<&Path>,
     mods: &[crate::crash_conflicts::InstalledMod],
 ) -> Option<(Diagnosis, String)> {
     if let Some(fatal) = java_fatal_diagnosis(text) {
@@ -1613,6 +1614,11 @@ fn diagnose_rules(
     }
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
+    }
+    if let Some((diagnosis, error)) =
+        crate::crash_suspect::diagnose_unassigned_entity(text, mods_dir, mods)
+    {
+        return Some((diagnosis, error.to_owned()));
     }
     let text = tail_of(text, MAX_TEXT);
 
@@ -2018,6 +2024,17 @@ fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a st
         // The code is stable across runs. Fault addresses and process/thread IDs vary.
         return Some(error.split_once(" at pc=").map_or(error, |(kind, _)| kind));
     }
+    if let Some(stack) = crash_report
+        .and_then(crash_exception)
+        .or_else(|| crash_exception(log))
+    {
+        // Java indents causes belonging to suppressed failures. The main chain's causes are bare.
+        return stack
+            .lines()
+            .rev()
+            .find(|line| line.starts_with("Caused by: "))
+            .or_else(|| stack.lines().next());
+    }
     if let Some(error) = vanilla_crash_trace(log).next() {
         return Some(error);
     }
@@ -2032,10 +2049,14 @@ fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a st
         let mut skip_record = false;
         let mut lines = text.lines();
         while let Some(line) = lines.next() {
-            if line.starts_with('[') {
+            if exception_record_boundary(line) {
                 skip_record = line.contains("/WARN]")
                     || line.contains("/INFO]")
-                    || (!report && harmless_log_record(line));
+                    || (!report && harmless_log_record(line))
+                    || background_auth_record(
+                        line,
+                        lines.clone().take_while(|l| !exception_record_boundary(l)),
+                    );
             }
             if skip_record || line.contains("pack.mcmeta") || line.contains("pack metadata") {
                 continue;
@@ -2050,7 +2071,7 @@ fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a st
             if !report
                 && lines
                     .clone()
-                    .take_while(|l| !l.starts_with('['))
+                    .take_while(|l| !exception_record_boundary(l))
                     .any(|l| l.trim_start().starts_with("at "))
             {
                 return Some(line[found.start()..].trim());
@@ -2058,16 +2079,10 @@ fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a st
         }
         None
     };
-    if let Some(report) = crash_report {
-        let report = report
-            .split("---- Minecraft Crash Report ----")
-            .last()
-            .unwrap_or(report);
-        if let Some(error) = select(report, true) {
-            return Some(error);
-        }
-    }
-    select(log, false)
+    crash_report
+        .filter(|report| !report.contains("---- Minecraft Crash Report ----"))
+        .and_then(|report| select(report, true))
+        .or_else(|| select(log, false))
 }
 
 impl Report {
@@ -2153,7 +2168,9 @@ impl Report {
                 diagnosis.title,
                 scrub(matched, &Own::this_pc())
             ));
-            if diagnosis.title == SAVE_FAILED_TITLE && vanilla_crash_trace(&all).next().is_some() {
+            if (diagnosis.title == SAVE_FAILED_TITLE && vanilla_crash_trace(&all).next().is_some())
+                || diagnosis.title == crate::crash_suspect::UNASSIGNED_ENTITY_TITLE
+            {
                 priority.push_str(&scrub(head_of(&diagnosis.detail, 2048), &Own::this_pc()));
                 priority.push('\n');
             }
@@ -2249,8 +2266,9 @@ impl Report {
         let title = diagnosis
             .as_ref()
             .filter(|(d, _)| {
-                d.title.ends_with(crate::crash_conflicts::CONFIG_CORRUPT)
-                    && !title.ends_with(crate::crash_conflicts::CONFIG_CORRUPT)
+                d.title == crate::crash_suspect::UNASSIGNED_ENTITY_TITLE
+                    || (d.title.ends_with(crate::crash_conflicts::CONFIG_CORRUPT)
+                        && !title.ends_with(crate::crash_conflicts::CONFIG_CORRUPT))
             })
             .map_or(title, |(d, _)| d.title.clone());
         let title = registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
@@ -2738,6 +2756,25 @@ struct ExceptionEntry<'a> {
     count: usize,
 }
 
+fn exception_record_boundary(line: &str) -> bool {
+    line.starts_with('[') || line.starts_with("Exception in thread \"") || line.starts_with("---- ")
+}
+
+fn background_auth_record<'a>(header: &'a str, body: impl Iterator<Item = &'a str>) -> bool {
+    static THREAD: OnceLock<Regex> = OnceLock::new();
+    static AUTH: OnceLock<Regex> = OnceLock::new();
+    let thread = THREAD.get_or_init(|| {
+        Regex::new(r#"(?i)^(?:(?:\[[^\]]*\]\s*)?\[(?:Download|Realms)[^\]]*/(?:ERROR|FATAL)\]|Exception in thread "(?:Download|Realms)[^"]*")"#).unwrap()
+    });
+    if !thread.is_match(header) {
+        return false;
+    }
+    let auth = AUTH.get_or_init(|| Regex::new(r"(?i)\b(?:401|authlib|InvalidCredentialsException|RealmsServiceException|Failed to fetch user properties|Failed to fetch Realms feature flags|Couldn't connect to realms)\b").unwrap());
+    std::iter::once(header)
+        .chain(body)
+        .any(|line| !line.trim_start().starts_with("at ") && auth.is_match(line))
+}
+
 /// The first distinct ERROR/FATAL log entries that carry a stack trace, from the whole log, so a
 /// root cause that scrolled out of the tail (e.g. a join-time NPE that later leaves `player`
 /// null) is still reported. Repeats of the same trace are kept once.
@@ -2749,10 +2786,13 @@ fn first_exceptions(text: &str) -> String {
             continue;
         }
         let mut body = Vec::new();
-        while let Some(next) = lines.next_if(|l| !l.starts_with('[') && !l.starts_with("---- ")) {
+        while let Some(next) = lines.next_if(|l| !exception_record_boundary(l)) {
             body.push(next);
         }
-        if harmless_log_record(line) || !body.iter().any(|l| l.trim_start().starts_with("at ")) {
+        if harmless_log_record(line)
+            || background_auth_record(line, body.iter().copied())
+            || !body.iter().any(|l| l.trim_start().starts_with("at "))
+        {
             continue;
         }
         let message = log_message(line);
@@ -3340,7 +3380,7 @@ mod tests {
     fn first_error_prefers_crash_report_over_pack_metadata_warnings() {
         let log = include_str!("../tests/fixtures/crash-325-pack-warning.log");
         let report = include_str!("../tests/fixtures/crash-330-main-exception.log");
-        let expected = "java.lang.IllegalStateException: Failed to initialize renderer";
+        let expected = "Caused by: java.lang.RuntimeException: underlying failure";
         assert_eq!(first_error(log, Some(report)), Some(expected));
         let uploaded = Report::build("1.21", "fabric", "unknown", &[log], &[], Some(report), None);
         assert!(
@@ -3352,11 +3392,11 @@ mod tests {
         assert_eq!(
             first_error(
                 &format!(
-                    "{log}\n[Render thread/ERROR] Uncaught exception\n{expected}\n\tat example.Game.render(Game.java:42)"
+                    "{log}\n[Render thread/ERROR] Uncaught exception\njava.lang.IllegalStateException: Failed to initialize renderer\n\tat example.Game.render(Game.java:42)"
                 ),
                 None
             ),
-            Some(expected)
+            Some("java.lang.IllegalStateException: Failed to initialize renderer")
         );
         let earlier = format!(
             "[main/ERROR] java.lang.RuntimeException: handled\n\tat example.Optional.load(Optional.java:1)\n{log}"
@@ -3378,6 +3418,43 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[test]
+    fn first_error_skips_background_auth_and_uses_the_deepest_report_cause() {
+        let fixture = include_str!("../tests/fixtures/crash-451-unassigned-entity.log");
+        let (startup, _) = fixture.split_once("---- logs/arctic-freezes/").unwrap();
+        let startup = format!(
+            "{startup}[Realms Availability/ERROR] Request failed\n\
+            java.io.IOException: HTTP status 401\n\tat example.Realms.request(Realms.java:1)"
+        );
+        assert_eq!(first_error(&startup, None), None);
+        assert!(first_exceptions(&startup).is_empty());
+        let uncaught = "Exception in thread \"Download-3\" java.io.IOException: HTTP 401\n\tat example.Auth.fetch(Auth.java:1)";
+        assert_eq!(first_error(uncaught, None), None);
+
+        let fatal = "java.lang.IllegalStateException: renderer failed";
+        let log = format!(
+            "{startup}\nException in thread \"Render thread\" {fatal}\n\tat example.Game.render(Game.java:1)"
+        );
+        assert_eq!(first_error(&log, None), Some(fatal));
+
+        let cause = "Caused by: java.lang.IllegalArgumentException: invalid renderer state";
+        let report = format!(
+            "---- Minecraft Crash Report ----\nDescription: Rendering entity in world\n\n\
+            {fatal}\n\tat example.Game.render(Game.java:1)\n\
+            Caused by: java.lang.RuntimeException: setup failed\n\tat example.Game.setup(Game.java:2)\n\
+            {cause}\n\tat example.Game.init(Game.java:3)\n\
+            \tSuppressed: java.lang.RuntimeException: cleanup failed\n\tCaused by: java.lang.IllegalStateException: cleanup\n"
+        );
+        assert_eq!(first_error(&log, Some(&report)), Some(cause));
+        assert_eq!(first_error(&format!("{log}\n{report}"), None), Some(cause));
+
+        let download = "java.io.IOException: disk full";
+        let log = format!(
+            "{startup}\n[Download-2/ERROR] Failed to save assets\n{download}\n\tat example.Assets.write(Assets.java:1)"
+        );
+        assert_eq!(first_error(&log, None), Some(download));
     }
 
     use super::*;
