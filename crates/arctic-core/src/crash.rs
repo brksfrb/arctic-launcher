@@ -1008,8 +1008,9 @@ pub(crate) fn diagnose_with_java(
     text: &str,
     java: Option<&str>,
     mods_dir: &Path,
+    mods: &[crate::crash_conflicts::InstalledMod],
 ) -> Option<Diagnosis> {
-    diagnose_rules(text, java)
+    diagnose_rules(text, java, mods)
         .or_else(|| hang_diagnosis(tail_of(text, MAX_TEXT), Some(mods_dir)))
         .map(|(diagnosis, _)| diagnosis)
 }
@@ -1154,6 +1155,22 @@ pub(crate) fn crash_exception(text: &str) -> Option<&str> {
         .min()
         .unwrap_or(stack.len());
     Some(&stack[..end])
+}
+
+/// Some mods explicitly report that their failure followed a failed mod load.
+pub(crate) fn secondary_mod_failure(line: &str) -> bool {
+    static SECONDARY: OnceLock<Regex> = OnceLock::new();
+    SECONDARY
+        .get_or_init(|| {
+            Regex::new(r"(?i)\b(?:another|other) mod (?:has )?failed (?:to (?:load|initialize)\b|first\b)|\bdue to (?:a )?previous mod loading (?:error|failure)\b").unwrap()
+        })
+        .is_match(line)
+}
+
+pub(crate) fn secondary_stack(stack: &str) -> bool {
+    stack.lines().enumerate().any(|(i, line)| {
+        (i == 0 || line.trim_start().starts_with("Caused by:")) && secondary_mod_failure(line)
+    })
 }
 
 /// Forge reports the failed entries separately from the exception. Only those explicit
@@ -1567,7 +1584,7 @@ fn diagnose_crash_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, St
         let captured = captured_vanilla_crash(text);
         let (cause, matched) = captured
             .as_deref()
-            .and_then(|trace| diagnose_rules(trace, java))
+            .and_then(|trace| diagnose_rules(trace, java, &[]))
             .map_or_else(
                 || {
                     (
@@ -1580,10 +1597,14 @@ fn diagnose_crash_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, St
             );
         return Some((vanilla_crash_diagnosis(text, cause), matched));
     }
-    diagnose_rules(text, java)
+    diagnose_rules(text, java, &[])
 }
 
-fn diagnose_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
+fn diagnose_rules(
+    text: &str,
+    java: Option<&str>,
+    mods: &[crate::crash_conflicts::InstalledMod],
+) -> Option<(Diagnosis, String)> {
     if let Some(fatal) = java_fatal_diagnosis(text) {
         return Some(fatal);
     }
@@ -1620,10 +1641,15 @@ fn diagnose_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
         return Some(wrong_game);
     }
 
+    if let Some((config, evidence)) = crate::crash_conflicts::diagnose_config(text, mods) {
+        return Some((config, head_of(evidence, 2048).to_owned()));
+    }
+
     diagnose_log_rules(text, java)
 }
 
 fn diagnose_log_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
+    let secondary_report = crash_exception(text).is_some_and(secondary_stack);
     for (rule, re) in RULES.iter().zip(compiled()) {
         for c in re.captures_iter(text) {
             let matched = c.get(0)?;
@@ -1632,6 +1658,11 @@ fn diagnose_log_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, Stri
                 .find('\n')
                 .map_or(text.len(), |n| matched.start() + n);
             let line = &text[start..end];
+            if secondary_mod_failure(line)
+                || (secondary_report && line.trim_start().starts_with("Suspected Mod"))
+            {
+                continue;
+            }
             if matches!(
                 rule.pattern,
                 crate::crash_conflicts::FABRIC_MIXIN_APPLY_FAILURE
@@ -2098,9 +2129,16 @@ impl Report {
                 .collect();
             priority.push_str(&format!("\nError: Watchdog freeze at exit [{signature}]\n"));
         }
-        // Put the fatal exception before the log tail so summary consumers cannot pick an
-        // earlier handled metadata warning. Keep the original warnings in the log for context.
-        if let Some(error) = first_error(&all, crash_report) {
+        // A consequence message is kept in the original stack, while the summary uses the cause.
+        let error = first_error(&all, crash_report);
+        let error = if error.is_some_and(secondary_mod_failure)
+            || crash_exception(&diagnosis_text).is_some_and(secondary_stack)
+        {
+            diagnosis.as_ref().map(|(_, matched)| matched.as_str())
+        } else {
+            error
+        };
+        if let Some(error) = error {
             priority.push_str(&format!(
                 "\n---- first error ----\n{}\n",
                 scrub(head_of(error, 2048), &Own::this_pc())
@@ -2109,11 +2147,11 @@ impl Report {
         priority.push_str("\n---- last output ----\n");
         priority.push_str(&scrub(&last_output(&all), &Own::this_pc()));
         priority.push('\n');
-        if let Some((diagnosis, matched)) = diagnosis {
+        if let Some((diagnosis, matched)) = &diagnosis {
             priority.push_str(&format!(
                 "\n---- diagnosis ----\n{}\nmatched: {}\n",
                 diagnosis.title,
-                scrub(&matched, &Own::this_pc())
+                scrub(matched, &Own::this_pc())
             ));
             if diagnosis.title == SAVE_FAILED_TITLE && vanilla_crash_trace(&all).next().is_some() {
                 priority.push_str(&scrub(head_of(&diagnosis.detail, 2048), &Own::this_pc()));
@@ -2208,6 +2246,13 @@ impl Report {
         } else {
             title
         };
+        let title = diagnosis
+            .as_ref()
+            .filter(|(d, _)| {
+                d.title.ends_with(crate::crash_conflicts::CONFIG_CORRUPT)
+                    && !title.ends_with(crate::crash_conflicts::CONFIG_CORRUPT)
+            })
+            .map_or(title, |(d, _)| d.title.clone());
         let title = registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
         let title = java_fatal_diagnosis(&diagnosis_text)
             .or_else(|| runtime_diagnosis(&diagnosis_text))
