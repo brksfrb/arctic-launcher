@@ -317,19 +317,15 @@ public final class LegacyHooks {
 		com.arcticlauncher.client.feature.ContainerPeek.hover(new LegacyGfx(), mouseX, mouseY, slot.getStack());
 	}
 
-	/**
-	 * The Arctic badge of the chosen style at ({@code x}, {@code y}), the top left of a text line: always
-	 * {@code Badge.SIZE} square from the line's top (the font's glyphs are 8 high from there), as the
-	 * newer versions' font picture, with the text's own transparency and, with a shadow, its shadow.
-	 */
+	/** Draw the Arctic badge at the top left of the text line, using the text opacity. */
 	public static void drawBadge(float x, float y, int argb, boolean shadow, int style, boolean tab) {
-		net.minecraft.util.Identifier texture = LegacyTextures.resolve("asset:" + com.arcticlauncher.client.feature.Badge.name(style) + (tab ? "_tab" : "_tag"));
+		y -= tab ? 1 : 0;
+		int side = com.arcticlauncher.client.feature.Badge.size(tab);
+		int resolution = com.arcticlauncher.client.feature.Badge.rasterSize(tab, LegacySmoothFont.badgePixels(x, y));
+		net.minecraft.util.Identifier texture = LegacyTextures.badge(style, resolution);
 		if (texture == null) {
 			return;
 		}
-		int side = com.arcticlauncher.client.feature.Badge.size(tab);
-		int resolution = side * 8;
-		y -= tab ? 1 : 0;
 		int alpha = argb >>> 24;
 		// Text with no alpha is opaque, as the game draws it.
 		float a = alpha == 0 ? 1f : alpha / 255f;
@@ -338,7 +334,7 @@ public final class LegacyHooks {
 		com.mojang.blaze3d.platform.GlStateManager.blendFuncSeparate(org.lwjgl.opengl.GL11.GL_SRC_ALPHA,
 				org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA, org.lwjgl.opengl.GL11.GL_ONE, org.lwjgl.opengl.GL11.GL_ZERO);
 		// The player list's picture has no shadow, its names do.
-		if (shadow && !tab) {
+		if (com.arcticlauncher.client.feature.Badge.drawShadow(tab, shadow)) {
 			com.mojang.blaze3d.platform.GlStateManager.color(0.25f, 0.25f, 0.25f, a);
 			net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x) + 1, Math.round(y) + 1, 0f, 0f, resolution, resolution, side, side, resolution, resolution);
 		}

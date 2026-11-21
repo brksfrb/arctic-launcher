@@ -99,7 +99,8 @@
 		"TextProjectionBufferMixin",<% } %><% if (worldTextScale) { %>
 		"WorldTextScaleMixin",<% } %><% if (nameTagTextScale) { %>
 		"NameTagTextScaleMixin",<% } %><% if (oldScaledFont) { %>
-		"ScaledFontSetMixin",<% } %><% if (oldScaledTexture) { %>
+		"ScaledFontSetMixin",
+		"BadgeQuadMixin",<% } %><% if (oldScaledTexture) { %>
 		"ScaledFontTextureMixin",<% } %><% if (gpuFontTexture && !scaledFont) { %>
 		"FontTextureMixin",<% } %><% if (textShader) { %>
 		"TextShaderMixin",<% } %><% if (textShaderOld) { %>

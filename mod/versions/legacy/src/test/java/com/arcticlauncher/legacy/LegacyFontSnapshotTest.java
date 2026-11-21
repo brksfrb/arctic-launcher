@@ -37,7 +37,7 @@ public class LegacyFontSnapshotTest {
 				}
 
 				@Override public MethodVisitor visitMethod(int access, String n, String desc, String sig, String[] exceptions) {
-					if (!n.equals("beginDraw") && !n.equals("preparing") && !n.equals("yieldPatcher")) return null;
+					if (!n.equals("beginDraw") && !n.equals("preparing") && !n.equals("yieldPatcher") && !n.equals("readTextTransform") && !n.equals("projectedPixels")) return null;
 					return new MethodVisitor(Opcodes.ASM9, super.visitMethod(access, n, desc, sig, exceptions)) {
 						@Override public void visitMethodInsn(int op, String owner, String method, String descriptor, boolean itf) {
 							if (owner.equals("org/lwjgl/opengl/GL11") || owner.equals(name) && method.equals("ready")

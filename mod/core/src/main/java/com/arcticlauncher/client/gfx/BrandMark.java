@@ -14,6 +14,7 @@ public final class BrandMark {
 	private static final float[][] BARBS = {{.04f, -.33f, .13f, -.38f}, {-.04f, -.33f, -.13f, -.38f}};
 	private static final float[][] CORE = new float[6][2];
 	private static final float[] SIN = new float[6], COS = new float[6];
+	private static final Map<Integer, int[]> BADGES = new ConcurrentHashMap<Integer, int[]>();
 	private static final Map<Integer, int[]> RASTERS = new ConcurrentHashMap<Integer, int[]>();
 
 	static {
@@ -35,7 +36,14 @@ public final class BrandMark {
 
 	/** Cached unpremultiplied ARGB pixels; callers must not modify them. */
 	public static int[] raster(int size) {
-		return RASTERS.computeIfAbsent(clampSize(size), BrandMark::generate);
+		return RASTERS.computeIfAbsent(clampSize(size), n -> generate(n, -1));
+	}
+
+	/** At text sizes, connect the blades to the core and give each spoke a readable stem. */
+	public static int[] badgeRaster(int size, int style) {
+		int side = clampSize(size);
+		int kind = com.arcticlauncher.client.feature.Badge.normalize(style);
+		return BADGES.computeIfAbsent(side * 3 + kind, key -> generate(side, kind));
 	}
 
 	public static void draw(Gfx g, float x, float y, int guiSize) {
@@ -60,15 +68,28 @@ public final class BrandMark {
 		g.pop();
 	}
 
-	private static int[] generate(int size) {
+	private static boolean tile(float x, float y, float halfSide, float radius) {
+		float dx = Math.max(0f, Math.abs(x) - halfSide + radius);
+		float dy = Math.max(0f, Math.abs(y) - halfSide + radius);
+		return dx * dx + dy * dy <= radius * radius;
+	}
+
+	private static int[] generate(int size, int style) {
 		int[] pixels = new int[size * size];
 		float n = size;
+		float markScale = style > 0 ? .72f : 1f;
+		float stem = style < 0 ? 0f : Math.max(.040f, .70f / (n * markScale));
 		for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) {
-			int hits = 0;
+			int hits = 0, background = 0;
 			for (int sy = 0; sy < SS; sy++) for (int sx = 0; sx < SS; sx++) {
 				float u = (x + (sx + .5f) / SS) / n - .5f;
 				float v = (y + (sy + .5f) / SS) / n - .5f;
-				if (inside(u, v)) hits++;
+				if (inside(u / markScale, v / markScale, stem)) {
+					hits++;
+				} else if (style > 0 && tile(u, v, .47f, .22f)
+						&& (style == 1 || !tile(u, v, .38f, .13f))) {
+					background++;
+				}
 			}
 			float cx = (x + .5f) / n - .5f, cy = (y + .5f) / n - .5f;
 			float t = Math.min(1f, (float) Math.sqrt(cx * cx + cy * cy) / .46f);
@@ -76,15 +97,27 @@ public final class BrandMark {
 			int g = (int) (234f + (165f - 234f) * t);
 			int b = (int) (254f + (233f - 254f) * t);
 			int a = (int) (hits / (float) (SS * SS) * 255f);
+			if (style == 1 && hits + background > 0) {
+				int samples = hits + background;
+				r = (hits * 12 + background * 168) / samples;
+				g = (hits * 102 + background * 220) / samples;
+				b = (hits * 156 + background * 244) / samples;
+			} else if (style == 2) {
+				r = 65;
+				g = 186;
+				b = 245;
+			}
+			if (style > 0) a = (hits + background) * 255 / (SS * SS);
 			pixels[y * size + x] = a << 24 | r << 16 | g << 8 | b;
 		}
 		return pixels;
 	}
 
-	private static boolean inside(float u, float v) {
+	private static boolean inside(float u, float v, float stem) {
 		if (polygon(u, v, CORE)) return true;
 		for (int k = 0; k < 6; k++) {
 			float lu = u * COS[k] - v * SIN[k], lv = u * SIN[k] + v * COS[k];
+			if (stem > 0f && Math.abs(lu) <= stem && lv >= -.389f && lv <= -.05f) return true;
 			if (polygon(lu, lv, KITE) && !polygon(lu, lv, NOTCH)) return true;
 			for (float[] barb : BARBS) {
 				float abx = barb[2] - barb[0], aby = barb[3] - barb[1];

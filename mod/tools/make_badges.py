@@ -12,7 +12,6 @@ import json
 from pathlib import Path
 import cairosvg
 from PIL import Image
-from badge_tab import tab_art
 from brand_mark import native
 
 MOD = Path(__file__).resolve().parents[1]
@@ -26,7 +25,6 @@ for name, style in STYLES:
         return Image.open(io.BytesIO(cairosvg.svg2png(bytestring=source.encode(), output_width=1024, output_height=1024))).convert('RGBA')
     if style == 0:
         im = native(256)
-        small_art = native(1024)
         im.save(ROOT / (name + '.png'))
     else:
         im = raster(svg)
@@ -35,13 +33,15 @@ for name, style in STYLES:
     for tab, height, ascent in [(False, 8, 7), (True, 9, 8)]:
         font = name + ('_tab' if tab else '')
         size = height * 8
-        # The logo's player list picture is pre-filtered onto a coarse grid (see badge_tab.py).
         if style == 0:
-            small = tab_art(small_art) if tab else native(size)
+            small = native(size)
         else:
             small = small_art.resize((size, size), Image.Resampling.LANCZOS)
-        small.save(ROOT / 'textures/font' / (font + '.png'))
         small.save(ROOT / (name + ('_tab' if tab else '_tag') + '.png'))
+        if style == 0 and tab:
+            # The compatibility bitmap provider infers advance from the rightmost occupied texel.
+            small.putpixel((size - 1, size // 2), (14, 165, 233, 1))
+        small.save(ROOT / 'textures/font' / (font + '.png'))
         bitmap = dict(type='bitmap', file='arctic:font/' + font + '.png', height=height, ascent=ascent, chars=['\uE000'])
         contents = [bitmap, dict(type='space', advances={' ': 1})]
         if name == 'badge' and not tab:

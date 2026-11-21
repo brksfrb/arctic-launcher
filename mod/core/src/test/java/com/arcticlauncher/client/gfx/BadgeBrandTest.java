@@ -1,5 +1,6 @@
 package com.arcticlauncher.client.gfx;
 
+import com.arcticlauncher.client.feature.Badge;
 import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
@@ -15,29 +16,50 @@ class BadgeBrandTest {
 	}
 
 	@Test
-	void tabPictureIsThePrefilteredMark() throws Exception {
+	void tabPictureMatchesBrandMark() throws Exception {
 		int[] tab = pixels("/assets/arctic/badge_tab.png", 72);
-		assertArrayEquals(tab, pixels("/assets/arctic/textures/font/badge_tab.png", 72));
-		// A nearly-invisible last-column texel keeps the glyph 9 px wide.
-		assertTrue((tab[36 * 72 + 71] >>> 24) > 0);
-		// Not the old flat #2EB1EC fill: the 18-grid body still carries the BrandMark gradient
-		// (centre near-white, tips ice-blue).
-		int center = tab[36 * 72 + 36];
-		int cr = (center >> 16) & 255, cg = (center >> 8) & 255, cb = center & 255;
-		assertTrue(cr > 150 && cg > 200 && cb > 230, "tab centre should be near-white ice");
-		int distinct = 0;
-		boolean[] seen = new boolean[1 << 24];
-		for (int argb : tab) {
-			if ((argb >>> 24) < 200) {
-				continue;
-			}
-			int key = argb & 0xFFFFFF;
-			if (!seen[key]) {
-				seen[key] = true;
-				distinct++;
+		assertArrayEquals(BrandMark.raster(72), tab);
+		int[] font = pixels("/assets/arctic/textures/font/badge_tab.png", 72);
+		int advanceTexel = 36 * 72 + 71;
+		assertEquals(1, font[advanceTexel] >>> 24);
+		font[advanceTexel] = tab[advanceTexel];
+		assertArrayEquals(tab, font);
+	}
+
+	@Test
+	void badgeLayoutAndShadowStayIndependentOfRasterSize() {
+		assertEquals(8, Badge.size(false));
+		assertEquals(9, Badge.size(true));
+		assertEquals(10, Badge.advance(false));
+		assertEquals(11, Badge.advance(true));
+		assertTrue(Badge.drawShadow(false, true));
+		assertFalse(Badge.drawShadow(false, false));
+		assertFalse(Badge.drawShadow(true, true));
+		assertFalse(Badge.drawShadow(true, false));
+		for (int scale = 2; scale <= 4; scale++) {
+			assertEquals(8 * scale, Badge.rasterSize(false, scale));
+			assertEquals(9 * scale, Badge.rasterSize(true, scale));
+		}
+		assertEquals(4, Badge.rasterSize(false, 0.5f));
+		assertEquals(1, Badge.rasterSize(false, 0f));
+		assertEquals(128, Badge.rasterSize(true, Float.MAX_VALUE));
+	}
+
+	@Test
+	void nativePixelArtUsesHardEdgesForEveryPlacementAndStyle() throws Exception {
+		for (Badge.Style style : Badge.STYLES) {
+			for (boolean tab : new boolean[] {false, true}) {
+				String path = "/assets/arctic/" + style.texture + (tab ? "_tab" : "_tag") + "_pixel.png";
+				int[] art = pixels(path, Badge.size(tab));
+				int visible = 0;
+				for (int pixel : art) {
+					int alpha = pixel >>> 24;
+					assertTrue(alpha == 0 || alpha == 255, path);
+					if (alpha == 255) visible++;
+				}
+				assertTrue(visible > 0 && visible < art.length, path);
 			}
 		}
-		assertTrue(distinct >= 8, "tab badge should carry the BrandMark gradient");
 	}
 
 	private static int[] pixels(String path, int size) throws Exception {

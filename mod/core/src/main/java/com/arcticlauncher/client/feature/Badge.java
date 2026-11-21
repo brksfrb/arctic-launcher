@@ -72,6 +72,15 @@ public final class Badge {
 		return size(tab) + 2;
 	}
 
+	/** Bound the texture cache while retaining integer framebuffer sizes at ordinary GUI scales. */
+	public static int rasterSize(boolean tab, float pixelsPerUnit) {
+		return Math.max(1, Math.min(128, Math.round(size(tab) * pixelsPerUnit)));
+	}
+
+	public static boolean drawShadow(boolean tab, boolean textShadow) {
+		return textShadow && !tab;
+	}
+
 	/** Carry wearer and placement through old String text APIs; never consult a local style while drawing. */
 	public static String mark(boolean tab, UUID wearer) {
 		return "\u00a7r" + (char) (MARK_BASE + style(wearer) + (tab ? TAB_OFFSET : 0)) + "\u00a7r";

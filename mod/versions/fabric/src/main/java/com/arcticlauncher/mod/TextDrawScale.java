@@ -28,7 +28,15 @@ public final class TextDrawScale {
 	private static final FloatBuffer LOCAL = BufferUtils.createFloatBuffer(16);
 	private static final float[] VIEW_MODEL = new float[16];
 	//#endif
+	// A negative scale defers projection until a badge is encountered when smooth text is off.
 	private static float current;
+	//#if MC >= 1.19.3
+	private static Matrix4fc[] poses = new Matrix4fc[16];
+	//#elif MC >= 1.15
+	private static Matrix4f[] poses = new Matrix4f[16];
+	//#endif
+	private static float[] xs = new float[16];
+	private static float[] ys = new float[16];
 	private static float[] scopes = new float[16];
 	private static int depth;
 	/** Only the explicit nametagfont self-test changes this to capture the old atlas at the identical camera. */
@@ -53,26 +61,61 @@ public final class TextDrawScale {
 	}
 
 	public static float current() {
+		return on() && !proofBaseline ? Math.max(0, current) / Math.max(1, baseScale()) : 0;
+	}
+
+	public static float framebufferPixels() {
+		if (current < 0) {
+			int scope = depth - 1;
+			current = pixels(
+					//#if MC >= 1.15
+					poses[scope],
+					//#endif
+					xs[scope], ys[scope]);
+		}
 		return current;
 	}
 
-	/** Save/restore allows nested draw/preparation calls without leaking a world's scale into GUI text. */
+	/** Save and restore the framebuffer scale across nested text preparation. */
 	public static float set(float pixels) {
 		float previous = current;
-		current = on() ? pixels / Math.max(1, baseScale()) : 0;
+		current = pixels;
 		return previous;
 	}
 
-	/** Primitive scope storage for the font entry/return hooks, including nested outlines. */
-	public static void push(float pixels) {
+	//#if MC >= 1.19.3
+	public static void push(Matrix4fc pose, float x, float y) {
+	//#elif MC >= 1.15
+	public static void push(Matrix4f pose, float x, float y) {
+	//#else
+	public static void push(float x, float y) {
+	//#endif
 		if (depth == scopes.length) {
-			scopes = java.util.Arrays.copyOf(scopes, depth * 2);
+			int capacity = depth * 2;
+			scopes = java.util.Arrays.copyOf(scopes, capacity);
+			xs = java.util.Arrays.copyOf(xs, capacity);
+			ys = java.util.Arrays.copyOf(ys, capacity);
+			//#if MC >= 1.15
+			poses = java.util.Arrays.copyOf(poses, capacity);
+			//#endif
 		}
-		scopes[depth++] = set(pixels);
+		//#if MC >= 1.15
+		poses[depth] = pose;
+		//#endif
+		xs[depth] = x;
+		ys[depth] = y;
+		scopes[depth++] = set(on() ? pixels(
+				//#if MC >= 1.15
+				pose,
+				//#endif
+				x, y) : -1);
 	}
 
 	public static void pop() {
 		current = scopes[--depth];
+		//#if MC >= 1.15
+		poses[depth] = null;
+		//#endif
 	}
 
 	public static void restore(float previous) {
@@ -86,9 +129,6 @@ public final class TextDrawScale {
 	//#else
 	public static float pixels(float x, float y) {
 	//#endif
-		if (!on() || proofBaseline) {
-			return 0;
-		}
 		//#if MC >= 1.21.6
 		Matrix4fc projection = TextProjection.current();
 		if (projection == null) {
