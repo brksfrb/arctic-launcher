@@ -8,8 +8,9 @@ import net.minecraft.client.gui.components.ChatComponent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-// Let default-priority chat mods supply the base limit before Arctic adjusts it for replay.
-@Mixin(value = ChatComponent.class, priority = 900)
+// MixinExtras inserts each modifier directly after the constant. Apply Arctic first
+// so default-priority modifiers run before Arctic at runtime.
+@Mixin(value = ChatComponent.class, priority = 1100)
 abstract class ChatHistoryLimitMixin {
 	@ModifyExpressionValue(
 			//#if MC >= 1.20.6
