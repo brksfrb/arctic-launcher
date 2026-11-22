@@ -626,8 +626,15 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
     };
     // The Arctic sign-in (a network round trip) runs while the game files are checked.
     let session = share_session.then(|| start_cosmetics_session(req, game_dir));
-    let installation =
+    let mut installation =
         install_with_repair(dirs, version, game_dir, java_override, progress, &repair)?;
+    if share_session && matches!(loader, Some((loaders::LoaderKind::Forge, _))) {
+        // Make Arctic's Mixin available before Forge discovers mods that embed an
+        // older version. Forge still discovers the mod at the same path.
+        installation
+            .classpath
+            .push(game_dir.join("mods").join(arctic_mod::FILE_NAME));
+    }
     if let Some(finished) = session {
         let _ = finished.recv_timeout(SESSION_WAIT);
     }

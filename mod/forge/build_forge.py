@@ -53,6 +53,14 @@ DOWNLOADS = {
         "https://repo.maven.apache.org/maven2/io/github/llamalad7/mixinextras-common/0.3.5/mixinextras-common-0.3.5.jar",
         "03abee14a54beea63cd89414716f45af2d096f12919ffe4d1df28df847341ab2",
     ),
+    "LICENSE_EssentialLoader": (
+        "https://raw.githubusercontent.com/SparkUniverse/EssentialLoader/4157cb5cf2acce9147b3882c68a8c2af4caafc5a/LICENSE",
+        "cb2ddbe45204d25ca565cc530b181bbadd396ef3223350045955f056a5a9747d",
+    ),
+    "LICENSE_Guava": (
+        "https://raw.githubusercontent.com/google/guava/v21.0/COPYING",
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    ),
 }
 MIXIN_SERVICES = {
     "META-INF/services/org.spongepowered.asm.service.IMixinService",
@@ -134,6 +142,7 @@ def build():
     remapper_jar = fetch("tiny-remapper.jar")
     mixin_jar = fetch("mixin-0.2.0+mixin.0.8.7.jar")
     extras_jar = fetch("mixinextras-common-0.3.5.jar")
+    licenses = [fetch("LICENSE_EssentialLoader"), fetch("LICENSE_Guava"), HERE / "NOTICE"]
 
     sys.path.insert(0, str(HERE))
     import mappings
@@ -177,6 +186,9 @@ def build():
                 seen.add(name)
                 z.writestr(name, data)
 
+        for notice in licenses:
+            add(notice.name, notice.read_bytes())
+        add("LICENSE_GPL-3.0", (MOD.parent / "LICENSE").read_bytes())
         with zipfile.ZipFile(remapped) as src:
             for info in src.infolist():
                 # Fabric's own metadata and signature files have no use on Forge.
