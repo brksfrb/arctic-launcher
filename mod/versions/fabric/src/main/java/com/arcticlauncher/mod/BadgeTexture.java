@@ -41,7 +41,7 @@ public final class BadgeTexture {
 			new DynamicTexture[Badge.STYLES.size()][Badge.ROLES.length];
 	private static final Identifier[][] MASTER_IDS =
 			new Identifier[Badge.STYLES.size()][Badge.ROLES.length];
-	private static final java.util.Set<Object> BADGE_GLYPHS =
+	private static final java.util.Set<Object> NAMETAG_GLYPHS =
 			java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Object, Boolean>());
 	/** Textures evicted this tick; released on the next tick so in-flight quads stay valid. */
 	private static final int GRAVE_CAP = 128;
@@ -50,12 +50,12 @@ public final class BadgeTexture {
 	private static final int[] GRAVE_SLOT = new int[GRAVE_CAP];
 	private static final int[] GRAVE_SIZE = new int[GRAVE_CAP];
 	private static int graveCount;
-	private static final java.util.Set<Object> RETIRED_GLYPHS =
+	private static final java.util.Set<Object> RETIRED_NAMETAG_GLYPHS =
 			java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Object, Boolean>());
 	private static final int[][][] QUAD_STAMP = new int[SLOTS][Badge.MAX_RASTER_SIZE + 1][QUAD_VARIANTS];
 
-	public static boolean isBadge(Object glyph) {
-		return glyph != null && BADGE_GLYPHS.contains(glyph);
+	public static boolean isNametagBadge(Object glyph) {
+		return glyph != null && NAMETAG_GLYPHS.contains(glyph);
 	}
 
 	//#if MC >= 1.21.11
@@ -72,10 +72,10 @@ public final class BadgeTexture {
 	/** Reap textures evicted on the previous tick. Called from the client tick, on the render thread. */
 	public static void onTick() {
 		reapGraveyard();
-		for (Object glyph : RETIRED_GLYPHS) {
-			BADGE_GLYPHS.remove(glyph);
+		for (Object glyph : RETIRED_NAMETAG_GLYPHS) {
+			NAMETAG_GLYPHS.remove(glyph);
 		}
-		RETIRED_GLYPHS.clear();
+		RETIRED_NAMETAG_GLYPHS.clear();
 		gpuTick++;
 	}
 
@@ -140,8 +140,8 @@ public final class BadgeTexture {
 		} else {
 			index = oldest;
 			BakedGlyph evicted = GUI_QUADS[slot][resolution][index];
-			if (evicted != null) {
-				RETIRED_GLYPHS.add(evicted);
+			if (isNametagBadge(evicted)) {
+				RETIRED_NAMETAG_GLYPHS.add(evicted);
 			}
 		}
 		GUI_QUADS[slot][resolution][index] = quad;
@@ -246,8 +246,8 @@ public final class BadgeTexture {
 			for (int i = 0; i < n; i++) {
 				if (QUAD_TEX[slot][r][i] == resolution || r == resolution) {
 					BakedGlyph evicted = GUI_QUADS[slot][r][i];
-					if (evicted != null) {
-						RETIRED_GLYPHS.add(evicted);
+					if (isNametagBadge(evicted)) {
+						RETIRED_NAMETAG_GLYPHS.add(evicted);
 					}
 					continue;
 				}
@@ -339,8 +339,8 @@ public final class BadgeTexture {
 			}
 		}
 		reapGraveyard();
-		BADGE_GLYPHS.clear();
-		RETIRED_GLYPHS.clear();
+		NAMETAG_GLYPHS.clear();
+		RETIRED_NAMETAG_GLYPHS.clear();
 		for (int slot = 0; slot < SLOTS; slot++) {
 			for (int r = 0; r <= Badge.MAX_RASTER_SIZE; r++) {
 				QUAD_COUNT[slot][r] = 0;
@@ -435,7 +435,7 @@ public final class BadgeTexture {
 				texture.getTextureView(),
 				//#endif
 				0, 1, 0, 1, 0, side, top, top + side);
-		BADGE_GLYPHS.add(quad);
+		if (!tab) NAMETAG_GLYPHS.add(quad);
 		return quad;
 	}
 }
