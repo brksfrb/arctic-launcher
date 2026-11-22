@@ -62,22 +62,27 @@ pub fn run(ctx: &Ctx, args: &LaunchArgs) -> Result<i32> {
         if !findings.is_empty() {
             for finding in findings {
                 let path = finding.path.display().to_string();
+                let severity = if finding.reason == Reason::KnownMalware {
+                    "Known malware"
+                } else {
+                    "Suspicious"
+                };
                 let reason = match &finding.reason {
-                    Reason::KnownMalware => "Known malware (file hash matches the blocklist)",
+                    Reason::KnownMalware => "file hash matches the blocklist",
                     Reason::Filename(reason) => reason,
-                    Reason::Fractureiser => "Suspicious: Fractureiser indicators",
-                    Reason::ShellCommand => "Suspicious: launches a shell command",
-                    Reason::CredentialAccess => "Suspicious: accesses credential storage",
-                    Reason::DownloadAndExecute => {
-                        "Suspicious: downloads and executes external code"
-                    }
-                    Reason::UndeclaredJar => {
-                        "Suspicious: loads code from an undeclared embedded JAR"
-                    }
+                    Reason::Fractureiser => "Fractureiser indicators",
+                    Reason::ShellCommand => "launches a shell command",
+                    Reason::CredentialAccess => "accesses credential storage",
+                    Reason::DownloadAndExecute => "downloads and executes external code",
+                    Reason::UndeclaredJar => "loads code from an undeclared embedded JAR",
                 };
                 ctx.out.emit(
-                    json!({"event": "mod_malware_warning", "file": path, "reason": reason}),
-                    || format!("{path}: {reason}"),
+                    json!({"event": "mod_malware_warning", "file": path, "severity": severity, "reason": reason}),
+                    || format!(
+                        "{}: {severity} ({})",
+                        path.replace(char::is_control, "�"),
+                        reason.replace(char::is_control, "�"),
+                    ),
                 );
             }
             if !args.allow_flagged_mods {

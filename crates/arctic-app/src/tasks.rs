@@ -81,10 +81,17 @@ pub struct Retargeted {
     pub failed: Vec<String>,
 }
 
+pub(crate) enum MalwareAction {
+    Disable(usize),
+    Proceed,
+    Cancel,
+}
+
 pub(crate) struct ModMalwareWarning {
+    pub instance: String,
     pub findings: Vec<malware::Finding>,
-    pub instance_mods: PathBuf,
-    pub proceed: Sender<bool>,
+    pub disable_error: Option<String>,
+    pub respond: Sender<MalwareAction>,
 }
 
 pub enum Event {
@@ -488,7 +495,7 @@ impl Tasks {
         start: StartAt,
     ) -> Result<Option<(GameHandle, PathBuf, String)>> {
         // Launches can share installer caches, and a new copy snapshots the instance's mods.
-        let _content = self.content_lock();
+        let mut content = self.content_lock();
         let tracker = Mutex::new(LaunchProgress::new(LaunchSteps::from_instance(instance)));
         let progress = |p: ProgressInfo| {
             let percent = tracker
@@ -521,16 +528,41 @@ impl Tasks {
         let prepared = launch::prepare_watched(&req, &progress)?;
         if settings.check_mods_for_malware {
             progress(ProgressInfo::stage(t!("tasks.checking_mods_for_malware")));
-            let findings = malware::scan(&self.dirs, &prepared.plan.game_dir.join("mods"));
+            let mods = prepared.plan.game_dir.join("mods");
+            let instance_mods = instance.game_dir(&self.dirs).join("mods");
+            let mut findings = malware::scan(&self.dirs, &mods);
+            let mut disable_error = None;
             if !findings.is_empty() {
-                let (proceed, decision) = std::sync::mpsc::channel();
-                self.send(Event::ModMalwareWarning(ModMalwareWarning {
-                    findings,
-                    instance_mods: instance.game_dir(&self.dirs).join("mods"),
-                    proceed,
-                }));
-                if decision.recv() != Ok(true) {
-                    return Ok(None);
+                loop {
+                    let (respond, decision) = std::sync::mpsc::channel();
+                    self.send(Event::ModMalwareWarning(ModMalwareWarning {
+                        instance: instance.name.clone(),
+                        findings: findings.clone(),
+                        disable_error: disable_error.take(),
+                        respond,
+                    }));
+                    // Keep the game directory reserved while the dialog is open,
+                    // but let other launches and content operations proceed.
+                    drop(content);
+                    let action = decision.recv().unwrap_or(MalwareAction::Cancel);
+                    if matches!(action, MalwareAction::Cancel) {
+                        return Ok(None);
+                    }
+                    content = self.content_lock();
+                    if let MalwareAction::Disable(index) = action
+                        && let Some(finding) = findings.get(index)
+                    {
+                        disable_error = malware::disable(finding, &instance_mods)
+                            .err()
+                            .map(|err| err.to_string());
+                    }
+                    let current = malware::scan(&self.dirs, &mods);
+                    if matches!(action, MalwareAction::Proceed)
+                        && current.iter().all(|finding| findings.contains(finding))
+                    {
+                        break;
+                    }
+                    findings = current;
                 }
             }
         }
@@ -541,6 +573,7 @@ impl Tasks {
             let _ = tx.send(Event::Game(id, event));
             ctx.request_repaint();
         })?;
+        drop(content);
         // Every stage finished and the process started. A failure above never sends 100%.
         let percent = tracker
             .lock()
