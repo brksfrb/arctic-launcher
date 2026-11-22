@@ -6,15 +6,15 @@ on:
     # Builds on main (never published) keep a warm cache there: a tag's run
     # can only restore caches from its own tag or the default branch.
     branches: [main]
-    paths: ["Cargo.lock", ".github/workflows/release.yml"]
+    paths: ["Cargo.lock"]
   # GitHub drops caches unused for 7 days; releases come less often.
   schedule:
     - cron: "17 4 */3 * *"
   # By hand: build everything (test builds, like the Mac app) without publishing.
   workflow_dispatch: {}
 
-# Read-only by default: the build jobs run third-party actions (and the Mac job holds the Developer ID key).
-# Only the two jobs that create and edit the release get write access.
+# Read-only by default. Build jobs can write attestations, and only the
+# publishing jobs can write release contents.
 permissions:
   contents: read
 
@@ -26,6 +26,10 @@ jobs:
   # Flash Hosting node: builds get its spare CPU only. Tags and runs by hand only: it never takes
   # branch, schedule or pull request jobs (the cache there persists between runs anyway).
   build:
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, linux, x64, ryzen]
     defaults:
@@ -75,6 +79,32 @@ jobs:
           cp "$CARGO_TARGET_DIR/release/arctic-launcher" dist/linux/arctic-launcher-linux-x64
           cp "$CARGO_TARGET_DIR/release/arctic" dist/linux/arctic-linux-x64
 
+      - name: Check Windows binaries can be recovered after signing
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          python3 - dist/windows/*.exe <<'PYTHON'
+          import struct
+          import sys
+          from pathlib import Path
+
+          for path in map(Path, sys.argv[1:]):
+              data = path.read_bytes()
+              pe, = struct.unpack_from("<I", data, 0x3c)
+              checksum, = struct.unpack_from("<I", data, pe + 0x58)
+              # SignTool aligns the certificate table to 8 bytes and writes the PE checksum.
+              # Verification must restore exactly the bytes attested below.
+              if len(data) % 8 or checksum:
+                  sys.exit(f"{path}: expected 8-byte alignment and a zero PE checksum")
+          PYTHON
+
+      - name: Attest Windows and Linux binaries
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/windows/*.exe
+            dist/linux/*
+
       - uses: actions/upload-artifact@v4
         with:
           name: windows
@@ -86,6 +116,10 @@ jobs:
 
   # One app for Apple Silicon and Intel Macs.
   macos:
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
@@ -154,6 +188,12 @@ jobs:
           mkdir mac-dist
           cp dist/arctic-launcher-macos.zip dist/arctic-launcher-macos dist/arctic-macos mac-dist/
 
+      - name: Attest macOS release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: mac-dist/*
+
       - uses: actions/upload-artifact@v4
         with:
           name: macos
@@ -182,7 +222,9 @@ jobs:
           chmod +x dist/*linux*
           # Checksums, so a download can be checked: a file next to the
           # downloads and a table at the top of the notes.
-          (cd dist && sha256sum -- * > SHA256SUMS.txt)
+          (cd dist && sha256sum -- *) > SHA256SUMS.txt
+          mv SHA256SUMS.txt dist/
+          cp dist/SHA256SUMS.txt dist/SHA256SUMS-unsigned.txt
           {
             # What's new, written by hand (docs/release-notes/<tag>.md), above the checksums.
             if [ -f "docs/release-notes/$GITHUB_REF_NAME.md" ]; then
@@ -224,11 +266,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           chmod +x mac/arctic-launcher-macos mac/arctic-macos
-          gh release download "$GITHUB_REF_NAME" --pattern SHA256SUMS.txt --dir current --clobber
+          gh release download "$GITHUB_REF_NAME" --pattern SHA256SUMS.txt --pattern SHA256SUMS-unsigned.txt --dir current --clobber
           (cd mac && sha256sum -- *) > mac.sums
-          { grep -v -E '  \*?(arctic-launcher-macos|arctic-launcher-macos\.zip|arctic-macos)$' current/SHA256SUMS.txt || true; cat mac.sums; } \
-            | sort -k2 > SHA256SUMS.txt
-          gh release upload "$GITHUB_REF_NAME" mac/* SHA256SUMS.txt --clobber
+          for sums in SHA256SUMS.txt SHA256SUMS-unsigned.txt; do
+            # Replace any existing Mac entries if this job is retried.
+            awk 'NR == FNR { mac[$2] = 1; print; next } !($2 in mac)' mac.sums "current/$sums" \
+              | sort -k2 > "$sums"
+          done
+          gh release upload "$GITHUB_REF_NAME" mac/* SHA256SUMS.txt SHA256SUMS-unsigned.txt --clobber
           # The notes' checksum table, rebuilt from the file (as sign-release.ps1 does).
           {
             echo "### SHA-256"

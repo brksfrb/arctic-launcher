@@ -132,6 +132,8 @@ The skin gallery is skins other players shared. Search by name or creator, wear 
 
 Windows may show a SmartScreen prompt for new apps. Choose **More info → Run anyway**.
 
+To check which source commit built your download, see [Verify a download](VERIFY.md).
+
 ### macOS
 
 1. Download **`arctic-launcher-macos.zip`** from the
