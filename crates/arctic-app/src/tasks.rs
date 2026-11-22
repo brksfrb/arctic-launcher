@@ -17,7 +17,7 @@ use arctic_core::instances::Instance;
 use arctic_core::launch::progress::{LaunchProgress, LaunchSteps};
 use arctic_core::launch::{self, GameEvent, GameHandle, LaunchRequest};
 use arctic_core::loaders::{self, LoaderKind, LoaderVersion};
-use arctic_core::mods::{self, InstalledMod, SearchPage, SearchQuery};
+use arctic_core::mods::{self, InstalledMod, SearchPage, SearchQuery, malware};
 use arctic_core::settings::Settings;
 use arctic_core::storage::DataDirs;
 use arctic_core::update::{self, UpdateChannel, UpdateInfo};
@@ -81,12 +81,20 @@ pub struct Retargeted {
     pub failed: Vec<String>,
 }
 
+pub(crate) struct ModMalwareWarning {
+    pub findings: Vec<malware::Finding>,
+    pub instance_mods: PathBuf,
+    pub proceed: Sender<bool>,
+}
+
 pub enum Event {
     /// A file dialog never appeared (no desktop portal or zenity on Linux).
     PickerMissing,
     Manifest(Outcome<VersionManifest>),
     /// Preparing a launch (id, progress).
     LaunchProgress(LaunchId, ProgressSnapshot),
+    ModMalwareWarning(ModMalwareWarning),
+    LaunchCancelled(LaunchId),
     UpdateProgress(ProgressSnapshot),
     AccountRefreshed(Account),
     /// Game process started (window not necessarily up yet). Carries the
@@ -457,9 +465,16 @@ impl Tasks {
                     play_started.elapsed().as_millis()
                 );
             }
-            let result = result.map(|(game, log, java)| (game, log, version.id.clone(), java));
             // The toast shows this string; it has to be the whole cause chain, not just Display.
-            t.send(Event::Launched(id, result.map_err(|e| e.chain())));
+            let result = match result {
+                Ok(Some((game, log, java))) => Ok((game, log, version.id.clone(), java)),
+                Ok(None) => {
+                    t.send(Event::LaunchCancelled(id));
+                    return;
+                }
+                Err(err) => Err(err.chain()),
+            };
+            t.send(Event::Launched(id, result));
         });
     }
 
@@ -471,7 +486,7 @@ impl Tasks {
         account: Account,
         settings: &Settings,
         start: StartAt,
-    ) -> Result<(GameHandle, PathBuf, String)> {
+    ) -> Result<Option<(GameHandle, PathBuf, String)>> {
         // Launches can share installer caches, and a new copy snapshots the instance's mods.
         let _content = self.content_lock();
         let tracker = Mutex::new(LaunchProgress::new(LaunchSteps::from_instance(instance)));
@@ -504,6 +519,20 @@ impl Tasks {
             quick_play: start.quick_play,
         };
         let prepared = launch::prepare_watched(&req, &progress)?;
+        if settings.check_mods_for_malware {
+            progress(ProgressInfo::stage(t!("tasks.checking_mods_for_malware")));
+            let findings = malware::scan(&self.dirs, &prepared.plan.game_dir.join("mods"));
+            if !findings.is_empty() {
+                let (proceed, decision) = std::sync::mpsc::channel();
+                self.send(Event::ModMalwareWarning(ModMalwareWarning {
+                    findings,
+                    proceed,
+                }));
+                if decision.recv() != Ok(true) {
+                    return Ok(None);
+                }
+            }
+        }
         let log_file = prepared.plan.log_file.clone();
         let java = prepared.plan.java_summary();
         let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
@@ -524,7 +553,7 @@ impl Tasks {
                 ..ProgressSnapshot::default()
             },
         ));
-        Ok((game, log_file, java))
+        Ok(Some((game, log_file, java)))
     }
 
     pub fn login_device_code(&self, attempt: LoginAttempt, cancel: Arc<AtomicBool>) {

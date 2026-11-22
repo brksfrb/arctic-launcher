@@ -8,6 +8,7 @@ use arctic_core::ProgressInfo;
 use arctic_core::auth::offline;
 use arctic_core::auth::{self, Account, AccountStore};
 use arctic_core::launch::{self, GameEvent, LaunchRequest, QuickPlay};
+use arctic_core::mods::malware::{self, Reason};
 use arctic_core::settings::Settings;
 use arctic_core::versions::VersionManifest;
 use arctic_core::{Error, Result, instances};
@@ -55,6 +56,34 @@ pub fn run(ctx: &Ctx, args: &LaunchArgs) -> Result<i32> {
             || plan.redacted_command(),
         );
         return Ok(0);
+    }
+    if settings.check_mods_for_malware {
+        let findings = malware::scan(&ctx.dirs, &plan.game_dir.join("mods"));
+        if !findings.is_empty() {
+            for finding in findings {
+                let path = finding.path.display().to_string();
+                let reason = match &finding.reason {
+                    Reason::KnownMalware => "Known malware (file hash matches the blocklist)",
+                    Reason::Filename(reason) => reason,
+                    Reason::Fractureiser => "Suspicious: Fractureiser indicators",
+                    Reason::ShellCommand => "Suspicious: launches a shell command",
+                    Reason::CredentialAccess => "Suspicious: accesses credential storage",
+                    Reason::DownloadAndExecute => {
+                        "Suspicious: downloads and executes external code"
+                    }
+                    Reason::UndeclaredJar => {
+                        "Suspicious: loads code from an undeclared embedded JAR"
+                    }
+                };
+                ctx.out.emit(
+                    json!({"event": "mod_malware_warning", "file": path, "reason": reason}),
+                    || format!("{path}: {reason}"),
+                );
+            }
+            if !args.allow_flagged_mods {
+                return Err(Error::Other("Launch cancelled. The check looks for known and obvious malware and cannot guarantee safety. Use --allow-flagged-mods to launch anyway.".into()));
+            }
+        }
     }
     if !args.wait {
         let pid = launch::spawn_detached(&plan)?;

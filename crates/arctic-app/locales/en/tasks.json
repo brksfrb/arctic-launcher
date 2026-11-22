@@ -175,5 +175,19 @@
   "tasks.you_can_turn_this_question_back_on_in": "You can turn this question back on in Settings.",
   "tasks.youll_see_it_next_time_you_play": "You'll see it next time you play.",
   "tasks.your_discord_account": "your Discord account",
-  "tasks.your_profile_and_friends_are_here_now": "Your profile and friends are here now"
+  "tasks.your_profile_and_friends_are_here_now": "Your profile and friends are here now",
+  "checking_mods_for_malware": "Checking mods for malware",
+  "mod_malware_warning": "Potential malware in your mods",
+  "malware_scope": "This check looks for known and obvious malware. It cannot guarantee a mod is safe.",
+  "malware_hash_match": "Known malware (file hash matches the blocklist)",
+  "malware_suspicious": "Suspicious — {reason}",
+  "malware_fractureiser": "Contains indicators associated with Fractureiser",
+  "malware_shell": "Starts a PowerShell or Command Prompt command",
+  "malware_credentials": "Accesses credential storage and uses the network or starts a process",
+  "malware_download": "Can download and execute external code",
+  "malware_undeclared_jar": "Loads code from an undeclared embedded JAR",
+  "malware_disable": "Disable mod",
+  "malware_disable_failed": "Could not disable mod",
+  "malware_launch": "Launch",
+  "malware_launch_anyway": "Launch anyway"
 }

@@ -1252,6 +1252,10 @@ pub struct LaunchArgs {
     #[arg(short, long)]
     pub wait: bool,
 
+    /// Explicitly allow launching with mods that the malware check flags.
+    #[arg(long)]
+    pub allow_flagged_mods: bool,
+
     /// Prepare everything and print the command line, but don't start.
     #[arg(long)]
     pub dry_run: bool,

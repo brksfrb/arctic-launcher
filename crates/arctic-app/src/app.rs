@@ -237,6 +237,7 @@ pub struct ArcticApp {
     pub(crate) close_prompt: bool,
     /// "Launch Minecraft to join this server?" is up for this address.
     pub(crate) join_confirm: Option<String>,
+    pub(crate) mod_malware_warning: Option<crate::tasks::ModMalwareWarning>,
     /// That dialog's "Don't show again" box.
     pub(crate) join_confirm_never: bool,
     /// "Play this world?" is up (a world never starts from one click).
@@ -331,6 +332,7 @@ impl ArcticApp {
             open_flushed: std::time::Instant::now(),
             close_prompt: false,
             join_confirm: None,
+            mod_malware_warning: None,
             join_confirm_never: false,
             world_confirm: None,
             software_gl: false,
@@ -1125,6 +1127,16 @@ impl ArcticApp {
                 }
             }
             Event::LaunchProgress(id, snapshot) => self.on_launch_progress(id, snapshot, now),
+            Event::ModMalwareWarning(warning) => {
+                crate::window::show();
+                self.mod_malware_warning = Some(warning);
+            }
+            Event::LaunchCancelled(id) => {
+                if let Some(run) = self.runs.get_mut(id) {
+                    run.state = crate::runs::RunState::Ended;
+                }
+                self.bridge.forget_launch(id);
+            }
             Event::UpdateProgress(p) => {
                 if let UpdateState::Installing { done, total, .. } = &mut self.update {
                     (*done, *total) = (p.bytes_done, p.bytes_total);

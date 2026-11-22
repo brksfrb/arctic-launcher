@@ -168,6 +168,11 @@ impl ArcticApp {
                 t!("settings.ask_before_launching_minecraft_to_join_a"),
             )
             .on_hover_text(t!("settings.join_on_a_server_asks_first_when_no_game_is"));
+            ui.checkbox(
+                &mut s.check_mods_for_malware,
+                t!("settings.check_mods_for_malware"),
+            )
+            .on_hover_text(t!("tasks.malware_scope"));
             ui.checkbox(&mut s.show_sponsor, t!("settings.show_supporter_mentions"))
                 .on_hover_text(t!("settings.supported_by_flash_hosting_in_the_sidebar"));
             ui.checkbox(&mut s.quick_tips, t!("settings.show_quick_tips"))

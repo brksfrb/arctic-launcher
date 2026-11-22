@@ -225,5 +225,6 @@
   "settings.your_newest_screenshot_or_the_versions_title": "En yeni ekran görüntün ya da sürümün başlık ekranı",
   "settings.your_picture": "Kendi resmin…",
   "settings.your_screenshot": "Ekran görüntün",
-  "settings.your_settings_instances_as_mod_lists_and_hud": "Ayarların, örneklerin (mod listesi olarak) ve HUD düzenlerin; kod, metin ya da dosya olarak. Hesaplar ve parolalar asla dahil edilmez."
+  "settings.your_settings_instances_as_mod_lists_and_hud": "Ayarların, örneklerin (mod listesi olarak) ve HUD düzenlerin; kod, metin ya da dosya olarak. Hesaplar ve parolalar asla dahil edilmez.",
+  "check_mods_for_malware": "Modları zararlı yazılıma karşı denetle"
 }
