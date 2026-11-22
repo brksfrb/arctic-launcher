@@ -356,13 +356,13 @@ public final class Hud {
 	 * Pin a widget with its top-left at (x, y), anchored to the nearest
 	 * screen edge (or the middle) so it stays there on other screen sizes.
 	 */
-	public void place(Gfx g, HudWidget w, int[] rect, int x, int y) {
+	public void place(HudWidget w, int[] rect, int x, int y, int screenWidth, int screenHeight) {
 		HudSlot slot = slot(w);
 		slot.placed = true;
-		slot.ax = third(x + rect[2] / 2, g.width());
-		slot.ay = third(y + rect[3] / 2, g.height());
-		slot.dx = offset(slot.ax, x, g.width(), rect[2]);
-		slot.dy = offset(slot.ay, y, g.height(), rect[3]);
+		slot.ax = third(x + rect[2] / 2, screenWidth);
+		slot.ay = third(y + rect[3] / 2, screenHeight);
+		slot.dx = offset(slot.ax, x, screenWidth, rect[2]);
+		slot.dy = offset(slot.ay, y, screenHeight, rect[3]);
 	}
 
 	private static int third(int center, int screen) {
