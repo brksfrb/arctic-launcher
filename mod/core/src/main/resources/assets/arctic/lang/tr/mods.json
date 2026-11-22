@@ -393,6 +393,8 @@
   "mods.part_of_the_sounds_name_then_its_volume_in": "Sesin adının bir parçası, sonra yüzde olarak ses düzeyi (0 = sessiz). Adlar şuna benzer: entity.player.hurt,",
   "mods.hide_my_potion_particles": "Kendi iksir parçacıklarımı gizle",
   "mods.hide_my_potion_particles_description": "Karakterinin etrafındaki etki girdaplarını gizler.",
+  "mods.hide_other_players_potion_particles": "Diğer oyuncuların iksir parçacıklarını gizle",
+  "mods.hide_other_players_potion_particles_description": "Diğer oyuncuların etrafındaki etki girdaplarını gizler.",
   "mods.particle_control": "Parçacık Kontrolü",
   "mods.particles.crits_and_hits": "Kritikler ve vuruşlar",
   "mods.particles.explosions": "Patlamalar",

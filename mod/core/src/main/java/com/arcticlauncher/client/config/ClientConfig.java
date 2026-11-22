@@ -348,6 +348,7 @@ public final class ClientConfig {
 	public boolean particleControl;
 	public int particleAmount = 50;
 	public boolean hideOwnPotionParticles;
+	public boolean hideOtherPlayersPotionParticles;
 	/** Particle kinds switched off (bit per {@code ParticleKinds.LABELS} entry). */
 	public int particleOff;
 	/** Ctrl+K opens the command palette (mods, servers, friends). */

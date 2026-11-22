@@ -38,6 +38,25 @@ pub fn supports_forge(game_version: &str) -> bool {
         .is_some_and(|(build, pack)| pack.jars.contains_key(build))
 }
 
+/// Mixin 0.8 needs ASM 5.2 on Forge 1.8.9. Change the launch profile in memory
+/// so already-installed Forge profiles get the same dependency as new ones.
+pub(crate) fn update_forge_asm(game_version: &str, profile: &mut crate::versions::VersionJson) {
+    if game_version != "1.8.9" {
+        return;
+    }
+    if let Some(asm) = profile
+        .libraries
+        .iter_mut()
+        .find(|lib| lib.name == "org.ow2.asm:asm-all:5.0.3")
+    {
+        asm.name = "org.ow2.asm:asm-all:5.2".into();
+        asm.downloads = None;
+        asm.url = Some("https://repo.maven.apache.org/maven2/".into());
+        asm.sha1 = Some("2ea49e08b876bbd33e0a7ce75c8f371d29e1f10a".into());
+        asm.size = Some(247_787);
+    }
+}
+
 /// The build target that serves `game_version`.
 fn build_for(game_version: &str) -> Option<&'static str> {
     COVERS
@@ -395,6 +414,27 @@ mod tests {
     use std::io::Read;
 
     use super::*;
+
+    #[test]
+    fn forge_client_replaces_the_cached_189_asm_dependency() {
+        let mut profile = serde_json::from_value(serde_json::json!({
+            "id": "1.8.9-forge",
+            "type": "release",
+            "mainClass": "net.minecraft.launchwrapper.Launch",
+            "libraries": [{
+                "name": "org.ow2.asm:asm-all:5.0.3",
+                "downloads": {"artifact": {"url": "https://example.invalid/old-asm.jar"}}
+            }]
+        }))
+        .unwrap();
+        update_forge_asm("1.7.10", &mut profile);
+        assert_eq!(profile.libraries[0].name, "org.ow2.asm:asm-all:5.0.3");
+        update_forge_asm("1.8.9", &mut profile);
+        assert_eq!(profile.libraries.len(), 1);
+        let asm = &profile.libraries[0];
+        assert_eq!(asm.name, "org.ow2.asm:asm-all:5.2");
+        assert!(asm.downloads.is_none());
+    }
 
     #[test]
     fn a_damaged_jar_is_noticed_and_written_again() {

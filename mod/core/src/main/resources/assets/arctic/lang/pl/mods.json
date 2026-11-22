@@ -393,6 +393,8 @@
   "mods.part_of_the_sounds_name_then_its_volume_in": "Część nazwy dźwięku, potem jego głośność w procentach (0 = cisza). Nazwy wyglądają jak entity.player.hurt,",
   "mods.hide_my_potion_particles": "Ukryj cząsteczki moich mikstur",
   "mods.hide_my_potion_particles_description": "Ukrywa wirujące cząsteczki efektów wokół twojej postaci.",
+  "mods.hide_other_players_potion_particles": "Ukryj cząsteczki mikstur innych graczy",
+  "mods.hide_other_players_potion_particles_description": "Ukrywa wirujące cząsteczki efektów wokół innych graczy.",
   "mods.particle_control": "Kontrola cząsteczek",
   "mods.particles.crits_and_hits": "Krytyki i trafienia",
   "mods.particles.explosions": "Eksplozje",

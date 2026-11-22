@@ -393,6 +393,8 @@
   "mods.part_of_the_sounds_name_then_its_volume_in": "サウンド名の一部、次に音量のパーセント（0 = 無音）。名前は entity.player.hurt、",
   "mods.hide_my_potion_particles": "自分のポーションのパーティクルを非表示",
   "mods.hide_my_potion_particles_description": "自分の周りに出るステータス効果の渦を非表示にします。",
+  "mods.hide_other_players_potion_particles": "他のプレイヤーのポーションのパーティクルを非表示",
+  "mods.hide_other_players_potion_particles_description": "他のプレイヤーの周りに出るステータス効果の渦を非表示にします。",
   "mods.particle_control": "パーティクル制御",
   "mods.particles.crits_and_hits": "クリティカルとヒット",
   "mods.particles.explosions": "爆発",

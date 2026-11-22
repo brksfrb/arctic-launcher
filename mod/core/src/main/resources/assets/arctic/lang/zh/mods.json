@@ -393,6 +393,8 @@
   "mods.part_of_the_sounds_name_then_its_volume_in": "声音名称的一部分，然后是百分比音量（0 = 静音）。名称类似 entity.player.hurt、",
   "mods.hide_my_potion_particles": "隐藏自己的药水粒子",
   "mods.hide_my_potion_particles_description": "隐藏自身角色周围的状态效果旋涡。",
+  "mods.hide_other_players_potion_particles": "隐藏其他玩家的药水粒子",
+  "mods.hide_other_players_potion_particles_description": "隐藏其他玩家周围的状态效果旋涡。",
   "mods.particle_control": "粒子控制",
   "mods.particles.crits_and_hits": "暴击与命中",
   "mods.particles.explosions": "爆炸",

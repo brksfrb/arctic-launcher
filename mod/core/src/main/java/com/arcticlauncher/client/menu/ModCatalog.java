@@ -458,6 +458,9 @@ final class ModCatalog {
 		out.add(new Mod("hideownpotionparticles", Lang.t("mods.hide_my_potion_particles"), Lang.t("mods.hide_my_potion_particles_description"), "particles",
 				Category.VISUAL, "self local player potion effect swirl beacon particles")
 				.toggle(() -> c.hideOwnPotionParticles, on -> c.hideOwnPotionParticles = on));
+		out.add(new Mod("hideotherplayerspotionparticles", Lang.t("mods.hide_other_players_potion_particles"), Lang.t("mods.hide_other_players_potion_particles_description"), "particles",
+				Category.VISUAL, "remote other players potion effect swirl beacon particles")
+				.toggle(() -> c.hideOtherPlayersPotionParticles, on -> c.hideOtherPlayersPotionParticles = on));
 		out.add(new Mod("helditem", Lang.t("mods.held_item"), Lang.t("mods.move_and_resize_your_hands_and_the_item_you"), "helditem",
 				Category.VISUAL, "hand item position size view model offset")
 				.toggle(() -> c.heldItem, on -> c.heldItem = on)

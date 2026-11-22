@@ -393,6 +393,8 @@
   "mods.part_of_the_sounds_name_then_its_volume_in": "Teil des Geräuschnamens, dann seine Lautstärke in Prozent (0 = stumm). Namen sehen aus wie entity.player.hurt,",
   "mods.hide_my_potion_particles": "Meine Trankpartikel ausblenden",
   "mods.hide_my_potion_particles_description": "Blendet die Effektwirbel um deine Spielfigur aus.",
+  "mods.hide_other_players_potion_particles": "Trankpartikel anderer Spieler ausblenden",
+  "mods.hide_other_players_potion_particles_description": "Blendet die Effektwirbel um andere Spieler aus.",
   "mods.particle_control": "Partikelsteuerung",
   "mods.particles.crits_and_hits": "Krits und Treffer",
   "mods.particles.explosions": "Explosionen",

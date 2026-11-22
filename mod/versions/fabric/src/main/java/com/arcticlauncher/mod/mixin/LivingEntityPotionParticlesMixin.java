@@ -7,6 +7,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.Level;
 import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
@@ -18,6 +19,12 @@ public class LivingEntityPotionParticlesMixin {
 	private boolean arctic$showPotionParticles(Level world, ParticleOptions particle,
 			double x, double y, double z, double dx, double dy, double dz) {
 		ClientConfig config = ArcticClient.config();
-		return config == null || !config.hideOwnPotionParticles || (Object) this != Minecraft.getInstance().player;
+		Object entity = this;
+		if (config == null || !(entity instanceof Player)) {
+			return true;
+		}
+		return entity == Minecraft.getInstance().player
+				? !config.hideOwnPotionParticles
+				: !config.hideOtherPlayersPotionParticles;
 	}
 }
