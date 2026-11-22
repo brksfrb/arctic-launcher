@@ -5,8 +5,8 @@
 	"minVersion": "0.8.7",
 	"plugin": "com.arcticlauncher.legacy.forge.ForgeMixinPlugin",<% } %>
 	"client": [
-<% if (!mc18) { %>		"LegacyMojangBlocklistMixin",
-<% } %>		"ScreenshotMixin",
+		"LegacyMojangBlocklistMixin",
+		"ScreenshotMixin",
 		"ScreenshotKeyMixin",
 		"MinecraftClientMixin",
 		"MainSessionLogMixin",
