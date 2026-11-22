@@ -2,7 +2,7 @@ use std::fs::{self, File};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::mem::size_of;
 use std::os::windows::{ffi::OsStrExt, io::AsRawHandle};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::ptr::from_mut;
 use std::sync::mpsc::{self, Receiver};
 
@@ -111,8 +111,11 @@ impl BuildSignature {
 }
 
 fn verify_running_exe() -> io::Result<Verification> {
-    let exe = std::env::current_exe()?;
-    let mut handle = File::open(&exe)?;
+    std::env::current_exe().and_then(|exe| verify_exe(&exe))
+}
+
+fn verify_exe(exe: &Path) -> io::Result<Verification> {
+    let mut handle = File::open(exe)?;
     let path: Vec<u16> = exe.as_os_str().encode_wide().chain([0]).collect();
     let mut file = WINTRUST_FILE_INFO {
         cbStruct: size_of::<WINTRUST_FILE_INFO>() as u32,
@@ -250,5 +253,20 @@ mod tests {
     #[test]
     fn authenticode_reports_unsigned_test_executable() {
         assert_eq!(verify_running_exe().unwrap(), Verification::Unsigned);
+    }
+
+    #[test]
+    #[ignore = "requires the published signed Windows launcher as a fixture"]
+    fn authenticode_accepts_the_official_publisher_and_rejects_tampering() {
+        let fixture = PathBuf::from(std::env::var_os("ARCTIC_SIGNED_EXE").unwrap());
+        assert_eq!(verify_exe(&fixture).unwrap(), Verification::Official);
+
+        let dir = tempfile::tempdir().unwrap();
+        let tampered = dir.path().join("tampered.exe");
+        let mut bytes = fs::read(fixture).unwrap();
+        // The DOS stub is covered by the Authenticode digest.
+        bytes[0x40] ^= 1;
+        fs::write(&tampered, bytes).unwrap();
+        assert_eq!(verify_exe(&tampered).unwrap(), Verification::Untrusted);
     }
 }
