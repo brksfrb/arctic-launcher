@@ -1,0 +1,67 @@
+[07:49:38] [Download-2/ERROR] Failed to fetch user properties
+    com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401
+        at knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59)
+        at knot//com.mojang.authlib.yggdrasil.YggdrasilUserApiService.fetchProperties(YggdrasilUserApiService.java:150)
+        at knot//net.minecraft.class_310.method_55608(class_310.java:457)
+
+    Caused by: MinecraftClientHttpException[type=HTTP_ERROR, status=401, response=ErrorResponse[path=/player/attributes, error=null, errorMessage=null, details=null]]
+        at knot//com.mojang.authlib.minecraft.client.MinecraftClient.readInputStream(MinecraftClient.java:103)
+        at knot//com.mojang.authlib.minecraft.client.MinecraftClient.get(MinecraftClient.java:56)
+        at knot//com.mojang.authlib.yggdrasil.YggdrasilUserApiService.fetchProperties(YggdrasilUserApiService.java:121)
+
+---- logs/arctic-freezes/freeze-20261122-080544.txt ----
+Arctic: game froze for 7.0s, mostly in java.base/jdk.internal.misc.Unsafe.park(Native Method) (Arctic code: knot//com.arcticlauncher.client.packs.ShaderPacks.lambda$select$0(ShaderPacks.java:128))
+started: 2026-11-22 08:05:44.406
+duration: 7.01s (still frozen when written)
+context: window focused, in a world, screen: com.arcticlauncher.mod.PageScreen
+samples: 1 client-thread stacks, one per ~500 ms; thread state at last sample WAITING
+sampler: slowest getStackTrace 2 ms, largest gap between samples 0 ms
+heap: 7934 MB used of 11900 MB max at start
+
+== Blocked on ==
+  Client "Render thread" id=1 state=WAITING
+  Waiting on java.util.concurrent.FutureTask@743b84d1
+  Owner unavailable (unowned wait/park or JVM did not report one).
+  Deadlocks: none detected
+
+== Where the time went (frames present in the most samples) ==
+  100%  java.base/jdk.internal.misc.Unsafe.park(Native Method)
+  100%  java.base/java.util.concurrent.locks.LockSupport.park(LockSupport.java:221)
+  100%  java.base/java.util.concurrent.FutureTask.awaitDone(FutureTask.java:500)
+  100%  java.base/java.util.concurrent.FutureTask.get(FutureTask.java:190)
+  100%  knot//net.irisshaders.iris.shaderpack.programs.ProgramSet.<init>(ProgramSet.java:86)
+  100%  knot//net.irisshaders.iris.shaderpack.ShaderPack.<init>(ShaderPack.java:322)
+  100%  knot//net.irisshaders.iris.Iris.loadExternalShaderpack(Iris.java:343)
+  100%  knot//net.irisshaders.iris.Iris.loadShaderpack(Iris.java:259)
+  100%  knot//net.irisshaders.iris.Iris.reload(Iris.java:576)
+  100%  java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+  100%  java.base/java.lang.reflect.Method.invoke(Method.java:580)
+  100%  knot//com.arcticlauncher.client.packs.ShaderPacks.lambda$select$0(ShaderPacks.java:128)
+
+== Distinct client-thread stacks (count of samples) ==
+
+[1x] stack 1
+    at java.base/jdk.internal.misc.Unsafe.park(Native Method)
+    at java.base/java.util.concurrent.locks.LockSupport.park(LockSupport.java:221)
+    at java.base/java.util.concurrent.FutureTask.awaitDone(FutureTask.java:500)
+    at java.base/java.util.concurrent.FutureTask.get(FutureTask.java:190)
+    at knot//net.irisshaders.iris.shaderpack.programs.ProgramSet.<init>(ProgramSet.java:86)
+    at knot//net.irisshaders.iris.shaderpack.ShaderPack.<init>(ShaderPack.java:322)
+    at knot//net.irisshaders.iris.Iris.loadExternalShaderpack(Iris.java:343)
+    at knot//net.irisshaders.iris.Iris.loadShaderpack(Iris.java:259)
+    at knot//net.irisshaders.iris.Iris.reload(Iris.java:576)
+    at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+    at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+    at knot//com.arcticlauncher.client.packs.ShaderPacks.lambda$select$0(ShaderPacks.java:128)
+
+Hang at exit: client hung for at least 7.01s in java.base/jdk.internal.misc.Unsafe.park(Native Method); still frozen at the last watchdog snapshot, no recovery recorded.
+
+---- launcher log ----
+[    0.00s] [INFO] Arctic Launcher 0.6.6 started 2026-11-22 07:49:02 (UTC+01:00) — data dir <home>\AppData\Local\ArcticLauncher
+[    0.48s] [INFO] window ready
+[    0.52s] [INFO] graphics: NVIDIA GeForce GTX 1650/PCIe/SSE2
+
+[    8.89s] [INFO] [startup] Java process started in 3257 ms (pid 8856)
+[    8.89s] [INFO] [startup] Play to Java process: 5029 ms
+
+(exit code -805306369 (0xCFFFFFFF; undocumented Windows exit code; hang termination or native failure, not enough evidence to distinguish))
