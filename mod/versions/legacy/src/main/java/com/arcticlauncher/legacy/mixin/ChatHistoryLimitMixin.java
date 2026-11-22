@@ -9,8 +9,8 @@ import net.minecraft.client.gui.hud.ChatHud;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-// MixinExtras inserts each modifier directly after the constant. Apply Arctic after
-// default-priority mixins so their modifiers run first at runtime.
+// Mixin applies lower priorities first. MixinExtras inserts each modifier directly after
+// the constant, so default-priority expression modifiers run before Arctic at runtime.
 @Mixin(value = ChatHud.class, priority = 900)
 abstract class ChatHistoryLimitMixin {
 	@ModifyExpressionValue(method = "addMessage(Lnet/minecraft/text/Text;IIZ)V", at = @At(value = "CONSTANT", args = "intValue=100"))
