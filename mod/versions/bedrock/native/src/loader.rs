@@ -3,7 +3,9 @@
 use std::ffi::c_void;
 use std::path::Path;
 
-use hudhook::windows::Win32::Foundation::{CloseHandle, ERROR_BAD_LENGTH, HANDLE, WAIT_OBJECT_0};
+use hudhook::windows::Win32::Foundation::{
+    CloseHandle, ERROR_BAD_LENGTH, ERROR_PARTIAL_COPY, HANDLE, WAIT_OBJECT_0,
+};
 use hudhook::windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
 use hudhook::windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, MODULEENTRY32W, Module32FirstW, Module32NextW, TH32CS_SNAPMODULE,
@@ -25,22 +27,31 @@ impl Drop for Handle {
     }
 }
 
-pub fn inject(pid: u32, dll: &Path) -> Result<(), Box<dyn std::error::Error>> {
+/// `step` hears each stage before it runs, so a log shows where a load stopped.
+pub fn inject(
+    pid: u32,
+    dll: &Path,
+    step: &dyn Fn(String),
+) -> Result<(), Box<dyn std::error::Error>> {
     if !cfg!(target_arch = "x86_64") {
         return Err("the native adapter requires Windows x64".into());
     }
     // SAFETY: every handle is owned by an RAII guard. The only remote memory is
     // an exactly sized UTF-16 path; it contains no executable code or credentials.
     unsafe {
-        let process = Handle(OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION
-                | PROCESS_CREATE_THREAD
-                | PROCESS_VM_OPERATION
-                | PROCESS_VM_WRITE
-                | PROCESS_VM_READ,
-            false,
-            pid,
-        )?);
+        step(format!("opening process {pid}"));
+        let process = Handle(
+            OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION
+                    | PROCESS_CREATE_THREAD
+                    | PROCESS_VM_OPERATION
+                    | PROCESS_VM_WRITE
+                    | PROCESS_VM_READ,
+                false,
+                pid,
+            )
+            .map_err(|e| format!("OpenProcess({pid}): {e}"))?,
+        );
         let mut name = [0u16; 32768];
         let mut size = name.len() as u32;
         QueryFullProcessImageNameW(
@@ -48,7 +59,8 @@ pub fn inject(pid: u32, dll: &Path) -> Result<(), Box<dyn std::error::Error>> {
             PROCESS_NAME_WIN32,
             hudhook::windows::core::PWSTR(name.as_mut_ptr()),
             &mut size,
-        )?;
+        )
+        .map_err(|e| format!("QueryFullProcessImageNameW: {e}"))?;
         let path = std::path::PathBuf::from(String::from_utf16_lossy(&name[..size as usize]));
         let filename = path
             .file_name()
@@ -62,6 +74,7 @@ pub fn inject(pid: u32, dll: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 "target is neither Minecraft Bedrock nor Arctic's renderer test host".into(),
             );
         }
+        step(format!("target image {}", path.display()));
         let mut wow64 = false.into();
         IsWow64Process(process.0, &mut wow64)?;
         if wow64.as_bool() {
@@ -72,25 +85,32 @@ pub fn inject(pid: u32, dll: &Path) -> Result<(), Box<dyn std::error::Error>> {
         // Windows documents ERROR_BAD_LENGTH while modules load/unload. JVM
         // startup can overlap this duplicate check. Retry that error only;
         // preserve all other failures and bound the wait to two seconds.
-        let snapshot_deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        // A process that is still starting has no module list yet
+        // (ERROR_PARTIAL_COPY); give it a few seconds too.
+        step("listing the game's modules".into());
+        let snapshot_deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         let modules = Handle(loop {
             match CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) {
                 Ok(handle) => break handle,
                 Err(error)
-                    if error.code()
+                    if (error.code()
                         == hudhook::windows::core::HRESULT::from_win32(ERROR_BAD_LENGTH.0)
+                        || error.code()
+                            == hudhook::windows::core::HRESULT::from_win32(
+                                ERROR_PARTIAL_COPY.0,
+                            ))
                         && std::time::Instant::now() < snapshot_deadline =>
                 {
-                    std::thread::sleep(std::time::Duration::from_millis(10))
+                    std::thread::sleep(std::time::Duration::from_millis(50))
                 }
-                Err(error) => return Err(error.into()),
+                Err(error) => return Err(format!("listing the game's modules: {error}").into()),
             }
         });
         let mut entry = MODULEENTRY32W {
             dwSize: size_of::<MODULEENTRY32W>() as u32,
             ..Default::default()
         };
-        Module32FirstW(modules.0, &mut entry)?;
+        Module32FirstW(modules.0, &mut entry).map_err(|e| format!("Module32FirstW: {e}"))?;
         loop {
             let end = entry
                 .szModule
@@ -113,6 +133,7 @@ pub fn inject(pid: u32, dll: &Path) -> Result<(), Box<dyn std::error::Error>> {
             .chain(Some(0))
             .collect();
         let bytes = remote_path.len() * size_of::<u16>();
+        step("writing the DLL path into the game".into());
         let memory = VirtualAllocEx(
             process.0,
             None,
@@ -121,7 +142,7 @@ pub fn inject(pid: u32, dll: &Path) -> Result<(), Box<dyn std::error::Error>> {
             PAGE_READWRITE,
         );
         if memory.is_null() {
-            return Err(std::io::Error::last_os_error().into());
+            return Err(format!("VirtualAllocEx: {}", std::io::Error::last_os_error()).into());
         }
         let result = (|| -> Result<(), Box<dyn std::error::Error>> {
             let mut written = 0;
@@ -131,7 +152,8 @@ pub fn inject(pid: u32, dll: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 remote_path.as_ptr().cast(),
                 bytes,
                 Some(&mut written),
-            )?;
+            )
+            .map_err(|e| format!("WriteProcessMemory: {e}"))?;
             if written != bytes {
                 return Err("couldn't write the complete DLL path".into());
             }
@@ -141,15 +163,11 @@ pub fn inject(pid: u32, dll: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 unsafe extern "system" fn() -> isize,
                 unsafe extern "system" fn(*mut c_void) -> u32,
             >(load);
-            let thread = Handle(CreateRemoteThread(
-                process.0,
-                None,
-                0,
-                Some(entry),
-                Some(memory),
-                0,
-                None,
-            )?);
+            step("starting LoadLibraryW in the game".into());
+            let thread = Handle(
+                CreateRemoteThread(process.0, None, 0, Some(entry), Some(memory), 0, None)
+                    .map_err(|e| format!("CreateRemoteThread: {e}"))?,
+            );
             if WaitForSingleObject(thread.0, 15_000) != WAIT_OBJECT_0 {
                 // The loader may still be reading the argument. Keep it alive
                 // until process exit instead of freeing a live thread's memory.
@@ -161,7 +179,7 @@ pub fn inject(pid: u32, dll: &Path) -> Result<(), Box<dyn std::error::Error>> {
             GetExitCodeThread(thread.0, &mut exit)?;
             VirtualFreeEx(process.0, memory, 0, MEM_RELEASE)?;
             if exit == 0 {
-                return Err("Windows couldn't load the native client DLL".into());
+                return Err("LoadLibraryW returned NULL inside the game: Windows couldn't load arctic_bedrock.dll (blocked by antivirus, no read access to the bundle folder, or a DLL it needs is missing)".into());
             }
             Ok(())
         })();

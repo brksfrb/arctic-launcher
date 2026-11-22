@@ -173,6 +173,8 @@ pub struct BedrockUi {
     offline_message: String,
     /// The injection warning is open (native mode was picked, not yet accepted).
     native_warning: bool,
+    /// How the last native client load went; stays on the card (a toast is easy to miss).
+    native_status: Option<crate::tasks::Outcome<String>>,
 }
 impl BedrockUi {
     pub(crate) fn background_active(&self) -> bool {
@@ -286,10 +288,6 @@ impl ArcticApp {
         });
         ui.add_space(8.0);
         self.bedrock_hero(ui);
-        if bedrock::supported() {
-            ui.add_space(10.0);
-            self.bedrock_client_card(ui);
-        }
         ui.add_space(14.0);
 
         let Some(scan) = self.bedrock.scans.get(&edition).cloned() else {
@@ -697,7 +695,7 @@ impl ArcticApp {
                     if widgets::button(ui, p, Some(Icon::Play), t!("bedrock.open_bedrock"), true)
                         .clicked()
                     {
-                        self.tasks.bedrock_launch(self.bedrock.edition, None);
+                        self.tasks.bedrock_launch(self.bedrock.edition);
                     }
                     stop = widgets::button(
                         ui,
@@ -1310,9 +1308,43 @@ impl ArcticApp {
             {
                 if self.settings.bedrock_native_warning_accepted {
                     self.bedrock.busy = true;
+                    self.bedrock.native_status = None;
                     self.tasks.bedrock_native_client(self.bedrock.edition);
                 } else {
                     self.bedrock.native_warning = true;
+                }
+            }
+            if let Some(status) = &self.bedrock.native_status {
+                let (color, text) = match status {
+                    Ok(text) => (p.text, text.clone()),
+                    Err(e) => (
+                        p.error,
+                        format!("{} {e}", t!("bedrock.native_client_failed")),
+                    ),
+                };
+                ui.add(egui::Label::new(RichText::new(text).color(color)).selectable(true));
+                if status.is_err() {
+                    ui.label(
+                        RichText::new(t!("bedrock.native_client_logs_hint"))
+                            .small()
+                            .color(p.muted),
+                    );
+                    ui.horizontal(|ui| {
+                        if ui
+                            .button(t!("bedrock.native_client_open_bundle_folder"))
+                            .clicked()
+                        {
+                            let _ = open::that_detached(
+                                self.dirs.root().join(bedrock::native::PAYLOAD_DIR),
+                            );
+                        }
+                        if ui
+                            .button(t!("bedrock.native_client_open_launcher_logs"))
+                            .clicked()
+                        {
+                            let _ = open::that_detached(self.dirs.launcher_logs());
+                        }
+                    });
                 }
             }
             ui.add_space(12.0);
@@ -1545,53 +1577,11 @@ impl ArcticApp {
         });
         if play {
             // No third-party clients for now: Arctic is building its own.
-            self.tasks.bedrock_launch(edition, None);
+            self.tasks.bedrock_launch(edition);
         }
         if cancel && let Some(i) = &self.bedrock.installing {
             i.cancel.store(true, Ordering::Relaxed);
         }
-    }
-
-    fn bedrock_client_card(&mut self, ui: &mut egui::Ui) {
-        let p = self.palette();
-        let edition = self.bedrock.edition;
-        let available = self.bedrock.installing.is_none()
-            && self
-                .bedrock
-                .scans
-                .get(&edition)
-                .is_some_and(|scan| scan.install.as_ref().is_some_and(|install| install.gdk));
-        theme::card(p).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.label(
-                RichText::new(t!("bedrock.client_heading"))
-                    .size(17.0)
-                    .strong()
-                    .color(p.text),
-            );
-            ui.label(RichText::new(t!("bedrock.client_development")).color(p.muted));
-            ui.label(
-                RichText::new(t!("bedrock.third_party_notice"))
-                    .small()
-                    .color(p.muted),
-            );
-            ui.horizontal_wrapped(|ui| {
-                for (client, label) in [
-                    (bedrock::client::Client::Latite, t!("bedrock.launch_latite")),
-                    (
-                        bedrock::client::Client::Flarial,
-                        t!("bedrock.launch_flarial"),
-                    ),
-                ] {
-                    if ui
-                        .add_enabled(available, egui::Button::new(label))
-                        .clicked()
-                    {
-                        self.tasks.bedrock_launch(edition, Some(client));
-                    }
-                }
-            });
-        });
     }
 
     fn bedrock_versions(&mut self, ui: &mut egui::Ui, scan: &BedrockScan) {
@@ -1759,6 +1749,7 @@ impl ArcticApp {
         }
         if go {
             self.settings.bedrock_native_warning_accepted = true;
+            self.bedrock.native_status = None;
             self.persist_settings();
             self.bedrock.busy = true;
             self.tasks.bedrock_native_client(self.bedrock.edition);
@@ -2524,6 +2515,17 @@ impl ArcticApp {
                         Err(e) => Ping::Down(e),
                     },
                 );
+            }
+            BedrockEvent::NativeClient(result) => {
+                b.busy = false;
+                match &result {
+                    Ok(text) => self.toasts.push(Kind::Success, text.clone(), ""),
+                    Err(e) => {
+                        self.toasts
+                            .push(Kind::Error, t!("bedrock.native_client_failed"), e.clone())
+                    }
+                }
+                b.native_status = Some(result);
             }
             BedrockEvent::Done(result) => {
                 b.busy = false;

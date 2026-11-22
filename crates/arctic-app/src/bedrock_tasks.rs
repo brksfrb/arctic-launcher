@@ -256,6 +256,8 @@ fn release_recording(
 // Sent boxed (`Event::Bedrock`), so its largest variant costs nothing elsewhere.
 #[allow(clippy::large_enum_variant)]
 pub enum BedrockEvent {
+    /// The native client load finished: what the card keeps showing.
+    NativeClient(Outcome<String>),
     PlaybackClockFinished(PlaybackClockResult),
     Scanned(Edition, BedrockScan),
     Catalog(Outcome<Catalog>),
@@ -806,15 +808,12 @@ impl Tasks {
         });
     }
 
-    /// Start Bedrock, with `client` (a third-party client) loaded into it when one is chosen.
-    pub fn bedrock_launch(&self, edition: Edition, client: Option<bedrock::client::Client>) {
+    /// Start Bedrock.
+    pub fn bedrock_launch(&self, edition: Edition) {
         self.run(move |t| {
-            let reporter = t.clone();
-            let result = bedrock::launch_with_client(t.dirs(), edition, client, move |message| {
-                reporter.bedrock(BedrockEvent::Done(Ok(message)));
-            })
-            .map(|_| format!("Starting {}", edition.name()))
-            .map_err(|e| e.to_string());
+            let result = bedrock::launch(edition)
+                .map(|()| format!("Starting {}", edition.name()))
+                .map_err(|e| e.to_string());
             t.bedrock(BedrockEvent::Done(result));
             // It shows as running once its window is up.
             std::thread::sleep(std::time::Duration::from_secs(4));
@@ -828,12 +827,17 @@ impl Tasks {
     pub fn bedrock_native_client(&self, edition: Edition) {
         self.run(move |t| {
             if let Some(payload) = bedrock::native::shipped_payload() {
+                log::info!(
+                    "native client: using the bundle shipped at {}",
+                    payload.display()
+                );
                 let quiet = |_: arctic_core::ProgressInfo| {};
                 let result = bedrock::native::prepare_shipped(t.dirs(), edition, &payload, &quiet)
+                    .inspect_err(|e| log::warn!("native client: preparing the bundle failed: {e}"))
                     .and_then(|bundle| bedrock::native::launch(edition, &bundle))
                     .map(|()| t!("bedrock.native_preview_is_rendering_right_shift").to_owned())
                     .map_err(|e| e.to_string());
-                t.bedrock(BedrockEvent::Done(result));
+                t.bedrock(BedrockEvent::NativeClient(result));
                 t.bedrock_scan(edition);
                 return;
             }
@@ -846,7 +850,7 @@ impl Tasks {
                     .map_err(|e| e.to_string()),
                 None => Ok(t!("bedrock.native_client_selection_cancelled").to_owned()),
             };
-            t.bedrock(BedrockEvent::Done(result));
+            t.bedrock(BedrockEvent::NativeClient(result));
             t.bedrock_scan(edition);
         });
     }

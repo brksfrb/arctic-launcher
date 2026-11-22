@@ -308,8 +308,6 @@
   "bedrock.working_with_the_native_client": "Working with the native client…",
   "bedrock.worlds": "Worlds",
   "bedrock.yaw": "Yaw",
-  "bedrock.client_heading": "Client",
-  "bedrock.client_development": "Arctic is building its own Bedrock client. The native preview below requires a manually built bundle.",
   "bedrock.switch_version_notice": "Switch the game to another version (older or newer). Windows downloads it from Microsoft and installs it over the current one; your worlds, packs and settings stay. You need to own Minecraft on the Microsoft account signed in to the Microsoft Store. The Store may update the game again later. Builds before 1.21.120 are the older kind of the game: clients can't be loaded into them, and a world saved by a newer version may not open in them.",
   "bedrock.older_kind": "Older kind",
   "bedrock.running_suffix": " · running",
@@ -323,9 +321,6 @@
   "bedrock.ping_ms": "{ping} ms",
   "bedrock.arctic_client": "Arctic Client",
   "bedrock.replay_export_canceled": "Replay video export canceled",
-  "bedrock.launch_latite": "Play with Latite",
-  "bedrock.launch_flarial": "Play with Flarial",
-  "bedrock.third_party_notice": "Optional third-party clients require the newer GDK game. Selecting one downloads and loads its DLL into Minecraft.",
   "bedrock.ago_minute.one": "{n} minute ago",
   "bedrock.ago_minute.other": "{n} minutes ago",
   "bedrock.ago_hour.one": "{n} hour ago",
@@ -347,5 +342,9 @@
   "bedrock.ms_suffix": " ms",
   "bedrock.native_warning_title": "Zanim przejdziesz dalej",
   "bedrock.native_warning_notice": "Korzystanie z natywnego klienta Arctic jest opcjonalne. Na większości serwerów nie stanowi to problemu, ale serwery z rygorystycznym systemem antycheat mogą cię wyrzucić lub zbanować. Sprawdź ich zasady, zanim przejdziesz dalej.",
-  "bedrock.native_warning_accept": "Kontynuuj"
+  "bedrock.native_warning_accept": "Kontynuuj",
+  "bedrock.native_client_failed": "Arctic Client couldn't be loaded:",
+  "bedrock.native_client_logs_hint": "Every step is in launcher.log (logs folder) and arctic-bedrock-loader.log in the bundle folder. Send both when reporting this.",
+  "bedrock.native_client_open_bundle_folder": "Open bundle folder",
+  "bedrock.native_client_open_launcher_logs": "Open launcher logs"
 }

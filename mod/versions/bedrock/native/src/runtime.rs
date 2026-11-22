@@ -32,10 +32,42 @@ fn log(message: impl AsRef<str>) {
     }
 }
 
+/// Find this module's folder and write the first log line. Runs in DllMain
+/// (only kernel32 file calls, no allocation-heavy work), so a load that never
+/// reaches the init thread still leaves `arctic-bedrock-<PID>.log`.
+pub fn attached(address: usize) {
+    if LOG.get().is_none()
+        && let Some(dir) = module_dir(address)
+    {
+        let _ = LOG.set(dir.join(format!("arctic-bedrock-{}.log", std::process::id())));
+    }
+    log(format!(
+        "DllMain: loaded into process {} at {address:#x}",
+        std::process::id()
+    ));
+}
+
+/// Record that the init thread couldn't be started.
+pub fn attach_failed(error: &str) {
+    log(format!("DllMain: couldn't start the init thread: {error}"));
+}
+
+fn module_dir(address: usize) -> Option<PathBuf> {
+    let mut path = [0u16; 32768];
+    // SAFETY: the handle is this module's own; the buffer has the declared capacity.
+    let len = unsafe { GetModuleFileNameW(Some(HMODULE(address as _)), &mut path) } as usize;
+    if len == 0 || len >= path.len() {
+        return None;
+    }
+    let module = PathBuf::from(String::from_utf16_lossy(&path[..len]));
+    module.parent().map(Path::to_path_buf)
+}
+
 pub fn start(address: usize) {
     if STARTED.swap(true, Ordering::AcqRel) {
         return;
     }
+    log("init thread running");
     let result = std::panic::catch_unwind(|| boot(address));
     match result {
         Ok(Ok(())) => {}
@@ -57,6 +89,7 @@ fn boot(address: usize) -> Result<(), String> {
     LOG.set(dir.join(format!("arctic-bedrock-{}.log", std::process::id())))
         .ok();
     log("starting native adapter (engine-dependent features pending)");
+    log(format!("module {}", module.display()));
     let bundle = Bundle::read(dir)?;
     let isolated_probe = crate::probe_isolation::optional(dir)?;
     crate::native_body::configure_probe(dir, isolated_probe);

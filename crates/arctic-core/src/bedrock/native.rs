@@ -1170,67 +1170,260 @@ pub fn prepare_shipped(
 }
 
 /// Start Bedrock and attach only to the selected edition's process. Success
-/// requires a first-render handshake from the native DLL.
+/// requires a first-render handshake from the native DLL. Every step is logged
+/// to the launcher log, and each failure names the step that failed.
 pub fn launch(edition: Edition, bundle: &Path) -> Result<()> {
     if !super::supported() || !cfg!(target_arch = "x86_64") {
         return Err(Error::Other(
             "the native Bedrock client requires Windows x64".into(),
         ));
     }
-    let bundle = validate_bundle(bundle)?;
+    log::info!("native client: checking bundle {}", bundle.display());
+    let bundle = validate_bundle(bundle)
+        .inspect_err(|e| log::warn!("native client: bundle check failed: {e}"))?;
     #[cfg(windows)]
     {
-        use std::time::{Duration, Instant};
-        let installed = super::find(edition)
-            .ok_or_else(|| Error::Other(format!("{} isn't installed", edition.name())))?;
-        super::launch(edition)?;
-        let started = Instant::now();
-        let pid = loop {
-            if let Some(pid) = super::package::process_id(&installed.path, edition.package_family())
-            {
-                break pid;
-            }
-            if started.elapsed() > Duration::from_secs(30) {
-                return Err(Error::Other(
-                    "Bedrock didn't expose its process within 30 seconds".into(),
-                ));
-            }
-            std::thread::sleep(Duration::from_millis(250));
-        };
-        let ready = bundle.join(format!("arctic-bedrock-{pid}.ready"));
-        // A PID can be reused after a previous run. Only accept a new marker.
-        if ready.exists() {
-            std::fs::remove_file(&ready).at(&ready)?;
+        let result = launch_windows(edition, &plain_path(&bundle));
+        if let Err(e) = &result {
+            log::warn!("native client: {e}");
         }
-        let output = std::process::Command::new(bundle.join("arctic-bedrock-loader.exe"))
-            .arg(pid.to_string())
-            .arg(&bundle)
-            .output()
-            .at(&bundle)?;
-        if !output.status.success() {
-            return Err(Error::Other(format!(
-                "native client loader failed: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
-            )));
-        }
-        let started = Instant::now();
-        loop {
-            if std::fs::read_to_string(&ready).is_ok_and(|s| s.trim() == "native-preview") {
-                return Ok(());
-            }
-            if started.elapsed() > Duration::from_secs(30) {
-                return Err(Error::Other(format!(
-                    "native client didn't confirm rendering; see {}",
-                    bundle.join(format!("arctic-bedrock-{pid}.log")).display()
-                )));
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        }
+        result
     }
     #[cfg(not(windows))]
     {
         let _ = (edition, bundle);
         unreachable!()
+    }
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+/// `\\?\C:\x` → `C:\x`. Canonical paths carry the verbatim prefix, which some
+/// consumers (LoadLibraryW in the game, icacls) handle worse than a plain path.
+fn plain_path(path: &Path) -> PathBuf {
+    let text = path.to_string_lossy();
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
+        _ => path.to_path_buf(),
+    }
+}
+
+/// Seconds the game gets after its window shows before the adapter is loaded.
+/// Loading into a process that is still starting fails (Windows can't list its
+/// modules yet and its loader isn't ready); third-party clients wait too.
+#[cfg(windows)]
+const LOAD_DELAY_SECS: u64 = 5;
+/// The adapter starts a JVM before its first frame; the first start on a
+/// computer is the slowest.
+#[cfg(windows)]
+const READY_TIMEOUT_SECS: u64 = 120;
+
+#[cfg(windows)]
+fn launch_windows(edition: Edition, bundle: &Path) -> Result<()> {
+    use std::time::{Duration, Instant};
+    let installed = super::find(edition)
+        .ok_or_else(|| Error::Other(format!("{} isn't installed", edition.name())))?;
+    log::info!(
+        "native client: {} {} at {} (GDK: {})",
+        edition.name(),
+        installed.version,
+        installed.path.display(),
+        installed.gdk
+    );
+    grant_app_packages(bundle);
+    let already = super::package::process_id(&installed.path, edition.package_family());
+    log::info!(
+        "native client: starting the game{}",
+        already.map_or(String::new(), |pid| format!(" (already running as {pid})"))
+    );
+    super::launch(edition)?;
+    let started = Instant::now();
+    let pid = loop {
+        if let Some(pid) = super::package::process_id(&installed.path, edition.package_family()) {
+            break pid;
+        }
+        if started.elapsed() > Duration::from_secs(60) {
+            return Err(Error::Other(
+                "Minecraft.Windows.exe didn't show up within 60 seconds after starting the game"
+                    .into(),
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    };
+    log::info!(
+        "native client: game process {pid} found after {:.1}s; waiting for its window",
+        started.elapsed().as_secs_f32()
+    );
+    let window_wait = Instant::now();
+    while !super::package::has_window(pid) {
+        if window_wait.elapsed() > Duration::from_secs(90) {
+            log::warn!("native client: no visible window for {pid} after 90s; loading anyway");
+            break;
+        }
+        if super::package::process_id(&installed.path, edition.package_family()) != Some(pid) {
+            return Err(Error::Other(format!(
+                "the game process {pid} closed before its window opened"
+            )));
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    log::info!(
+        "native client: window of {pid} is up after {:.1}s; loading in {LOAD_DELAY_SECS}s",
+        window_wait.elapsed().as_secs_f32()
+    );
+    std::thread::sleep(Duration::from_secs(LOAD_DELAY_SECS));
+    let ready = bundle.join(format!("arctic-bedrock-{pid}.ready"));
+    let dll_log = bundle.join(format!("arctic-bedrock-{pid}.log"));
+    // A PID can be reused after a previous run. Only accept a new marker.
+    if ready.exists() {
+        std::fs::remove_file(&ready).at(&ready)?;
+    }
+    let loader = bundle.join("arctic-bedrock-loader.exe");
+    log::info!(
+        "native client: running {} {pid} {}",
+        loader.display(),
+        bundle.display()
+    );
+    let output = {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        std::process::Command::new(&loader)
+            .arg(pid.to_string())
+            .arg(bundle)
+            .current_dir(bundle)
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| {
+                Error::Other(format!(
+                    "couldn't start {} ({e}); antivirus may have blocked or removed it",
+                    loader.display()
+                ))
+            })?
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    let code = output.status.code();
+    log::info!(
+        "native client: loader exited with {}; stdout: {}; stderr: {}",
+        code.map_or("no code".into(), exit_code),
+        if stdout.is_empty() {
+            "(empty)"
+        } else {
+            &stdout
+        },
+        if stderr.is_empty() {
+            "(empty)"
+        } else {
+            &stderr
+        },
+    );
+    let loader_log = bundle.join("arctic-bedrock-loader.log");
+    if !output.status.success() {
+        // The loader echoes its log to stderr; its last line is the failure.
+        let why = stderr
+            .lines()
+            .last()
+            .map(|line| line.split_once("] ").map_or(line, |(_, rest)| rest))
+            .map(|line| {
+                line.split_once("] ")
+                    .map_or(line, |(_, rest)| rest)
+                    .to_owned()
+            })
+            .unwrap_or_else(|| "it printed nothing".to_owned());
+        return Err(Error::Other(format!(
+            "the native client loader failed (exit {}): {why}. Details: {}",
+            code.map_or("unknown".into(), exit_code),
+            loader_log.display()
+        )));
+    }
+    let started = Instant::now();
+    loop {
+        if std::fs::read_to_string(&ready).is_ok_and(|s| s.trim() == "native-preview") {
+            log::info!(
+                "native client: first frame confirmed after {:.1}s",
+                started.elapsed().as_secs_f32()
+            );
+            return Ok(());
+        }
+        if started.elapsed() > Duration::from_secs(READY_TIMEOUT_SECS) {
+            break;
+        }
+        if super::package::process_id(&installed.path, edition.package_family()) != Some(pid) {
+            log_dll_tail(&dll_log);
+            return Err(Error::Other(format!(
+                "the game closed after the native client was loaded; see {}",
+                dll_log.display()
+            )));
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    log_dll_tail(&dll_log);
+    let detail = if dll_log.is_file() {
+        format!("see {}", dll_log.display())
+    } else {
+        format!(
+            "the adapter wrote no log ({} is missing), so it never started inside the game",
+            dll_log.display()
+        )
+    };
+    Err(Error::Other(format!(
+        "the native client was loaded but didn't confirm rendering within {READY_TIMEOUT_SECS} seconds; {detail}"
+    )))
+}
+
+/// Exit code as decimal, plus hex for Windows status codes (0xC0000135 = a
+/// DLL the program needs is missing).
+#[cfg(windows)]
+fn exit_code(code: i32) -> String {
+    if !(0..=0xFFFF).contains(&code) {
+        format!("{code} / 0x{:08X}", code as u32)
+    } else {
+        code.to_string()
+    }
+}
+
+/// Copy the adapter's own log into the launcher log, so one file shows the whole attempt.
+#[cfg(windows)]
+fn log_dll_tail(path: &Path) {
+    match std::fs::read_to_string(path) {
+        Ok(text) => {
+            let lines: Vec<&str> = text.lines().collect();
+            for line in &lines[lines.len().saturating_sub(40)..] {
+                log::info!("native client log: {line}");
+            }
+        }
+        Err(e) => log::warn!("native client: no adapter log at {} ({e})", path.display()),
+    }
+}
+
+/// Let packaged (AppContainer) game processes read, run and write the bundle:
+/// UWP builds can't load a DLL without this. Harmless for the GDK game, which
+/// runs as a normal desktop process. A failure is logged, never fatal.
+#[cfg(windows)]
+fn grant_app_packages(bundle: &Path) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    // ALL APPLICATION PACKAGES and ALL RESTRICTED APPLICATION PACKAGES, by SID so
+    // the names don't depend on the Windows display language.
+    for sid in ["*S-1-15-2-1", "*S-1-15-2-2"] {
+        let result = std::process::Command::new("icacls")
+            .arg(bundle)
+            .arg("/grant")
+            .arg(format!("{sid}:(OI)(CI)(RX,W)"))
+            .arg("/T")
+            .arg("/Q")
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+        match result {
+            Ok(out) if out.status.success() => {
+                log::info!("native client: granted {sid} read/execute on the bundle")
+            }
+            Ok(out) => log::warn!(
+                "native client: icacls {sid} failed ({}): {}",
+                out.status,
+                String::from_utf8_lossy(&out.stderr).trim()
+            ),
+            Err(e) => log::warn!("native client: couldn't run icacls: {e}"),
+        }
     }
 }
 
@@ -1421,6 +1614,19 @@ mod tests {
         std::fs::write(payload.join("arctic_bedrock.dll"), "new").unwrap();
         install_payload(&payload, &dest, &java, "1.26.52.3").unwrap();
         assert_eq!(std::fs::read(&dll).unwrap(), b"new");
+    }
+
+    #[test]
+    fn verbatim_drive_paths_become_plain_paths() {
+        assert_eq!(
+            plain_path(Path::new(r"\\?\C:\Users\a\bedrock-native")),
+            PathBuf::from(r"C:\Users\a\bedrock-native")
+        );
+        assert_eq!(
+            plain_path(Path::new(r"\\?\UNC\host\share")),
+            PathBuf::from(r"\\?\UNC\host\share")
+        );
+        assert_eq!(plain_path(Path::new("/tmp/x")), PathBuf::from("/tmp/x"));
     }
 
     #[test]

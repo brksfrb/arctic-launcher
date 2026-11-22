@@ -943,8 +943,8 @@ mod windows_probe {
                                 .join("arctic_bedrock.dll")
                                 .canonicalize()?;
                             std::thread::spawn(move || {
-                                let result =
-                                    crate::loader::inject(pid, &dll).map_err(|e| e.to_string());
+                                let result = crate::loader::inject(pid, &dll, &|_| {})
+                                    .map_err(|e| e.to_string());
                                 let _ = sender.send(result);
                             });
                         } else if exception.ExceptionCode.0 as u32 == 0x80000003

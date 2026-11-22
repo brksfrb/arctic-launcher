@@ -293,7 +293,17 @@ pub unsafe extern "system" fn DllMain(
     if reason == 1 {
         // The JVM, filesystem and graphics hooks must never run under loader lock.
         let address = module.0 as usize;
-        std::thread::spawn(move || runtime::start(address));
+        // Log first, so a load that goes no further still shows up; never
+        // unwind out of DllMain.
+        let _ = std::panic::catch_unwind(|| runtime::attached(address));
+        let _ = std::panic::catch_unwind(|| {
+            if let Err(e) = std::thread::Builder::new()
+                .name("arctic-init".into())
+                .spawn(move || runtime::start(address))
+            {
+                runtime::attach_failed(&e.to_string());
+            }
+        });
     }
     1
 }
