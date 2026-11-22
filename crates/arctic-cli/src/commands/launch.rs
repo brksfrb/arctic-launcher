@@ -19,7 +19,7 @@ use crate::output::parse_memory;
 
 pub fn run(ctx: &Ctx, args: &LaunchArgs) -> Result<i32> {
     let settings = apply_overrides(Settings::load(&ctx.dirs)?, args)?;
-    let manifest = VersionManifest::fetch(&ctx.dirs)?;
+    let manifest = VersionManifest::fetch_for_launch(&ctx.dirs)?;
     let instance = match &args.instance {
         Some(query) => instances::find(&ctx.dirs, query)?,
         None => instances::load_default(&ctx.dirs)?,

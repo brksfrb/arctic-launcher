@@ -385,7 +385,7 @@ impl Tasks {
             if let Some(manifest) = cached {
                 t.send(Event::Manifest(Ok(manifest)));
             }
-            match VersionManifest::fetch(&t.dirs) {
+            match VersionManifest::fetch_for_launch(&t.dirs) {
                 Ok(manifest) => t.send(Event::Manifest(Ok(manifest))),
                 // Offline with a copy on screen: keep using it.
                 Err(_) if have_cached => {}
