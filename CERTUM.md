@@ -12,7 +12,7 @@ The signed v0.6.6 launcher supplied these values.
 
 - Publisher subject is `C=TR, L=Samsun, O=Open Source Developer, CN=Open Source Developer Leyla Barlak`.
 - Issuer is `Certum Code Signing 2021 CA` with SHA-256 fingerprint
-  `5AC82CBE9F28351E85D5262293BCFCB8ACABEAD1294F248C1DF17F81CE5AC3CE`.
+  `5AC82CBE9F28351E85D5262293BCFC8BACABEAD1294F248C1DF17F81CE5AC3CE`.
 - The leaf SHA-1 thumbprint is `1CB4E723F6E1CE921BE5C2E6CBB7B22A131B57D4`, as configured in
   `packaging/windows/sign-release.ps1`.
 
