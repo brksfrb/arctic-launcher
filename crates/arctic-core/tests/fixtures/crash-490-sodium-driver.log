@@ -1,0 +1,39 @@
+    com.mojang.authlib.exceptions.MinecraftClientException: Failed to read from https://api.minecraftservices.com/publickeys due to Read timed out
+    at knot//com.mojang.authlib.minecraft.client.MinecraftClient.readInputStream(MinecraftClient.java:111)
+    at knot//com.mojang.authlib.minecraft.client.MinecraftClient.get(MinecraftClient.java:56)
+    at knot//com.mojang.authlib.yggdrasil.YggdrasilServicesKeyInfo.fetch(YggdrasilServicesKeyInfo.java:114)
+[20:55:55] [Download-2/ERROR]: Failed to fetch user properties
+com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401
+	at knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59)
+	at knot//com.mojang.authlib.yggdrasil.YggdrasilUserApiService.fetchProperties(YggdrasilUserApiService.java:150)
+	at knot//net.minecraft.class_310.method_55608(class_310.java:457)
+Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401
+	at knot//com.mojang.authlib.minecraft.client.MinecraftClient.readInputStream(MinecraftClient.java:103)
+	at knot//com.mojang.authlib.minecraft.client.MinecraftClient.get(MinecraftClient.java:56)
+	at knot//com.mojang.authlib.yggdrasil.YggdrasilUserApiService.fetchProperties(YggdrasilUserApiService.java:121)
+[Arctic diagnostics] runtime: agent=true; executable=branded Arctic Client; high_performance_gpu=true; GPU registry preference for spawned exe: Ok(Some("GpuPreference=2;")); display adapters=3 [Intel(R) HD Graphics 4000 (driver 10.18.10.4358, 12-21-2015), Intel(R) HD Graphics 4000 (driver 10.18.10.4358, 12-21-2015), Intel(R) HD Graphics 4000 (driver 10.18.10.4358, 12-21-2015)] (display devices, not a physical GPU inventory)
+[Arctic diagnostics] hang begin; no render progress for 30426 ms
+[Arctic diagnostics] thread "Render thread" RUNNABLE
+    at knot//org.lwjgl.system.JNI.callPI(Native Method)
+    at knot//net.caffeinemc.mods.sodium.client.platform.windows.api.User32.callMessageBoxIndirectW(User32.java:19)
+    at knot//net.caffeinemc.mods.sodium.client.platform.MessageBox$WindowsMessageBoxImpl.showMessageBox(MessageBox.java:88)
+    at knot//net.caffeinemc.mods.sodium.client.platform.MessageBox.showMessageBox(MessageBox.java:24)
+    at knot//net.caffeinemc.mods.sodium.client.platform.PlatformHelper.showCriticalErrorAndClose(PlatformHelper.java:26)
+    at knot//net.caffeinemc.mods.sodium.client.compatibility.checks.GraphicsDriverChecks.postContextInit(GraphicsDriverChecks.java:25)
+    at knot//net.caffeinemc.mods.sodium.client.compatibility.checks.PostLaunchChecks.onContextInitialized(PostLaunchChecks.java:17)
+    at knot//com.mojang.blaze3d.systems.RenderSystem.handler$cba000$sodium$postContextReady(RenderSystem.java:2049)
+    at knot//com.mojang.blaze3d.systems.RenderSystem.initRenderer(RenderSystem.java:209)
+[Arctic diagnostics] hang end
+[Arctic diagnostics] exit Runtime.exit() called with status: 1
+[Arctic diagnostics] java.lang.Throwable: Runtime.exit(1)
+[Arctic diagnostics] exit stack
+[Arctic diagnostics] exit caller other knot//net.caffeinemc.mods.sodium.client.platform.PlatformHelper.showCriticalErrorAndClose(PlatformHelper.java:27)
+[Arctic diagnostics]     at java.base/java.lang.Shutdown.logRuntimeExit(Shutdown.java:179)
+[Arctic diagnostics]     at java.base/java.lang.Shutdown.exit(Shutdown.java:160)
+[Arctic diagnostics]     at java.base/java.lang.Runtime.exit(Runtime.java:188)
+[Arctic diagnostics]     at java.base/java.lang.System.exit(System.java:1920)
+[Arctic diagnostics]     at knot//net.caffeinemc.mods.sodium.client.platform.PlatformHelper.showCriticalErrorAndClose(PlatformHelper.java:27)
+[Arctic diagnostics]     at knot//net.caffeinemc.mods.sodium.client.compatibility.checks.GraphicsDriverChecks.postContextInit(GraphicsDriverChecks.java:25)
+[Arctic diagnostics]     at knot//net.caffeinemc.mods.sodium.client.compatibility.checks.PostLaunchChecks.onContextInitialized(PostLaunchChecks.java:17)
+[Arctic diagnostics]     at knot//com.mojang.blaze3d.systems.RenderSystem.handler$cba000$sodium$postContextReady(RenderSystem.java:2049)
+[Arctic diagnostics] process ended after 94465 ms; exit code 1 (0x00000001; no known NTSTATUS name)

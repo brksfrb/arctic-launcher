@@ -1746,6 +1746,9 @@ fn diagnose_rules(
     {
         return Some((diagnosis, error.to_owned()));
     }
+    if let Some(driver) = sodium_driver_diagnosis(text) {
+        return Some(driver);
+    }
     let text = tail_of(text, MAX_TEXT);
 
     if let Some(quilt) = quilt_load_error(text) {
@@ -1875,6 +1878,100 @@ pub(crate) fn runtime_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
             Vec::new(),
         ),
         head_of(line.trim(), 2048).to_owned(),
+    ))
+}
+
+const SODIUM_DRIVER_TITLE: &str = "Sodium refused to start on this graphics driver";
+
+fn sodium_driver_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    fn sodium_call(frame: &str) -> Option<&str> {
+        let call = if frame.contains('(') {
+            freeze_frame(frame)?
+        } else {
+            frame.rsplit('/').next()?
+        };
+        call.strip_prefix("net.caffeinemc.mods.sodium.client.")
+            .or_else(|| call.strip_prefix("me.jellysquid.mods.sodium.client."))
+    }
+    let is_driver_check = |frame: &&str| {
+        sodium_call(frame).is_some_and(|call| {
+            call == "platform.PlatformHelper.showCriticalErrorAndClose"
+                || call.starts_with("compatibility.checks.GraphicsDriverChecks.")
+        })
+    };
+    let exit_frame = text
+        .lines()
+        .filter_map(|line| {
+            let entry = line.strip_prefix("[Arctic diagnostics] ")?;
+            entry
+                .strip_prefix("exit caller other ")
+                .or_else(|| entry.trim_start().strip_prefix("at "))
+        })
+        .find(|frame| {
+            is_driver_check(frame)
+                || sodium_call(frame)
+                    .is_some_and(|call| call.starts_with("compatibility.checks.PreLaunchChecks."))
+        });
+    let frame = exit_frame.or_else(|| {
+        if !freeze_evidence(text) {
+            return None;
+        }
+        let hang_frame = text
+            .rsplit_once("[Arctic diagnostics] hang begin")
+            .filter(|(_, dump)| !dump.contains("[Arctic diagnostics] hang recovered"))
+            .and_then(|(_, dump)| {
+                dump.lines()
+                    .skip_while(|line| !line.starts_with("[Arctic diagnostics] thread \""))
+                    .skip(1)
+                    .map_while(|line| line.trim_start().strip_prefix("at "))
+                    .find(is_driver_check)
+            });
+        hang_frame.or_else(|| {
+            if !text.contains("---- logs/arctic-freezes/") {
+                return None;
+            }
+            let snapshot = latest_freeze_snapshot(text);
+            if !snapshot.contains("(still frozen when written)") {
+                return None;
+            }
+            freeze_hot_frames(snapshot)
+                .map(|(_, frame, _)| frame)
+                .chain(
+                    snapshot
+                        .lines()
+                        .filter_map(|line| line.trim_start().strip_prefix("at ")),
+                )
+                .find(is_driver_check)
+        })
+    })?;
+    let mut detail = "The GPU or its driver is unsupported or too old for Sodium.".to_owned();
+    if let Some(inventory) = text.lines().rev().find_map(|line| {
+        let (_, adapters) = line
+            .strip_prefix("[Arctic diagnostics] runtime:")?
+            .split_once("display adapters=")?;
+        let (_, entries) = adapters.split_once(" [")?;
+        let (inventory, _) = entries.rsplit_once(']')?;
+        (!inventory.is_empty()).then_some(inventory)
+    }) {
+        let mut adapters = Vec::new();
+        // The date may contain a comma. The adapter entries end with a closing parenthesis.
+        for entry in inventory.split_inclusive("), ") {
+            let entry = entry.trim_end_matches(", ");
+            if !adapters.contains(&entry) {
+                adapters.push(entry);
+            }
+        }
+        detail.push_str(&format!(
+            " Available display adapters include {}.",
+            adapters.join(", ")
+        ));
+    }
+    detail.push_str(
+        " Update your graphics driver. If your computer has a dedicated GPU, make sure Minecraft uses it.",
+    );
+    Some((
+        Diagnosis::new(SODIUM_DRIVER_TITLE, detail, vec!["sodium".into()]),
+        head_of(frame, 2048).to_owned(),
     ))
 }
 
@@ -2306,7 +2403,14 @@ impl Report {
         }
         // A consequence message is kept in the original stack, while the summary uses the cause.
         let error = first_error(&all, crash_report);
-        let error = if error.is_some_and(secondary_mod_failure)
+        let sodium_driver = diagnosis
+            .as_ref()
+            .filter(|(d, _)| d.title == SODIUM_DRIVER_TITLE);
+        let sodium_error =
+            sodium_driver.map(|(_, frame)| format!("Error: {SODIUM_DRIVER_TITLE}\n{frame}"));
+        let error = if let Some(error) = sodium_error.as_deref() {
+            Some(error)
+        } else if error.is_some_and(secondary_mod_failure)
             || crash_exception(&diagnosis_text).is_some_and(secondary_stack)
         {
             diagnosis.as_ref().map(|(_, matched)| matched.as_str())
@@ -2327,6 +2431,7 @@ impl Report {
             ));
             if (diagnosis.title == SAVE_FAILED_TITLE && vanilla_crash_trace(&all).next().is_some())
                 || diagnosis.title == crate::crash_suspect::UNASSIGNED_ENTITY_TITLE
+                || diagnosis.title == SODIUM_DRIVER_TITLE
             {
                 priority.push_str(&scrub(head_of(&diagnosis.detail, 2048), &own));
                 priority.push('\n');
@@ -2470,6 +2575,8 @@ impl Report {
             title: scrub(
                 if failed_save {
                     SAVE_FAILED_TITLE
+                } else if sodium_driver.is_some() {
+                    SODIUM_DRIVER_TITLE
                 } else if orderly_shutdown(&all)
                     && crash_report.is_none()
                     && diagnose(&all).is_none()
@@ -3106,6 +3213,100 @@ mod tests {
     const HANG_436: &str = include_str!("../tests/fixtures/crash-436-customrecipe-hang.log");
     const HANG_487: &str = include_str!("../tests/fixtures/crash-487-iris-shader-hang.log");
     const FREEZE_440: &str = include_str!("../tests/fixtures/crash-440-create-world-freeze.log");
+    const SODIUM_490: &str = include_str!("../tests/fixtures/crash-490-sodium-driver.log");
+
+    #[test]
+    fn sodium_driver_block_490_outranks_freeze_and_auth_noise() {
+        let (noise, hang_and_exit) = SODIUM_490
+            .split_once("[Arctic diagnostics] hang begin")
+            .unwrap();
+        let (hang, exit) = hang_and_exit
+            .split_once("[Arctic diagnostics] exit Runtime.exit()")
+            .unwrap();
+        let driver_frame = "net.caffeinemc.mods.sodium.client.compatibility.checks.GraphicsDriverChecks.postContextInit";
+        let dialog_frame =
+            "net.caffeinemc.mods.sodium.client.platform.PlatformHelper.showCriticalErrorAndClose";
+        let hang_only = format!("{noise}[Arctic diagnostics] hang begin{hang}");
+        let exit_caller = exit
+            .lines()
+            .find(|line| line.contains("exit caller"))
+            .unwrap();
+        let driver_only = |stack: &str| {
+            stack
+                .lines()
+                .filter(|line| !line.contains(dialog_frame))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        assert!(
+            first_error(SODIUM_490, None)
+                .unwrap()
+                .contains("publickeys")
+        );
+        let dir = tempfile::tempdir().unwrap();
+        for (log, frame) in [
+            (SODIUM_490.to_owned(), dialog_frame),
+            (hang_only.clone(), dialog_frame),
+            (driver_only(&hang_only), driver_frame),
+            (format!("{noise}{exit_caller}"), dialog_frame),
+            (format!("{noise}{}", driver_only(exit)), driver_frame),
+        ] {
+            let diagnosis = crate::crash_conflicts::diagnose_exit_in(&log, 1, dir.path()).unwrap();
+            assert_eq!(diagnosis.title, SODIUM_DRIVER_TITLE);
+            assert_eq!(
+                diagnosis
+                    .detail
+                    .matches("Intel(R) HD Graphics 4000")
+                    .count(),
+                1
+            );
+            assert!(diagnosis.detail.contains("driver 10.18.10.4358"));
+            assert!(diagnosis.detail.contains("Update your graphics driver"));
+            assert!(diagnosis.detail.contains("dedicated GPU"));
+            let report = Report::build(
+                "1.21.11",
+                "Fabric",
+                "The game froze and was closed",
+                &[&log],
+                &[],
+                None,
+                None,
+            );
+            assert_eq!(report.title, SODIUM_DRIVER_TITLE);
+            assert!(report.log.starts_with(&format!(
+                "\n---- first error ----\nError: {SODIUM_DRIVER_TITLE}\nknot//{frame}("
+            )));
+            assert!(report.log.contains(&format!(
+                "---- diagnosis ----\n{SODIUM_DRIVER_TITLE}\nmatched: knot//{frame}("
+            )));
+            assert!(report.log.contains(
+                "Available display adapters include Intel(R) HD Graphics 4000 (driver 10.18.10.4358"
+            ));
+        }
+        let recovered =
+            format!("{hang_only}[Arctic diagnostics] hang recovered; render progress resumed");
+        assert!(sodium_driver_diagnosis(&recovered).is_none());
+        assert!(
+            sodium_driver_diagnosis(&format!(
+                "    at knot//{driver_frame}(GraphicsDriverChecks.java:25)"
+            ))
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn sodium_driver_block_accepts_startup_checks_without_adapter_inventory() {
+        let exit = "[Arctic diagnostics] exit caller other knot//net.caffeinemc.mods.sodium.client.compatibility.checks.PreLaunchChecks.onGameLaunch";
+        let snapshot = "---- logs/arctic-freezes/freeze-now.txt ----\n\
+                        duration: 3.00s (still frozen when written)\n\
+                        == Where the time went (frames present in the most samples) ==\n\
+                        100% net.caffeinemc.mods.sodium.client.compatibility.checks.GraphicsDriverChecks.postContextInit(GraphicsDriverChecks.java:25)\n";
+        for log in [exit, snapshot] {
+            let diagnosis = diagnose(log).unwrap();
+            assert_eq!(diagnosis.title, SODIUM_DRIVER_TITLE);
+            assert!(!diagnosis.detail.contains("Available display adapters"));
+        }
+    }
 
     #[test]
     fn create_world_freeze_groups_by_the_client_call_site() {
