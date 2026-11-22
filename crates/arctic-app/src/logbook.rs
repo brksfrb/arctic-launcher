@@ -18,6 +18,7 @@ struct Logbook {
     /// (lines ever logged, recent lines)
     lines: Mutex<(u64, VecDeque<LogLine>)>,
     file: Option<Mutex<File>>,
+    bedrock_debug: bool,
 }
 
 static LOGBOOK: OnceLock<Logbook> = OnceLock::new();
@@ -25,9 +26,11 @@ static LOGBOOK: OnceLock<Logbook> = OnceLock::new();
 impl log::Log for Logbook {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         // Our own crates at info+, dependencies only when they warn.
-        let ours = metadata.target().starts_with("arctic");
+        let target = metadata.target();
         metadata.level()
-            <= if ours {
+            <= if self.bedrock_debug && target.starts_with("arctic_core::bedrock::") {
+                log::Level::Debug
+            } else if target.starts_with("arctic") {
                 log::Level::Info
             } else {
                 log::Level::Warn
@@ -88,9 +91,14 @@ pub fn init(file: PathBuf) {
         start: Instant::now(),
         lines: Mutex::new((0, VecDeque::new())),
         file,
+        bedrock_debug: std::env::var("ARCTIC_BEDROCK_DEBUG").as_deref() == Ok("1"),
     });
     if log::set_logger(logbook).is_ok() {
-        log::set_max_level(log::LevelFilter::Info);
+        log::set_max_level(if logbook.bedrock_debug {
+            log::LevelFilter::Debug
+        } else {
+            log::LevelFilter::Info
+        });
     }
 }
 

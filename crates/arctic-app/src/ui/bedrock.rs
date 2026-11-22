@@ -173,12 +173,14 @@ pub struct BedrockUi {
     offline_message: String,
     /// The injection warning is open (native mode was picked, not yet accepted).
     native_warning: bool,
+    native_starting: bool,
     /// How the last native client load went; stays on the card (a toast is easy to miss).
     native_status: Option<crate::tasks::Outcome<String>>,
 }
 impl BedrockUi {
     pub(crate) fn background_active(&self) -> bool {
         self.offline_session.is_some()
+            || self.native_starting
             || self.video_export.is_some()
             || self.recording_work.is_some()
             || self.playback_work.is_some()
@@ -1292,7 +1294,10 @@ impl ArcticApp {
             );
             ui.add_space(8.0);
             ui.label(t!("bedrock.build_the_bundle_from_mod_versions_bedrock"));
-            if self.bedrock.busy || self.bedrock.video_export.is_some() {
+            if self.bedrock.native_starting
+                || self.bedrock.busy
+                || self.bedrock.video_export.is_some()
+            {
                 ui.horizontal(|ui| {
                     ui.spinner();
                     ui.label(t!("bedrock.working_with_the_native_client"));
@@ -1307,9 +1312,7 @@ impl ArcticApp {
             .clicked()
             {
                 if self.settings.bedrock_native_warning_accepted {
-                    self.bedrock.busy = true;
-                    self.bedrock.native_status = None;
-                    self.tasks.bedrock_native_client(self.bedrock.edition);
+                    self.start_bedrock_native_client();
                 } else {
                     self.bedrock.native_warning = true;
                 }
@@ -1749,15 +1752,20 @@ impl ArcticApp {
         }
         if go {
             self.settings.bedrock_native_warning_accepted = true;
-            self.bedrock.native_status = None;
             self.persist_settings();
-            self.bedrock.busy = true;
-            self.tasks.bedrock_native_client(self.bedrock.edition);
+            self.start_bedrock_native_client();
             close = true;
         }
         if close {
             self.bedrock.native_warning = false;
         }
+    }
+
+    fn start_bedrock_native_client(&mut self) {
+        self.bedrock.busy = true;
+        self.bedrock.native_starting = true;
+        self.bedrock.native_status = None;
+        self.tasks.bedrock_native_client(self.bedrock.edition);
     }
 
     /// "Install this version?" before replacing the game.
@@ -2517,6 +2525,7 @@ impl ArcticApp {
                 );
             }
             BedrockEvent::NativeClient(result) => {
+                b.native_starting = false;
                 b.busy = false;
                 match &result {
                     Ok(text) => self.toasts.push(Kind::Success, text.clone(), ""),

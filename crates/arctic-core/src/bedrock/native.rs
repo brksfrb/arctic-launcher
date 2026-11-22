@@ -1174,9 +1174,9 @@ pub fn prepare_shipped(
 /// to the launcher log, and each failure names the step that failed.
 pub fn launch(edition: Edition, bundle: &Path) -> Result<()> {
     if !super::supported() || !cfg!(target_arch = "x86_64") {
-        return Err(Error::Other(
-            "the native Bedrock client requires Windows x64".into(),
-        ));
+        let error = "the native Bedrock client requires Windows x64";
+        log::warn!("native client: platform check failed: {error}");
+        return Err(Error::Other(error.into()));
     }
     log::info!("native client: checking bundle {}", bundle.display());
     let bundle = validate_bundle(bundle)
@@ -1230,20 +1230,29 @@ fn launch_windows(edition: Edition, bundle: &Path) -> Result<()> {
         installed.gdk
     );
     grant_app_packages(bundle);
-    let already = super::package::process_id(&installed.path, edition.package_family());
-    log::info!(
-        "native client: starting the game{}",
-        already.map_or(String::new(), |pid| format!(" (already running as {pid})"))
-    );
-    super::launch(edition)?;
+    let other_edition = match edition {
+        Edition::Release => Edition::Preview,
+        Edition::Preview => Edition::Release,
+    };
+    let allow_name_match = installed.gdk && super::find(other_edition).is_none();
+    let find_process = || {
+        super::package::find_process(&installed.path, edition.package_family(), allow_name_match)
+    };
+    let already = find_process();
+    if let Some(pid) = already {
+        log::info!("native client: using already-running game process {pid}");
+    } else {
+        log::info!("native client: starting the game");
+        super::launch(edition).map_err(|e| Error::Other(format!("game launch failed: {e}")))?;
+    }
     let started = Instant::now();
     let pid = loop {
-        if let Some(pid) = super::package::process_id(&installed.path, edition.package_family()) {
+        if let Some(pid) = already.or_else(find_process) {
             break pid;
         }
-        if started.elapsed() > Duration::from_secs(60) {
+        if started.elapsed() >= Duration::from_secs(60) {
             return Err(Error::Other(
-                "Minecraft.Windows.exe didn't show up within 60 seconds after starting the game"
+                "game process detection timed out: Minecraft.Windows.exe wasn't found within 60 seconds"
                     .into(),
             ));
         }
@@ -1255,13 +1264,15 @@ fn launch_windows(edition: Edition, bundle: &Path) -> Result<()> {
     );
     let window_wait = Instant::now();
     while !super::package::has_window(pid) {
-        if window_wait.elapsed() > Duration::from_secs(90) {
-            log::warn!("native client: no visible window for {pid} after 90s; loading anyway");
-            break;
-        }
-        if super::package::process_id(&installed.path, edition.package_family()) != Some(pid) {
+        log::debug!("native client: window poll: PID {pid} has no visible window");
+        if !super::package::game_process_exists(pid) {
             return Err(Error::Other(format!(
                 "the game process {pid} closed before its window opened"
+            )));
+        }
+        if window_wait.elapsed() >= Duration::from_secs(90) {
+            return Err(Error::Other(format!(
+                "game window detection timed out: PID {pid} had no visible window within 90 seconds"
             )));
         }
         std::thread::sleep(Duration::from_millis(250));
@@ -1275,7 +1286,12 @@ fn launch_windows(edition: Edition, bundle: &Path) -> Result<()> {
     let dll_log = bundle.join(format!("arctic-bedrock-{pid}.log"));
     // A PID can be reused after a previous run. Only accept a new marker.
     if ready.exists() {
-        std::fs::remove_file(&ready).at(&ready)?;
+        std::fs::remove_file(&ready).map_err(|e| {
+            Error::Other(format!(
+                "couldn't clear the previous first-frame marker {}: {e}",
+                ready.display()
+            ))
+        })?;
     }
     let loader = bundle.join("arctic-bedrock-loader.exe");
     log::info!(
@@ -1337,17 +1353,27 @@ fn launch_windows(edition: Edition, bundle: &Path) -> Result<()> {
     }
     let started = Instant::now();
     loop {
-        if std::fs::read_to_string(&ready).is_ok_and(|s| s.trim() == "native-preview") {
-            log::info!(
-                "native client: first frame confirmed after {:.1}s",
-                started.elapsed().as_secs_f32()
-            );
-            return Ok(());
+        match std::fs::read_to_string(&ready) {
+            Ok(text) if text.trim() == "native-preview" => {
+                log::info!(
+                    "native client: first frame confirmed after {:.1}s",
+                    started.elapsed().as_secs_f32()
+                );
+                return Ok(());
+            }
+            Ok(_) => log::debug!(
+                "native client: first-frame poll: {} has no ready marker",
+                ready.display()
+            ),
+            Err(e) => log::debug!(
+                "native client: first-frame poll: couldn't read {}: {e}",
+                ready.display()
+            ),
         }
         if started.elapsed() > Duration::from_secs(READY_TIMEOUT_SECS) {
             break;
         }
-        if super::package::process_id(&installed.path, edition.package_family()) != Some(pid) {
+        if !super::package::game_process_exists(pid) {
             log_dll_tail(&dll_log);
             return Err(Error::Other(format!(
                 "the game closed after the native client was loaded; see {}",

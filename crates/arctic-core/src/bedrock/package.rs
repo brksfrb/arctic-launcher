@@ -170,65 +170,228 @@ pub(super) fn running(install_dir: &Path, family: &str) -> bool {
     process_id(install_dir, family).is_some()
 }
 
-/// The id of the game's process: one running from inside `install_dir`, or from the package's own folder
-/// under `WindowsApps` (the GDK game is installed under `C:\XboxGames` but runs from `WindowsApps`).
+/// Find the game by executable name, with package identity or path to distinguish editions.
 pub(super) fn process_id(install_dir: &Path, family: &str) -> Option<u32> {
+    find_process(install_dir, family, false)
+}
+
+/// GDK may launch an executable whose package identity and image path cannot
+/// confirm its edition. Permit an unambiguous name match when only one edition
+/// is installed.
+pub(super) fn find_process(
+    install_dir: &Path,
+    family: &str,
+    allow_name_match: bool,
+) -> Option<u32> {
+    use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+
+    let mut current_session = 0;
+    // SAFETY: the output points to a writable session ID.
+    if unsafe { ProcessIdToSessionId(std::process::id(), &mut current_session) } == 0 {
+        log::debug!(
+            "Bedrock process poll: launcher session ID lookup failed: {}",
+            std::io::Error::last_os_error()
+        );
+        return None;
+    }
+    let dir = install_dir.to_string_lossy().to_lowercase();
+    let dir = dir.trim_start_matches(r"\\?\").trim_end_matches('\\');
     let package_folder = format!(
         r"\{}_",
         family.split('_').next().unwrap_or(family).to_lowercase()
     );
-    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
-        TH32CS_SNAPPROCESS,
+    let mut candidates = 0;
+    let mut unverified = Vec::new();
+    let found = visit_game_processes(|pid| {
+        candidates += 1;
+        let mut session = 0;
+        // SAFETY: the output points to a writable session ID.
+        if unsafe { ProcessIdToSessionId(pid, &mut session) } == 0 {
+            log::debug!(
+                "Bedrock process poll: PID {pid} session lookup failed: {}",
+                std::io::Error::last_os_error()
+            );
+            return false;
+        }
+        if session != current_session {
+            log::debug!(
+                "Bedrock process poll: PID {pid} belongs to session {session}, expected {current_session}"
+            );
+            return false;
+        }
+        match process_identity(pid, family, dir, &package_folder) {
+            Some(matches) => matches,
+            None => {
+                unverified.push(pid);
+                false
+            }
+        }
+    });
+    match found {
+        Err(e) => {
+            log::debug!("Bedrock process poll: {e}");
+            None
+        }
+        Ok(Some(pid)) => Some(pid),
+        Ok(None) if candidates == 0 => {
+            log::debug!("Bedrock process poll: snapshot contains no Minecraft.Windows.exe");
+            None
+        }
+        Ok(None) => match unverified.as_slice() {
+            [pid] if allow_name_match => {
+                log::debug!(
+                    "Bedrock process poll: using PID {pid}, the sole unverified Minecraft.Windows.exe in this session"
+                );
+                Some(*pid)
+            }
+            _ => {
+                log::debug!(
+                    "Bedrock process poll: no confirmed match for {family}; unverified PIDs: {unverified:?}, name fallback enabled: {allow_name_match}"
+                );
+                None
+            }
+        },
+    }
+}
+
+/// A known package identity takes precedence. Unpackaged processes can still
+/// be identified by their executable path.
+fn process_identity(pid: u32, family: &str, dir: &str, package_folder: &str) -> Option<bool> {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use windows_sys::Win32::Foundation::ERROR_SUCCESS;
+    use windows_sys::Win32::Storage::Packaging::Appx::{
+        GetPackageFamilyName, PACKAGE_FAMILY_NAME_MAX_LENGTH,
     };
     use windows_sys::Win32::System::Threading::{
         OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
         QueryFullProcessImageNameW,
     };
-    let dir = install_dir.to_string_lossy().to_lowercase();
-    // SAFETY: plain Win32 calls with buffers sized as declared; every handle is closed.
-    unsafe {
-        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if snapshot == INVALID_HANDLE_VALUE {
-            return None;
+
+    // SAFETY: the returned handle is checked and owned below.
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if process.is_null() {
+        log::debug!(
+            "Bedrock process poll: OpenProcess for PID {pid} failed: {}",
+            std::io::Error::last_os_error()
+        );
+        return None;
+    }
+    // SAFETY: OpenProcess returned a valid handle owned by this call.
+    let process = unsafe { OwnedHandle::from_raw_handle(process) };
+    let mut name = [0u16; PACKAGE_FAMILY_NAME_MAX_LENGTH as usize + 1];
+    let mut size = name.len() as u32;
+    // SAFETY: both output parameters are writable and size describes the buffer.
+    let status =
+        unsafe { GetPackageFamilyName(process.as_raw_handle(), &mut size, name.as_mut_ptr()) };
+    if status == ERROR_SUCCESS {
+        let actual = String::from_utf16_lossy(&name[..size.saturating_sub(1) as usize]);
+        let matches = actual.eq_ignore_ascii_case(family);
+        if !matches {
+            log::debug!(
+                "Bedrock process poll: PID {pid} package family is {actual}, expected {family}"
+            );
         }
-        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
-        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
-        let mut found = None;
-        let mut more = Process32FirstW(snapshot, &mut entry) != 0;
-        while more && found.is_none() {
-            let len = entry
-                .szExeFile
-                .iter()
-                .position(|&c| c == 0)
-                .unwrap_or(entry.szExeFile.len());
-            let name = String::from_utf16_lossy(&entry.szExeFile[..len]);
-            if name.eq_ignore_ascii_case("Minecraft.Windows.exe") {
-                let process =
-                    OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, entry.th32ProcessID);
-                if !process.is_null() {
-                    let mut buf = [0u16; 1024];
-                    let mut size = buf.len() as u32;
-                    if QueryFullProcessImageNameW(
-                        process,
-                        PROCESS_NAME_WIN32,
-                        buf.as_mut_ptr(),
-                        &mut size,
-                    ) != 0
-                    {
-                        let path = String::from_utf16_lossy(&buf[..size as usize]).to_lowercase();
-                        if path.starts_with(&dir) || path.contains(&package_folder) {
-                            found = Some(entry.th32ProcessID);
-                        }
-                    }
-                    CloseHandle(process);
-                }
-            }
-            more = Process32NextW(snapshot, &mut entry) != 0;
+        return Some(matches);
+    }
+    log::debug!("Bedrock process poll: GetPackageFamilyName for PID {pid} returned {status}");
+
+    let mut path = [0u16; 1024];
+    let mut size = path.len() as u32;
+    // SAFETY: both output parameters are writable and size describes the buffer.
+    if unsafe {
+        QueryFullProcessImageNameW(
+            process.as_raw_handle(),
+            PROCESS_NAME_WIN32,
+            path.as_mut_ptr(),
+            &mut size,
+        )
+    } == 0
+    {
+        log::debug!(
+            "Bedrock process poll: QueryFullProcessImageNameW for PID {pid} failed: {}",
+            std::io::Error::last_os_error()
+        );
+        return None;
+    }
+    let path = String::from_utf16_lossy(&path[..size as usize]).to_lowercase();
+    let path = path.trim_start_matches(r"\\?\");
+    if path
+        .strip_prefix(dir)
+        .is_some_and(|rest| rest.starts_with('\\'))
+        || path.contains(package_folder)
+    {
+        return Some(true);
+    }
+    log::debug!(
+        "Bedrock process poll: PID {pid} image path {path} matches neither {dir} nor {package_folder}"
+    );
+    None
+}
+
+/// Check the chosen PID without redoing edition detection on later polls.
+pub(super) fn game_process_exists(pid: u32) -> bool {
+    match visit_game_processes(|candidate| candidate == pid) {
+        Ok(Some(_)) => true,
+        Ok(None) => {
+            log::debug!("Bedrock process poll: Minecraft.Windows.exe PID {pid} is absent");
+            false
         }
-        CloseHandle(snapshot);
-        found
+        Err(e) => {
+            log::debug!("Bedrock process poll: couldn't recheck PID {pid}: {e}");
+            true
+        }
+    }
+}
+
+fn visit_game_processes(
+    mut matches: impl FnMut(u32) -> bool,
+) -> std::result::Result<Option<u32>, String> {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use windows_sys::Win32::Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
+        TH32CS_SNAPPROCESS,
+    };
+
+    // SAFETY: the process snapshot takes no pointers and returns an owned handle on success.
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+    if snapshot == INVALID_HANDLE_VALUE {
+        return Err(format!(
+            "CreateToolhelp32Snapshot failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    // SAFETY: the snapshot is valid and owned by this call.
+    let snapshot = unsafe { OwnedHandle::from_raw_handle(snapshot) };
+    let mut entry = PROCESSENTRY32W {
+        dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+        ..Default::default()
+    };
+    let mut next: unsafe extern "system" fn(_, _) -> _ = Process32FirstW;
+    let mut operation = "Process32FirstW";
+    loop {
+        // SAFETY: the handle is live and entry is sized for Process32FirstW/Process32NextW.
+        if unsafe { next(snapshot.as_raw_handle(), &mut entry) } == 0 {
+            let error = std::io::Error::last_os_error();
+            return if error.raw_os_error() == Some(ERROR_NO_MORE_FILES as i32) {
+                Ok(None)
+            } else {
+                Err(format!("{operation} failed: {error}"))
+            };
+        }
+        let len = entry
+            .szExeFile
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(entry.szExeFile.len());
+        if String::from_utf16_lossy(&entry.szExeFile[..len])
+            .eq_ignore_ascii_case("Minecraft.Windows.exe")
+            && matches(entry.th32ProcessID)
+        {
+            return Ok(Some(entry.th32ProcessID));
+        }
+        next = Process32NextW;
+        operation = "Process32NextW";
     }
 }
 
