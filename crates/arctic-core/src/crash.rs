@@ -714,22 +714,7 @@ fn missing_entrypoint_library(text: &str, at: usize, mods_dir: Option<&Path>) ->
         .captures(&text[at..])?[1]
         .replace('/', ".");
     let (package, _) = class.rsplit_once('.')?;
-    if [
-        "net.minecraft",
-        "com.mojang",
-        "java",
-        "javax",
-        "jdk",
-        "sun",
-        "com.sun",
-    ]
-    .iter()
-    .any(|root| {
-        package == *root
-            || package
-                .strip_prefix(root)
-                .is_some_and(|s| s.starts_with('.'))
-    }) {
+    if package != "com.death.core" && !package.starts_with("com.death.core.") {
         return None;
     }
 
@@ -787,8 +772,6 @@ fn missing_entrypoint_library(text: &str, at: usize, mods_dir: Option<&Path>) ->
     {
         return None;
     }
-    let package = package.replace('_', "").to_ascii_lowercase();
-    let package_parts: Vec<_> = package.split('.').collect();
     if reported
         .iter()
         .map(|m| m.id.as_str())
@@ -800,20 +783,9 @@ fn missing_entrypoint_library(text: &str, at: usize, mods_dir: Option<&Path>) ->
                 .filter_map(|line| line.split_once(' ').map(|(id, _)| id)),
         )
         .any(|mod_id| {
-            let mod_id = mod_id.replace(['-', '_', '.'], "").to_ascii_lowercase();
-            (0..package_parts.len()).any(|start| {
-                let mut remaining = mod_id.as_str();
-                for part in &package_parts[start..] {
-                    let Some(suffix) = remaining.strip_prefix(part) else {
-                        break;
-                    };
-                    if suffix.is_empty() {
-                        return true;
-                    }
-                    remaining = suffix;
-                }
-                false
-            })
+            mod_id
+                .replace(['-', '_', '.'], "")
+                .eq_ignore_ascii_case("deathcore")
         })
     {
         return None;
@@ -831,9 +803,9 @@ fn missing_entrypoint_library(text: &str, at: usize, mods_dir: Option<&Path>) ->
         })
         .unwrap_or(id);
     Some(Diagnosis::new(
-        format!("{name} needs a mod that isn't installed"),
+        format!("{name} needs DeathCore"),
         format!(
-            "{name} couldn't load {class}. Check {name}'s download page for the required mod or library and install it, or remove {name}."
+            "{name} couldn't load {class}. Install a compatible version of DeathCore, or remove {name}."
         ),
         vec![id.to_owned()],
     ))
@@ -4343,10 +4315,13 @@ Caused by: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.even
             \t\tfabric-api: Fabric API 0.161.0+26.2\n\
             \t\tquickthrow: QuickThrow 1.0.0\n";
         let (d, matched) = diagnose_match(report, None).unwrap();
-        assert_eq!(d.title, "QuickThrow needs a mod that isn't installed");
+        assert_eq!(d.title, "QuickThrow needs DeathCore");
         assert_eq!(d.mods, ["quickthrow"]);
         assert!(d.detail.contains("com.death.core.DeathCoreApi"));
-        assert!(d.detail.contains("QuickThrow's download page"));
+        assert!(
+            d.detail
+                .contains("Install a compatible version of DeathCore")
+        );
         assert!(d.detail.contains("remove QuickThrow"));
         assert!(!d.repair);
         assert!(matched.ends_with("NoClassDefFoundError: com/death/core/DeathCoreApi"));
@@ -4360,6 +4335,9 @@ Caused by: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.even
             report
                 .replace("com/death/core/", "com/iamdeath/quickthrow/api/")
                 .replace("com.death.core.", "com.iamdeath.quickthrow.api."),
+            report
+                .replace("com/death/core/DeathCoreApi", "org/lwjgl/MissingClass")
+                .replace("com.death.core.DeathCoreApi", "org.lwjgl.MissingClass"),
             format!("{report}\t\tdeath_core: DeathCore 1.0.0\n"),
             report.replace(
                 "Caused by: java.lang.NoClassDefFoundError",
