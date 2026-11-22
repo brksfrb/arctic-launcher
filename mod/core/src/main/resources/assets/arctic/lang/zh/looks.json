@@ -96,6 +96,7 @@
   "looks.turn_off": "关闭",
   "looks.turn_on": "开启",
   "looks.turn_packs_on_and_off_or_find_new_ones_on": "开启或关闭资源包，或在 Modrinth 上寻找新的。",
+  "looks.shader_packs_can_take_a_while": "加载光影包可能需要一些时间。",
   "looks.turning_shaders_off": "正在关闭光影…",
   "looks.undo": "撤销",
   "looks.what_this_game_knows_about_looks_and_when_it": "此游戏对外观的了解，以及上次同步的时间。",

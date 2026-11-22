@@ -96,6 +96,7 @@
   "looks.turn_off": "Выключить",
   "looks.turn_on": "Включить",
   "looks.turn_packs_on_and_off_or_find_new_ones_on": "Включайте и выключайте паки или находите новые на Modrinth.",
+  "looks.shader_packs_can_take_a_while": "Загрузка пакетов шейдеров может занять некоторое время.",
   "looks.turning_shaders_off": "Выключение шейдеров…",
   "looks.undo": "Отменить",
   "looks.what_this_game_knows_about_looks_and_when_it": "Что эта игра знает об образах и когда последний раз синхронизировалась.",

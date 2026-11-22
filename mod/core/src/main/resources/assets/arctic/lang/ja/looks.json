@@ -96,6 +96,7 @@
   "looks.turn_off": "オフにする",
   "looks.turn_on": "オンにする",
   "looks.turn_packs_on_and_off_or_find_new_ones_on": "パックのオン・オフを切り替えたり、Modrinthで新しいパックを探したりできます。",
+  "looks.shader_packs_can_take_a_while": "シェーダーパックの読み込みには時間がかかることがあります。",
   "looks.turning_shaders_off": "シェーダーをオフにしています…",
   "looks.undo": "元に戻す",
   "looks.what_this_game_knows_about_looks_and_when_it": "このゲームが見た目について把握していることと、最後に同期した時刻。",

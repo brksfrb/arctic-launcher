@@ -32,6 +32,10 @@ pub struct Diagnosis {
     pub fix: Option<Fix>,
 }
 
+pub const IRIS_SHADER_LOADING_TITLE: &str =
+    "The game was closed while Iris was loading a shader pack";
+pub const IRIS_SHADER_LOADING_DETAIL: &str = "Shader packs can take a while to load, especially on slower graphics cards. Give Iris time to finish or try a lighter shader pack.";
+
 impl Diagnosis {
     /// "This rule matched but has nothing to say": keep looking.
     fn none() -> Self {
@@ -1828,6 +1832,36 @@ fn freeze_group_frame<'a>(text: &'a str, snapshot: &'a str) -> Option<&'a str> {
         .find_map(freeze_frame)
 }
 
+fn iris_shader_loading_frame(snapshot: &str) -> Option<&str> {
+    let hot = freeze_hot_frames(snapshot).map(|(_, frame, _)| frame);
+    let stacks = snapshot
+        .split_once("== Distinct client-thread stacks")
+        .into_iter()
+        .flat_map(|(_, stacks)| {
+            stacks
+                .lines()
+                .skip(1)
+                .take_while(|line| !line.starts_with("== "))
+                .filter_map(|line| line.trim_start().strip_prefix("at "))
+        });
+    hot.chain(stacks).find(|frame| {
+        freeze_frame(frame)
+            .and_then(|call| {
+                call.strip_prefix("net.irisshaders.iris.")
+                    .or_else(|| call.strip_prefix("net.coderbot.iris."))
+            })
+            .is_some_and(|call| {
+                matches!(
+                    call,
+                    "Iris.reload"
+                        | "Iris.loadShaderpack"
+                        | "Iris.loadExternalShaderpack"
+                        | "shaderpack.ShaderPack.<init>"
+                )
+            })
+    })
+}
+
 fn hang_diagnosis(text: &str, mods_dir: Option<&Path>) -> Option<(Diagnosis, String)> {
     if !freeze_evidence(text)
         || text.contains("---- Minecraft Crash Report ----")
@@ -1857,6 +1891,20 @@ fn hang_diagnosis(text: &str, mods_dir: Option<&Path>) -> Option<(Diagnosis, Str
         })
         .unwrap_or("The run contains an unrecovered watchdog freeze.");
     let snapshot = latest_freeze_snapshot(text);
+    if !snapshot
+        .lines()
+        .any(|line| line.starts_with("duration: ") && !line.contains("(still frozen when written)"))
+        && let Some(frame) = iris_shader_loading_frame(snapshot)
+    {
+        return Some((
+            Diagnosis::new(
+                IRIS_SHADER_LOADING_TITLE,
+                IRIS_SHADER_LOADING_DETAIL,
+                Vec::new(),
+            ),
+            format!("{summary}\n{frame}"),
+        ));
+    }
     let short_menu_freeze = snapshot.contains("not in a world (menu/loading)")
         || snapshot.contains("no world (menu/loading screen)");
     // A first snapshot at about three seconds gives little evidence about who caused a menu stall.
@@ -2020,6 +2068,24 @@ fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a st
                         line,
                         lines.clone().take_while(|l| !exception_record_boundary(l)),
                     );
+            }
+            // A log tail may start inside the background request's stack trace.
+            if !warning
+                && matches!(
+                    line.trim_start().trim_start_matches("Caused by: "),
+                    "com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401"
+                        | "com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401"
+                )
+                && lines
+                    .clone()
+                    .take_while(|line| !exception_record_boundary(line))
+                    .any(|line| {
+                        (line.contains("status=401,") && line.contains("path=/player/attributes,"))
+                            || (line.trim_start().starts_with("at ")
+                                && line.contains(".YggdrasilUserApiService.fetchProperties("))
+                    })
+            {
+                warning = true;
             }
             if warning || line.contains("pack.mcmeta") || line.contains("pack metadata") {
                 continue;
@@ -2607,6 +2673,11 @@ fn exception_record_boundary(line: &str) -> bool {
 }
 
 fn background_auth_record<'a>(header: &'a str, body: impl Iterator<Item = &'a str>) -> bool {
+    if header.rsplit_once(']').is_some_and(|(_, message)| {
+        message.trim_start_matches([' ', ':']) == "Failed to fetch user properties"
+    }) {
+        return true;
+    }
     static THREAD: OnceLock<Regex> = OnceLock::new();
     static AUTH: OnceLock<Regex> = OnceLock::new();
     let thread = THREAD.get_or_init(|| {
@@ -2615,7 +2686,7 @@ fn background_auth_record<'a>(header: &'a str, body: impl Iterator<Item = &'a st
     if !thread.is_match(header) {
         return false;
     }
-    let auth = AUTH.get_or_init(|| Regex::new(r"(?i)\b(?:401|authlib|InvalidCredentialsException|RealmsServiceException|Failed to fetch user properties|Failed to fetch Realms feature flags|Couldn't connect to realms)\b").unwrap());
+    let auth = AUTH.get_or_init(|| Regex::new(r"(?i)\b(?:401|authlib|InvalidCredentialsException|RealmsServiceException|Failed to fetch Realms feature flags|Couldn't connect to realms)\b").unwrap());
     std::iter::once(header)
         .chain(body)
         .any(|line| !line.trim_start().starts_with("at ") && auth.is_match(line))
@@ -2903,6 +2974,7 @@ pub fn scrub(text: &str, own: &Own) -> String {
 mod tests {
     const VANILLA_EXIT_398: &str = include_str!("../tests/fixtures/crash-398-vanilla-exit.log");
     const HANG_436: &str = include_str!("../tests/fixtures/crash-436-customrecipe-hang.log");
+    const HANG_487: &str = include_str!("../tests/fixtures/crash-487-iris-shader-hang.log");
     const FREEZE_440: &str = include_str!("../tests/fixtures/crash-440-create-world-freeze.log");
 
     #[test]
@@ -3026,6 +3098,74 @@ mod tests {
         assert_eq!(
             diagnose(&without_exit_summary).unwrap().title,
             diagnosis.title
+        );
+    }
+
+    #[test]
+    fn report_487_explains_the_iris_freeze_and_skips_the_player_attributes_401() {
+        let (log, launcher) = HANG_487.split_once("---- launcher log ----\n").unwrap();
+        let (launcher, exit) = launcher.split_once("(exit code ").unwrap();
+        let (diagnosis, matched) = diagnose_match(HANG_487, None).unwrap();
+        assert_eq!(diagnosis.title, IRIS_SHADER_LOADING_TITLE);
+        assert!(diagnosis.detail.contains("slower graphics cards"));
+        assert!(matched.contains("iris.shaderpack.ShaderPack.<init>"));
+
+        let (_, without_auth_header) = log.split_once('\n').unwrap();
+        let console_trace = without_auth_header
+            .lines()
+            .map(|line| {
+                if line.contains("path=/player/attributes,") {
+                    "Caused by: com.mojang.authlib.exceptions.MinecraftClientHttpException: Status: 401"
+                } else {
+                    line
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        for log in [log, without_auth_header, &console_trace] {
+            assert_eq!(first_error(log, None), None);
+            let report = Report::build(
+                "1.21.11",
+                "Fabric",
+                "The game froze and was closed",
+                &log.lines().collect::<Vec<_>>(),
+                &launcher.lines().collect::<Vec<_>>(),
+                None,
+                Some(&format!("(exit code {exit}")),
+            );
+            assert_eq!(report.title, IRIS_SHADER_LOADING_TITLE);
+            assert!(report.log.contains("Error: Watchdog freeze at exit"));
+            assert!(!report.log.contains("---- first error ----"));
+            assert!(!report.log.contains("---- first exceptions ----"));
+        }
+    }
+
+    #[test]
+    fn iris_shader_loading_requires_current_client_frames() {
+        let start = HANG_487.find("== Where the time went").unwrap();
+        let stacks = HANG_487.find("== Distinct client-thread stacks").unwrap();
+        let old_iris = [&HANG_487[..start], &HANG_487[stacks..]]
+            .concat()
+            .replace("net.irisshaders.iris.", "net.coderbot.iris.");
+        assert_eq!(
+            diagnose(&old_iris).unwrap().title,
+            IRIS_SHADER_LOADING_TITLE
+        );
+
+        let recovered = HANG_487.replace(" (still frozen when written)", "");
+        assert_ne!(
+            diagnose(&recovered).unwrap().title,
+            IRIS_SHADER_LOADING_TITLE
+        );
+        let later = format!(
+            "{HANG_487}\n---- logs/arctic-freezes/freeze-later.txt ----\n\
+             duration: 7.0s (still frozen when written)\n\
+             == Likely awaited threads (from the first sample) ==\n\
+             at knot//net.irisshaders.iris.Iris.reload(Iris.java:576)"
+        );
+        assert_eq!(
+            diagnose(&later).unwrap().title,
+            "The game froze and was closed"
         );
     }
 

@@ -844,9 +844,16 @@ impl ArcticApp {
                 }
                 self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
                 let diagnosis = run.exit_diagnosis(code, watchdog);
+                let shader_loading = diagnosis
+                    .as_ref()
+                    .is_some_and(|d| d.title == crash::IRIS_SHADER_LOADING_TITLE);
                 if let Some(d) = &diagnosis {
                     run.push_log([LogLine {
-                        level: Level::Error,
+                        level: if shader_loading {
+                            Level::Warn
+                        } else {
+                            Level::Error
+                        },
                         text: format!("──── Arctic: {} — {} ────", d.title, d.detail),
                     }]);
                     if d.repair {
@@ -856,7 +863,8 @@ impl ArcticApp {
                         arctic_core::launch::startup_cache::turn_off(&run.game_dir);
                     }
                 }
-                let crashed = matches!(code, Some(c) if c != 0 && !watchdog);
+                let reportable = matches!(code, Some(c) if c != 0 && !watchdog);
+                let crashed = reportable && !shader_loading;
                 let native_place = crashed
                     .then(|| arctic_core::stability::place(&run.crash_text()))
                     .flatten();
@@ -866,6 +874,8 @@ impl ArcticApp {
                         text: "Need help with this crash? Join our Discord: https://discord.arcticlauncher.com"
                             .into(),
                     }]);
+                }
+                if reportable {
                     let report =
                         run.crash_report(diagnosis.as_ref().map_or("", |d| d.title.as_str()), code);
                     self.offer_crash_report(id, report);
@@ -909,6 +919,16 @@ impl ArcticApp {
             return (tf!("tasks.mod_crashed_the_game", name = name), detail);
         }
         match d.title.as_str() {
+            crash::IRIS_SHADER_LOADING_TITLE => {
+                let mut detail = t!("tasks.iris_shader_loading_detail").to_string();
+                if let Some(extra) = d.detail.strip_prefix(crash::IRIS_SHADER_LOADING_DETAIL) {
+                    detail.push_str(extra);
+                }
+                (
+                    t!("tasks.closed_while_iris_was_loading_shaders").into(),
+                    detail,
+                )
+            }
             "Minecraft ran out of memory and froze" => {
                 let mut detail = t!("tasks.the_game_froze_with_memory_pressure").to_string();
                 if d.detail.contains("Arctic capped the memory") {
@@ -973,12 +993,21 @@ impl ArcticApp {
             Some(c) => {
                 // A crash the launcher can fix gets a "Fix it" button instead of the logs one.
                 let fix = diagnosis.as_ref().and_then(|d| d.fix.clone());
-                let (heading, body) = match diagnosis {
+                let (kind, heading, body) = match diagnosis {
                     Some(d) => {
                         let (title2, body) = Self::localized_diagnosis(&d);
-                        (tf!("tasks.crashed", title = title, title2 = title2), body)
+                        if d.title == crash::IRIS_SHADER_LOADING_TITLE {
+                            (Kind::Info, title2, body)
+                        } else {
+                            (
+                                Kind::Error,
+                                tf!("tasks.crashed", title = title, title2 = title2),
+                                body,
+                            )
+                        }
                     }
                     None => (
+                        Kind::Error,
                         tf!("tasks.closed_unexpectedly", title = title),
                         tf!("tasks.exit_code", c = c),
                     ),
@@ -991,7 +1020,7 @@ impl ArcticApp {
                     None => ToastAction::ShowLogs(id),
                 };
                 self.toasts
-                    .push_with_action(Kind::Error, heading, body, Some(action));
+                    .push_with_action(kind, heading, body, Some(action));
             }
             None => self
                 .toasts
@@ -1013,12 +1042,17 @@ impl ArcticApp {
             CrashReports::Never => {}
             CrashReports::Always => self.tasks.send_crash_report(report),
             CrashReports::Ask => {
+                let heading = if report.title == crash::IRIS_SHADER_LOADING_TITLE {
+                    t!("tasks.help_diagnose_this_freeze")
+                } else {
+                    t!("tasks.help_fix_this_crash")
+                };
                 if let Some(run) = self.runs.get_mut(id) {
                     run.crash_report = Some(report);
                 }
                 self.toasts.push_with_action(
                     Kind::Info,
-                    t!("tasks.help_fix_this_crash"),
+                    heading,
                     t!("tasks.send_the_log_to_arctic_your_name_folders_and"),
                     Some(ToastAction::SendCrash(id)),
                 );
@@ -1760,6 +1794,42 @@ C2:  13971 9500       4       org.objectweb.asm.tree.AnnotationNode::accept (134
         let report = run.crash_report(&diagnosis.title, code);
         assert_eq!(report.title, diagnosis.title);
         assert!(!report.title.contains("c2me"));
+    }
+
+    #[test]
+    fn report_487_explains_iris_loading_from_the_freeze_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let freezes = dir.path().join("logs/arctic-freezes");
+        std::fs::create_dir_all(&freezes).unwrap();
+        let fixture =
+            include_str!("../../arctic-core/tests/fixtures/crash-487-iris-shader-hang.log");
+        let (log, snapshot) = fixture
+            .split_once("---- logs/arctic-freezes/freeze-20261122-080544.txt ----\n")
+            .unwrap();
+        let (snapshot, _) = snapshot.split_once("Hang at exit:").unwrap();
+        std::fs::write(freezes.join("freeze-20261122-080544.txt"), snapshot).unwrap();
+        std::fs::write(dir.path().join("logs/latest.log"), log).unwrap();
+
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.21.11", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        run.java = Some("Java 21".into());
+        let code = Some(-805306369);
+        let diagnosis = run.exit_diagnosis(code, false).unwrap();
+        assert_eq!(diagnosis.title, crash::IRIS_SHADER_LOADING_TITLE);
+        let (heading, detail) = ArcticApp::localized_diagnosis(&diagnosis);
+        assert_eq!(heading, crash::IRIS_SHADER_LOADING_TITLE);
+        assert_eq!(detail, crash::IRIS_SHADER_LOADING_DETAIL);
+
+        let report = run.crash_report(&diagnosis.title, code);
+        assert_eq!(report.title, diagnosis.title);
+        assert!(
+            report
+                .log
+                .contains("Hang at exit: client hung for at least 7.01s")
+        );
+        assert!(!report.log.contains("---- first error ----"));
     }
 
     #[test]
