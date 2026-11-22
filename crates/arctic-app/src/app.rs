@@ -168,6 +168,8 @@ pub struct ArcticApp {
     pub(crate) performance_off_confirm: Option<String>,
     /// Instance whose Arctic Client (or Arctic mod) is about to be turned off (asks first).
     pub(crate) client_off_confirm: Option<String>,
+    pub(crate) reports: crate::ui::suggest::Reports,
+    pub(crate) suggestion_sending: std::collections::HashSet<std::path::PathBuf>,
     /// The suggest-a-feature form, while it's open.
     pub(crate) suggest: Option<crate::ui::suggest::SuggestForm>,
     pub(crate) profile_dialog: ProfileDialog,
@@ -362,6 +364,8 @@ impl ArcticApp {
             remove_confirm: None,
             performance_off_confirm: None,
             client_off_confirm: None,
+            reports: Default::default(),
+            suggestion_sending: Default::default(),
             suggest: None,
             profile_dialog: ProfileDialog::Closed,
             inst: InstancesUi::default(),
@@ -490,6 +494,7 @@ impl ArcticApp {
         self.bridge.update(&self.accounts, &self.tasks);
         self.runs.clear();
         self.log_cache = None;
+        self.load_suggestion_reports();
         // Instance pages and mod listings belong to the old profile.
         self.inst = InstancesUi::default();
         // Theme is per profile: force a re-apply on the next frame.
@@ -1301,7 +1306,10 @@ impl ArcticApp {
                     .toasts
                     .push(Kind::Error, t!("tasks.couldnt_send_the_report"), e),
             },
-            Event::SuggestionSent(result) => self.on_suggestion_sent(result),
+            Event::SuggestionSent(profile, result) => self.on_suggestion_sent(&profile, result),
+            Event::SuggestionReplies(request, updates, failed) => {
+                self.on_suggestion_replies(request, updates, failed);
+            }
             Event::LogSent(result) => self.on_log_sent(result, ctx),
             Event::UpdateChecked(result) => self.on_update_checked(result),
             Event::ProxyTested(proxy, result) => self.on_proxy_tested(proxy, result),

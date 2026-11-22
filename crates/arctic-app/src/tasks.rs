@@ -12,6 +12,7 @@ use crate::t;
 use arctic_core::auth::avatar::{self, Face};
 use arctic_core::auth::microsoft::{self, DeviceCode, MsaConfig};
 use arctic_core::auth::{Account, now_secs};
+use arctic_core::cosmetics::{self, SuggestionReceipt, SuggestionReplies};
 use arctic_core::instances::Instance;
 use arctic_core::launch::progress::{LaunchProgress, LaunchSteps};
 use arctic_core::launch::{self, GameEvent, GameHandle, LaunchRequest};
@@ -182,7 +183,12 @@ pub enum Event {
     GalleryDone(Outcome<String>),
     /// A crash report was sent.
     CrashReportSent(Outcome<()>),
-    SuggestionSent(Outcome<()>),
+    SuggestionSent(PathBuf, Outcome<(Option<crate::ui::suggest::Report>, bool)>),
+    SuggestionReplies(
+        uuid::Uuid,
+        Vec<(uuid::Uuid, Option<SuggestionReplies>)>,
+        bool,
+    ),
     /// A log sent to the staff: the code to give them.
     LogSent(Outcome<String>),
     /// Other launchers looked through (the folder, if one was picked).
@@ -340,10 +346,49 @@ impl Tasks {
     /// Send an idea or bug report in the background.
     pub fn send_suggestion(&self, suggestion: arctic_core::cosmetics::Suggestion) {
         self.run(move |t| {
-            let base = arctic_core::cosmetics::base_url();
-            let result = arctic_core::cosmetics::send_suggestion(&base, &suggestion)
+            let base = cosmetics::base_url();
+            let result = cosmetics::send_suggestion(&base, &suggestion)
+                .map(|receipt| {
+                    let Some(receipt) = receipt else {
+                        return (None, false);
+                    };
+                    let report = crate::ui::suggest::Report::new(base, receipt, suggestion);
+                    let saved = match report.save(&t.dirs) {
+                        Ok(()) => true,
+                        Err(e) => {
+                            log::warn!("could not save sent report: {e}");
+                            false
+                        }
+                    };
+                    (Some(report), saved)
+                })
                 .map_err(|e| e.to_string());
-            t.send(Event::SuggestionSent(result));
+            t.send(Event::SuggestionSent(
+                t.dirs.profile_root().to_owned(),
+                result,
+            ));
+        });
+    }
+
+    pub(crate) fn check_suggestion_replies(
+        &self,
+        request: uuid::Uuid,
+        reports: Vec<(uuid::Uuid, String, SuggestionReceipt)>,
+    ) {
+        self.run(move |t| {
+            let mut updates = Vec::new();
+            let mut failed = false;
+            for (key, server, receipt) in reports {
+                match cosmetics::suggestion_replies(&server, &receipt) {
+                    Ok(replies) => updates.push((key, replies)),
+                    Err(e) => {
+                        log::debug!("could not check report replies: {e}");
+                        failed = true;
+                        break;
+                    }
+                }
+            }
+            t.send(Event::SuggestionReplies(request, updates, failed));
         });
     }
 
