@@ -24,8 +24,10 @@ checksum published by the build. Your original download stays intact.
    gh attestation verify ./arctic-launcher-windows-x64.exe.unsigned --repo brksfrb/arctic-launcher --signer-workflow brksfrb/arctic-launcher/.github/workflows/release.yml
    ```
 
-   Check the source commit in the result. To require a particular commit, add
-   `--source-digest` followed by its full commit SHA. Keep the signed download
+   Check that the result shows the release tag and source commit you expect.
+   To require the tag, add `--source-ref refs/tags/<tag>` and replace `<tag>`
+   with your release tag. To require a commit, add `--source-digest` followed
+   by its full commit SHA. Keep the signed download
    for playing. Use `arctic-windows-x64.exe` in the commands to verify the CLI.
 
 On Linux or macOS, install `osslsigncode` and save [verify.sh](packaging/verify/verify.sh)
