@@ -25,7 +25,7 @@ public final class BadgeTexture {
 	private static final int SLOTS = Badge.STYLES.size() * Badge.ROLES.length * PLACEMENTS;
 	private static final DynamicTexture[][] TEXTURES = new DynamicTexture[SLOTS][Badge.MAX_RASTER_SIZE + 1];
 	private static final Identifier[][] IDS = new Identifier[SLOTS][Badge.MAX_RASTER_SIZE + 1];
-	/** Variants share a slot/resolution but keep their own side, so two tags never mutate one glyph. */
+	/** Variants share a slot/resolution but keep their own geometry. */
 	private static final int QUAD_VARIANTS = 8;
 	private static final BakedGlyph[][][] GUI_QUADS = new BakedGlyph[SLOTS][Badge.MAX_RASTER_SIZE + 1][QUAD_VARIANTS];
 	private static final int[][][] QUAD_TEX = new int[SLOTS][Badge.MAX_RASTER_SIZE + 1][QUAD_VARIANTS];
@@ -119,7 +119,16 @@ public final class BadgeTexture {
 				gpuRemember(slot, texSize);
 			}
 		}
-		int sideBits = Float.floatToIntBits(side);
+		boolean uniformTab = false;
+		//#if MC >= 1.16
+		uniformTab = tab && Minecraft.getInstance().isEnforceUnicode();
+		//#if MC >= 1.20.5
+		// Inter takes precedence over the uniform provider in the default font.
+		uniformTab = uniformTab && !TextDrawScale.on();
+		//#endif
+		//#endif
+		// The side is positive. Its sign bit distinguishes the two TAB offsets in this cache.
+		int sideBits = Float.floatToIntBits(uniformTab ? -side : side);
 		int count = QUAD_COUNT[slot][resolution];
 		int oldest = 0, oldestStamp = Integer.MAX_VALUE;
 		for (int i = 0; i < count; i++) {
@@ -132,7 +141,7 @@ public final class BadgeTexture {
 				return GUI_QUADS[slot][resolution][i];
 			}
 		}
-		BakedGlyph quad = bake(slot, texSize, side);
+		BakedGlyph quad = bake(slot, texSize, side, uniformTab);
 		int index;
 		if (count < QUAD_VARIANTS) {
 			index = count;
@@ -388,7 +397,7 @@ public final class BadgeTexture {
 		bury(id, texture, -1, -1);
 	}
 
-	private static BakedGlyph bake(int slot, int texSize, float side) {
+	private static BakedGlyph bake(int slot, int texSize, float side, boolean uniformTab) {
 		DynamicTexture texture;
 		Identifier id;
 		if (texSize > Badge.MAX_RASTER_SIZE) {
@@ -410,11 +419,12 @@ public final class BadgeTexture {
 			}
 		}
 		boolean tab = tab(slot);
+		// Both vanilla fonts put the capital baseline at y + 7.
+		// Force Unicode's capitals occupy five rows and the default bitmap's occupy seven.
+		float top = tab ? 7f - ((uniformTab ? 5f : 7f) + Badge.TAB_SIZE) / 2f : 0f;
 		//#if MC < 1.20.5
 		// Older text quads subtract three from their vertical bounds.
-		float top = tab ? 2 : 3;
-		//#else
-		float top = tab ? -1 : 0;
+		top += 3f;
 		//#endif
 		BakedGlyph quad = new
 				//#if MC >= 1.21.9
