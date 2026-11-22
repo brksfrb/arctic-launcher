@@ -19,9 +19,10 @@ import net.minecraft.client.gui.font.glyphs.BakedGlyph;
 //#endif
 
 /**
- * Tab-list (and billboarded nametag) badge quads snap their origin to a whole framebuffer pixel so
- * a 1:1 blit does not land on a half-pixel and soften under linear filtering. Rotated tags are left
- * alone. Uses the clip matrix captured when the text's projected size was measured.
+ * Billboarded nametag badges snap using the clip matrix captured during world text measurement.
+ * TAB badges already start at the integer coordinates of the HUD text. Deferred GUI text
+ * preparation measures only the GUI scale, leaving the cached clip matrix from a world draw.
+ * Applying that matrix to a TAB glyph would move it as the camera moves.
  *
  * <p>On 1.21.4+, the public entry is {@code renderChar}, which reads the glyph instance's x/y and
  * then calls the (private) {@code render} overload with those values. The hook on {@code render}
@@ -48,7 +49,7 @@ abstract class BadgeSnapMixin {
 			boolean italic, float x0, float y) {
 	//#endif
 		arctic$didSnap = false;
-		if (!BadgeTexture.isBadge(this)) {
+		if (!BadgeTexture.isNametagBadge(this)) {
 			return x;
 		}
 		if (!TextDrawScale.snapOrigin(x, y, arctic$snap)) {
@@ -74,7 +75,7 @@ abstract class BadgeSnapMixin {
 	//#endif
 	private float arctic$charX(@Coerce Object inst, Operation<Float> original) {
 		float x = original.call(inst);
-		if (!BadgeTexture.isBadge(this)) {
+		if (!BadgeTexture.isNametagBadge(this)) {
 			return x;
 		}
 		float y = ((BadgeGlyphInstanceAccess) inst).arctic$y();
@@ -90,7 +91,7 @@ abstract class BadgeSnapMixin {
 	//#endif
 	private float arctic$charY(@Coerce Object inst, Operation<Float> original) {
 		float y = original.call(inst);
-		if (!BadgeTexture.isBadge(this)) {
+		if (!BadgeTexture.isNametagBadge(this)) {
 			return y;
 		}
 		float x = ((BadgeGlyphInstanceAccess) inst).arctic$x();
