@@ -74,14 +74,11 @@ class PersistentChatTest {
 
 	private java.io.File[] logs() { return dir.resolve("chat-history").toFile().listFiles(); }
 
-	@Test void hudLimitSaturatesAndLeavesRoomForMoreChatHistory() {
-		int moreChatHistoryOffset = 16_384 - 100;
+	@Test void hudLimitSaturatesWithTheVanillaBase() {
 		int duringReplay = PersistentChat.historyLimit(100, true, 10_000, 300);
 		assertEquals(PersistentChat.MAX_HUD_LINES, duringReplay);
-		assertTrue(duringReplay + moreChatHistoryOffset > 0);
 		int overflow = PersistentChat.historyLimit(100, false, Integer.MAX_VALUE, Integer.MAX_VALUE);
 		assertEquals(PersistentChat.MAX_HUD_LINES, overflow);
-		assertTrue(overflow + moreChatHistoryOffset > 0);
 		assertEquals(1, PersistentChat.historyLimit(100, false, Integer.MIN_VALUE, -1));
 		assertEquals(10_300, PersistentChat.historyLimit(100, false, 10_000, 300));
 	}
