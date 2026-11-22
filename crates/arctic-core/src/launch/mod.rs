@@ -526,7 +526,7 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
             timer.step("vanilla files");
             let stage = format!("Installing {} {loader_version}", kind.label());
             progress(ProgressInfo::stage(&stage));
-            let profile = loaders::install_profile(
+            let mut profile = loaders::install_profile(
                 dirs,
                 kind,
                 loader_version,
@@ -596,6 +596,9 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
                     req.instance.arctic_mod,
                 )?;
                 share_session = req.instance.arctic_mod && arctic_mod::supports_forge(&vanilla.id);
+                if share_session {
+                    arctic_mod::update_forge_asm(&vanilla.id, &mut profile);
+                }
                 timer.step("arctic client");
                 // 1.8.9: Patcher and Entity Culling for FPS (the Performance switch); never stops a start.
                 progress(ProgressInfo::stage("Checking performance mods"));

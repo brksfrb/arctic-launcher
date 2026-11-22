@@ -393,6 +393,8 @@
   "mods.part_of_the_sounds_name_then_its_volume_in": "Une partie du nom du son, puis son volume en pour cent (0 = muet). Les noms ressemblent à entity.player.hurt,",
   "mods.hide_my_potion_particles": "Masquer mes particules de potion",
   "mods.hide_my_potion_particles_description": "Masque les tourbillons d’effet autour de votre personnage.",
+  "mods.hide_other_players_potion_particles": "Masquer les particules de potion des autres joueurs",
+  "mods.hide_other_players_potion_particles_description": "Masque les tourbillons d’effet autour des autres joueurs.",
   "mods.particle_control": "Contrôle des particules",
   "mods.particles.crits_and_hits": "Critiques et coups",
   "mods.particles.explosions": "Explosions",

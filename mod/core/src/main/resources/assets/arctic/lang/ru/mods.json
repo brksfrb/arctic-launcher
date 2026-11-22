@@ -393,6 +393,8 @@
   "mods.part_of_the_sounds_name_then_its_volume_in": "Часть названия звука, затем его громкость в процентах (0 = без звука). Названия выглядят как entity.player.hurt,",
   "mods.hide_my_potion_particles": "Скрывать частицы моих зелий",
   "mods.hide_my_potion_particles_description": "Скрывает вихри эффектов вокруг вашего персонажа.",
+  "mods.hide_other_players_potion_particles": "Скрывать частицы зелий других игроков",
+  "mods.hide_other_players_potion_particles_description": "Скрывает вихри эффектов вокруг других игроков.",
   "mods.particle_control": "Управление частицами",
   "mods.particles.crits_and_hits": "Криты и удары",
   "mods.particles.explosions": "Взрывы",

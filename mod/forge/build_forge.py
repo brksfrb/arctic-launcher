@@ -5,10 +5,10 @@ Writes mod/dist/arctic-forge-1.8.9.jar.
 
 The client is written against Yarn names for Legacy Fabric. Forge 1.8.9 runs mods against SRG names
 (net/minecraft/client/Minecraft, func_71410_x...), so the Forge flavour of the legacy build (gradle
--Pforge=true: the three mixins that use MixinExtras are replaced) is remapped Yarn -> SRG with
+-Pforge=true: loader-specific mixins are replaced) is remapped Yarn -> SRG with
 tiny-remapper, mixin annotations included, then packed with:
   - a few stand-in classes for the Fabric Loader calls the client makes (forge/shim),
-  - Sponge's Mixin 0.7.11 (what Forge 1.8.9 mods use; ASM 5 compatible), started by its tweaker,
+  - Essential's build of Sponge Mixin for legacy Forge (with relocated Guava), and MixinExtras,
   - a manifest that makes Forge load the jar as a mod and Mixin read arctic-legacy.mixins.json.
 Everything downloaded is kept under mod/build/forge-cache.
 """
@@ -30,9 +30,7 @@ GRADLE_CACHE = Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
 YARN_BUILD = "1.8.9+build.604-v2"
 
 # name: (url, SHA-256). Checked on download and on every use of the cached file, because the Mixin classes
-# and services below end up inside the jar players run. The published SHA-1 of each file (the Maven
-# repositories') matched when these were pinned. The Mixin file is a timestamped snapshot build, which
-# cannot change under its name; the pin makes sure of it.
+# and services below end up inside the jar players run.
 DOWNLOADS = {
     "forge-universal.jar": (
         f"https://maven.minecraftforge.net/net/minecraftforge/forge/{FORGE}/forge-{FORGE}-universal.jar",
@@ -46,10 +44,14 @@ DOWNLOADS = {
         "https://maven.fabricmc.net/net/fabricmc/tiny-remapper/0.10.4/tiny-remapper-0.10.4-fat.jar",
         "aff82c3e052d031be8cba33f97a5e4d1b0098f6a9e942f4457706f751b4032b2",
     ),
-    "mixin.jar": (
-        "https://repo.spongepowered.org/repository/maven-public/org/spongepowered/mixin/0.7.11-SNAPSHOT/"
-        "mixin-0.7.11-20180703.121122-1.jar",
-        "da3d6e47b9c12b5a312d89b67bc27e2429d823c09cde8a90299e9fdcc4eefc20",
+    "mixin-0.2.0+mixin.0.8.7.jar": (
+        "https://repo.essential.gg/repository/maven-public/gg/essential/mixin/0.2.0+mixin.0.8.7/"
+        "mixin-0.2.0+mixin.0.8.7.jar",
+        "f30dc144a343989e06b4f379be55efa0cd37d4e038b161665b73e7d0388a5df6",
+    ),
+    "mixinextras-common-0.3.5.jar": (
+        "https://repo.maven.apache.org/maven2/io/github/llamalad7/mixinextras-common/0.3.5/mixinextras-common-0.3.5.jar",
+        "03abee14a54beea63cd89414716f45af2d096f12919ffe4d1df28df847341ab2",
     ),
 }
 MIXIN_SERVICES = {
@@ -130,7 +132,8 @@ def build():
     forge_jar = fetch("forge-universal.jar")
     srg_zip = fetch("mcp-srg.zip")
     remapper_jar = fetch("tiny-remapper.jar")
-    mixin_jar = fetch("mixin.jar")
+    mixin_jar = fetch("mixin-0.2.0+mixin.0.8.7.jar")
+    extras_jar = fetch("mixinextras-common-0.3.5.jar")
 
     sys.path.insert(0, str(HERE))
     import mappings
@@ -184,12 +187,18 @@ def build():
             add(path.relative_to(shim_classes).as_posix(), path.read_bytes())
         with zipfile.ZipFile(mixin_jar) as src:
             for info in src.infolist():
-                if info.filename.startswith("org/spongepowered/") or info.filename.startswith("mixin"):
+                # The launcher supplies ASM 5.2 on the classpath. Keep the
+                # patched Mixin and its relocated runtime classes from the jar.
+                if info.filename.startswith(("org/spongepowered/", "mixin", "gg/essential/", "LICENSE")):
                     add(info.filename, src.read(info))
                 # Mixin finds its launch service through these registrations: without them the game
                 # stops at "ServiceNotAvailableError: No mixin host service is available". (Its signature
                 # files stay out: they would not match a repacked jar.)
                 elif info.filename in MIXIN_SERVICES:
+                    add(info.filename, src.read(info))
+        with zipfile.ZipFile(extras_jar) as src:
+            for info in src.infolist():
+                if info.filename.startswith(("com/llamalad7/", "LICENSE")):
                     add(info.filename, src.read(info))
     with zipfile.ZipFile(out) as packed:
         missing = [name for name in MIXIN_SERVICES if name not in packed.namelist()]
