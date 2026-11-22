@@ -8,7 +8,7 @@ use crate::art::{brand_mark, glow};
 use crate::theme;
 use crate::widgets;
 use crate::{t, tf};
-const WEBSITE: &str = "https://arcticlauncher.com";
+pub(super) const WEBSITE: &str = "https://arcticlauncher.com";
 const FEATURES_URL: &str = "https://arcticlauncher.com/features";
 pub(crate) const DISCORD: &str = "https://discord.arcticlauncher.com";
 const SUPPORT_EMAIL: &str = "support@arcticlauncher.com";
@@ -30,6 +30,14 @@ impl ArcticApp {
                     ui.label(
                         RichText::new(tf!("nav.version", APP_VERSION = APP_VERSION)).color(p.muted),
                     );
+                    #[cfg(windows)]
+                    if self.build_signature.is_unsigned() {
+                        ui.label(
+                            RichText::new(t!("nav.unofficial_build"))
+                                .small()
+                                .color(p.muted),
+                        );
+                    }
                 });
             });
             ui.add_space(8.0);

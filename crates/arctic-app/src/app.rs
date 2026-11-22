@@ -134,6 +134,8 @@ pub enum UpdateState {
 }
 
 pub struct ArcticApp {
+    #[cfg(windows)]
+    pub(crate) build_signature: crate::build_signature::BuildSignature,
     /// Launcher-wide layout (shared downloads, caches).
     pub(crate) root: DataDirs,
     pub(crate) profiles: ProfileStore,
@@ -302,6 +304,8 @@ impl ArcticApp {
             };
         let intro = data.settings.intro && !startup.no_intro;
         let mut app = Self {
+            #[cfg(windows)]
+            build_signature: crate::build_signature::BuildSignature::start(&root, &cc.egui_ctx),
             splash: Splash::new(intro),
             applied_theme: None,
             theme_fade: None,
@@ -1497,6 +1501,8 @@ impl eframe::App for ArcticApp {
         self.update_theme(&ctx, frame);
         crate::zoom::apply(&ctx, self.settings.interface_size);
         self.go_back(&ctx);
+        #[cfg(windows)]
+        self.build_signature.poll();
         self.shell(ui);
         self.splash.show(&ctx, self.palette());
         self.autosave_settings(&ctx);
