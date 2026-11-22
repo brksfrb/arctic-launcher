@@ -20,7 +20,7 @@ For annual renewal, sign a test executable with the new certificate and run
 `signtool verify /pa /v` on Windows. Compare its full subject and immediate
 issuer certificate with the pins above. A renewal with the same subject and
 issuer certificate only needs a thumbprint update in the signing script.
-If either pin changes, confirm the new values against the certificate from
+If the subject changes or Certum rotates or reissues the intermediate, confirm the new values against the certificate from
 SimplySign, update `PUBLISHER_SUBJECT` (DER-encoded X.500 name) and/or
 `ISSUER_SHA256`, and build again before signing the next release. To export the
 DER subject from the leaf PEM, use Python's

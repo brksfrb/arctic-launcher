@@ -188,8 +188,8 @@ impl ArcticApp {
             Banner::Unsigned => (t!("nav.unsigned_build_warning"), p.warn),
             Banner::Untrusted => (t!("nav.untrusted_build_warning"), p.error),
         };
+        ui.add(egui::Label::new(RichText::new(message).strong().color(color)).wrap());
         widgets::row(ui, |ui| {
-            ui.label(RichText::new(message).strong().color(color));
             ui.hyperlink_to(t!("nav.download_official_build"), super::about::WEBSITE);
             if banner == Banner::Unsigned
                 && widgets::button(ui, p, None, t!("nav.dismiss"), false).clicked()

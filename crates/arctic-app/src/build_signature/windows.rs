@@ -39,7 +39,7 @@ const ISSUER_SHA256: [u8; 32] = [
 ];
 
 pub(crate) struct BuildSignature {
-    pending: Receiver<(Verification, bool)>,
+    pending: Option<Receiver<(Verification, bool)>>,
     verification: Option<Verification>,
     dismissed: bool,
     release: bool,
@@ -55,10 +55,13 @@ impl BuildSignature {
         if let Err(error) = std::thread::Builder::new()
             .name("build-signature".into())
             .spawn(move || {
-                let verification = verify_running_exe().unwrap_or_else(|error| {
-                    log::warn!("Could not verify launcher signature: {error}");
-                    Verification::Untrusted
-                });
+                let verification = match verify_running_exe() {
+                    Ok(verification) => verification,
+                    Err(error) => {
+                        log::warn!("Could not access launcher executable for signature verification: {error}");
+                        return;
+                    }
+                };
                 let dismissed = verification == Verification::Unsigned && marker.is_file();
                 if send.send((verification, dismissed)).is_ok() {
                     ctx.request_repaint();
@@ -68,7 +71,7 @@ impl BuildSignature {
             log::warn!("Could not start launcher signature check: {error}");
         }
         Self {
-            pending,
+            pending: Some(pending),
             verification: None,
             dismissed: false,
             release: arctic_core::update::is_release_build(),
@@ -77,11 +80,17 @@ impl BuildSignature {
     }
 
     pub(crate) fn poll(&mut self) {
-        if self.verification.is_none()
-            && let Ok((verification, dismissed)) = self.pending.try_recv()
-        {
-            self.verification = Some(verification);
-            self.dismissed = dismissed;
+        let Some(pending) = &self.pending else {
+            return;
+        };
+        match pending.try_recv() {
+            Ok((verification, dismissed)) => {
+                self.verification = Some(verification);
+                self.dismissed = dismissed;
+                self.pending = None;
+            }
+            Err(mpsc::TryRecvError::Disconnected) => self.pending = None,
+            Err(mpsc::TryRecvError::Empty) => {}
         }
     }
 
@@ -139,7 +148,9 @@ fn verify_running_exe() -> io::Result<Verification> {
 
     if official {
         Ok(Verification::Official)
-    } else if status == TRUST_E_NOSIGNATURE && has_no_certificate_table(&mut handle)? {
+    } else if status == TRUST_E_NOSIGNATURE
+        && has_no_certificate_table(&mut handle).unwrap_or(false)
+    {
         Ok(Verification::Unsigned)
     } else {
         Ok(Verification::Untrusted)
@@ -219,9 +230,14 @@ fn has_no_certificate_table(file: &mut File) -> io::Result<bool> {
     if optional_size < security_offset + 8 {
         return Ok(false);
     }
-    file.seek(SeekFrom::Start(
-        u64::from(pe_offset) + 24 + u64::from(security_offset),
-    ))?;
+    let directories = u64::from(pe_offset) + 24 + u64::from(directory_offset);
+    file.seek(SeekFrom::Start(directories - 4))?;
+    let mut count = [0; 4];
+    file.read_exact(&mut count)?;
+    if u32::from_le_bytes(count) <= 4 {
+        return Ok(false);
+    }
+    file.seek(SeekFrom::Start(directories + 4 * 8))?;
     let mut entry = [0; 8];
     file.read_exact(&mut entry)?;
     Ok(entry == [0; 8])
