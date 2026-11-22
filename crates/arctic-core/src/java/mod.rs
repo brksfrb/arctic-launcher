@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::fs::{self, File, Metadata};
 use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -22,9 +23,11 @@ pub const RUNTIME_INDEX_URL: &str = "https://launchermeta.mojang.com/v1/products
 /// Component used by versions that predate `javaVersion` (Java 8).
 pub const LEGACY_COMPONENT: &str = "jre-legacy";
 const INDEX_CACHE: &str = "java_runtimes.json";
-/// Written after a successful install, with the manifest SHA-1 and last verified repair request.
+/// Written after a successful install, using the manifest SHA-1 alone for older launchers.
 const MARKER: &str = ".arctic-runtime";
 const REPAIR: &str = ".arctic-runtime-repair";
+const REPAIR_ACK: &str = ".arctic-runtime-repair-ack";
+const MAX_HASH_WORKERS: usize = 4;
 /// Smaller files are fetched raw; decompression setup is not worth it.
 const LZMA_MIN_SIZE: u64 = 64 * 1024;
 const INDEX_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
@@ -211,6 +214,7 @@ pub struct RuntimePlan {
     dir: PathBuf,
     /// Install marker to publish once every file is in place.
     marker: Option<String>,
+    repair_request: String,
     executables: Vec<PathBuf>,
     // Held across planning, downloading and publishing, including across launcher processes.
     _lock: File,
@@ -227,6 +231,9 @@ impl RuntimePlan {
             )));
         }
         if let Some(marker) = &self.marker {
+            if !self.repair_request.is_empty() {
+                write_marker(&self.dir.join(REPAIR_ACK), &self.repair_request)?;
+            }
             write_marker(&self.dir.join(MARKER), marker)?;
         }
         Ok(self.java)
@@ -250,44 +257,50 @@ pub fn plan_runtime_for(dirs: &DataDirs, component: &str, rosetta: bool) -> Resu
         jobs: Vec::new(),
         dir,
         marker: None,
+        repair_request: String::new(),
         executables: Vec::new(),
         _lock: lock,
     };
     let marker = plan.dir.join(MARKER);
     let installed = read_marker(&marker)?.unwrap_or_default();
-    let (installed_sha, verified_request) = installed.split_once('\n').unwrap_or((&installed, ""));
+    let (installed_sha, embedded_ack) = parse_marker(&installed);
     let request = read_marker(&plan.dir.join(REPAIR))?.unwrap_or_default();
-    let repairing = request != verified_request;
-    let ready = !installed_sha.is_empty() && !repairing && java_exists(&plan.dir, &plan.java)?;
+    let java_present = java_exists(&plan.dir, &plan.java)?;
+    let reason = if repair_pending(&plan.dir, &request, embedded_ack)? {
+        Some("repair requested")
+    } else if installed_sha.is_none() {
+        Some("missing or invalid install stamp")
+    } else if !java_present {
+        Some("missing Java executable")
+    } else {
+        None
+    };
 
     let build = match fetch_index(dirs) {
         Ok(index) => find_build(&index, component, rosetta)?,
-        Err(e) if ready => {
+        Err(e) if reason.is_none() => {
             log::warn!("runtime index unavailable, using installed {component}: {e}");
             return Ok(plan);
         }
         Err(e) => return Err(e),
     };
-    let same_build = ready && installed_sha == build.manifest.sha1;
-    if same_build && installed.contains('\n') {
+    if reason.is_none()
+        && installed_sha.is_some_and(|sha| sha.eq_ignore_ascii_case(&build.manifest.sha1))
+    {
         return Ok(plan);
     }
 
-    log::info!("verifying Java runtime {component} {}", build.version.name);
-    let manifest: RuntimeManifest = match get_json(&build.manifest.url) {
-        Ok(manifest) => manifest,
-        // Older launchers used a size-only check. Recheck legacy installs once,
-        // while letting an otherwise current runtime continue to work offline.
-        Err(e) if same_build => {
-            log::warn!("runtime manifest unavailable, using installed {component}: {e}");
-            return Ok(plan);
-        }
-        Err(e) => return Err(e),
-    };
-    // If this install stops partway, the old build must no longer qualify for offline reuse.
+    let reason = reason.unwrap_or("manifest SHA-1 changed");
+    log::info!(
+        "verifying Java runtime {component} {}: {reason}",
+        build.version.name
+    );
+    let manifest: RuntimeManifest = get_json(&build.manifest.url)?;
+    // An interrupted install must no longer qualify for warm or offline reuse.
     write_marker(&marker, "")?;
     (plan.jobs, plan.executables) = collect_files(&plan.dir, manifest)?;
-    plan.marker = Some(format!("{}\n{request}", build.manifest.sha1));
+    plan.marker = Some(build.manifest.sha1);
+    plan.repair_request = request;
     Ok(plan)
 }
 
@@ -350,9 +363,12 @@ pub(crate) fn lock_runtime(dir: &Path) -> Result<File> {
 pub(crate) fn check_runtime_ready(dir: &Path) -> Result<()> {
     require_directory(dir).at(dir)?;
     let installed = read_marker(&dir.join(MARKER))?.unwrap_or_default();
-    let (sha, verified) = installed.split_once('\n').unwrap_or((&installed, ""));
+    let (sha, embedded_ack) = parse_marker(&installed);
     let request = read_marker(&dir.join(REPAIR))?.unwrap_or_default();
-    if sha.is_empty() || verified != request || !java_exists(dir, &java_executable(dir))? {
+    if sha.is_none()
+        || repair_pending(dir, &request, embedded_ack)?
+        || !java_exists(dir, &java_executable(dir))?
+    {
         return Err(Error::Other(
             "Java runtime verification is pending. Launch again to repair it.".into(),
         ));
@@ -365,16 +381,33 @@ pub(crate) fn request_repair(dir: &Path, id: &str) -> Result<()> {
     require_directory(dir).at(dir)?;
     let installed = read_marker(&dir.join(MARKER))?.unwrap_or_default();
     let current = read_marker(&dir.join(REPAIR))?;
-    if installed
-        .split_once('\n')
-        .is_some_and(|(_, verified)| verified == id)
-        || current.as_deref() == Some(id)
-    {
+    let (_, embedded_ack) = parse_marker(&installed);
+    if current.as_deref() == Some(id) || !repair_pending(dir, id, embedded_ack)? {
         return Ok(());
     }
     write_marker(&dir.join(REPAIR), id)?;
     log::warn!("Java runtime verification requested for {}", dir.display());
     Ok(())
+}
+
+fn parse_marker(installed: &str) -> (Option<&str>, &str) {
+    let (sha, embedded_ack) = installed.split_once('\n').unwrap_or((installed, ""));
+    let sha = sha.trim();
+    let valid_sha = sha.len() == 40 && sha.bytes().all(|byte| byte.is_ascii_hexdigit());
+    (valid_sha.then_some(sha), embedded_ack.trim())
+}
+
+fn repair_pending(dir: &Path, request: &str, embedded_ack: &str) -> Result<bool> {
+    Ok(!request.is_empty()
+        && request != embedded_ack
+        && read_marker(&dir.join(REPAIR_ACK))?.as_deref() != Some(request))
+}
+
+#[cfg(any(windows, test))]
+pub(crate) fn is_runtime_control_file(name: &std::ffi::OsStr) -> bool {
+    [MARKER, REPAIR, REPAIR_ACK]
+        .iter()
+        .any(|stamp| name.eq_ignore_ascii_case(stamp))
 }
 
 fn java_exists(dir: &Path, java: &Path) -> Result<bool> {
@@ -399,7 +432,7 @@ fn read_marker(path: &Path) -> Result<Option<String>> {
 }
 
 fn write_marker(path: &Path, contents: &str) -> Result<()> {
-    // Replacement keeps any hard link in a named copy tied to its previous build.
+    // Atomic replacement keeps readers from seeing a partially written stamp.
     file_metadata(path).at(path)?;
     let mut temp = tempfile::NamedTempFile::new_in(path.parent().unwrap()).at(path)?;
     temp.write_all(contents.as_bytes()).at(path)?;
@@ -509,6 +542,7 @@ fn collect_files(
 ) -> Result<(Vec<DownloadJob>, Vec<PathBuf>)> {
     let mut jobs = Vec::new();
     let mut executables = Vec::new();
+    let mut candidates = Vec::new();
     for (rel, file) in manifest.files {
         let rel = Path::new(&rel);
         let mut dest = dir.to_path_buf();
@@ -531,37 +565,66 @@ fn collect_files(
                 if executable {
                     executables.push(dest.clone());
                 }
-                if let Some(meta) = file_metadata(&dest).at(&dest)?
-                    && meta.len() == downloads.raw.size
-                    && sha1_file(&dest)?.eq_ignore_ascii_case(&downloads.raw.sha1)
-                {
-                    continue;
-                }
-                let part = part_path(&dest);
-                file_metadata(&part).at(&part)?;
-                // Prefer the LZMA stream for anything worth compressing;
-                // runtimes are ~3-4x smaller that way.
-                let lzma = downloads
-                    .lzma
-                    .filter(|_| downloads.raw.size >= LZMA_MIN_SIZE)
-                    .map(|l| Compressed {
-                        url: l.url,
-                        sha1: l.sha1,
-                        size: l.size,
-                    });
-                jobs.push(DownloadJob {
-                    url: downloads.raw.url,
-                    dest,
-                    sha1: Some(downloads.raw.sha1),
-                    size: Some(downloads.raw.size),
-                    lzma,
-                    md5: None,
-                });
+                candidates.push((dest, downloads));
             }
             RuntimeFile::Link { target } => link(&dest, &target)?,
         }
     }
+    let workers = std::thread::available_parallelism()
+        .map_or(1, |count| count.get())
+        .min(MAX_HASH_WORKERS)
+        .min(candidates.len());
+    let candidates = Mutex::new(candidates.into_iter());
+    std::thread::scope(|scope| -> Result<()> {
+        let workers: Vec<_> = (0..workers)
+            .map(|_| {
+                scope.spawn(|| -> Result<Vec<DownloadJob>> {
+                    let mut pending = Vec::new();
+                    loop {
+                        let candidate = candidates.lock().unwrap().next();
+                        let Some((dest, downloads)) = candidate else {
+                            return Ok(pending);
+                        };
+                        if let Some(job) = verify_file(dest, downloads)? {
+                            pending.push(job);
+                        }
+                    }
+                })
+            })
+            .collect();
+        for worker in workers {
+            jobs.extend(worker.join().unwrap()?);
+        }
+        Ok(())
+    })?;
     Ok((jobs, executables))
+}
+
+fn verify_file(dest: PathBuf, downloads: FileDownloads) -> Result<Option<DownloadJob>> {
+    if let Some(meta) = file_metadata(&dest).at(&dest)?
+        && meta.len() == downloads.raw.size
+        && sha1_file(&dest)?.eq_ignore_ascii_case(&downloads.raw.sha1)
+    {
+        return Ok(None);
+    }
+    let part = part_path(&dest);
+    file_metadata(&part).at(&part)?;
+    let lzma = downloads
+        .lzma
+        .filter(|_| downloads.raw.size >= LZMA_MIN_SIZE)
+        .map(|l| Compressed {
+            url: l.url,
+            sha1: l.sha1,
+            size: l.size,
+        });
+    Ok(Some(DownloadJob {
+        url: downloads.raw.url,
+        dest,
+        sha1: Some(downloads.raw.sha1),
+        size: Some(downloads.raw.size),
+        lzma,
+        md5: None,
+    }))
 }
 
 /// Runtime manifests contain symlinks on Linux/macOS (e.g. `bin/` helpers).
@@ -613,6 +676,44 @@ fn set_executable(_paths: &[PathBuf]) -> Result<()> {
 mod tests {
     use super::*;
 
+    const MANIFEST_SHA: &str = "0123456789abcdef0123456789abcdef01234567";
+
+    #[test]
+    fn warm_runtime_accepts_old_stamps_without_fetching_the_manifest() {
+        use serde_json::json;
+
+        let temp = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(temp.path());
+        let component = "java-runtime-epsilon";
+        let runtime = runtime_dir(&dirs, component, false).unwrap();
+        let java = java_executable(&runtime);
+        fs::create_dir_all(java.parent().unwrap()).unwrap();
+        fs::write(&java, b"java").unwrap();
+        save_json(
+            &dirs.meta().join(INDEX_CACHE),
+            &json!({
+                (platform_key()): {(component): [{
+                    "manifest": {"sha1": MANIFEST_SHA, "size": 0, "url": "invalid-manifest-url"},
+                    "version": {"name": "25.0.1"}
+                }]}
+            }),
+        )
+        .unwrap();
+
+        for suffix in ["", "\n", "\r\n", "\nprevious-crash"] {
+            let stamp = format!("{MANIFEST_SHA}{suffix}");
+            if suffix == "\nprevious-crash" {
+                fs::write(runtime.join(REPAIR), "previous-crash").unwrap();
+            }
+            fs::write(runtime.join(MARKER), &stamp).unwrap();
+            check_runtime_ready(&runtime).unwrap();
+            let plan = plan_runtime(&dirs, component).unwrap();
+            assert!(plan.jobs.is_empty());
+            assert_eq!(plan.finish().unwrap(), java);
+            assert_eq!(fs::read_to_string(runtime.join(MARKER)).unwrap(), stamp);
+        }
+    }
+
     #[test]
     fn repair_rechecks_the_installed_manifest_and_replaces_only_bad_files() {
         use std::io::{BufRead, BufReader};
@@ -631,7 +732,7 @@ mod tests {
         let library = runtime.join("lib/management.dll");
         fs::create_dir(library.parent().unwrap()).unwrap();
         fs::write(&library, b"good").unwrap();
-        fs::write(runtime.join(MARKER), "installed").unwrap();
+        fs::write(runtime.join(MARKER), MANIFEST_SHA).unwrap();
 
         let server = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}", server.local_addr().unwrap());
@@ -658,13 +759,13 @@ mod tests {
         .to_string();
         let index = json!({
             (platform_key()): {(component): [{
-                "manifest": {"sha1": "installed", "size": manifest.len(), "url": format!("{url}/manifest")},
+                "manifest": {"sha1": MANIFEST_SHA, "size": manifest.len(), "url": format!("{url}/manifest")},
                 "version": {"name": "25.0.1"}
             }]}
         });
         save_json(&dirs.meta().join(INDEX_CACHE), &index).unwrap();
         let server = std::thread::spawn(move || {
-            for expected in ["/manifest", "/manifest", "/manifest", "/management"] {
+            for expected in ["/manifest", "/manifest", "/management"] {
                 let (mut stream, _) = server.accept().unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
@@ -693,12 +794,6 @@ mod tests {
             }
         });
 
-        // A legacy size-only install is checked once even without a repair request.
-        assert_eq!(ensure_runtime(&dirs, component, &|_| {}).unwrap(), java);
-        assert_eq!(
-            fs::read_to_string(runtime.join(MARKER)).unwrap(),
-            "installed\n"
-        );
         fs::write(&library, b"bad!").unwrap();
         assert!(plan_runtime(&dirs, component).unwrap().jobs.is_empty());
         request_repair(&runtime, "crash-380").unwrap();
@@ -717,7 +812,11 @@ mod tests {
         assert_eq!(fs::read(&library).unwrap(), b"good");
         assert_eq!(
             fs::read_to_string(runtime.join(MARKER)).unwrap(),
-            "installed\ncrash-380"
+            MANIFEST_SHA
+        );
+        assert_eq!(
+            fs::read_to_string(runtime.join(REPAIR_ACK)).unwrap(),
+            "crash-380"
         );
         request_repair(&runtime, "crash-380").unwrap();
         assert!(check_runtime_ready(&runtime).is_ok());

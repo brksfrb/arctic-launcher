@@ -1131,8 +1131,11 @@ mod tests {
             .join("bin")
             .join(if cfg!(windows) { "java.exe" } else { "java" });
         // Run twice: the second pass is the "already mirrored" launch.
-        for _ in 0..2 {
-            let (named, _) = super::super::named_runtime::prepare(&runtime, &java).unwrap();
+        for launch in 0..2 {
+            let (named, rebuilt) = super::super::named_runtime::prepare(&runtime, &java).unwrap();
+            if launch == 1 {
+                assert!(!rebuilt, "second launch should reuse the named runtime");
+            }
             assert_eq!(release_version(&java), release_version(&named));
             assert!(named.starts_with(runtime.parent().unwrap().join(".named")));
             assert_eq!(bundled(named.parent().unwrap().parent().unwrap()), 0);
