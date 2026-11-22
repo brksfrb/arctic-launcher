@@ -34,6 +34,20 @@ pub const GITHUB_REPO: &str = "brksfrb/arctic-launcher";
 /// so it never offers or installs a public release over itself. Must stay false on release branches.
 /// Every update path (start-up check, background auto-install, manual check) goes through [`check`].
 const PERSONAL_BUILD: bool = false;
+
+/// Whether this build uses a public release version for the unsigned-build notice.
+pub fn is_release_build() -> bool {
+    !cfg!(debug_assertions) && is_release_version(APP_VERSION, PERSONAL_BUILD)
+}
+
+fn is_release_version(version: &str, personal: bool) -> bool {
+    !personal
+        && semver::Version::parse(version).is_ok_and(|version| {
+            let prerelease = version.pre.as_str().split('.').next().unwrap_or_default();
+            version.build.is_empty() && matches!(prerelease, "" | "alpha" | "beta" | "rc")
+        })
+}
+
 /// Flatpak owns the installed executable and updates it through its signed repository.
 pub fn managed_by_flatpak() -> bool {
     cfg!(target_os = "linux") && std::path::Path::new("/.flatpak-info").is_file()
@@ -406,5 +420,27 @@ mod tests {
             &v("0.2.0")
         ));
         assert!(!is_required("just notes", &v("0.1.0")));
+    }
+}
+
+#[cfg(test)]
+mod release_build_tests {
+    use super::is_release_version;
+
+    #[test]
+    fn release_versions_exclude_personal_and_local_versions() {
+        for version in ["0.6.6", "0.6.0-beta.2", "0.6.0-rc.1"] {
+            assert!(is_release_version(version, false));
+            assert!(!is_release_version(version, true));
+        }
+        for version in [
+            "dev",
+            "0.6.6-dev",
+            "0.6.6-test.1",
+            "0.6.6-personal",
+            "0.6.6+local",
+        ] {
+            assert!(!is_release_version(version, false));
+        }
     }
 }
