@@ -347,6 +347,7 @@ public final class ClientConfig {
 	/** Particle Control: keep only this share (percent) of the particles. */
 	public boolean particleControl;
 	public int particleAmount = 50;
+	public boolean hideOwnPotionParticles;
 	/** Particle kinds switched off (bit per {@code ParticleKinds.LABELS} entry). */
 	public int particleOff;
 	/** Ctrl+K opens the command palette (mods, servers, friends). */

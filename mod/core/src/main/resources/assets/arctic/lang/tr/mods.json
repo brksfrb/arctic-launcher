@@ -391,6 +391,8 @@
   "mods.packs": "Paketler",
   "mods.packs_shaders": "Paketler ve Shader'lar",
   "mods.part_of_the_sounds_name_then_its_volume_in": "Sesin adının bir parçası, sonra yüzde olarak ses düzeyi (0 = sessiz). Adlar şuna benzer: entity.player.hurt,",
+  "mods.hide_my_potion_particles": "Kendi iksir parçacıklarımı gizle",
+  "mods.hide_my_potion_particles_description": "Karakterinin etrafındaki etki girdaplarını gizler.",
   "mods.particle_control": "Parçacık Kontrolü",
   "mods.particles.crits_and_hits": "Kritikler ve vuruşlar",
   "mods.particles.explosions": "Patlamalar",

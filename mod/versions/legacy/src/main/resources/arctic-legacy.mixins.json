@@ -78,6 +78,7 @@
 		"SlotInvAccess",
 		"HandledScreenLockMixin",
 		"ParticleManagerMixin",
+		"LivingEntityPotionParticlesMixin",
 		"ClientPlayerPortalMixin",
 		"OwnNametagLegacyMixin",
 		"ChatEmojiLegacyMixin",

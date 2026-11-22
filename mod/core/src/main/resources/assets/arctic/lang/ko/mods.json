@@ -391,6 +391,8 @@
   "mods.packs": "팩",
   "mods.packs_shaders": "팩 및 셰이더",
   "mods.part_of_the_sounds_name_then_its_volume_in": "소리 이름의 일부, 그다음 음량 퍼센트 (0 = 무음). 이름은 entity.player.hurt,",
+  "mods.hide_my_potion_particles": "내 물약 입자 숨기기",
+  "mods.hide_my_potion_particles_description": "내 캐릭터 주변의 상태 효과 소용돌이를 숨깁니다.",
   "mods.particle_control": "입자 제어",
   "mods.particles.crits_and_hits": "치명타와 타격",
   "mods.particles.explosions": "폭발",
