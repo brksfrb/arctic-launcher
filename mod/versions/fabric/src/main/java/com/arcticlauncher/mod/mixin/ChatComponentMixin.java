@@ -17,8 +17,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Constant;
-import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -26,7 +24,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.arcticlauncher.client.Lang;
 /** Chat timestamps, repeated lines stacked as "(x3)", mentions of you marked, and a longer history. */
 @Mixin(ChatComponent.class)
-abstract class ChatComponentMixin {
+abstract class ChatComponentMixin implements PersistentChat.Hud {
 	/** Text width in GUI pixels, fractions included where the game keeps them (a proportional font's digits are not whole pixels). */
 	@Unique
 	private static com.arcticlauncher.client.feature.ChatStampWidth.Measure arctic$measure(net.minecraft.client.gui.Font font) {
@@ -189,20 +187,11 @@ abstract class ChatComponentMixin {
 		//#endif
 	}
 
-	/** How many messages the chat keeps: the game's 100 become the player's setting. */
-	@ModifyConstant(
-			//#if MC >= 1.20.6
-			method = {"addMessageToDisplayQueue", "addMessageToQueue"},
-			//#elif MC >= 1.19
-			method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;ILnet/minecraft/client/GuiMessageTag;Z)V",
-			//#else
-			method = "addMessage(Lnet/minecraft/network/chat/Component;IIZ)V",
-			//#endif
-			constant = @Constant(intValue = 100))
-	private int arctic$history(int vanilla) {
+	@Override
+	public int arctic$historyLimit(int limit) {
 		ClientConfig c = ArcticClient.config();
-		return PersistentChat.historyLimit(arctic$loading, c == null ? vanilla : c.chatHistory,
-				c == null ? 0 : arctic$loadedLines);
+		return c == null ? limit : PersistentChat.historyLimit(limit,
+				arctic$loading, c.chatHistory, arctic$loadedLines);
 	}
 
 	@Shadow
@@ -242,13 +231,6 @@ abstract class ChatComponentMixin {
 			arctic$loadedLines = 0;
 			ArcticClient.persistentChat().stopPaging();
 		}
-	}
-
-	/** Keep a larger up-arrow history while chat is saved to disk. */
-	@ModifyConstant(method = "addRecentChat", constant = @Constant(intValue = 100), require = 0)
-	private int arctic$sentLimit(int vanilla) {
-		ClientConfig c = ArcticClient.config();
-		return c != null && c.chatPersistent ? PersistentChat.MAX_HUD_LINES : vanilla;
 	}
 
 	/** Muted players and hidden words: the line never reaches the chat. */

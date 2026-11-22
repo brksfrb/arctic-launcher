@@ -97,14 +97,22 @@ public final class PersistentChat {
 		void sent(String text);
 	}
 
+	public interface Hud {
+		int arctic$historyLimit(int gameLimit);
+	}
+
 	public PersistentChat(File instanceConfig) {
 		root = new File(instanceConfig, "chat-history");
 		legacy = new File(instanceConfig, LEGACY_NAME);
 	}
 
-	public static int historyLimit(boolean loading, int history, int loadedLines) {
+	public static int historyLimit(int gameLimit, boolean loading, int history, int loadedLines) {
 		if (loading) {
-			return MAX_HUD_LINES;
+			return Math.max(gameLimit, MAX_HUD_LINES);
+		}
+		if (gameLimit != 100) {
+			// Reserve room for restored lines without reducing the other mod's live message limit.
+			return (int) Math.max(gameLimit, Math.min(MAX_HUD_LINES, (long) gameLimit + loadedLines));
 		}
 		return (int) Math.max(1L, Math.min(MAX_HUD_LINES, (long) history + loadedLines));
 	}
