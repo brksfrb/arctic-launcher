@@ -114,6 +114,7 @@ struct Rule {
 }
 
 const OUT_OF_MEMORY: &str = r"java\.lang\.OutOfMemoryError";
+const LINKAGE_ERROR: &str = r"java\.lang\.(NoSuchMethodError|NoSuchFieldError|NoClassDefFoundError|ClassNotFoundException|AbstractMethodError)";
 
 /// Checked in order: the most specific causes first.
 const RULES: &[Rule] = &[
@@ -591,7 +592,7 @@ const RULES: &[Rule] = &[
         explain: missing_recommended_dependency,
     },
     Rule {
-        pattern: r"java\.lang\.(NoSuchMethodError|NoSuchFieldError|NoClassDefFoundError|ClassNotFoundException|AbstractMethodError)",
+        pattern: LINKAGE_ERROR,
         explain: |_, _| {
             Diagnosis::new(
                 "A mod is for a different version",
@@ -689,6 +690,153 @@ fn missing_fabric_api_class(c: &regex::Captures, text: &str) -> Diagnosis {
         ));
     }
     Diagnosis::new(title, detail, id.into_iter().map(str::to_owned).collect())
+}
+
+fn related_packages(a: &str, b: &str, shared_depth: usize) -> bool {
+    let mut a = a.split('.');
+    let mut b = b.split('.');
+    for depth in 0..shared_depth {
+        match (a.next(), b.next()) {
+            (Some(a), Some(b)) if a == b => {}
+            (None, _) | (_, None) => return depth > 0,
+            _ => return false,
+        }
+    }
+    true
+}
+
+fn missing_entrypoint_library(text: &str, at: usize, mods_dir: Option<&Path>) -> Option<Diagnosis> {
+    static CLASS: OnceLock<Regex> = OnceLock::new();
+    let class = CLASS
+        .get_or_init(|| {
+            Regex::new(r"^java\.lang\.(?:NoClassDefFoundError|ClassNotFoundException):[ \t]+([\w$]+(?:[./][\w$]+)+)(?:\s|$)").unwrap()
+        })
+        .captures(&text[at..])?[1]
+        .replace('/', ".");
+    let (package, _) = class.rsplit_once('.')?;
+    if [
+        "net.minecraft",
+        "com.mojang",
+        "java",
+        "javax",
+        "jdk",
+        "sun",
+        "com.sun",
+    ]
+    .iter()
+    .any(|root| {
+        package == *root
+            || package
+                .strip_prefix(root)
+                .is_some_and(|s| s.starts_with('.'))
+    }) {
+        return None;
+    }
+
+    // Walk back within the same throwable. A separate log record, blank line or suppressed
+    // exception must not lend its entrypoint to an unrelated missing class.
+    static ENTRYPOINT: OnceLock<Regex> = OnceLock::new();
+    let entrypoint = ENTRYPOINT.get_or_init(|| {
+        Regex::new(r"Could not execute entrypoint stage '[^']+'[^\r\n]*?provided by '([\w.-]+)' at '([\w$]+(?:\.[\w$]+)+)(?:::[\w$]+)?'").unwrap()
+    });
+    fn trace_line(line: &str) -> &str {
+        line.strip_prefix(VANILLA_CRASH_TRACE)
+            .unwrap_or(line)
+            .trim()
+    }
+    let mut before = text[..at].rsplit('\n');
+    if trace_line(before.next()?) != "Caused by:" {
+        return None;
+    }
+    let header = before.map(trace_line).find(|line| {
+        line.contains("Could not execute entrypoint stage ")
+            || !["at ", "Caused by:", "... "]
+                .iter()
+                .any(|prefix| line.starts_with(prefix))
+    })?;
+    let owner = entrypoint.captures(header)?;
+    let id = &owner[1];
+    let (owner_package, _) = owner[2].rsplit_once('.')?;
+    // A shared top-level domain such as "com" is too broad to identify a mod.
+    if related_packages(package, owner_package, 2) {
+        return None;
+    }
+
+    let known = mods_dir.map_or_else(Vec::new, crate::crash_suspect::scan);
+    if known
+        .iter()
+        .flat_map(|m| &m.packages)
+        .any(|p| related_packages(package, p, 3))
+    {
+        return None;
+    }
+
+    // Reports can identify a plausible provider by mod ID even when its jar is unavailable.
+    let reported = crate::crash_conflicts::from_crash_report(text);
+    let startup = compact_mod_inventory(text, text);
+    let uploaded = text
+        .split_once("---- full mod list (id version) ----\n")
+        .map_or("", |(_, tail)| {
+            tail.split("\n---- ").next().unwrap_or_default()
+        });
+    // The trace identifies who needed the class. An inventory is needed to infer absence.
+    if reported.is_empty()
+        && startup.is_empty()
+        && uploaded.trim().is_empty()
+        && !mods_dir.is_some_and(Path::is_dir)
+    {
+        return None;
+    }
+    let package = package.replace('_', "").to_ascii_lowercase();
+    let package_parts: Vec<_> = package.split('.').collect();
+    if reported
+        .iter()
+        .map(|m| m.id.as_str())
+        .chain(known.iter().map(|m| m.id.as_str()))
+        .chain(
+            startup
+                .lines()
+                .chain(uploaded.lines())
+                .filter_map(|line| line.split_once(' ').map(|(id, _)| id)),
+        )
+        .any(|mod_id| {
+            let mod_id = mod_id.replace(['-', '_', '.'], "").to_ascii_lowercase();
+            (0..package_parts.len()).any(|start| {
+                let mut remaining = mod_id.as_str();
+                for part in &package_parts[start..] {
+                    let Some(suffix) = remaining.strip_prefix(part) else {
+                        break;
+                    };
+                    if suffix.is_empty() {
+                        return true;
+                    }
+                    remaining = suffix;
+                }
+                false
+            })
+        })
+    {
+        return None;
+    }
+    let name = known
+        .iter()
+        .find(|m| m.id == id)
+        .map(|m| m.name.as_str())
+        .filter(|name| *name != id)
+        .or_else(|| {
+            reported
+                .iter()
+                .find(|m| m.id == id)
+                .map(|m| m.name.as_str())
+        })
+        .unwrap_or(id);
+    Some(Diagnosis::new(
+        format!("{name} needs a mod that isn't installed"),
+        format!(
+            "{name} couldn't load {class}. Check {name}'s download page for the required mod or library and install it, or remove {name}."
+        ),
+        vec![id.to_owned()],
+    ))
 }
 
 fn missing_recommended_dependency(class: &regex::Captures, text: &str) -> Diagnosis {
@@ -1403,7 +1551,7 @@ fn native_library_diagnosis(text: &str, report: &str, fatal: &str) -> Option<Dia
         format!(
             "The game stopped with {signal} in {mod_id}'s native library. Update {mod_id} or try launching without it."
         )
-    } else if let Some((driver, _)) = diagnose_log_rules(report, None)
+    } else if let Some((driver, _)) = diagnose_log_rules(report, None, None)
         .filter(|(diagnosis, _)| diagnosis.title == "The graphics driver crashed")
     {
         return Some(Diagnosis::new(
@@ -1453,7 +1601,7 @@ pub(crate) fn java_fatal_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
     } else if let Some(native) = native_library_diagnosis(text, report, fatal) {
         native
     } else {
-        diagnose_log_rules(report, None).map_or_else(
+        diagnose_log_rules(report, None, None).map_or_else(
             || {
                 Diagnosis::new(
                     "The Java runtime crashed",
@@ -1657,10 +1805,14 @@ fn diagnose_rules(
         return Some((config, head_of(evidence, 2048).to_owned()));
     }
 
-    diagnose_log_rules(text, java)
+    diagnose_log_rules(text, java, mods_dir)
 }
 
-fn diagnose_log_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
+fn diagnose_log_rules(
+    text: &str,
+    java: Option<&str>,
+    mods_dir: Option<&Path>,
+) -> Option<(Diagnosis, String)> {
     let secondary_report = crash_exception(text).is_some_and(secondary_stack);
     for (rule, re) in RULES.iter().zip(compiled()) {
         for c in re.captures_iter(text) {
@@ -1696,7 +1848,13 @@ fn diagnose_log_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, Stri
             } else {
                 text
             };
-            let diagnosis = (rule.explain)(&c, context);
+            let diagnosis = if rule.pattern == LINKAGE_ERROR
+                && let Some(diagnosis) = missing_entrypoint_library(text, matched.start(), mods_dir)
+            {
+                diagnosis
+            } else {
+                (rule.explain)(&c, context)
+            };
             if !diagnosis.title.is_empty() {
                 // The mixin rules select the actual failure, which can differ from their first match.
                 if matches!(
@@ -4166,6 +4324,70 @@ Caused by: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.even
         assert!(
             diagnose("[main/WARN]: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents")
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn crash_488_points_quickthrow_at_its_missing_library() {
+        let report = "---- Minecraft Crash Report ----\n\n\
+            Description: Initializing game\n\n\
+            java.lang.RuntimeException: Could not execute entrypoint stage 'client' due to errors, provided by 'quickthrow' at 'com.iamdeath.quickthrow.QuickThrowClient'!\n\
+            \tat net.fabricmc.loader.impl.FabricLoaderImpl.invokeEntrypoints(FabricLoaderImpl.java:416)\n\
+            Caused by: java.lang.NoClassDefFoundError: com/death/core/DeathCoreApi\n\
+            \tat knot//com.iamdeath.quickthrow.QuickThrowClient.onInitializeClient(QuickThrowClient.java:42)\n\
+            \t... 6 more\n\
+            Caused by: java.lang.ClassNotFoundException: com.death.core.DeathCoreApi\n\
+            \tat net.fabricmc.loader.impl.launch.knot.KnotClassLoader.loadClass(KnotClassLoader.java:119)\n\n\
+            -- System Details --\n\
+            \tFabric Mods:\n\
+            \t\tfabric-api: Fabric API 0.161.0+26.2\n\
+            \t\tquickthrow: QuickThrow 1.0.0\n";
+        let (d, matched) = diagnose_match(report, None).unwrap();
+        assert_eq!(d.title, "QuickThrow needs a mod that isn't installed");
+        assert_eq!(d.mods, ["quickthrow"]);
+        assert!(d.detail.contains("com.death.core.DeathCoreApi"));
+        assert!(d.detail.contains("QuickThrow's download page"));
+        assert!(d.detail.contains("remove QuickThrow"));
+        assert!(!d.repair);
+        assert!(matched.ends_with("NoClassDefFoundError: com/death/core/DeathCoreApi"));
+
+        let dotted_only = report.replace(
+            "Caused by: java.lang.NoClassDefFoundError: com/death/core/DeathCoreApi\n",
+            "",
+        );
+        assert_eq!(diagnose(&dotted_only).unwrap(), d);
+        for report in [
+            report
+                .replace("com/death/core/", "com/iamdeath/quickthrow/api/")
+                .replace("com.death.core.", "com.iamdeath.quickthrow.api."),
+            format!("{report}\t\tdeath_core: DeathCore 1.0.0\n"),
+            report.replace(
+                "Caused by: java.lang.NoClassDefFoundError",
+                "\njava.lang.RuntimeException: An unrelated failure\nCaused by: java.lang.NoClassDefFoundError",
+            ),
+        ] {
+            assert_eq!(diagnose(&report).unwrap().title, "A mod is for a different version");
+        }
+
+        // A provider's jar can own the package even when its mod ID gives no clue.
+        let mods = tempfile::tempdir().unwrap();
+        let file = std::fs::File::create(mods.path().join("library.jar")).unwrap();
+        let mut jar = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        jar.start_file("fabric.mod.json", options).unwrap();
+        std::io::Write::write_all(
+            &mut jar,
+            br#"{"id":"library","name":"Library","version":"1.0.0"}"#,
+        )
+        .unwrap();
+        jar.start_file("com/death/core/OtherClass.class", options)
+            .unwrap();
+        jar.finish().unwrap();
+        assert_eq!(
+            diagnose_with_java(report, None, mods.path(), &[])
+                .unwrap()
+                .title,
+            "A mod is for a different version"
         );
     }
 
