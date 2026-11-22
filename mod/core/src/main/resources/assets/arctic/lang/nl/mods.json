@@ -391,6 +391,8 @@
   "mods.packs": "Packs",
   "mods.packs_shaders": "Packs en shaders",
   "mods.part_of_the_sounds_name_then_its_volume_in": "Deel van de naam van het geluid, dan het volume in procenten (0 = stil). Namen zien eruit als entity.player.hurt,",
+  "mods.hide_my_potion_particles": "Mijn toverdrankdeeltjes verbergen",
+  "mods.hide_my_potion_particles_description": "Verbergt de draaikolken van effecten rond je personage.",
   "mods.particle_control": "Deeltjesbeheer",
   "mods.particles.crits_and_hits": "Crits en treffers",
   "mods.particles.explosions": "Explosies",

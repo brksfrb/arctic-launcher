@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 //#if MC >= 1.21.4
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import org.spongepowered.asm.mixin.injection.Coerce;
 //#endif
 //#if MC >= 1.21.9
 import net.minecraft.client.gui.font.glyphs.BakedSheetGlyph;
@@ -71,7 +72,7 @@ abstract class BadgeSnapMixin {
 	@WrapOperation(method = "renderChar", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/gui/font/glyphs/BakedGlyph$GlyphInstance;x()F"))
 	//#endif
-	private float arctic$charX(Object inst, Operation<Float> original) {
+	private float arctic$charX(@Coerce Object inst, Operation<Float> original) {
 		float x = original.call(inst);
 		if (!BadgeTexture.isBadge(this)) {
 			return x;
@@ -87,7 +88,7 @@ abstract class BadgeSnapMixin {
 	@WrapOperation(method = "renderChar", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/gui/font/glyphs/BakedGlyph$GlyphInstance;y()F"))
 	//#endif
-	private float arctic$charY(Object inst, Operation<Float> original) {
+	private float arctic$charY(@Coerce Object inst, Operation<Float> original) {
 		float y = original.call(inst);
 		if (!BadgeTexture.isBadge(this)) {
 			return y;
