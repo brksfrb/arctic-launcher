@@ -3,6 +3,9 @@
 	"package": "com.arcticlauncher.mod.mixin",
 	"compatibilityLevel": "JAVA_${java}",
 	"client": [
+<% if (resolver) { %>		"MojangBlocklistMixin",
+<% } else { %>		"LegacyMojangBlocklistMixin",
+<% } %>
 		"ScreenshotMixin",<% if (restyleWidgets) { %>
 		"AbstractButtonMixin",
 		"AbstractSliderButtonMixin",

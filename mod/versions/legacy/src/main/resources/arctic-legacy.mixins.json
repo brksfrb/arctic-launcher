@@ -5,7 +5,8 @@
 	"minVersion": "0.8.7",
 	"plugin": "com.arcticlauncher.legacy.forge.ForgeMixinPlugin",<% } %>
 	"client": [
-		"ScreenshotMixin",
+<% if (!mc18) { %>		"LegacyMojangBlocklistMixin",
+<% } %>		"ScreenshotMixin",
 		"ScreenshotKeyMixin",
 		"MinecraftClientMixin",
 		"MainSessionLogMixin",
@@ -88,11 +89,11 @@
 		"NoHurtCamLegacyMixin",
 		"FramerateLimitLegacyMixin",
 		"HeldItemTweakMixin",
-		"OldAnimationsMixin",
+<% if (mc18) { %>		"OldAnimationsMixin",
 		"OldSneakMixin",
 		"OldItemPositionMixin",
 		"OldHeldLayerMixin",
-		"ClientPlayerDropMixin",
+<% } %>		"ClientPlayerDropMixin",
 		"ScreenMouseMixin",
 		"NetworkStateAccess",
 		"ClientConnectionReplayMixin",

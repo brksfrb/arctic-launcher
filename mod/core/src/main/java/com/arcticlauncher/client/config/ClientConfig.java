@@ -225,6 +225,8 @@ public final class ClientConfig {
 	public boolean tabGlowSelf;
 	/** Playing with a game controller. */
 	public com.arcticlauncher.client.controller.Controller.Settings controller = new com.arcticlauncher.client.controller.Controller.Settings();
+	/** Ignore Mojang's server address blocklist when connecting or pinging. */
+	public volatile boolean ignoreMojangServerBlocklist = true;
 	/** SOCKS5 proxy for server connections and Arctic's web requests. */
 	public ProxyConfig proxy = new ProxyConfig();
 	/** When the launcher's proxy choice was last applied (its timestamp). */

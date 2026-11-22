@@ -840,6 +840,12 @@ final class ModCatalog {
 	private static void social(List<Mod> out, ClientConfig c) {
 		out.add(new Mod("friends", Lang.t("mods.friends"), Lang.t("mods.whos_online_chat_screenshots_voice"), "friends", Category.SOCIAL, "voice duel invite")
 				.page(FriendsPage::new));
+		if (!"1.8.9".equals(ArcticClient.platform().minecraftVersion())) {
+			out.add(new Mod("mojangblocklist", Lang.t("mods.ignore_mojang_server_blocklist"),
+					Lang.t("mods.allow_connections_to_servers_blocked_by_mojang"), "quickplay", Category.CLIENT,
+					"Mojang server blocklist multiplayer") // i18n-ignore
+					.toggle(() -> c.ignoreMojangServerBlocklist, on -> c.ignoreMojangServerBlocklist = on));
+		}
 		out.add(new Mod("account", Lang.t("mods.account"), Lang.t("mods.switch_accounts_or_use_a_proxy"), "account", Category.CLIENT, "proxy login") // i18n-ignore
 				.page(AccountPage::new));
 		out.add(new Mod("lookscheck", Lang.t("mods.cosmetics_check"), Lang.t("mods.why_cant_others_see_my_look_what_this_game"), "looks", Category.CLIENT,
