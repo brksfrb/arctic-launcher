@@ -69,15 +69,14 @@ impl ArcticApp {
                         "https://github.com/{GITHUB_REPO}"
                     )));
                 }
-                if widgets::button(
-                    ui,
-                    p,
-                    Some(Icon::Plus),
-                    t!("nav.suggest_a_feature_or_report_a_bug"),
-                    true,
-                )
-                .clicked()
-                {
+                let suggest = t!("nav.suggest_a_feature_or_report_a_bug");
+                let unread = self.reports.unread();
+                let label = if unread == 0 {
+                    suggest.to_owned()
+                } else {
+                    format!("{suggest} ({unread})")
+                };
+                if widgets::button(ui, p, Some(Icon::Plus), &label, true).clicked() {
                     self.open_suggest();
                 }
                 if widgets::button(ui, p, Some(Icon::External), t!("nav.email_support"), false)

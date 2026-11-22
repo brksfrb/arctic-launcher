@@ -481,8 +481,61 @@ pub struct Suggestion {
     pub log: String,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SuggestionReceipt {
+    pub id: i64,
+    reply_token: Option<String>,
+}
+
+impl SuggestionReceipt {
+    pub fn can_receive_replies(&self) -> bool {
+        self.reply_token.is_some()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SuggestionReply {
+    pub id: i64,
+    pub text: String,
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SuggestionReplies {
+    pub done: bool,
+    pub replies: Vec<SuggestionReply>,
+}
+
+/// A missing report or invalid receipt returns `None`; transient errors leave the cache usable.
+pub fn suggestion_replies(
+    base: &str,
+    receipt: &SuggestionReceipt,
+) -> Result<Option<SuggestionReplies>> {
+    let Some(token) = &receipt.reply_token else {
+        return Ok(None);
+    };
+    let mut response = agent()
+        .get(&format!("{base}/v1/suggest/{}/replies", receipt.id))
+        .header("Authorization", &format!("Bearer {token}"))
+        .config()
+        .http_status_as_error(false)
+        .max_redirects(0)
+        .build()
+        .call()?;
+    match response.status().as_u16() {
+        200 => Ok(Some(
+            response
+                .body_mut()
+                .with_config()
+                .limit(MAX_BYTES)
+                .read_json()?,
+        )),
+        404 => Ok(None),
+        status => Err(Error::Other(server_error(&mut response, status))),
+    }
+}
+
 /// Send a suggestion the player wrote.
-pub fn send_suggestion(base: &str, suggestion: &Suggestion) -> Result<()> {
+pub fn send_suggestion(base: &str, suggestion: &Suggestion) -> Result<Option<SuggestionReceipt>> {
     let mut resp = agent()
         .post(&format!("{base}/v1/suggest"))
         .config()
@@ -498,7 +551,13 @@ pub fn send_suggestion(base: &str, suggestion: &Suggestion) -> Result<()> {
         }))?;
     let status = resp.status().as_u16();
     if (200..300).contains(&status) {
-        Ok(())
+        // A successful submission can come from an older server with no receipt.
+        Ok(resp
+            .body_mut()
+            .with_config()
+            .limit(MAX_BYTES)
+            .read_json()
+            .ok())
     } else {
         Err(Error::Other(server_error(&mut resp, status)))
     }
