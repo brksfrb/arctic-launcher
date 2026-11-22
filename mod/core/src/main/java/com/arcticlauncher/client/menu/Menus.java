@@ -13,7 +13,7 @@ public final class Menus {
 
 	/** What Right Shift opens right now. */
 	public static Page home() {
-		if (ArcticClient.platform().inWorld() && ArcticClient.platform().hasFeatures()) {
+		if (ArcticClient.platform().inWorld() && ArcticClient.platform().hudEditorWorks()) {
 			return new HudEditor();
 		}
 		return new ModsScreen();

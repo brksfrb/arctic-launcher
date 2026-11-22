@@ -117,6 +117,16 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return true;
 	}
 
+	/** The HUD editor (drag, resize and style widgets) works here; versions without game features may still draw Arctic's HUD. */
+	default boolean hudEditorWorks() {
+		return hasFeatures();
+	}
+
+	/** Arctic can switch the game's own font (the smooth font pack); false where it doesn't own the game's text. */
+	default boolean gameFontWorks() {
+		return true;
+	}
+
 	/** The smooth font pack is on. */
 	boolean smoothFont();
 

@@ -27,11 +27,17 @@ pub mod avatar_gpu_upload;
 #[cfg(windows)]
 pub mod avatar_material;
 pub mod bundle;
+#[cfg(windows)]
+mod core_bindings;
+pub mod core_signatures;
 pub mod engine;
 #[cfg(windows)]
 mod gpu_flight;
 #[cfg(windows)]
+mod input_hook;
+#[cfg(windows)]
 mod native_geometry_stream;
+pub mod sigscan;
 
 #[cfg(windows)]
 pub mod capture;

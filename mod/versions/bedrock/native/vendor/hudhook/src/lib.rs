@@ -141,6 +141,7 @@ pub mod mh;
 pub(crate) mod renderer;
 
 pub use renderer::msg_filter::MessageFilter;
+pub use renderer::pipeline::set_window_subclass;
 
 pub mod util;
 

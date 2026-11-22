@@ -518,6 +518,16 @@ Latite is licensed under GPL-3.0; Arctic uses GPL-3.0-or-later. The scanner does
 not distribute any Minecraft executable bytes or symbols. Inspection output is
 local and ignored under `target/`.
 
+`src/core_signatures.rs` adapts five signatures (`ScreenView::setupAndRender`,
+`ClientInstance::grabCursor`/`releaseCursor`, `Mouse::processInputQueue`,
+`MouseDevice::_instance`) and the 1.26.6x field offsets of `ScreenView`,
+`VisualTree`, `UIControl`, `MinecraftUIRenderContext`, `ClientInstance`,
+`MinecraftGame` and `Actor` (`StateVectorComponent`, `ActorRotationComponent`)
+from [LatiteClient/Latite](https://github.com/LatiteClient/Latite) v2.9.1,
+commit `0c32cbe035b3f4432e51cddadd2ae5a289bc7f89` (GPL-3.0), whose supported
+version list includes 1.26.6x. The scanner (`src/sigscan.rs`), RTTI pointer
+checks, offset calibration, self-check log and input hooks are Arctic code.
+
 `src/world_hooks.rs` uses that revision's world/actor/tick callback signatures
 and platform/renderer field offsets (`Platform_GameCore.cpp`, `MinecraftGame.h`,
 `GameRenderer.h`, `LevelRenderer.h`, `LevelRendererPlayer.cpp`). The runtime

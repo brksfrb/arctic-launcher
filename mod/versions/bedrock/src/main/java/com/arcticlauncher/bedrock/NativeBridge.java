@@ -4,7 +4,6 @@ import com.arcticlauncher.client.ArcticClient;
 import java.io.File;
 import java.awt.image.BufferedImage;
 
-import com.arcticlauncher.client.Lang;
 /** JNI entry points; every core UI call is serialized on the native render thread. */
 public final class NativeBridge {
     private static BedrockPlatform platform;
@@ -372,7 +371,41 @@ public final class NativeBridge {
 
     /** Width/height and mouse are world-surface pixels. The shared UI keeps a
      * separate GUI scale. Events are {kind, value} native-window pairs. */
+    /** Core engine binding state for this frame (native core_bindings). */
+    public static void gameState(boolean bound,boolean inWorld,boolean screenOpen,double[] position,String screen) {
+        if(platform==null)return;
+        if(position!=null&&position.length!=5)throw new IllegalArgumentException("invalid position");
+        platform.engineBound=bound;platform.engineInWorld=inWorld;platform.engineScreenOpen=screenOpen;
+        platform.enginePosition=position;platform.engineScreen=screen;
+    }
+    /** Which engine bindings resolved on this game build (shown only inside the Arctic menu). */
+    public static void bindingStatus(String status) {
+        if(platform!=null)platform.bindingStatus=status==null?"":status;
+    }
+
+    private static final byte[] NOTHING=new byte[0];
+    private static int[] lastPixels;
+    private static int lastWidth,lastHeight;
+
+    /**
+     * The presentation path: null when the pixels equal the last returned
+     * frame (no copy, no upload), an empty array when there is nothing to
+     * draw (no rasterizing at all), else RGBA pixels.
+     */
+    public static byte[] frameIfChanged(int width, int height, int fps, int mx, int my, boolean[] keys, int[] events) {
+        return frame(width,height,fps,mx,my,keys,events,true);
+    }
+
     public static byte[] frame(int width, int height, int fps, int mx, int my, boolean[] keys, int[] events) {
+        return frame(width,height,fps,mx,my,keys,events,false);
+    }
+
+    /** Arctic's HUD shows only in a world with no game screen and no Arctic page over it. */
+    static boolean hudVisible() {
+        return platform.inWorld() && !platform.engineScreenOpen && !platform.hudHidden();
+    }
+
+    private static byte[] frame(int width, int height, int fps, int mx, int my, boolean[] keys, int[] events, boolean changedOnly) {
         requirePresentationContext();
         frameProbeSequence=0;
         frameCaptureMetadata=null;
@@ -401,6 +434,12 @@ public final class NativeBridge {
             nextTick = now + 50_000_000L;
         }
         platform.sampleAppearanceHistory();
+        boolean worldLayer=WORLD.renderable&&platform.world!=null;
+        if(changedOnly&&!worldLayer&&!cleanCaptureView&&platform.page==null&&!hudVisible()) {
+            // Main menu, loading, a game screen: nothing of ours on screen.
+            lastPixels=null;
+            return NOTHING;
+        }
         try (SoftwareGfx gfx = new SoftwareGfx(width, height, platform, guiScale)) {
             WorldFrame world=WORLD.renderable?platform.world:null;
             if(world!=null && world.width==width && world.height==height) {
@@ -425,25 +464,41 @@ public final class NativeBridge {
                 }
             } else {platform.softwareAvatarSimplePhases.reset();}
             if(cleanCaptureView) { /* Export world geometry without Arctic HUD/editor pixels. */ }
-            else if (platform.page != null) platform.page.render(gfx, mx, my);
-            else {
-                ArcticClient.hud().render(gfx, ArcticClient.style(), false);
-                gfx.text(Lang.t("platform.arctic_bedrock_native_preview_right_shift"), 6, uiHeight - 16, 0xFFC4D8EB, true);
+            else if (platform.page != null) {
+                platform.page.render(gfx, mx, my);
+                // Binding status lives inside the menu only.
+                String status=platform.bindingStatus;
+                if(status!=null&&!status.isEmpty())gfx.text("Bedrock "+platform.version+" \u00b7 "+status, 6, uiHeight - 12, 0x99C4D8EB, true); // i18n-ignore: diagnostics
+            }
+            else if (hudVisible()) ArcticClient.hud().render(gfx, ArcticClient.style(), false);
+            if(changedOnly) {
+                int[] argb=argb(gfx.image());
+                if(lastPixels!=null&&lastWidth==width&&lastHeight==height&&java.util.Arrays.equals(lastPixels,argb))return null;
+                lastPixels=argb.clone();lastWidth=width;lastHeight=height;
+                return rgba(argb);
             }
             return rgba(gfx.image());
         }
+    }
+
+    private static boolean typingInGame() {
+        String screen=platform.engineScreen;
+        return platform.engineScreenOpen&&screen!=null&&(screen.contains("chat")||screen.contains("sign")||screen.contains("anvil")||screen.contains("command"));
     }
 
     private static void input(int kind, int value, int mx, int my) {
         if (kind == 0) {
             int key = coreKey(value);
             if (platform.page != null) platform.page.keyPressed(key, value);
-            else ArcticClient.screenKeyPressed(key);
+            // Typing a capital in the game's chat must not open the Arctic menu.
+            else if (!typingInGame()) ArcticClient.screenKeyPressed(key);
         } else if (kind == 1 && platform.page != null) {
             platform.page.charTyped(value);
         } else if (kind == 2) {
             if (platform.page != null) platform.page.mouseClicked(mx, my, value);
-            else ArcticClient.mousePressed(value);
+        } else if (kind == 6) {
+            // A real click that went to the game (low-level mouse hook): CPS/keystrokes.
+            ArcticClient.mousePressed(value);
         } else if (kind == 3 && platform.page != null) {
             platform.page.mouseReleased(mx, my, value);
         } else if (kind == 4 && platform.page != null) {
@@ -455,6 +510,27 @@ public final class NativeBridge {
 
     public static int coreKey(int vk) {
         return BedrockKeys.core(vk);
+    }
+
+    /** The image's own ARGB pixels when it is a plain TYPE_INT_ARGB raster (no copy). */
+    private static int[] argb(BufferedImage image) {
+        java.awt.image.DataBuffer buffer=image.getRaster().getDataBuffer();
+        if(image.getType()==BufferedImage.TYPE_INT_ARGB&&buffer instanceof java.awt.image.DataBufferInt
+                &&((java.awt.image.DataBufferInt)buffer).getNumBanks()==1
+                &&buffer.getSize()==image.getWidth()*image.getHeight())
+            return ((java.awt.image.DataBufferInt)buffer).getData();
+        int[] out=new int[image.getWidth()*image.getHeight()];
+        image.getRGB(0,0,image.getWidth(),image.getHeight(),out,0,image.getWidth());
+        return out;
+    }
+
+    private static byte[] rgba(int[] argb) {
+        byte[] rgba=new byte[argb.length*4];
+        for(int i=0,o=0;i<argb.length;i++,o+=4) {
+            int c=argb[i];
+            rgba[o]=(byte)(c>>16);rgba[o+1]=(byte)(c>>8);rgba[o+2]=(byte)c;rgba[o+3]=(byte)(c>>>24);
+        }
+        return rgba;
     }
 
     static byte[] rgba(BufferedImage image) {

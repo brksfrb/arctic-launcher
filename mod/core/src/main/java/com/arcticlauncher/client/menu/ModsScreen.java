@@ -92,7 +92,7 @@ final class ModsScreen extends Page {
 		int headerY = py + (TabPage.HEADER - FIELD_H) / 2;
 		int hudX = px + pw - TabPage.PAD - SEARCH_W - 22 - CHIP_GAP - HUD_W;
 		int styleX = hudX;
-		if (ArcticClient.platform().hasFeatures()) {
+		if (ArcticClient.platform().hudEditorWorks()) {
 			// The HUD layout, from anywhere (outside a world it shows sample values).
 			add(new Button(Lang.t("mods.edit_hud"), () -> ArcticClient.platform().openPage(new HudEditor())))
 					.bounds(hudX, headerY, HUD_W, FIELD_H);

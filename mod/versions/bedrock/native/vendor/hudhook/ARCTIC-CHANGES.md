@@ -31,3 +31,14 @@ host exercises resize, format/buffer-count changes, swap-chain replacement and
 both Present test paths, with decoded MP4 color checks in each capture phase.
 
 There are no changes to signature scanning or game authentication.
+
+Overlay texture replacement uses a ring of three upload slots (command
+allocator, list and persistent upload buffer each). A slot is reused only after
+its own fence completes; replacement no longer creates a committed upload
+buffer per frame or waits on the CPU for the queue to drain. Size changes still
+retire earlier draws before replacing the resource and descriptor, and
+`wait_idle` also retires outstanding uploads.
+
+`set_window_subclass(false)` makes later pipelines leave the window procedure
+alone (no `GWLP_WNDPROC` replacement or restore); the embedding adapter then
+supplies input itself. `WM_CHAR` surrogate halves no longer panic.

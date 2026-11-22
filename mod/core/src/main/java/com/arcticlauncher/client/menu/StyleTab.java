@@ -44,16 +44,21 @@ final class StyleTab implements MenuTab {
 			})).bounds(x + i * (cardW + GAP), top, cardW, CARD_H);
 		}
 		final ClientConfig c = ArcticClient.config();
-		host.add(new Toggle(Lang.t("mods.fancy"), Lang.t("mods.smooth_font_and_rounded_smooth_shapes"), Form.binding(() -> c.fancy, on -> {
-			c.fancy = on;
-			ArcticClient.platform().setSmoothFont(on);
-		}))).bounds(x, top + CARD_H + 8, w, ROW);
+		int rowY = top + CARD_H + 8;
+		// Only where Arctic can change the game's own font (not on Bedrock).
+		if (ArcticClient.platform().gameFontWorks()) {
+			host.add(new Toggle(Lang.t("mods.fancy"), Lang.t("mods.smooth_font_and_rounded_smooth_shapes"), Form.binding(() -> c.fancy, on -> {
+				c.fancy = on;
+				ArcticClient.platform().setSmoothFont(on);
+			}))).bounds(x, rowY, w, ROW);
+			rowY += ROW + 2;
+		}
 		host.add(new Toggle(Lang.t("mods.smooth_edges"), Lang.t("mods.anti_aliased_letter_edges_off_every_pixel_of"),
 				Form.binding(() -> c.fontAntialias, on -> {
 					c.fontAntialias = on;
 					ArcticClient.platform().reloadFonts();
-				}))).bounds(x, top + CARD_H + 8 + ROW + 2, w, ROW);
-		textY = top + CARD_H + 8 + (ROW + 2) * 2 + 8;
+				}))).bounds(x, rowY, w, ROW);
+		textY = rowY + ROW + 2 + 8;
 	}
 
 	@Override

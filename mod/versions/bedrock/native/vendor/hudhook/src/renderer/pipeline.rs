@@ -21,6 +21,15 @@ use crate::{util, ImguiRenderLoop, MessageFilter};
 
 type RenderLoop = Box<dyn ImguiRenderLoop + Send + Sync>;
 
+/// Arctic: whether pipelines subclass the game window (GWLP_WNDPROC) to feed
+/// imgui input. Off means no window procedure is ever replaced or restored.
+static WINDOW_SUBCLASS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Arctic: enable or disable window subclassing for pipelines created later.
+pub fn set_window_subclass(enabled: bool) {
+    WINDOW_SUBCLASS.store(enabled, Ordering::SeqCst);
+}
+
 // Safety: HWND is an opaque integer handle, safe to send/share across threads.
 #[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
@@ -43,6 +52,7 @@ pub(crate) struct PipelineSharedState {
     pub(crate) message_filter: AtomicU32,
     pub(crate) wnd_proc: WndProcType,
     pub(crate) tx: Sender<PipelineMessage>,
+    pub(crate) subclassed: bool,
 }
 
 pub(crate) struct Pipeline<T: RenderEngine> {
@@ -76,17 +86,23 @@ impl<T: RenderEngine> Pipeline<T> {
             return Err((e, render_loop));
         }
 
-        let wnd_proc = unsafe {
-            #[cfg(target_arch = "x86")]
-            type SwlpRet = i32;
-            #[cfg(target_arch = "x86_64")]
-            type SwlpRet = isize;
+        let subclassed = WINDOW_SUBCLASS.load(Ordering::SeqCst);
+        let wnd_proc = if subclassed {
+            unsafe {
+                #[cfg(target_arch = "x86")]
+                type SwlpRet = i32;
+                #[cfg(target_arch = "x86_64")]
+                type SwlpRet = isize;
 
-            mem::transmute::<SwlpRet, WndProcType>(SetWindowLongPtrW(
-                hwnd,
-                GWLP_WNDPROC,
-                pipeline_wnd_proc as *const () as _,
-            ))
+                mem::transmute::<SwlpRet, WndProcType>(SetWindowLongPtrW(
+                    hwnd,
+                    GWLP_WNDPROC,
+                    pipeline_wnd_proc as *const () as _,
+                ))
+            }
+        } else {
+            // Never installed and never called: a placeholder for the type.
+            pipeline_wnd_proc as WndProcType
         };
 
         let (tx, rx) = mpsc::channel();
@@ -94,6 +110,7 @@ impl<T: RenderEngine> Pipeline<T> {
             message_filter: AtomicU32::new(MessageFilter::empty().bits()),
             wnd_proc,
             tx,
+            subclassed,
         });
 
         PIPELINE_STATES.lock().insert(hwnd.0 as usize, Arc::clone(&shared_state));
@@ -184,9 +201,11 @@ impl<T: RenderEngine> Pipeline<T> {
     }
 
     pub(crate) fn cleanup(&mut self) {
-        unsafe {
-            SetWindowLongPtrW(self.hwnd, GWLP_WNDPROC, self.shared_state.wnd_proc as usize as _)
-        };
+        if self.shared_state.subclassed {
+            unsafe {
+                SetWindowLongPtrW(self.hwnd, GWLP_WNDPROC, self.shared_state.wnd_proc as usize as _)
+            };
+        }
         PIPELINE_STATES.lock().remove(&(self.hwnd.0 as usize));
     }
 

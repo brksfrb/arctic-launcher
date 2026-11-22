@@ -1,26 +1,24 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use hudhook::hooks::{dx11::ImguiDx11Hooks, dx12::ImguiDx12Hooks};
 use hudhook::imgui::{self, TextureId};
-use hudhook::windows::Win32::Foundation::{HMODULE, HWND, LPARAM, WPARAM};
+use hudhook::windows::Win32::Foundation::{HMODULE, HWND};
 use hudhook::windows::Win32::System::LibraryLoader::GetModuleFileNameW;
-use hudhook::windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, MAPVK_VSC_TO_VK_EX, MapVirtualKeyW,
-};
-use hudhook::windows::Win32::UI::WindowsAndMessaging::*;
-use hudhook::{BeforeWndProc, Hudhook, ImguiRenderLoop, MessageFilter, RenderContext};
+use hudhook::windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+use hudhook::{Hudhook, ImguiRenderLoop, RenderContext};
 use jni::objects::{GlobalRef, JByteArray, JClass, JValue};
 use jni::{InitArgsBuilder, JNIEnv, JNIVersion, JavaVM};
 
 use crate::bundle::{Bundle, Renderer};
 
 static STARTED: AtomicBool = AtomicBool::new(false);
+static MODULE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static LOG: OnceLock<PathBuf> = OnceLock::new();
 
-fn log(message: impl AsRef<str>) {
+pub(crate) fn log(message: impl AsRef<str>) {
     use std::io::Write;
     if let Some(path) = LOG.get()
         && let Ok(mut file) = std::fs::OpenOptions::new()
@@ -77,6 +75,7 @@ pub fn start(address: usize) {
 }
 
 fn boot(address: usize) -> Result<(), String> {
+    MODULE.store(address, Ordering::Release);
     let mut path = [0u16; 32768];
     // SAFETY: DllMain supplies this module's handle, and the writable buffer has
     // the declared capacity. No game memory layout assumptions are made.
@@ -104,8 +103,11 @@ fn boot(address: usize) -> Result<(), String> {
     log("shared Java client initialized");
     let render = NativeRender {
         client: jvm,
-        input: Mutex::new(Vec::new()),
         menu: AtomicBool::new(false),
+        show_texture: false,
+        window: 0,
+        last_mouse: None,
+        status: String::new(),
         texture: None,
         failure: None,
         frames: 0,
@@ -122,6 +124,9 @@ fn boot(address: usize) -> Result<(), String> {
         geometry_stream: crate::native_geometry_stream::Stream::default(),
         geometry_failure: None,
     };
+    // Input comes from message/low-level hooks (input_hook), never from a
+    // replaced window procedure: see input_hook for why.
+    hudhook::set_window_subclass(false);
     let hooks = match bundle.renderer {
         Renderer::Dx11 => Hudhook::builder().with::<ImguiDx11Hooks>(render).build(),
         Renderer::Dx12 => Hudhook::builder().with::<ImguiDx12Hooks>(render).build(),
@@ -135,9 +140,14 @@ fn boot(address: usize) -> Result<(), String> {
             )),
         }
     }
+    // Core state (world, screens, position, cursor) stands on signatures and
+    // is checked on every build; the cosmetics observers below stay pinned.
+    crate::core_bindings::install(&|line| log(line));
     match crate::world_hooks::start(dir.to_path_buf()) {
-        Ok(()) => log("engine observer initialization complete (cosmetics bindings pending)"),
-        Err(error) => log(format!("engine observers unavailable: {error}")),
+        Ok(()) => log("cosmetics observers (exact build) installed"),
+        Err(error) => log(format!(
+            "cosmetics observers (exact build) not installed: {error}; core bindings above are independent"
+        )),
     }
     log("renderer hooks installed; awaiting first swap-chain frame");
     Ok(())
@@ -148,7 +158,7 @@ struct ClientVm {
     bridge: GlobalRef,
 }
 struct ClientFrame {
-    pixels: Vec<u8>,
+    pixels: Option<Vec<u8>>,
     open: bool,
     probe: Option<u64>,
     body_plan: Option<String>,
@@ -511,6 +521,55 @@ impl ClientVm {
         Ok(Self { vm, bridge })
     }
 
+    fn game_state(
+        &self,
+        state: &crate::core_bindings::GameState,
+        status: Option<&str>,
+    ) -> Result<(), String> {
+        let mut env = self
+            .vm
+            .attach_current_thread_as_daemon()
+            .map_err(|e| e.to_string())?;
+        let class: &JClass = self.bridge.as_obj().into();
+        let result = env.with_local_frame(8, |env| -> jni::errors::Result<()> {
+            let position = match state.position {
+                Some(p) => {
+                    let array = env.new_double_array(5)?;
+                    env.set_double_array_region(&array, 0, &p)?;
+                    jni::objects::JObject::from(array)
+                }
+                None => jni::objects::JObject::null(),
+            };
+            let screen = match &state.top_screen {
+                Some(s) => jni::objects::JObject::from(env.new_string(s)?),
+                None => jni::objects::JObject::null(),
+            };
+            env.call_static_method(
+                class,
+                "gameState",
+                "(ZZZ[DLjava/lang/String;)V",
+                &[
+                    JValue::Bool(u8::from(state.bound)),
+                    JValue::Bool(u8::from(state.in_world)),
+                    JValue::Bool(u8::from(state.screen_open)),
+                    JValue::Object(&position),
+                    JValue::Object(&screen),
+                ],
+            )?;
+            if let Some(status) = status {
+                let text = env.new_string(status)?;
+                env.call_static_method(
+                    class,
+                    "bindingStatus",
+                    "(Ljava/lang/String;)V",
+                    &[JValue::Object(&text)],
+                )?;
+            }
+            Ok(())
+        });
+        result.map_err(|e| java_error(&mut env, e))
+    }
+
     fn frame(
         &self,
         size: [i32; 2],
@@ -545,7 +604,7 @@ impl ClientVm {
             let pixels = env
                 .call_static_method(
                     class,
-                    "frame",
+                    "frameIfChanged",
                     "(IIIII[Z[I)[B",
                     &[
                         size[0].into(),
@@ -558,7 +617,12 @@ impl ClientVm {
                     ],
                 )?
                 .l()?;
-            let pixels = env.convert_byte_array(JByteArray::from(pixels))?;
+            // null: the same pixels as last frame; empty: nothing to draw.
+            let pixels = if pixels.is_null() {
+                None
+            } else {
+                Some(env.convert_byte_array(JByteArray::from(pixels))?)
+            };
             let open = env.call_static_method(class, "menuOpen", "()Z", &[])?.z()?;
             let probe = env
                 .call_static_method(class, "frameProbeSequence", "()J", &[])?
@@ -647,8 +711,15 @@ struct GeometryRequest {
 }
 struct NativeRender {
     client: ClientVm,
-    input: Mutex<Vec<i32>>,
     menu: AtomicBool,
+    /// The last client frame had something to draw.
+    show_texture: bool,
+    /// The game window the input hooks serve.
+    window: usize,
+    /// Cursor position last frame (menu drags).
+    last_mouse: Option<[i32; 2]>,
+    /// Binding summary last sent to the client.
+    status: String,
     texture: Option<TextureId>,
     failure: Option<String>,
     frames: u32,
@@ -667,6 +738,12 @@ struct NativeRender {
 }
 
 impl NativeRender {
+    fn hook_window(&mut self, window: HWND) {
+        if window.0 as usize != self.window && !window.0.is_null() {
+            self.window = window.0 as usize;
+            crate::input_hook::install(window, MODULE.load(Ordering::Acquire), &|line| log(line));
+        }
+    }
     /// Run only after the ordinary client frame has imported textures and
     /// updated appearance/controllers. Geometry emission itself does not tick
     /// those controllers again, and never runs on a backend draw worker.
@@ -735,6 +812,9 @@ impl ImguiRenderLoop for NativeRender {
         let geometry_result = self.geometry_stream.poll();
         self.geometry_result(geometry_result);
         crate::world_hooks::begin_gpu_frame();
+        if let Ok(desc) = unsafe { swap.GetDesc() } {
+            self.hook_window(desc.OutputWindow);
+        }
         // SAFETY: hudhook supplies a live swap chain from this presenting thread.
         let result = (|| -> Result<(), String> {
             let device: ID3D12Device = unsafe { swap.GetDevice() }.map_err(|e| e.to_string())?;
@@ -775,6 +855,9 @@ impl ImguiRenderLoop for NativeRender {
         }
     }
     fn on_dx11_frame(&mut self, swap: &hudhook::windows::Win32::Graphics::Dxgi::IDXGISwapChain) {
+        if let Ok(desc) = unsafe { swap.GetDesc() } {
+            self.hook_window(desc.OutputWindow);
+        }
         self.present_sequence = self.present_sequence.saturating_add(1);
         let marker = self.probe_sequence.take();
         let mut tag = self.capture_tag.take();
@@ -909,21 +992,42 @@ impl ImguiRenderLoop for NativeRender {
             }
             self.engine_frame = sequence;
         }
-        let mouse = [
+        // Game state from the core bindings; without the screen hook, fall
+        // back to the game's own cursor capture (hidden cursor = playing).
+        let mut state = crate::core_bindings::state(&|line| log(line));
+        if !state.bound {
+            let playing = crate::input_hook::game_has_mouse();
+            state.in_world = playing;
+            state.screen_open = false;
+            state.position = None;
+        }
+        let status = crate::core_bindings::summary(state.bound);
+        let changed = (status != self.status).then_some(status.as_str());
+        if let Err(e) = self.client.game_state(&state, changed) {
+            log(format!("game state rejected: {e}"));
+        }
+        if changed.is_some() {
+            self.status = status.clone();
+        }
+        // The hardware cursor, in surface pixels (no imgui-drawn cursor).
+        let mouse = crate::input_hook::cursor(size).unwrap_or([
             (ctx.io().mouse_pos[0] / display[0] * size[0] as f32) as i32,
             (ctx.io().mouse_pos[1] / display[1] * size[1] as f32) as i32,
-        ];
+        ]);
         let mut keys = [0u8; 256];
         // SAFETY: Win32 key polling reads physical state only; it does not
         // dereference pointers into the game or change its controls.
         for (vk, key) in keys.iter_mut().enumerate() {
             *key = u8::from(unsafe { GetAsyncKeyState(vk as i32) } < 0);
         }
-        let events = self
-            .input
-            .lock()
-            .map(|mut q| std::mem::take(&mut *q))
-            .unwrap_or_default();
+        if self.menu.load(Ordering::Acquire)
+            && keys[1] != 0
+            && self.last_mouse.is_some_and(|m| m != mouse)
+        {
+            crate::input_hook::push_drag();
+        }
+        self.last_mouse = Some(mouse);
+        let events = crate::input_hook::drain(&|line| log(line));
         let result = self
             .client
             .frame(size, self.fps, mouse, &keys, &events)
@@ -936,26 +1040,54 @@ impl ImguiRenderLoop for NativeRender {
                     attachment_plan,
                     capture_tag,
                 } = frame;
-                if pixels.len() != size[0] as usize * size[1] as usize * 4 {
-                    return Err("shared client returned an invalid pixel buffer".into());
-                }
-                match self.texture {
-                    Some(id) => {
-                        renderer.replace_texture(id, &pixels, size[0] as u32, size[1] as u32)
+                match pixels {
+                    // Unchanged: keep the uploaded texture (and its visibility).
+                    None => {}
+                    // Nothing to draw (main menu, loading, a game screen): no
+                    // upload and no full-screen draw at all.
+                    Some(pixels) if pixels.is_empty() => self.show_texture = false,
+                    Some(pixels) => {
+                        if pixels.len() != size[0] as usize * size[1] as usize * 4 {
+                            return Err("shared client returned an invalid pixel buffer".into());
+                        }
+                        match self.texture {
+                            Some(id) => renderer.replace_texture(
+                                id,
+                                &pixels,
+                                size[0] as u32,
+                                size[1] as u32,
+                            ),
+                            None => renderer
+                                .load_texture(&pixels, size[0] as u32, size[1] as u32)
+                                .map(|id| self.texture = Some(id)),
+                        }
+                        .map_err(|e| e.to_string())?;
+                        self.show_texture = true;
                     }
-                    None => renderer
-                        .load_texture(&pixels, size[0] as u32, size[1] as u32)
-                        .map(|id| self.texture = Some(id)),
                 }
-                .map_err(|e| e.to_string())?;
                 // Publish the marker only after these exact pixels were uploaded.
                 // Consume it at the post-render readback, never on a later frame.
                 self.probe_sequence = probe;
                 self.capture_tag = capture_tag;
                 crate::native_body::update_ready(body_plan.as_deref());
                 crate::native_attachment_replay::update(attachment_plan.as_deref());
-                self.menu.store(open, Ordering::Release);
-                ctx.io_mut().mouse_draw_cursor = open && !crate::capture::frame_options().1;
+                if self.menu.swap(open, Ordering::AcqRel) != open {
+                    // Release the game's cursor (shown, unclipped, no mouse-look)
+                    // while the menu is open; give it back when it closes.
+                    crate::core_bindings::menu_changed(open);
+                    crate::input_hook::menu_changed(
+                        open,
+                        crate::core_bindings::cursor_binding() && state.bound,
+                    );
+                    log(if open {
+                        "Arctic menu opened: cursor released"
+                    } else {
+                        "Arctic menu closed: cursor returned"
+                    });
+                }
+                // The OS cursor is the cursor: an imgui-drawn copy lags a frame
+                // behind it and leaves a trail.
+                ctx.io_mut().mouse_draw_cursor = false;
                 Ok(())
             });
         if let Err(e) = result {
@@ -965,7 +1097,10 @@ impl ImguiRenderLoop for NativeRender {
             crate::native_attachment_replay::invalidate();
             log(format!("render failed: {e}"));
             self.failure = Some(e);
-            self.menu.store(false, Ordering::Release);
+            if self.menu.swap(false, Ordering::AcqRel) {
+                crate::core_bindings::menu_changed(false);
+                crate::input_hook::menu_changed(false, crate::core_bindings::cursor_binding());
+            }
         } else {
             let geometry_result = self.stage_world_geometry();
             self.geometry_result(geometry_result);
@@ -977,7 +1112,7 @@ impl ImguiRenderLoop for NativeRender {
             ui.window("Arctic Bedrock startup error").build(|| {
                 ui.text_wrapped(error);
             });
-        } else if let Some(texture) = self.texture {
+        } else if let Some(texture) = self.texture.filter(|_| self.show_texture) {
             ui.get_background_draw_list()
                 .add_image(texture, [0.0, 0.0], ui.io().display_size)
                 .build();
@@ -986,56 +1121,6 @@ impl ImguiRenderLoop for NativeRender {
                 log("first shared-client frame rendered; native preview ready");
                 let _ = std::fs::write(&self.ready, "native-preview\n");
             }
-        }
-    }
-
-    fn before_wnd_proc(&self, _: HWND, message: u32, w: WPARAM, l: LPARAM) -> BeforeWndProc {
-        let event = match message {
-            WM_KEYDOWN | WM_SYSKEYDOWN => {
-                let mut vk = w.0 as i32;
-                if vk == 0x10 {
-                    // WM_KEYDOWN reports VK_SHIFT; resolve the right-hand scan code.
-                    vk = unsafe { MapVirtualKeyW(((l.0 >> 16) & 0xFF) as u32, MAPVK_VSC_TO_VK_EX) }
-                        as i32;
-                } else if vk == 0x11 {
-                    vk = if l.0 & (1 << 24) != 0 { 0xA3 } else { 0xA2 };
-                } else if vk == 0x12 {
-                    vk = if l.0 & (1 << 24) != 0 { 0xA5 } else { 0xA4 };
-                }
-                // A held Right Shift must not repeatedly close/reopen the page.
-                if vk == 0xA1 && (l.0 & (1 << 30)) != 0 {
-                    None
-                } else {
-                    Some([0, vk])
-                }
-            }
-            WM_CHAR => Some([1, w.0 as i32]),
-            WM_LBUTTONDOWN => Some([2, 0]),
-            WM_RBUTTONDOWN => Some([2, 1]),
-            WM_MBUTTONDOWN => Some([2, 2]),
-            WM_XBUTTONDOWN => Some([2, if (w.0 >> 16) & 0xFFFF == 1 { 3 } else { 4 }]),
-            WM_LBUTTONUP => Some([3, 0]),
-            WM_RBUTTONUP => Some([3, 1]),
-            WM_MBUTTONUP => Some([3, 2]),
-            WM_XBUTTONUP => Some([3, if (w.0 >> 16) & 0xFFFF == 1 { 3 } else { 4 }]),
-            WM_MOUSEWHEEL => Some([4, ((w.0 >> 16) as u16 as i16) as i32]),
-            WM_MOUSEMOVE if w.0 & 1 != 0 => Some([5, 0]),
-            _ => None,
-        };
-        if let Some(event) = event
-            && let Ok(mut q) = self.input.lock()
-            && q.len() < 4096
-        {
-            q.extend_from_slice(&event);
-        }
-        BeforeWndProc::Continue
-    }
-
-    fn message_filter(&self, _: &imgui::Io) -> MessageFilter {
-        if self.menu.load(Ordering::Acquire) {
-            MessageFilter::InputAll
-        } else {
-            MessageFilter::empty()
         }
     }
 }

@@ -252,6 +252,10 @@ impl RenderEngine for D3D12RenderEngine {
                 fc.fence_value = 0;
             }
         }
+        // Arctic: texture uploads run ahead without blocking; retire them too.
+        for slot in &self.texture_heap.uploads {
+            self.texture_heap.fence.wait_for_value(slot.fence_value)?;
+        }
 
         Ok(())
     }
@@ -777,10 +781,24 @@ struct TextureHeap {
     srv_staging_heap: ID3D12DescriptorHeap,
     textures: Vec<Texture>,
     command_queue: ID3D12CommandQueue,
-    command_allocator: ID3D12CommandAllocator,
-    command_list: ID3D12GraphicsCommandList,
+    /// Arctic: a small ring of upload slots. The overlay texture is replaced
+    /// every client frame; each slot keeps its allocator, list and upload
+    /// buffer and is reused only after its own fence value completes, so a
+    /// replacement neither allocates a committed buffer nor stalls the CPU
+    /// until the GPU drains the game's frame.
+    uploads: Vec<UploadSlot>,
+    next_upload: usize,
     fence: Fence,
     node_mask: u32,
+}
+
+const UPLOAD_SLOTS: usize = 3;
+
+struct UploadSlot {
+    command_allocator: ID3D12CommandAllocator,
+    command_list: ID3D12GraphicsCommandList,
+    buffer: Option<(ID3D12Resource, u64)>,
+    fence_value: u64,
 }
 
 impl TextureHeap {
@@ -789,22 +807,24 @@ impl TextureHeap {
         // A separate upload queue races those outstanding shader reads.
         let command_queue=command_queue.clone();
 
-        let command_allocator: ID3D12CommandAllocator =
-            unsafe { device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT) }?;
-
-        let command_list: ID3D12GraphicsCommandList = unsafe {
-            device.CreateCommandList(
-                node_mask,
-                D3D12_COMMAND_LIST_TYPE_DIRECT,
-                &command_allocator,
-                None,
-            )
-        }?;
-
-        unsafe {
-            command_list.Close()?;
-            command_allocator.SetName(w!("hudhook Render Engine Command Allocator"))?;
-            command_list.SetName(w!("hudhook Render Engine Command List"))?;
+        let mut uploads = Vec::with_capacity(UPLOAD_SLOTS);
+        for _ in 0..UPLOAD_SLOTS {
+            let command_allocator: ID3D12CommandAllocator =
+                unsafe { device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT) }?;
+            let command_list: ID3D12GraphicsCommandList = unsafe {
+                device.CreateCommandList(
+                    node_mask,
+                    D3D12_COMMAND_LIST_TYPE_DIRECT,
+                    &command_allocator,
+                    None,
+                )
+            }?;
+            unsafe {
+                command_list.Close()?;
+                command_allocator.SetName(w!("hudhook Render Engine Command Allocator"))?;
+                command_list.SetName(w!("hudhook Render Engine Command List"))?;
+            }
+            uploads.push(UploadSlot { command_allocator, command_list, buffer: None, fence_value: 0 });
         }
 
         let srv_staging_heap: ID3D12DescriptorHeap = unsafe {
@@ -824,8 +844,8 @@ impl TextureHeap {
             srv_staging_heap,
             textures: Vec::new(),
             command_queue,
-            command_allocator,
-            command_list,
+            uploads,
+            next_upload: 0,
             fence,
             node_mask,
         })
@@ -962,6 +982,13 @@ impl TextureHeap {
         Ok(Texture { resource: texture, gpu_desc, width, height, uploaded:false })
     }
 
+    /// Wait until every upload and every earlier draw on the queue completed.
+    unsafe fn wait_queue_idle(&mut self) -> Result<()> {
+        let value = self.fence.incr() + 1;
+        self.command_queue.Signal(self.fence.fence(), value)?;
+        self.fence.wait_for_value(value)
+    }
+
     unsafe fn upload_texture(
         &mut self,
         texture_id: TextureId,
@@ -976,44 +1003,56 @@ impl TextureHeap {
         }
         let texture = self.textures.get(texture_id.id()).ok_or_else(|| Error::from_hresult(HRESULT(-1)))?;
         if texture.width != width || texture.height != height {
+            // Earlier overlay draws may still sample the old resource and its
+            // descriptor: retire them before replacing either (rare: resizes).
+            self.wait_queue_idle()?;
             let replacement = self.make_texture(width, height, texture_id.id() as u32)?;
             self.textures[texture_id.id()] = replacement;
         }
-        let texture = &mut self.textures[texture_id.id()];
 
         let upload_row_size = width * 4;
         let align = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
-        let upload_pitch = upload_row_size.div_ceil(align) * align; // 256 bytes
-                                                                    // aligned
-        let upload_size = height * upload_pitch;
+        let upload_pitch = upload_row_size.div_ceil(align) * align; // 256 bytes aligned
+        let upload_size = u64::from(height) * u64::from(upload_pitch);
 
-        let upload_buffer: ID3D12Resource = util::try_out_ptr(|v| unsafe {
-            self.device.CreateCommittedResource(
-                &D3D12_HEAP_PROPERTIES {
-                    Type: D3D12_HEAP_TYPE_UPLOAD,
-                    CPUPageProperty: D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
-                    MemoryPoolPreference: D3D12_MEMORY_POOL_UNKNOWN,
-                    CreationNodeMask: self.node_mask,
-                    VisibleNodeMask: self.node_mask,
-                },
-                D3D12_HEAP_FLAG_NONE,
-                &D3D12_RESOURCE_DESC {
-                    Dimension: D3D12_RESOURCE_DIMENSION_BUFFER,
-                    Alignment: 0,
-                    Width: upload_size as _,
-                    Height: 1,
-                    DepthOrArraySize: 1,
-                    MipLevels: 1,
-                    Format: DXGI_FORMAT_UNKNOWN,
-                    SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-                    Layout: D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
-                    Flags: D3D12_RESOURCE_FLAG_NONE,
-                },
-                D3D12_RESOURCE_STATE_GENERIC_READ,
-                None,
-                v,
-            )
-        })?;
+        let slot_index = self.next_upload;
+        self.next_upload = (self.next_upload + 1) % self.uploads.len();
+        // Normally long complete: this slot was submitted UPLOAD_SLOTS frames ago.
+        self.fence.wait_for_value(self.uploads[slot_index].fence_value)?;
+
+        let needs_buffer = self.uploads[slot_index].buffer.as_ref().is_none_or(|(_, capacity)| *capacity < upload_size);
+        if needs_buffer {
+            let buffer: ID3D12Resource = util::try_out_ptr(|v| unsafe {
+                self.device.CreateCommittedResource(
+                    &D3D12_HEAP_PROPERTIES {
+                        Type: D3D12_HEAP_TYPE_UPLOAD,
+                        CPUPageProperty: D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+                        MemoryPoolPreference: D3D12_MEMORY_POOL_UNKNOWN,
+                        CreationNodeMask: self.node_mask,
+                        VisibleNodeMask: self.node_mask,
+                    },
+                    D3D12_HEAP_FLAG_NONE,
+                    &D3D12_RESOURCE_DESC {
+                        Dimension: D3D12_RESOURCE_DIMENSION_BUFFER,
+                        Alignment: 0,
+                        Width: upload_size,
+                        Height: 1,
+                        DepthOrArraySize: 1,
+                        MipLevels: 1,
+                        Format: DXGI_FORMAT_UNKNOWN,
+                        SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                        Layout: D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                        Flags: D3D12_RESOURCE_FLAG_NONE,
+                    },
+                    D3D12_RESOURCE_STATE_GENERIC_READ,
+                    None,
+                    v,
+                )
+            })?;
+            self.uploads[slot_index].buffer = Some((buffer, upload_size));
+        }
+        let slot = &self.uploads[slot_index];
+        let upload_buffer = slot.buffer.as_ref().map(|(b, _)| b.clone()).ok_or_else(|| Error::from_hresult(HRESULT(-1)))?;
 
         let mut upload_buffer_ptr = ptr::null_mut();
         upload_buffer.Map(0, None, Some(&mut upload_buffer_ptr))?;
@@ -1028,12 +1067,17 @@ impl TextureHeap {
         }
         upload_buffer.Unmap(0, None);
 
-        self.command_allocator.Reset()?;
-        self.command_list.Reset(&self.command_allocator, None)?;
+        let command_allocator = slot.command_allocator.clone();
+        let command_list = slot.command_list.clone();
+        command_allocator.Reset()?;
+        command_list.Reset(&command_allocator, None)?;
 
+        let texture = &mut self.textures[texture_id.id()];
+        // Queue order makes this transition wait for earlier draws that sample
+        // the texture; the copy then lands before the next overlay draw.
         if texture.uploaded {
             let barrier=util::create_barrier(&texture.resource,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_COPY_DEST);
-            self.command_list.ResourceBarrier(std::slice::from_ref(&barrier));
+            command_list.ResourceBarrier(std::slice::from_ref(&barrier));
             util::drop_barrier(barrier);
         }
 
@@ -1060,26 +1104,26 @@ impl TextureHeap {
             },
         };
 
-        self.command_list.CopyTextureRegion(&dst_location, 0, 0, 0, &src_location, None);
+        command_list.CopyTextureRegion(&dst_location, 0, 0, 0, &src_location, None);
         let barriers = [util::create_barrier(
             &texture.resource,
             D3D12_RESOURCE_STATE_COPY_DEST,
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
         )];
 
-        self.command_list.ResourceBarrier(&barriers);
-        self.command_list.Close()?;
-        self.command_queue.ExecuteCommandLists(&[Some(self.command_list.cast()?)]);
+        command_list.ResourceBarrier(&barriers);
+        command_list.Close()?;
+        self.command_queue.ExecuteCommandLists(&[Some(command_list.cast()?)]);
         let fence_value = self.fence.incr() + 1;
         self.command_queue.Signal(self.fence.fence(), fence_value)?;
-        self.fence.wait_for_value(fence_value)?;
+        self.uploads[slot_index].fence_value = fence_value;
         texture.uploaded=true;
 
         barriers.into_iter().for_each(util::drop_barrier);
 
-        // Both locations own one cloned COM reference. Release each once the
-        // shared queue's fence completes; retaining the source leaked an upload
-        // allocation on every client frame. Error paths retain in-flight data.
+        // The copy locations each own one cloned COM reference: release them.
+        // The slot keeps the upload buffer, and the texture list keeps the
+        // destination, alive until this slot's fence completes.
         let _ = ManuallyDrop::into_inner(src_location.pResource);
         let _ = ManuallyDrop::into_inner(dst_location.pResource);
 

@@ -9,7 +9,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import javax.imageio.ImageIO;
 
-import com.arcticlauncher.client.Lang;
 /** Shared client platform backed by native input/render events. No fabricated world state. */
 public final class BedrockPlatform implements Platform {
     private static final com.google.gson.Gson NATIVE_STATE=new com.google.gson.GsonBuilder().serializeNulls().create();
@@ -50,6 +49,11 @@ public final class BedrockPlatform implements Platform {
     private final String offlineName;
     private final UUID offlineId;
     boolean[] keys = new boolean[256];
+    /** Core engine bindings (signature-scanned, any 1.26.x build): see core_bindings.rs. */
+    volatile boolean engineBound, engineInWorld, engineScreenOpen;
+    volatile double[] enginePosition;
+    volatile String engineScreen;
+    volatile String bindingStatus = "";
     int fps, width = 800, height = 450;
     Page page;
 
@@ -85,9 +89,22 @@ public final class BedrockPlatform implements Platform {
         return frame==null?System.currentTimeMillis():frame.clockMs;
     }
     @Override public int ping() { return -1; }
-    // Only a verified engine binding may supply inWorld, entity IDs or positions.
-    @Override public boolean inWorld() { return world != null && world.local() != null; }
-    @Override public double[] position() { WorldFrame f=world; return f==null||f.local()==null?null:f.local().position.clone(); }
+    // Only a verified engine binding may supply inWorld, entity IDs or positions:
+    // the cosmetics world frame (exact build), else the core bindings.
+    @Override public boolean inWorld() { return (world != null && world.local() != null) || engineInWorld; }
+    @Override public double[] position() {
+        WorldFrame f=world;
+        if(f!=null&&f.local()!=null)return f.local().position.clone();
+        double[] p=enginePosition;
+        return engineInWorld&&p!=null?p.clone():null;
+    }
+    /** In a world with no game screen (inventory, chat, pause...) and no Arctic page open. */
+    @Override public boolean noScreen() { return inWorld() && !engineScreenOpen && page == null; }
+    @Override public String screenClassName() { String s=engineScreen; return s==null?"unknown":s; }
+    /** Arctic's HUD layer is drawn here even without game features, so its editor works. */
+    @Override public boolean hudEditorWorks() { return true; }
+    /** The game's text is the game's: Arctic can't swap Bedrock's font. */
+    @Override public boolean gameFontWorks() { return false; }
     @Override public UUID worldPlayerId() { WorldFrame f=world; return f==null||f.localPlayer==null?null:UUID.fromString(f.localPlayer); }
     @Override public boolean localMoving() {
         WorldFrame frame=world;
@@ -631,7 +648,9 @@ public final class BedrockPlatform implements Platform {
             ArcticClient.looks().textureReady(hash, frames);
         } catch (IOException e) { log(true, "Texture: " + e.getMessage()); }
     }
+    /** Settings that can't apply on Bedrock are hidden (Platform capabilities);
+     * anything still reaching here is logged, never toasted at the player. */
     private void unsupported(String feature) {
-        com.arcticlauncher.client.notice.Notices.post(Lang.t("platform.bedrock_binding_pending"), feature + " needs a verified engine adapter."); // i18n-ignore
+        log(false, feature + " is not available on Bedrock"); // i18n-ignore: log
     }
 }
