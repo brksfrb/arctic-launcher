@@ -45,6 +45,7 @@
 <% } %>		"LightmapRefreshMixin",
 <% if (framerateTracker) { %>		"FramerateTrackerMixin",
 <% } %>		"ParticleEngineMixin",
+		"LivingEntityPotionParticlesMixin",
 		"HeldItemMixin",
 <% if (recipeBookPeek) { %>		"RecipeBookScreenMixin",
 		"ContainerHoverAccess",

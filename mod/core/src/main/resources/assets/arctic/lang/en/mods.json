@@ -391,6 +391,8 @@
   "mods.packs": "Packs",
   "mods.packs_shaders": "Packs & Shaders",
   "mods.part_of_the_sounds_name_then_its_volume_in": "Part of the sound's name, then its volume in percent (0 = silent). Names look like entity.player.hurt,",
+  "mods.hide_my_potion_particles": "Hide my potion particles",
+  "mods.hide_my_potion_particles_description": "Hide the effect swirls around your player.",
   "mods.particle_control": "Particle Control",
   "mods.particles.crits_and_hits": "Crits and hits",
   "mods.particles.explosions": "Explosions",

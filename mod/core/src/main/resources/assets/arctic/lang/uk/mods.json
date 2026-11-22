@@ -391,6 +391,8 @@
   "mods.packs": "Паки",
   "mods.packs_shaders": "Паки й шейдери",
   "mods.part_of_the_sounds_name_then_its_volume_in": "Частина назви звуку, потім його гучність у відсотках (0 = без звуку). Назви виглядають як entity.player.hurt,",
+  "mods.hide_my_potion_particles": "Приховувати частинки моїх зіль",
+  "mods.hide_my_potion_particles_description": "Приховує вихори ефектів навколо вашого персонажа.",
   "mods.particle_control": "Керування частинками",
   "mods.particles.crits_and_hits": "Крити й удари",
   "mods.particles.explosions": "Вибухи",
