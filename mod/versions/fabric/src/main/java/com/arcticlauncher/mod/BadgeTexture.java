@@ -3,6 +3,8 @@ package com.arcticlauncher.mod;
 import com.arcticlauncher.client.Lang;
 import com.arcticlauncher.client.feature.Badge;
 import com.arcticlauncher.client.gfx.BrandMark;
+import com.arcticlauncher.mod.mixin.BadgeFontAccess;
+import com.arcticlauncher.mod.mixin.BadgeGlyphBoundsAccess;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.font.glyphs.BakedGlyph;
@@ -22,14 +24,20 @@ import net.minecraft.client.gui.font.glyphs.BakedSheetGlyph;
 public final class BadgeTexture {
 	public static final char SPACER = '\uE002';
 	private static final int PLACEMENTS = 2;
+	//#if MC < 1.20.5
+	/** Older text quads subtract three from their vertical bounds. */
+	private static final float GLYPH_Y_OFFSET = 3f;
+	//#else
+	private static final float GLYPH_Y_OFFSET = 0f;
+	//#endif
 	private static final int SLOTS = Badge.STYLES.size() * Badge.ROLES.length * PLACEMENTS;
 	private static final DynamicTexture[][] TEXTURES = new DynamicTexture[SLOTS][Badge.MAX_RASTER_SIZE + 1];
 	private static final Identifier[][] IDS = new Identifier[SLOTS][Badge.MAX_RASTER_SIZE + 1];
-	/** Variants share a slot/resolution but keep their own side, so two tags never mutate one glyph. */
+	/** Variants share a slot/resolution but keep their own geometry. */
 	private static final int QUAD_VARIANTS = 8;
 	private static final BakedGlyph[][][] GUI_QUADS = new BakedGlyph[SLOTS][Badge.MAX_RASTER_SIZE + 1][QUAD_VARIANTS];
 	private static final int[][][] QUAD_TEX = new int[SLOTS][Badge.MAX_RASTER_SIZE + 1][QUAD_VARIANTS];
-	private static final int[][][] QUAD_SIDE = new int[SLOTS][Badge.MAX_RASTER_SIZE + 1][QUAD_VARIANTS];
+	private static final long[][][] QUAD_GEOMETRY = new long[SLOTS][Badge.MAX_RASTER_SIZE + 1][QUAD_VARIANTS];
 	private static final int[][] QUAD_COUNT = new int[SLOTS][Badge.MAX_RASTER_SIZE + 1];
 	public static final int GPU_CACHE_CAP = 64;
 	private static final int[] GPU_KEYS = new int[GPU_CACHE_CAP];
@@ -100,6 +108,38 @@ public final class BadgeTexture {
 		return slot % PLACEMENTS != 0;
 	}
 
+	private static float tabCapCenter(Minecraft mc) {
+		boolean uniform = false;
+		//#if MC >= 1.16
+		uniform = mc.isEnforceUnicode();
+		//#endif
+		boolean inter = TextDrawScale.on();
+		//#if MC < 1.20.5
+		// Force Unicode selects a separate font set on these versions.
+		inter = inter && !uniform;
+		//#endif
+		if (inter) {
+			BadgeFontAccess font = (BadgeFontAccess) mc.font;
+			//#if MC >= 1.21.9
+			BakedGlyph cap = font.arctic$glyphSource(net.minecraft.network.chat.FontDescription.DEFAULT).getGlyph('H');
+			//#elif MC >= 1.16
+			BakedGlyph cap = font.arctic$fontSet(Minecraft.DEFAULT_FONT).getGlyph('H');
+			//#else
+			BakedGlyph cap = font.arctic$fontSet().getGlyph('H');
+			//#endif
+			if (cap instanceof BadgeGlyphBoundsAccess) {
+				BadgeGlyphBoundsAccess bounds = (BadgeGlyphBoundsAccess) cap;
+				// A bitmap fallback's quad covers its entire 8-pixel cell.
+				if (bounds.arctic$bottom() - bounds.arctic$top() < 8f) {
+					return (bounds.arctic$top() + bounds.arctic$bottom()) / 2f - GLYPH_Y_OFFSET;
+				}
+			}
+		}
+		// Both vanilla fonts put the capital baseline at y + 7. The visible
+		// caps span seven rows in the default bitmap and five in Force Unicode.
+		return 7f - (uniform ? 5f : 7f) / 2f;
+	}
+
 	public static BakedGlyph quad(int slot) {
 		boolean tab = tab(slot);
 		float pixelsPerUnit = TextDrawScale.framebufferPixels();
@@ -119,7 +159,8 @@ public final class BadgeTexture {
 				gpuRemember(slot, texSize);
 			}
 		}
-		int sideBits = Float.floatToIntBits(side);
+		float top = tab ? Math.round((tabCapCenter(Minecraft.getInstance()) - side / 2f) * pixelsPerUnit) / pixelsPerUnit : 0f;
+		long geometry = (long) Float.floatToIntBits(side) << 32 | Integer.toUnsignedLong(Float.floatToIntBits(top));
 		int count = QUAD_COUNT[slot][resolution];
 		int oldest = 0, oldestStamp = Integer.MAX_VALUE;
 		for (int i = 0; i < count; i++) {
@@ -127,12 +168,12 @@ public final class BadgeTexture {
 				oldestStamp = QUAD_STAMP[slot][resolution][i];
 				oldest = i;
 			}
-			if (QUAD_TEX[slot][resolution][i] == texSize && QUAD_SIDE[slot][resolution][i] == sideBits) {
+			if (QUAD_TEX[slot][resolution][i] == texSize && QUAD_GEOMETRY[slot][resolution][i] == geometry) {
 				QUAD_STAMP[slot][resolution][i] = nextGpuStamp();
 				return GUI_QUADS[slot][resolution][i];
 			}
 		}
-		BakedGlyph quad = bake(slot, texSize, side);
+		BakedGlyph quad = bake(slot, texSize, side, top + GLYPH_Y_OFFSET);
 		int index;
 		if (count < QUAD_VARIANTS) {
 			index = count;
@@ -146,7 +187,7 @@ public final class BadgeTexture {
 		}
 		GUI_QUADS[slot][resolution][index] = quad;
 		QUAD_TEX[slot][resolution][index] = texSize;
-		QUAD_SIDE[slot][resolution][index] = sideBits;
+		QUAD_GEOMETRY[slot][resolution][index] = geometry;
 		QUAD_STAMP[slot][resolution][index] = nextGpuStamp();
 		return quad;
 	}
@@ -253,14 +294,14 @@ public final class BadgeTexture {
 				}
 				GUI_QUADS[slot][r][w] = GUI_QUADS[slot][r][i];
 				QUAD_TEX[slot][r][w] = QUAD_TEX[slot][r][i];
-				QUAD_SIDE[slot][r][w] = QUAD_SIDE[slot][r][i];
+				QUAD_GEOMETRY[slot][r][w] = QUAD_GEOMETRY[slot][r][i];
 				QUAD_STAMP[slot][r][w] = QUAD_STAMP[slot][r][i];
 				w++;
 			}
 			for (int i = w; i < n; i++) {
 				GUI_QUADS[slot][r][i] = null;
 				QUAD_TEX[slot][r][i] = 0;
-				QUAD_SIDE[slot][r][i] = 0;
+				QUAD_GEOMETRY[slot][r][i] = 0;
 				QUAD_STAMP[slot][r][i] = 0;
 			}
 			QUAD_COUNT[slot][r] = w;
@@ -347,7 +388,7 @@ public final class BadgeTexture {
 				for (int i = 0; i < QUAD_VARIANTS; i++) {
 					GUI_QUADS[slot][r][i] = null;
 					QUAD_TEX[slot][r][i] = 0;
-					QUAD_SIDE[slot][r][i] = 0;
+					QUAD_GEOMETRY[slot][r][i] = 0;
 					QUAD_STAMP[slot][r][i] = 0;
 				}
 			}
@@ -388,7 +429,7 @@ public final class BadgeTexture {
 		bury(id, texture, -1, -1);
 	}
 
-	private static BakedGlyph bake(int slot, int texSize, float side) {
+	private static BakedGlyph bake(int slot, int texSize, float side, float top) {
 		DynamicTexture texture;
 		Identifier id;
 		if (texSize > Badge.MAX_RASTER_SIZE) {
@@ -410,12 +451,6 @@ public final class BadgeTexture {
 			}
 		}
 		boolean tab = tab(slot);
-		//#if MC < 1.20.5
-		// Older text quads subtract three from their vertical bounds.
-		float top = tab ? 2 : 3;
-		//#else
-		float top = tab ? -1 : 0;
-		//#endif
 		BakedGlyph quad = new
 				//#if MC >= 1.21.9
 				BakedSheetGlyph(() -> Badge.advance(tab),
