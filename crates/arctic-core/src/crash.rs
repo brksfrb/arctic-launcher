@@ -4335,9 +4335,12 @@ Caused by: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.even
             report
                 .replace("com/death/core/", "com/iamdeath/quickthrow/api/")
                 .replace("com.death.core.", "com.iamdeath.quickthrow.api."),
-            report
-                .replace("com/death/core/DeathCoreApi", "org/lwjgl/MissingClass")
-                .replace("com.death.core.DeathCoreApi", "org.lwjgl.MissingClass"),
+            format!(
+                "{}\t\tcloth-config: Cloth Config 1.0.0\n",
+                report
+                    .replace("com/death/core/DeathCoreApi", "me/shedaniel/clothconfig2/MissingClass")
+                    .replace("com.death.core.DeathCoreApi", "me.shedaniel.clothconfig2.MissingClass"),
+            ),
             format!("{report}\t\tdeath_core: DeathCore 1.0.0\n"),
             report.replace(
                 "Caused by: java.lang.NoClassDefFoundError",
