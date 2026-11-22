@@ -1894,10 +1894,8 @@ fn sodium_driver_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
             .or_else(|| call.strip_prefix("me.jellysquid.mods.sodium.client."))
     }
     let is_driver_check = |frame: &&str| {
-        sodium_call(frame).is_some_and(|call| {
-            call == "platform.PlatformHelper.showCriticalErrorAndClose"
-                || call.starts_with("compatibility.checks.GraphicsDriverChecks.")
-        })
+        sodium_call(frame)
+            .is_some_and(|call| call.starts_with("compatibility.checks.GraphicsDriverChecks."))
     };
     let exit_frame = text
         .lines()
@@ -1907,11 +1905,7 @@ fn sodium_driver_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
                 .strip_prefix("exit caller other ")
                 .or_else(|| entry.trim_start().strip_prefix("at "))
         })
-        .find(|frame| {
-            is_driver_check(frame)
-                || sodium_call(frame)
-                    .is_some_and(|call| call.starts_with("compatibility.checks.PreLaunchChecks."))
-        });
+        .find(is_driver_check);
     let frame = exit_frame.or_else(|| {
         if !freeze_evidence(text) {
             return None;
@@ -3365,32 +3359,17 @@ mod tests {
             .split_once("[Arctic diagnostics] exit Runtime.exit()")
             .unwrap();
         let driver_frame = "net.caffeinemc.mods.sodium.client.compatibility.checks.GraphicsDriverChecks.postContextInit";
-        let dialog_frame =
-            "net.caffeinemc.mods.sodium.client.platform.PlatformHelper.showCriticalErrorAndClose";
         let hang_only = format!("{noise}[Arctic diagnostics] hang begin{hang}");
-        let exit_caller = exit
-            .lines()
-            .find(|line| line.contains("exit caller"))
-            .unwrap();
-        let driver_only = |stack: &str| {
-            stack
-                .lines()
-                .filter(|line| !line.contains(dialog_frame))
-                .collect::<Vec<_>>()
-                .join("\n")
-        };
         assert!(
             first_error(SODIUM_490, None)
                 .unwrap()
                 .contains("publickeys")
         );
         let dir = tempfile::tempdir().unwrap();
-        for (log, frame) in [
-            (SODIUM_490.to_owned(), dialog_frame),
-            (hang_only.clone(), dialog_frame),
-            (driver_only(&hang_only), driver_frame),
-            (format!("{noise}{exit_caller}"), dialog_frame),
-            (format!("{noise}{}", driver_only(exit)), driver_frame),
+        for log in [
+            SODIUM_490.to_owned(),
+            hang_only.clone(),
+            format!("{noise}{exit}"),
         ] {
             let diagnosis = crate::crash_conflicts::diagnose_exit_in(&log, 1, dir.path()).unwrap();
             assert_eq!(diagnosis.title, SODIUM_DRIVER_TITLE);
@@ -3415,10 +3394,10 @@ mod tests {
             );
             assert_eq!(report.title, SODIUM_DRIVER_TITLE);
             assert!(report.log.starts_with(&format!(
-                "\n---- first error ----\nError: {SODIUM_DRIVER_TITLE}\nknot//{frame}("
+                "\n---- first error ----\nError: {SODIUM_DRIVER_TITLE}\nknot//{driver_frame}("
             )));
             assert!(report.log.contains(&format!(
-                "---- diagnosis ----\n{SODIUM_DRIVER_TITLE}\nmatched: knot//{frame}("
+                "---- diagnosis ----\n{SODIUM_DRIVER_TITLE}\nmatched: knot//{driver_frame}("
             )));
             assert!(report.log.contains(
                 "Available display adapters include Intel(R) HD Graphics 4000 (driver 10.18.10.4358"
@@ -3436,8 +3415,17 @@ mod tests {
     }
 
     #[test]
+    fn sodium_driver_block_requires_a_graphics_driver_check() {
+        let unrelated_dialog = SODIUM_490.replace(
+            "compatibility.checks.GraphicsDriverChecks.postContextInit",
+            "compatibility.checks.WindowsModuleChecks.checkModules",
+        );
+        assert!(sodium_driver_diagnosis(&unrelated_dialog).is_none());
+    }
+
+    #[test]
     fn sodium_driver_block_accepts_startup_checks_without_adapter_inventory() {
-        let exit = "[Arctic diagnostics] exit caller other knot//net.caffeinemc.mods.sodium.client.compatibility.checks.PreLaunchChecks.onGameLaunch";
+        let exit = "[Arctic diagnostics] exit caller other knot//net.caffeinemc.mods.sodium.client.compatibility.checks.GraphicsDriverChecks.preContextInit";
         let snapshot = "---- logs/arctic-freezes/freeze-now.txt ----\n\
                         duration: 3.00s (still frozen when written)\n\
                         == Where the time went (frames present in the most samples) ==\n\
