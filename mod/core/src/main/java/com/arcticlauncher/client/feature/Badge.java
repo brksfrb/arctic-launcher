@@ -109,19 +109,17 @@ public final class Badge {
 		return size(tab) + 2;
 	}
 
-	/** Bound the texture cache while retaining integer framebuffer sizes at ordinary GUI scales. */
-	/**
-	 * Framebuffer pixels of one badge, quantized to a whole pixel from the projected size
-	 * ({@code size(tab) * pixelsPerUnit}). {@code pixelsPerUnit} is {@link TextPixelScale#projected}:
-	 * camera distance, FOV, Arctic zoom, sprint FOV and GUI scale are already in that number.
-	 */
+	/** Selects a bounded texture size from the badge's projected framebuffer footprint. */
 	public static int rasterSize(boolean tab, float pixelsPerUnit) {
 		return Math.max(1, Math.min(MAX_RASTER_SIZE, Math.round(size(tab) * pixelsPerUnit)));
 	}
 
-	/** Text-space side that covers exactly {@code resolution} framebuffer pixels at this scale. */
-	public static float quadSide(int resolution, float pixelsPerUnit) {
-		return pixelsPerUnit > 0f ? resolution / pixelsPerUnit : resolution;
+	/** World badges share the text transform. Tab badges also snap their extent to GUI pixels. */
+	public static float quadSide(boolean tab, float pixelsPerUnit) {
+		if (!tab || !(pixelsPerUnit > 0f) || !Float.isFinite(pixelsPerUnit)) return size(tab);
+		float pixels = size(tab) * pixelsPerUnit;
+		if (pixels >= Integer.MAX_VALUE) return size(tab);
+		return Math.max(1, Math.round(pixels)) / pixelsPerUnit;
 	}
 
 	/** The badge picture never has a drop shadow; the name text keeps its own. */

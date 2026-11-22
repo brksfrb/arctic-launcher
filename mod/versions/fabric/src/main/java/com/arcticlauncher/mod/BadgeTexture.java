@@ -105,7 +105,7 @@ public final class BadgeTexture {
 		float pixelsPerUnit = TextDrawScale.framebufferPixels();
 		if (pixelsPerUnit <= 0) pixelsPerUnit = (float) Minecraft.getInstance().getWindow().getGuiScale();
 		int resolution = Badge.rasterSize(tab, pixelsPerUnit);
-		float side = Badge.quadSide(resolution, pixelsPerUnit);
+		float side = Badge.quadSide(tab, pixelsPerUnit);
 		int style = slot / PLACEMENTS / Badge.ROLES.length;
 		int role = slot / PLACEMENTS % Badge.ROLES.length;
 		BrandMark.badgeReady(resolution, style, role, READY_SIZE);

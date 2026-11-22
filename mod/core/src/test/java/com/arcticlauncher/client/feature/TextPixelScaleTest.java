@@ -115,8 +115,16 @@ class TextPixelScaleTest {
 		assertEquals(99f, out[0], 0f);
 	}
 
-	@Test void quadSideMatchesRasterPixels() {
-		assertEquals(27 / 3.4f, Badge.quadSide(27, 3.4f), 1e-6);
-		assertEquals(9f, Badge.quadSide(27, 3f), 1e-6);
+	@Test void worldBadgeKeepsItsTextSpaceSizeAcrossZoomAndDistance() {
+		for (float scale : new float[] {0.01f, 0.7f, 3.4f, 16f, 32f, 1000f, Float.MAX_VALUE}) {
+			assertEquals(8f, Badge.quadSide(false, scale));
+		}
+	}
+
+	@Test void tabBadgeKeepsWholeFramebufferPixels() {
+		assertEquals(31 / 3.4f, Badge.quadSide(true, 3.4f), 1e-6);
+		assertEquals(9f, Badge.quadSide(true, 3f), 1e-6);
+		assertEquals(9f, Badge.quadSide(true, 16f), 1e-6);
+		assertEquals(Badge.MAX_RASTER_SIZE, Badge.rasterSize(true, 16f));
 	}
 }
