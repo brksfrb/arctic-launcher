@@ -1133,7 +1133,7 @@ pub(crate) fn diagnose_with_java(
     mods: &[crate::crash_conflicts::InstalledMod],
 ) -> Option<Diagnosis> {
     diagnose_rules(text, java, Some(mods_dir), mods)
-        .or_else(|| hang_diagnosis(tail_of(text, MAX_TEXT), Some(mods_dir)))
+        .or_else(|| hang_diagnosis(text, Some(mods_dir)))
         .map(|(diagnosis, _)| diagnosis)
 }
 
@@ -1698,7 +1698,7 @@ fn fabric_wrong_game(text: &str) -> Option<(Diagnosis, String)> {
 }
 
 fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
-    diagnose_crash_match(text, java).or_else(|| hang_diagnosis(tail_of(text, MAX_TEXT), None))
+    diagnose_crash_match(text, java).or_else(|| hang_diagnosis(text, None))
 }
 
 fn diagnose_crash_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
@@ -2089,7 +2089,113 @@ fn iris_shader_loading_frame(snapshot: &str) -> Option<&str> {
     })
 }
 
-fn hang_diagnosis(text: &str, mods_dir: Option<&Path>) -> Option<(Diagnosis, String)> {
+const GRAPHICS_DRIVER_HANG_TITLE: &str = "The graphics driver stopped responding";
+
+fn graphics_wait(frame: &str) -> bool {
+    let Some((class, method)) = freeze_frame(frame).and_then(|call| call.rsplit_once('.')) else {
+        return false;
+    };
+    if matches!(
+        (class, method),
+        ("com.mojang.blaze3d.opengl.GlFence", "awaitCompletion")
+            | (
+                "com.mojang.blaze3d.opengl.GlStateManager",
+                "_glClientWaitSync"
+            )
+    ) {
+        return true;
+    }
+    let method = method.strip_prefix('n').unwrap_or(method);
+    frame.ends_with("(Native Method)")
+        && ((class.starts_with("org.lwjgl.opengl.")
+            && matches!(
+                method,
+                "glClientWaitSync"
+                    | "glWaitSync"
+                    | "glFinish"
+                    | "glClientWaitSyncAPPLE"
+                    | "glWaitSyncAPPLE"
+                    | "wglSwapBuffers"
+                    | "glXSwapBuffers"
+                    | "SwapBuffers"
+            ))
+            || (class == "org.lwjgl.glfw.GLFW" && method == "glfwSwapBuffers")
+            || (class == "org.lwjgl.egl.EGL10" && method == "eglSwapBuffers"))
+}
+
+fn graphics_driver_hang_frame<'a>(snapshot: &'a str, summary: &'a str) -> Option<&'a str> {
+    if let Some(frame) = summary
+        .strip_prefix("Hang at exit: client hung for at least ")
+        .and_then(|line| line.split_once(" in "))
+        .and_then(|(_, frame)| frame.split_once(';'))
+        .map(|(frame, _)| frame)
+        && summary.contains("no recovery recorded")
+        && graphics_wait(frame)
+    {
+        return Some(frame);
+    }
+    // A completed snapshot can predate a later Windows hang termination.
+    if snapshot.lines().any(|line| {
+        line.starts_with("duration: ") && !line.ends_with(" (still frozen when written)")
+    }) {
+        return None;
+    }
+    freeze_hot_frames(snapshot)
+        .find(|(percent, frame, _)| (51..=100).contains(percent) && graphics_wait(frame))
+        .map(|(_, _, line)| line)
+}
+
+fn graphics_driver_hang_detail(text: &str) -> String {
+    use chrono::{Months, NaiveDate, Utc};
+
+    let mut detail = "The graphics driver hung while Minecraft was drawing.".to_owned();
+    let adapters = text.lines().rev().find_map(|line| {
+        let (_, runtime) = line.split_once("[Arctic diagnostics] runtime: ")?;
+        let (_, adapters) = runtime.split_once("display adapters=")?;
+        let (_, adapters) = adapters.split_once('[')?;
+        adapters.split_once(']').map(|(list, _)| list)
+    });
+    let mut old_drivers = false;
+    if let Some(adapters) = adapters {
+        static ADAPTER: OnceLock<Regex> = OnceLock::new();
+        let adapter = ADAPTER.get_or_init(|| {
+            Regex::new(r"([^,]+?)(?: \(driver [^,)]*(?:, ([^)]*))?\))?(?:, |$)").unwrap()
+        });
+        let cutoff = Utc::now().date_naive().checked_sub_months(Months::new(60));
+        let mut names = Vec::new();
+        // Windows reports display devices without identifying the adapter used by the game.
+        old_drivers = true;
+        for entry in adapter.captures_iter(adapters) {
+            let name = entry[1].trim();
+            let date = entry.get(2).map(|date| date.as_str());
+            let parsed_date =
+                date.and_then(|date| NaiveDate::parse_from_str(date, "%m-%d-%Y").ok());
+            old_drivers &= parsed_date
+                .zip(cutoff)
+                .is_some_and(|(date, cutoff)| date < cutoff);
+            let name = match (parsed_date, date) {
+                (Some(date), _) => format!("{name} (driver from {date})"),
+                (None, Some(date)) => format!("{name} (driver date {date})"),
+                (None, None) => name.to_owned(),
+            };
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+        old_drivers &= !names.is_empty();
+        if !names.is_empty() {
+            detail.push_str(&format!(" The launcher detected {}.", names.join(", ")));
+        }
+    }
+    detail.push_str(" Update your graphics driver.");
+    if old_drivers {
+        detail.push_str(" Newer Minecraft versions may run poorly on this hardware. Try an older Minecraft version or close other GPU-heavy apps before playing.");
+    }
+    detail
+}
+
+fn hang_diagnosis(full_text: &str, mods_dir: Option<&Path>) -> Option<(Diagnosis, String)> {
+    let text = tail_of(full_text, MAX_TEXT);
     if !freeze_evidence(text)
         || text.contains("---- Minecraft Crash Report ----")
         || text.contains("---- crash report ----\n")
@@ -2130,6 +2236,21 @@ fn hang_diagnosis(text: &str, mods_dir: Option<&Path>) -> Option<(Diagnosis, Str
                 Vec::new(),
             ),
             format!("{summary}\n{frame}"),
+        ));
+    }
+    if let Some(frame) = graphics_driver_hang_frame(snapshot, summary) {
+        let matched = if summary.contains(frame) {
+            summary.to_owned()
+        } else {
+            format!("{summary}\n{frame}")
+        };
+        return Some((
+            Diagnosis::new(
+                GRAPHICS_DRIVER_HANG_TITLE,
+                graphics_driver_hang_detail(full_text),
+                Vec::new(),
+            ),
+            matched,
         ));
     }
     let short_menu_freeze = snapshot.contains("not in a world (menu/loading)")
@@ -2314,6 +2435,21 @@ fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a st
             {
                 warning = true;
             }
+            if !warning
+                && line
+                    .trim_start()
+                    .starts_with("com.mojang.realmsclient.exception.RealmsServiceException: ")
+                && line.contains("Could not connect to Realms")
+                && lines
+                    .clone()
+                    .take_while(|line| !exception_record_boundary(line))
+                    .any(|line| {
+                        line.trim_start().starts_with("at ")
+                            && line.contains(".RealmsClient.fetchFeatureFlags(")
+                    })
+            {
+                warning = true;
+            }
             if warning || line.contains("pack.mcmeta") || line.contains("pack metadata") {
                 continue;
             }
@@ -2373,7 +2509,7 @@ impl Report {
         let crash = diagnose_crash_match(&diagnosis_text, java);
         let diagnosis_tail = tail_of(&diagnosis_text, MAX_TEXT);
         let watchdog = if crash.is_none() {
-            hang_diagnosis(diagnosis_tail, None)
+            hang_diagnosis(&diagnosis_text, None)
         } else {
             None
         };
@@ -2432,6 +2568,7 @@ impl Report {
             if (diagnosis.title == SAVE_FAILED_TITLE && vanilla_crash_trace(&all).next().is_some())
                 || diagnosis.title == crate::crash_suspect::UNASSIGNED_ENTITY_TITLE
                 || diagnosis.title == SODIUM_DRIVER_TITLE
+                || diagnosis.title == GRAPHICS_DRIVER_HANG_TITLE
             {
                 priority.push_str(&scrub(head_of(&diagnosis.detail, 2048), &own));
                 priority.push('\n');
@@ -2911,7 +3048,10 @@ fn exception_record_boundary(line: &str) -> bool {
 
 fn background_auth_record<'a>(header: &'a str, body: impl Iterator<Item = &'a str>) -> bool {
     if header.rsplit_once(']').is_some_and(|(_, message)| {
-        message.trim_start_matches([' ', ':']) == "Failed to fetch user properties"
+        matches!(
+            message.trim_start_matches([' ', ':']),
+            "Failed to fetch user properties" | "Failed to fetch Realms feature flags"
+        )
     }) {
         return true;
     }
@@ -3212,6 +3352,7 @@ mod tests {
     const VANILLA_EXIT_398: &str = include_str!("../tests/fixtures/crash-398-vanilla-exit.log");
     const HANG_436: &str = include_str!("../tests/fixtures/crash-436-customrecipe-hang.log");
     const HANG_487: &str = include_str!("../tests/fixtures/crash-487-iris-shader-hang.log");
+    const HANG_489: &str = include_str!("../tests/fixtures/crash-489-gl-fence-hang.log");
     const FREEZE_440: &str = include_str!("../tests/fixtures/crash-440-create-world-freeze.log");
     const SODIUM_490: &str = include_str!("../tests/fixtures/crash-490-sodium-driver.log");
 
@@ -3469,6 +3610,90 @@ mod tests {
             assert!(!report.log.contains("---- first error ----"));
             assert!(!report.log.contains("---- first exceptions ----"));
         }
+    }
+
+    #[test]
+    fn report_489_explains_the_gl_fence_hang_and_skips_background_requests() {
+        let (log, exit) = HANG_489.rsplit_once("\n(exit code ").unwrap();
+        let exit = format!("(exit code {exit}");
+        let (diagnosis, matched) = diagnose_match(HANG_489, None).unwrap();
+        assert_eq!(diagnosis.title, GRAPHICS_DRIVER_HANG_TITLE);
+        assert!(
+            diagnosis
+                .detail
+                .contains("hung while Minecraft was drawing")
+        );
+        assert!(diagnosis.detail.contains("Update your graphics driver"));
+        assert!(
+            diagnosis
+                .detail
+                .contains("Intel(R) HD Graphics 4000 (driver from 2015-12-21)")
+        );
+        assert_eq!(
+            diagnosis
+                .detail
+                .matches("Intel(R) HD Graphics 4000")
+                .count(),
+            1
+        );
+        assert!(diagnosis.detail.contains("older Minecraft version"));
+        assert!(diagnosis.detail.contains("close other GPU-heavy apps"));
+        assert!(matched.contains("nglClientWaitSync(Native Method)"));
+        let mods_dir = tempfile::tempdir().unwrap();
+        let at_exit = crate::crash_conflicts::diagnose_exit_in(log, -805306369, mods_dir.path());
+        assert_eq!(at_exit.unwrap(), diagnosis);
+
+        let report = Report::build(
+            "26.1",
+            "Vanilla",
+            "The game froze and was closed",
+            &log.lines().collect::<Vec<_>>(),
+            &[],
+            None,
+            Some(&exit),
+        );
+        assert_eq!(report.title, GRAPHICS_DRIVER_HANG_TITLE);
+        assert!(report.log.contains(&diagnosis.detail));
+        assert!(!report.log.contains("---- first error ----"));
+        assert!(!report.log.contains("---- first exceptions ----"));
+
+        let (_, clipped_realms) = log
+            .split_once("Failed to fetch Realms feature flags\n")
+            .unwrap();
+        assert_eq!(first_error(clipped_realms, None), None);
+
+        let (sampled, at_exit) = HANG_489.split_once("\nHang at exit:").unwrap();
+        let (diagnosis, matched) = diagnose_match(sampled, None).unwrap();
+        assert_eq!(diagnosis.title, GRAPHICS_DRIVER_HANG_TITLE);
+        assert!(matched.contains("100%  knot//org.lwjgl.opengl.GL32C.nglClientWaitSync"));
+        assert!(!diagnosis.detail.contains("older Minecraft version"));
+        let minority = sampled.replace("100%", "50%");
+        assert_eq!(
+            diagnose(&minority).unwrap().title,
+            "The game froze and was closed"
+        );
+        let recovered = sampled.replace(" (still frozen when written)", "");
+        let recovered = format!("{recovered}\n{exit}");
+        assert_eq!(
+            diagnose(&recovered).unwrap().title,
+            "The game froze and was closed"
+        );
+
+        let at_exit = format!("Hang at exit:{at_exit}").replace(
+            "knot//org.lwjgl.opengl.GL32C.nglClientWaitSync(Native Method)",
+            "org.lwjgl.glfw.GLFW.nglfwSwapBuffers(Native Method)",
+        );
+        assert_eq!(
+            diagnose(&at_exit).unwrap().title,
+            GRAPHICS_DRIVER_HANG_TITLE
+        );
+        let new_driver = at_exit.replace(
+            "12-21-2015",
+            &chrono::Utc::now().format("%m-%d-%Y").to_string(),
+        );
+        let diagnosis = diagnose(&new_driver).unwrap();
+        assert!(diagnosis.detail.contains("driver from"));
+        assert!(!diagnosis.detail.contains("older Minecraft version"));
     }
 
     #[test]
