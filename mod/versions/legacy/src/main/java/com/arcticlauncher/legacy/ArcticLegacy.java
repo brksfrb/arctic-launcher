@@ -10,6 +10,11 @@ public final class ArcticLegacy implements ClientModInitializer {
 	public static final Logger LOG = LogManager.getLogger("Arctic");
 	static final LegacyPlatform PLATFORM = new LegacyPlatform();
 
+	/** Drops GPU badge textures; called from the lifecycle mixin. */
+	public static void releaseBadgeTextures() {
+		LegacyTextures.releaseBadges();
+	}
+
 	@Override
 	public void onInitializeClient() {
 		ArcticClient.init(PLATFORM);

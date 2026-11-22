@@ -1,4 +1,4 @@
-"""The Arctic logo (style 0) for the player list: a square 9 GUI px picture, the same height as before.
+"""Reproduce the retired 18-grid tab art for visual comparisons.
 
 The list draws the picture with nearest-neighbour sampling, so a texture with many more texels than screen
 pixels drops thin lines at some GUI scales: the snowflake's up/down arms vanished first and the logo read
@@ -9,7 +9,6 @@ are sampled alike. The art keeps its own proportions, centred in the square, wit
 the last column so the glyph is 9 px wide as well as 9 px tall (a bitmap glyph is as wide as its last
 non-empty column).
 """
-from pathlib import Path
 from PIL import Image
 
 GRID = 18
@@ -36,14 +35,3 @@ def tab_art(logo):
     if px[GRID - 1, GRID // 2][3] == 0:
         px[GRID - 1, GRID // 2] = (r, g, b, 1)
     return grid.resize((GRID * BLOCK, GRID * BLOCK), Image.Resampling.NEAREST)
-
-
-def write(logo, assets):
-    art = tab_art(logo)
-    art.save(assets / 'textures/font/badge_tab.png')
-    art.save(assets / 'badge_tab.png')
-
-
-if __name__ == '__main__':
-    assets = Path(__file__).resolve().parents[1] / 'core/src/main/resources/assets/arctic'
-    write(Image.open(assets / 'badge.png').convert('RGBA'), assets)
