@@ -491,7 +491,7 @@ public final class Looks {
 			return look == null ? new Look(null, false, previewCape ? capeTrying : null, trying, true, now,
 					tryFits != null ? tryFits : java.util.Collections.<String, Fit>emptyMap())
 					: new Look(look.skin, look.slim, previewCape ? capeTrying : look.cape, trying, look.arctic, look.fetched,
-							tryFits != null ? tryFits : look.fits);
+							tryFits != null ? tryFits : look.fits, look.badgeStyle, look.badgeRole);
 		}
 		if (previewCape) {
 			return look == null ? new Look(null, false, capeTrying,
@@ -543,7 +543,7 @@ public final class Looks {
 		return look != null && look.arctic;
 	}
 
-	/** Badges share the looks cache but refresh promptly when another wearer changes their choice. */
+	/** The server-assigned role from the cached look. */
 	public String badgeRole(UUID player) {
 		if (player == null) return null;
 		Look look = players.get(player);
@@ -551,6 +551,7 @@ public final class Looks {
 		return look == null ? null : look.badgeRole;
 	}
 
+	/** Badges share the looks cache but refresh promptly when another wearer changes their choice. */
 	public int badgeStyle(UUID player) {
 		if (player == null) return 0;
 		Look look = players.get(player);

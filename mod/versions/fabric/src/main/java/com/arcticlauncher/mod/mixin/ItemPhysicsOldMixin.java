@@ -4,6 +4,8 @@ package com.arcticlauncher.mod.mixin;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.mod.ItemPhysicsState;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraft.client.renderer.entity.ItemEntityRenderer;
 import net.minecraft.client.resources.model.BakedModel;
@@ -13,7 +15,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
@@ -111,9 +112,9 @@ abstract class ItemPhysicsOldMixin {
 		return tilt;
 	}
 
-	@Redirect(method = "setupBobbingItem",
+	@WrapOperation(method = "setupBobbingItem",
 			at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/GlStateManager;translatef(FFF)V", ordinal = 0))
-	private void arctic$height(float x, float y, float z) {
+	private void arctic$height(float x, float y, float z, Operation<Void> original) {
 		ItemEntity item = arctic$item;
 		if (item != null) {
 			y -= Mth.sin((item.tickCount + arctic$tickDelta) / 10.0F + item.bobOffs) * 0.1F + 0.1F;
@@ -125,25 +126,25 @@ abstract class ItemPhysicsOldMixin {
 				y += STANDING_LIFT * Math.abs(Mth.cos(radians)) + lying * Math.abs(Mth.sin(radians)) - STANDING_LIFT;
 			}
 		}
-		GlStateManager.translatef(x, y, z);
+		original.call(x, y, z);
 	}
 
-	@Redirect(method = "setupBobbingItem",
+	@WrapOperation(method = "setupBobbingItem",
 			at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/GlStateManager;rotatef(FFFF)V", ordinal = 0))
-	private void arctic$angle(float angle, float axisX, float axisY, float axisZ) {
+	private void arctic$angle(float angle, float axisX, float axisY, float axisZ, Operation<Void> original) {
 		ItemEntity item = arctic$item;
 		if (item == null) {
 			ClientConfig c = ArcticClient.config();
 			if (c != null && c.items2d) {
 				// 2D Items: a flat sprite that faces you.
-				GlStateManager.rotatef((float) Math.toDegrees(com.arcticlauncher.mod.Compat.faceCamera()), 0F, 1F, 0F);
+				original.call((float) Math.toDegrees(com.arcticlauncher.mod.Compat.faceCamera()), 0F, 1F, 0F);
 				GlStateManager.scalef(1F, 1F, 0.01F);
 				return;
 			}
-			GlStateManager.rotatef(angle, axisX, axisY, axisZ);
+			original.call(angle, axisX, axisY, axisZ);
 			return;
 		}
-		GlStateManager.rotatef(item.bobOffs * (180F / (float) Math.PI), 0F, 1F, 0F);
+		original.call(item.bobOffs * (180F / (float) Math.PI), 0F, 1F, 0F);
 		// Lying face up (-90): the copies of a stack, spread along the model's depth, pile up from the ground.
 		GlStateManager.rotatef(arctic$tilt, 1F, 0F, 0F);
 	}

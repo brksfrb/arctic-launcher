@@ -97,7 +97,8 @@
 		"SmoothFontManagerMixin",<% } %><% if (glowText) { %>
 		"GlowTextMixin",<% } %><% if (scaledFont) { %>
 		"FontTextureMixin",
-		"ScaledGlyphMixin",<% } %><% if (!worldTextScale) { %>
+		"ScaledGlyphMixin",<% } %><% if (badgeGuiFilter) { %>
+		"BadgeGuiFilterMixin",<% } %><% if (!worldTextScale) { %>
 		"FontDrawScaleMixin",<% } %><% if (textProjection) { %>
 		"ScaledTextStateMixin",
 		"TextProjectionMixin",
@@ -105,7 +106,11 @@
 		"WorldTextScaleMixin",
 		"WorldTextOutlineMixin",<% } %><% if (nameTagTextScale) { %>
 		"NameTagTextScaleMixin",<% } %><% if (oldScaledFont) { %>
-		"ScaledFontSetMixin",<% } %><% if (oldScaledTexture) { %>
+		"ScaledFontSetMixin",
+		"BadgeQuadMixin",<% } %><% if (badgeSnap) { %>
+		"BadgeSnapMixin",
+		"BadgeTextureLifecycleMixin",<% } %><% if (badgeGlyphInstance) { %>
+		"BadgeGlyphInstanceAccess",<% } %><% if (oldScaledTexture) { %>
 		"ScaledFontTextureMixin",<% } %><% if (gpuFontTexture && !scaledFont) { %>
 		"FontTextureMixin",<% } %><% if (textShader) { %>
 		"TextShaderMixin",<% } %><% if (textShaderOld) { %>

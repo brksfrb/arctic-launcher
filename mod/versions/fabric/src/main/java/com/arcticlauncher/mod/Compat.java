@@ -1,5 +1,6 @@
 package com.arcticlauncher.mod;
 
+import com.arcticlauncher.client.feature.Badge;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
@@ -210,13 +211,7 @@ public final class Compat {
 
 	/** Like {@link #texture}, but filtered linearly: for a picture that is drawn turned. */
 	public static DynamicTexture smoothTexture(String name, NativeImage image) {
-		//#if MC >= 1.21.11
 		return new SmoothTexture(name, image);
-		//#else
-		DynamicTexture texture = texture(name, image);
-		texture.setFilter(true, false);
-		return texture;
-		//#endif
 	}
 
 	//#if MC >= 1.19.3
@@ -553,40 +548,35 @@ public final class Compat {
 		//#endif
 	}
 
-	/**
-	 * The wearer's badge and gap: 8px for nametags, 9px centered in a tab row.
-	 * 1.16 and newer use a text font for each style and size;
-	 * 1.13-1.15, where text has no fonts: a character of the same picture in the default font
-	 * (assets/minecraft/font/default.json). Empty with "Force Unicode Font" on in 1.13-1.15, where that font drops it.
-	 */
+	/** The wearer's badge spacer and its two-pixel gap. The draw path supplies the textured quad. */
 	public static net.minecraft.network.chat.MutableComponent arcticBadgeWithGap(java.util.UUID wearer, boolean tab) {
-		int style = com.arcticlauncher.client.feature.Badge.style(wearer);
+		int style = Badge.style(wearer);
+		int role = Badge.roleIndex(Badge.role(wearer));
 		//#if MC < 1.16
 		if (net.minecraft.client.Minecraft.getInstance().options.forceUnicodeFont) {
 			return literal("");
 		}
-		return literal("\u00a7r" + com.arcticlauncher.client.feature.Badge.glyph(style, com.arcticlauncher.client.feature.Badge.role(wearer), tab) + com.arcticlauncher.client.feature.Badge.GLYPH_GAP + "\u00a7r");
+		return literal("\u00a7r" + Badge.glyph(style, role, tab) + "\u00a7r");
 		//#else
-		net.minecraft.network.chat.MutableComponent badge = literal((style == 0 && com.arcticlauncher.client.feature.Badge.roleIndex(com.arcticlauncher.client.feature.Badge.role(wearer)) > 0 ? String.valueOf(com.arcticlauncher.client.feature.Badge.glyph(style, com.arcticlauncher.client.feature.Badge.role(wearer), tab)) : "\uE000") + " ").withStyle(badgeStyle(style, tab));
-		return badge;
+		return literal(String.valueOf((char) (BadgeTexture.SPACER + role))).withStyle(badgeStyle(style, tab));
 		//#endif
 	}
 
 	//#if MC >= 1.16
 	/** The text style that puts a text in the font of badge picture {@code style}. */
 	public static net.minecraft.network.chat.Style badgeStyle(int style, boolean tab) {
-		net.minecraft.resources.Identifier font = id(ArcticMod.ID, com.arcticlauncher.client.feature.Badge.definition(style).font + (tab ? "_tab" : ""));
+		net.minecraft.resources.Identifier font = id(ArcticMod.ID, Badge.definition(style).font + (tab ? "_tab" : ""));
 		//#if MC >= 1.21.9
 		net.minecraft.network.chat.Style badge = net.minecraft.network.chat.Style.EMPTY.withFont(new net.minecraft.network.chat.FontDescription.Resource(font));
 		//#else
 		net.minecraft.network.chat.Style badge = net.minecraft.network.chat.Style.EMPTY.withFont(font);
 		//#endif
-		// The player list draws names with a shadow; the picture beside them has none (names keep theirs).
-		// Before 1.21.4 a style can't say so, and the picture keeps the text's shadow.
+		// The badge picture has no drop shadow; the name text beside it keeps its own.
+		// Before 1.21.4 a style can't say so, so BadgeShadowMixin omits the shadow-pass quad.
 		//#if MC >= 1.21.11
-		return tab ? badge.withoutShadow() : badge;
+		return badge.withoutShadow();
 		//#elif MC >= 1.21.4
-		return tab ? badge.withShadowColor(0) : badge;
+		return badge.withShadowColor(0);
 		//#else
 		return badge;
 		//#endif

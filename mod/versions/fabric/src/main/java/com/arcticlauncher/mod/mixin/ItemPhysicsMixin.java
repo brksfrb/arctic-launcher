@@ -4,10 +4,8 @@ package com.arcticlauncher.mod.mixin;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.mod.ItemPhysicsState;
-//#if MC < 1.21.2
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-//#endif
 import com.mojang.blaze3d.vertex.PoseStack;
 //#if MC >= 1.19.3
 import com.mojang.math.Axis;
@@ -40,9 +38,6 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
-//#if MC >= 1.21.2
-import org.spongepowered.asm.mixin.injection.Redirect;
-//#endif
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
@@ -355,9 +350,9 @@ abstract class ItemPhysicsMixin {
 	}
 
 	/** No spin: each item keeps the random angle it was dropped with. */
-	@Redirect(method = DRAW, at = @At(value = "INVOKE", target = SPIN))
-	private float arctic$fixedAngle(float age, float bobOffset) {
-		return arctic$drawing ? bobOffset : arctic$flat2d() ? com.arcticlauncher.mod.Compat.faceCamera() : ItemEntity.getSpin(age, bobOffset);
+	@WrapOperation(method = DRAW, at = @At(value = "INVOKE", target = SPIN))
+	private float arctic$fixedAngle(float age, float bobOffset, Operation<Float> original) {
+		return arctic$drawing ? bobOffset : arctic$flat2d() ? com.arcticlauncher.mod.Compat.faceCamera() : original.call(age, bobOffset);
 	}
 
 	//#if MC >= 1.21.9

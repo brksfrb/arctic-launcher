@@ -58,7 +58,8 @@
       "type": "space",
       "advances": {
         "\ue0af": 1,
-        "\ue0c0": 10
+        "\ue0c0": 11,
+        "\ue0c1": 10
       }
     }
   ]

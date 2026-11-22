@@ -1,0 +1,41 @@
+name: Update Homebrew cask
+
+on:
+  # After sign-release.ps1 publishes the release. Not on tag push: the
+  # Windows files are still unsigned then, and the Mac zip may not be
+  # attached yet (mac-assets can finish after publish).
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the Mac zip, then bump the Homebrew cask
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HOMEBREW_TAP_TOKEN:-}" ]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN is not set; skipping the immediate Homebrew cask update. The scheduled workflow in brksfrb/homebrew-arctic will still pick this up (every 6 hours). Add a fine-grained PAT with Actions write on brksfrb/homebrew-arctic as the HOMEBREW_TAP_TOKEN repository secret."
+            exit 0
+          fi
+          for i in $(seq 1 90); do
+            if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx 'arctic-launcher-macos.zip'; then
+              echo "Found arctic-launcher-macos.zip"
+              break
+            fi
+            if [ "$i" -eq 90 ]; then
+              echo "::error::$TAG has no arctic-launcher-macos.zip after 90 minutes"
+              exit 1
+            fi
+            echo "Waiting for arctic-launcher-macos.zip ($i/90)..."
+            sleep 60
+          done
+          GH_TOKEN="$HOMEBREW_TAP_TOKEN" gh workflow run update.yml --repo brksfrb/homebrew-arctic

@@ -1,5 +1,6 @@
 package com.arcticlauncher.legacy;
 
+import com.arcticlauncher.client.feature.Badge;
 import com.arcticlauncher.client.feature.TextPixelScale;
 import java.io.InputStream;
 import java.lang.reflect.Field;
@@ -32,12 +33,12 @@ public class LegacyFontSnapshotTest {
 			assertNotNull(in);
 			new ClassReader(in).accept(new ClassVisitor(Opcodes.ASM9, writer) {
 				@Override public FieldVisitor visitField(int access, String n, String desc, String sig, Object value) {
-					// No game/font fields are needed to execute these two production methods.
+					// No game/font fields are needed to execute the projected text and badge methods.
 					return fields.contains(n) ? super.visitField(access & ~Opcodes.ACC_FINAL, n, desc, sig, value) : null;
 				}
 
 				@Override public MethodVisitor visitMethod(int access, String n, String desc, String sig, String[] exceptions) {
-					if (!n.equals("beginDraw") && !n.equals("preparing") && !n.equals("yieldPatcher")) return null;
+					if (!n.equals("beginDraw") && !n.equals("preparing") && !n.equals("yieldPatcher") && !n.equals("readTextTransform") && !n.equals("projectedPixels") && !n.equals("badgePixels")) return null;
 					return new MethodVisitor(Opcodes.ASM9, super.visitMethod(access, n, desc, sig, exceptions)) {
 						@Override public void visitMethodInsn(int op, String owner, String method, String descriptor, boolean itf) {
 							if (owner.equals("org/lwjgl/opengl/GL11") || owner.equals(name) && method.equals("ready")
@@ -93,6 +94,19 @@ public class LegacyFontSnapshotTest {
 		assertEquals(reference(10, 20), scale(), 0f);
 		assertNotEquals(first, scale());
 		assertEquals(6, FakeGl.reads);
+	}
+
+	@Test void badgeUsesProjectedPixelsWithoutTheGuiAtlasDivisor() throws Exception {
+		font.getMethod("beginDraw").invoke(null);
+		java.lang.reflect.Method badgePixels = font.getDeclaredMethod("badgePixels", float.class, float.class);
+		badgePixels.setAccessible(true);
+		float close = (Float) badgePixels.invoke(null, 0f, 0f);
+		assertEquals(reference(0, 0) * 2, close, 0f);
+		assertEquals(32, Badge.rasterSize(false, close));
+		FakeGl.model[14] = -12;
+		float far = (Float) badgePixels.invoke(null, 0f, 0f);
+		assertEquals(reference(0, 0) * 2, far, 0f);
+		assertEquals(11, Badge.rasterSize(false, far));
 	}
 
 	@Test void absentPatcherDoesNotReadClockForEveryGlyph() throws Exception {

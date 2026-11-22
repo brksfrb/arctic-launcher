@@ -97,16 +97,33 @@ public final class LegacySmoothFont {
 	public static void beginDraw() {
 		// The GUI-size atlas establishes the divisor, including the first draw after a GUI-scale change.
 		ready();
+		readTextTransform();
+	}
+
+	private static void readTextTransform() {
 		GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, MODEL);
 		GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, PROJECTION);
 		GL11.glGetInteger(GL11.GL_VIEWPORT, VIEWPORT);
 		com.arcticlauncher.client.feature.TextPixelScale.multiply(PROJECTION, MODEL, CLIP);
 	}
 
+	static boolean snapOrigin(float x, float y, float[] out) {
+		return com.arcticlauncher.client.feature.TextPixelScale.snapOrigin(
+				CLIP, x, y, VIEWPORT.get(2), VIEWPORT.get(3), out);
+	}
+
+	static float badgePixels(float x, float y) {
+		readTextTransform();
+		return projectedPixels(x, y);
+	}
+
+	private static float projectedPixels(float x, float y) {
+		return com.arcticlauncher.client.feature.TextPixelScale.projected(CLIP, x, y, VIEWPORT.get(2), VIEWPORT.get(3));
+	}
+
 	/** Each layer keeps its own anchor for the perspective divide, without another driver read. */
 	public static void preparing(float x, float y) {
-		drawScale = com.arcticlauncher.client.feature.TextPixelScale.projected(CLIP, x, y,
-				VIEWPORT.get(2), VIEWPORT.get(3)) / Math.max(1, scale);
+		drawScale = projectedPixels(x, y) / Math.max(1, scale);
 	}
 
 	/**
