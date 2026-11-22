@@ -156,6 +156,7 @@ impl ArcticApp {
         self.whats_new_dialog(&ctx);
         self.close_prompt_dialog(&ctx);
         self.join_confirm_dialog(&ctx);
+        self.mod_malware_dialog(&ctx);
         self.world_confirm_dialog(&ctx);
         self.mod_clash_dialog(&ctx);
         self.required_update_overlay(&ctx);

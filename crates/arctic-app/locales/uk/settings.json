@@ -225,5 +225,6 @@
   "settings.your_newest_screenshot_or_the_versions_title": "Твій останній знімок екрана або титульний екран версії",
   "settings.your_picture": "Власне зображення…",
   "settings.your_screenshot": "Твій знімок екрана",
-  "settings.your_settings_instances_as_mod_lists_and_hud": "Твої налаштування, збірки (як списки модів) і розкладки HUD — кодом, текстом або файлом. Облікові записи й паролі ніколи не включаються."
+  "settings.your_settings_instances_as_mod_lists_and_hud": "Твої налаштування, збірки (як списки модів) і розкладки HUD — кодом, текстом або файлом. Облікові записи й паролі ніколи не включаються.",
+  "settings.check_mods_for_malware": "Перевіряти моди на шкідливе ПЗ"
 }

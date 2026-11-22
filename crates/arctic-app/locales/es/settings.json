@@ -225,5 +225,6 @@
   "settings.your_newest_screenshot_or_the_versions_title": "Tu captura más reciente, o la pantalla de título de la versión",
   "settings.your_picture": "Tu imagen…",
   "settings.your_screenshot": "Tu captura",
-  "settings.your_settings_instances_as_mod_lists_and_hud": "Tus ajustes, instancias (como listas de mods) y configuraciones de HUD, como código, texto o archivo. Las cuentas y contraseñas nunca se incluyen."
+  "settings.your_settings_instances_as_mod_lists_and_hud": "Tus ajustes, instancias (como listas de mods) y configuraciones de HUD, como código, texto o archivo. Las cuentas y contraseñas nunca se incluyen.",
+  "settings.check_mods_for_malware": "Buscar malware en los mods"
 }

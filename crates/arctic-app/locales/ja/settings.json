@@ -225,5 +225,6 @@
   "settings.your_newest_screenshot_or_the_versions_title": "最新のスクリーンショット、またはそのバージョンのタイトル画面",
   "settings.your_picture": "自分の画像…",
   "settings.your_screenshot": "自分のスクリーンショット",
-  "settings.your_settings_instances_as_mod_lists_and_hud": "設定、インスタンス（Modリストとして）、HUD構成をコード、テキスト、またはファイルとして書き出します。アカウントとパスワードは決して含まれません。"
+  "settings.your_settings_instances_as_mod_lists_and_hud": "設定、インスタンス（Modリストとして）、HUD構成をコード、テキスト、またはファイルとして書き出します。アカウントとパスワードは決して含まれません。",
+  "settings.check_mods_for_malware": "Mod にマルウェアがないか確認する"
 }

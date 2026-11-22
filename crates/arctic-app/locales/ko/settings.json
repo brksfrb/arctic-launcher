@@ -225,5 +225,6 @@
   "settings.your_newest_screenshot_or_the_versions_title": "가장 최근 스크린샷 또는 해당 버전의 타이틀 화면",
   "settings.your_picture": "내 사진…",
   "settings.your_screenshot": "내 스크린샷",
-  "settings.your_settings_instances_as_mod_lists_and_hud": "설정, 인스턴스(모드 목록 형태), HUD 구성을 코드, 텍스트 또는 파일로 내보냅니다. 계정과 비밀번호는 절대 포함되지 않습니다."
+  "settings.your_settings_instances_as_mod_lists_and_hud": "설정, 인스턴스(모드 목록 형태), HUD 구성을 코드, 텍스트 또는 파일로 내보냅니다. 계정과 비밀번호는 절대 포함되지 않습니다.",
+  "settings.check_mods_for_malware": "모드에서 악성코드 검사"
 }

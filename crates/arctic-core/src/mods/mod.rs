@@ -12,6 +12,7 @@ mod exact;
 mod files;
 mod identify;
 mod index;
+pub mod malware;
 pub mod modpack;
 mod modrinth;
 mod oneconfig;

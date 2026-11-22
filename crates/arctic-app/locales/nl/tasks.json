@@ -175,5 +175,19 @@
   "tasks.you_can_turn_this_question_back_on_in": "Je kunt deze vraag weer aanzetten in Instellingen.",
   "tasks.youll_see_it_next_time_you_play": "Je ziet het de volgende keer dat je speelt.",
   "tasks.your_discord_account": "je Discord-account",
-  "tasks.your_profile_and_friends_are_here_now": "Je profiel en vrienden staan nu hier"
+  "tasks.your_profile_and_friends_are_here_now": "Je profiel en vrienden staan nu hier",
+  "tasks.checking_mods_for_malware": "Mods worden op malware gecontroleerd",
+  "tasks.mod_malware_warning": "Mogelijke malware in je mods",
+  "tasks.malware_scope": "Deze controle zoekt naar bekende en duidelijke malware. Ze kan de veiligheid van een mod niet garanderen.",
+  "tasks.malware_hash_match": "Bekende malware (bestandshash komt overeen met de blokkeerlijst)",
+  "tasks.malware_suspicious": "Verdacht — {reason}",
+  "tasks.malware_fractureiser": "Bevat indicatoren die verband houden met Fractureiser",
+  "tasks.malware_shell": "Voert een opdracht uit in PowerShell of de opdrachtprompt",
+  "tasks.malware_credentials": "Leest opgeslagen inloggegevens en gebruikt het netwerk of start een proces",
+  "tasks.malware_download": "Kan externe code downloaden en uitvoeren",
+  "tasks.malware_undeclared_jar": "Laadt code uit een niet-aangegeven ingesloten JAR",
+  "tasks.malware_disable": "Mod uitschakelen",
+  "tasks.malware_disable_failed": "Mod kon niet worden uitgeschakeld",
+  "tasks.malware_launch": "Starten",
+  "tasks.malware_launch_anyway": "Toch starten"
 }

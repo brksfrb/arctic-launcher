@@ -1,6 +1,6 @@
 //! Application state and event handling. Layout lives in `ui/`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
@@ -239,6 +239,7 @@ pub struct ArcticApp {
     pub(crate) close_prompt: bool,
     /// "Launch Minecraft to join this server?" is up for this address.
     pub(crate) join_confirm: Option<String>,
+    pub(crate) mod_malware_warnings: VecDeque<crate::tasks::ModMalwareWarning>,
     /// That dialog's "Don't show again" box.
     pub(crate) join_confirm_never: bool,
     /// "Play this world?" is up (a world never starts from one click).
@@ -335,6 +336,7 @@ impl ArcticApp {
             open_flushed: std::time::Instant::now(),
             close_prompt: false,
             join_confirm: None,
+            mod_malware_warnings: VecDeque::new(),
             join_confirm_never: false,
             world_confirm: None,
             software_gl: false,
@@ -1129,6 +1131,20 @@ impl ArcticApp {
                 }
             }
             Event::LaunchProgress(id, snapshot) => self.on_launch_progress(id, snapshot, now),
+            Event::ModMalwareWarning(warning) => {
+                crate::window::show();
+                self.mod_malware_warnings.push_back(warning);
+            }
+            Event::LaunchCancelled(id) => {
+                self.runs.cancel(id);
+                self.bridge.forget_launch(id);
+                if matches!(self.log_source, LogSource::Game(run) if run == id) {
+                    self.log_source = self
+                        .runs
+                        .latest()
+                        .map_or(LogSource::Launcher, |run| LogSource::Game(run.id));
+                }
+            }
             Event::UpdateProgress(p) => {
                 if let UpdateState::Installing { done, total, .. } = &mut self.update {
                     (*done, *total) = (p.bytes_done, p.bytes_total);
