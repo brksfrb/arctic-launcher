@@ -98,7 +98,7 @@ public final class LegacyPlatform implements Platform {
 			return -1;
 		}
 		PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(mc.player.getUuid());
-		return entry == null ? -1 : entry.getLatency();
+		return com.arcticlauncher.client.net.MeasuredPing.value(server(), entry == null ? -1 : entry.getLatency());
 	}
 
 	@Override
@@ -107,6 +107,8 @@ public final class LegacyPlatform implements Platform {
 		if (mc.getNetworkHandler() == null || mc.isInSingleplayer()) {
 			return -1;
 		}
+		// Our own entry: the measured round trip, as the ping widget shows.
+		if (mc.player != null && player.equals(mc.player.getUuid())) return ping();
 		PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(player);
 		return entry == null ? -1 : entry.getLatency();
 	}
@@ -1104,14 +1106,7 @@ public final class LegacyPlatform implements Platform {
 			List<ResourcePackLoader.Entry> selected = new ArrayList<ResourcePackLoader.Entry>(loader.getSelectedResourcePacks());
 			selected.remove(entry);
 			selected.add(entry);
-			loader.setSelectedResourcePacks(selected);
-			// Same order as the loader's list: bottom to top.
-			mc.options.resourcePacks.clear();
-			for (ResourcePackLoader.Entry e : selected) {
-				mc.options.resourcePacks.add(e.getName());
-			}
-			mc.options.save();
-			mc.reloadResources();
+			applyResourcePacks(mc, loader, selected);
 			return;
 		}
 		ArcticLegacy.LOG.warn("pack {} isn't available after the download", fileName);
@@ -1157,13 +1152,47 @@ public final class LegacyPlatform implements Platform {
 				}
 			}
 		}
-		loader.setSelectedResourcePacks(bottomFirst);
-		mc.options.resourcePacks.clear();
-		for (ResourcePackLoader.Entry e : bottomFirst) {
-			mc.options.resourcePacks.add(e.getName());
-		}
+		applyResourcePacks(mc, loader, bottomFirst);
+	}
+
+	private static void applyResourcePacks(MinecraftClient mc, ResourcePackLoader loader,
+			List<ResourcePackLoader.Entry> bottomFirst) {
+		loader.setSelectedResourcePacks(updateResourcePackOptions(mc.options, bottomFirst));
 		mc.options.save();
 		mc.reloadResources();
+	}
+
+	static List<ResourcePackLoader.Entry> updateResourcePackOptions(net.minecraft.client.option.GameOptions options,
+			List<ResourcePackLoader.Entry> bottomFirst) {
+		// Match the vanilla pack screen and the startup loader for this version.
+		//#if MC >= 1.11
+		int expectedFormat = 3;
+		//#elif MC >= 1.9
+		int expectedFormat = 2;
+		//#else
+		int expectedFormat = 1;
+		//#endif
+		List<ResourcePackLoader.Entry> selected = new ArrayList<>();
+		List<String> names = new ArrayList<>();
+		List<String> incompatible = new ArrayList<>();
+		for (ResourcePackLoader.Entry e : bottomFirst) {
+			int format;
+			try {
+				format = e.getFormat();
+			} catch (NullPointerException missingMetadata) {
+				// 1.8.9 dereferences the pack section even when pack.mcmeta has none.
+				ArcticLegacy.LOG.warn("Skipping resource pack {} with missing metadata", e.getName(), missingMetadata);
+				continue;
+			}
+			selected.add(e);
+			names.add(e.getName());
+			if (format != expectedFormat) {
+				incompatible.add(e.getName());
+			}
+		}
+		options.resourcePacks = names;
+		options.incompatibleResourcePacks = incompatible;
+		return selected;
 	}
 
 	@Override
@@ -1714,27 +1743,34 @@ public final class LegacyPlatform implements Platform {
 
 	@Override
 	public void registerTexture(String hash, byte[] png, boolean cape) {
-		BufferedImage image = LegacyTextures.decode(png);
-		if (image == null) {
+		// Decoded and read out here (a download thread); the render thread only uploads.
+		LegacyTextures.Pixels pixels = LegacyTextures.pixels(LegacyTextures.decode(png));
+		if (pixels == null) {
 			return;
 		}
-		int frames = cape ? Looks.capeFrames(image.getWidth(), image.getHeight()) : 1;
-		com.arcticlauncher.client.gfx.RenderWork.post(() -> {
-			if (frames < 2) {
-				if (LegacyTextures.register(LegacyTextures.look(hash), image)) {
+		int frames = cape ? Looks.capeFrames(pixels.width, pixels.height) : 1;
+		if (frames < 2) {
+			com.arcticlauncher.client.gfx.RenderWork.post(() -> {
+				if (LegacyTextures.register(LegacyTextures.look(hash), pixels)) {
 					ArcticClient.looks().textureReady(hash, 1);
 				}
-				return;
-			}
-			int h = image.getHeight() / frames;
-			boolean ok = true;
-			for (int f = 0; f < frames; f++) {
-				ok &= LegacyTextures.register(LegacyTextures.look(hash + "/" + f), image.getSubimage(0, f * h, image.getWidth(), h));
-			}
-			if (ok) {
-				ArcticClient.looks().textureReady(hash, frames);
-			}
-		});
+			});
+			return;
+		}
+		// An animated cape: one upload per job (frame), so a long cape is spread over frames like
+		// everything else; it shows once the last frame is up, as before.
+		int h = pixels.height / frames;
+		boolean[] ok = {true};
+		for (int f = 0; f < frames; f++) {
+			int frame = f;
+			LegacyTextures.Pixels part = pixels.rows(f * h, h);
+			com.arcticlauncher.client.gfx.RenderWork.post(() -> {
+				ok[0] &= LegacyTextures.register(LegacyTextures.look(hash + "/" + frame), part);
+				if (frame == frames - 1 && ok[0]) {
+					ArcticClient.looks().textureReady(hash, frames);
+				}
+			});
+		}
 	}
 
 	@Override

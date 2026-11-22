@@ -112,10 +112,10 @@ fn dist_to_segment(px: f32, py: f32, ax: f32, ay: f32, bx: f32, by: f32) -> f32 
     (qx * qx + qy * qy).sqrt()
 }
 
-/// Windows .ico with 32-bit BMP images at the given sizes.
+/// Windows .ico with the encoded frames at the given sizes.
 #[allow(dead_code)]
-pub fn ico_bytes(sizes: &[u32]) -> Vec<u8> {
-    let images: Vec<Vec<u8>> = sizes.iter().map(|&s| bmp_entry(s)).collect();
+pub fn ico_bytes(sizes: &[u32], encode: impl FnMut(u32) -> Vec<u8>) -> Vec<u8> {
+    let images: Vec<Vec<u8>> = sizes.iter().copied().map(encode).collect();
     let mut out = Vec::new();
     out.extend_from_slice(&[0, 0, 1, 0]);
     out.extend_from_slice(&(sizes.len() as u16).to_le_bytes());
@@ -134,7 +134,8 @@ pub fn ico_bytes(sizes: &[u32]) -> Vec<u8> {
 }
 
 /// BITMAPINFOHEADER + bottom-up BGRA pixels + (empty) AND mask.
-fn bmp_entry(size: u32) -> Vec<u8> {
+#[allow(dead_code)]
+pub fn bmp_entry(size: u32) -> Vec<u8> {
     let rgba = app_icon_rgba(size);
     let mask_row = size.div_ceil(32) * 4;
     let mut out = Vec::new();

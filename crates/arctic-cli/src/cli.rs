@@ -1432,6 +1432,9 @@ pub enum ProfilesCommand {
 
 #[derive(Debug, Args)]
 pub struct OpenArgs {
+    /// Launch an instance by id in the GUI. Takes precedence over --launch.
+    #[arg(long, value_name = "ID")]
+    pub instance: Option<String>,
     /// Start launching this version as soon as the window opens.
     #[arg(long, value_name = "VERSION")]
     pub launch: Option<String>,

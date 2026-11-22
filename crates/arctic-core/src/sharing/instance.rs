@@ -257,6 +257,7 @@ impl InstancePack {
 }
 
 /// A Fabric Loader older than the Arctic Client needs gets the one it needs.
+/// Preserve Quilt: launch checks its jar's Fabric compatibility and skips the client if needed.
 fn arctic_ready(dirs: &DataDirs, loader: &Loader, game: &str) -> Loader {
     match loader {
         Loader::Fabric { version } if !crate::arctic_mod::loader_fits(game, version) => {

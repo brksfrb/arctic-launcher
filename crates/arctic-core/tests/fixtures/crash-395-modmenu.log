@@ -1,0 +1,15 @@
+[18:59:27] [main/INFO] Loading Minecraft 1.21.11 with Fabric Loader 0.20.1
+[18:59:29] [main/INFO] Loading 236 mods:
+	- appleskin 3.0.8+mc1.21.11
+	- chestesp 1.4.1-MC1.21.10-Fabric
+	   |-- cloth-config 20.0.149
+	   |    \-- cloth-basic-math 0.6.1
+	   \-- modmenu 16.0.0-rc.1
+	- cicada 0.14.3+1.21.9-1.21.10
+	   \-- org_yaml_snakeyaml 2.2
+[19:00:17] [Render thread/ERROR] Minecraft has crashed!
+    net.fabricmc.loader.impl.FormattedException: java.lang.RuntimeException: Mixin transformation of net.minecraft.class_442 failed
+    Caused by: org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error was encountered
+        at org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:380)
+    Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Critical injection failure: Argument modifier method adjustRealmsHeight(I)I in mixins.modmenu.json:MixinTitleScreen from mod modmenu failed injection check, (0/1) succeeded. Scanned 0 target(s). Using refmap modmenu-refmap.json
+        at org.spongepowered.asm.mixin.injection.struct.InjectionInfo.postInject(InjectionInfo.java:526)

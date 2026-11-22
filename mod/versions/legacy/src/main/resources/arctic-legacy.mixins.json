@@ -2,7 +2,8 @@
 	"required": <% if (forge) { %>false<% } else { %>true<% } %>,
 	"package": "com.arcticlauncher.legacy.mixin",
 	"compatibilityLevel": "JAVA_8",<% if (forge) { %>
-	"minVersion": "0.7.11",<% } %>
+	"minVersion": "0.8.7",
+	"plugin": "com.arcticlauncher.legacy.forge.ForgeMixinPlugin",<% } %>
 	"client": [
 		"ScreenshotMixin",
 		"ScreenshotKeyMixin",
@@ -53,6 +54,7 @@
 		"TerrainBuildTimeMixin",
 		"TerrainSyncBuildMixin",
 		"WorldSwitchGcMixin",
+		"BadgeTextureLifecycleMixin",
 		"PlayerListHudMixin",
 		"PlayerTierMixin",
 		"ScreenClickInvoker",
@@ -77,6 +79,7 @@
 		"SlotInvAccess",
 		"HandledScreenLockMixin",
 		"ParticleManagerMixin",
+		"LivingEntityPotionParticlesMixin",
 		"ClientPlayerPortalMixin",
 		"OwnNametagLegacyMixin",
 		"ChatEmojiLegacyMixin",
@@ -103,6 +106,9 @@
 		"ServerListPingerProxyMixin",
 <% if (!forge) { %>		"ServerAddressMixin",
 <% } %>		"LoginSessionMixin",
+		"OfflineJoinMixin",
+		"HostedBanCommandsMixin",
+		"HostedBanLoginMixin",
 		"ScoreboardRemoveMixin",
 		"ClientPlayerSwingMixin",
 		"ServerPingPoolMixin",

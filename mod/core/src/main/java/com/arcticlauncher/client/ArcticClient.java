@@ -8,6 +8,7 @@ import com.arcticlauncher.client.hud.Hud;
 import com.arcticlauncher.client.looks.Looks;
 import com.arcticlauncher.client.menu.Menus;
 import com.arcticlauncher.client.menu.TitleMenu;
+import com.arcticlauncher.client.notice.Notices;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Page;
 
@@ -54,9 +55,18 @@ public final class ArcticClient {
 	private static com.arcticlauncher.client.looks.LauncherSkins launcherSkins;
 
 	public static void init(Platform p) {
+		StartupTiming timing = new StartupTiming(p);
 		CrashDiagnostics.start();
-		com.arcticlauncher.client.looks.OsTrust.installDefault();
+		// Certificate parsing is independent of local settings and HUD construction.
+		java.util.concurrent.CompletableFuture<Void> trust = new java.util.concurrent.CompletableFuture<>();
+		Thread trustWorker = new Thread(() -> {
+			try { com.arcticlauncher.client.looks.OsTrust.installDefault(); trust.complete(null); }
+			catch (Throwable failure) { trust.completeExceptionally(failure); }
+		}, "Arctic system certificates");
+		trustWorker.setDaemon(true);
+		trustWorker.start();
 		platform = p;
+		timing.step("diagnostics + trust worker"); // i18n-ignore: startup log label
 		FreezeWatchdog.logTo(new java.util.function.Consumer<String>() {
 			public void accept(String line) {
 				p.log(true, line);
@@ -68,11 +78,19 @@ public final class ArcticClient {
 		Lang.init(p, session.language);
 		config = ClientConfig.load(p.configDir());
 		persistentChat = new com.arcticlauncher.client.feature.PersistentChat(p.configDir());
+		persistentChat.readAhead();
 		applyLauncherStyle(session);
 		applyLauncherProxy(session);
 		waypoints = com.arcticlauncher.client.waypoints.Waypoints.load(p.configDir());
+		timing.step("session + language + settings"); // i18n-ignore: startup log label
 		hud = new Hud(config);
 		features = new Features(p, config);
+		timing.step("HUD + features"); // i18n-ignore: startup log label
+		// Finish before starting any network service, preserving the default trust setup.
+		trust.join();
+		timing.step("trust wait"); // i18n-ignore: startup log label
+		// Cosmetic files and textures named by their SHA-1 are kept between sessions (in the instance's .arctic folder).
+		com.arcticlauncher.client.looks.AssetCache.init(new java.io.File(p.configDir().getAbsoluteFile().getParentFile(), ".arctic/cache/looks"));
 		looks = new Looks(p, config, serverUrl(session), session.token);
 		looks.shareServer(session.shareServer);
 		looks.start();
@@ -82,6 +100,7 @@ public final class ArcticClient {
 		launcherSkins = new com.arcticlauncher.client.looks.LauncherSkins(p, session.bridgePort, session.bridgeSecret);
 		voice = new com.arcticlauncher.client.voice.VoiceLink(p, session.bridgePort, session.bridgeSecret);
 		voice.start();
+		timing.step("looks + social + voice"); // i18n-ignore: startup log label
 		packs = new com.arcticlauncher.client.packs.PackBrowser(p, p.configDir());
 		shaders = new com.arcticlauncher.client.packs.ShaderPacks(p);
 		shaderBrowser = new com.arcticlauncher.client.packs.PackBrowser(p, p.configDir(),
@@ -104,6 +123,8 @@ public final class ArcticClient {
 		if (session.replayFile != null && replayAge >= 0 && replayAge < DUEL_REQUEST_SECONDS) {
 			com.arcticlauncher.client.replay.Replays.watchWhenReady(new java.io.File(session.replayFile));
 		}
+		timing.step("packs + replay + bridge"); // i18n-ignore: startup log label
+		timing.done();
 		p.log(false, "Arctic Client ready: style " + config.style + ", looks from " + looks.baseUrl());
 	}
 
@@ -206,6 +227,15 @@ public final class ArcticClient {
 
 	// ---- Hooks for adapters ----------------------------------------------------
 
+	private static final LauncherNotice LAUNCHER_NOTICE = new LauncherNotice(System.getProperty("arctic.launcher"));
+
+	/** Draw notices above the title screen's own artwork and buttons. */
+	public static void renderTitleNotices(Gfx g) {
+		com.arcticlauncher.client.gfx.Draw.fancy = config.fancy;
+		LAUNCHER_NOTICE.show(Notices::post);
+		Notices.render(g, style());
+	}
+
 	/** Draw the HUD over the game (skip while F1 or F3 is up). */
 	public static void renderHud(Gfx g) {
 		com.arcticlauncher.client.gfx.Draw.fancy = config.fancy;
@@ -236,6 +266,8 @@ public final class ArcticClient {
 			}
 		}
 		if (platform.inWorld()) {
+			// Quick Play can reach a world without drawing the title screen.
+			LAUNCHER_NOTICE.show(Notices::post);
 			if (!platform.hudHidden()) {
 				drawVoice(g);
 				PICKUPS.render(g, style());
@@ -402,6 +434,7 @@ public final class ArcticClient {
 		}
 		FreezeWatchdog.state(platform == null || platform.windowFocused(), platform != null && platform.inWorld(),
 				platform == null ? "unknown" : platform.screenClassName());
+		if (platform != null) com.arcticlauncher.client.net.MeasuredPing.tick(platform);
 		com.arcticlauncher.client.feature.DynamicFps.tick(platform, screenOpen);
 		com.arcticlauncher.client.replay.Replays.tick(screenOpen);
 		// Gameplay ticks are skipped outside a world and while watching a replay.

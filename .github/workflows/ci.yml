@@ -94,7 +94,16 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/hello"
-          echo 'public class Hello { public static void main(String[] a) { System.out.println("hello from java"); } }' > "$RUNNER_TEMP/hello/Hello.java"
+          cat > "$RUNNER_TEMP/hello/Hello.java" <<'JAVA'
+          public class Hello {
+              public static void main(String[] args) {
+                  if (java.lang.management.ManagementFactory.getMemoryMXBean().getHeapMemoryUsage() == null) {
+                      throw new AssertionError();
+                  }
+                  System.out.println("hello from java");
+              }
+          }
+          JAVA
           javac --release 17 -d "$RUNNER_TEMP/hello" "$RUNNER_TEMP/hello/Hello.java"
       - name: Start Java from the named copy
         shell: bash
@@ -110,10 +119,109 @@ jobs:
       - uses: actions/checkout@v5
       - run: python3 tools/i18n_check.py
 
-  # The in-game client: its shared core's tests, then every Minecraft target compiled and
-  # its mixin hooks checked against that version's game jar (no game is started).
-  mod-core:
+  gradle-warm:
     if: ${{ inputs.only == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - &gradle-cache-keys
+        name: Key the Gradle dependency caches
+        id: gradle-keys
+        env:
+          PREFIX: gradle-deps-v4-${{ runner.os }}-${{ runner.arch }}
+          BUILD_HASH: ${{ hashFiles('mod/**/*.gradle*', 'mod/**/gradle.properties', 'mod/**/gradle-wrapper.properties', 'mod/build.py', 'mod/targets.json', '.github/scripts/resolve-gradle.init.gradle') }}
+        run: |
+          # Refresh shared SNAPSHOT metadata daily and rotate the larger set of target caches monthly.
+          day=$(date -u +%F)
+          warm_prefix="$PREFIX-warm-$BUILD_HASH-"
+          target_prefix="$PREFIX-target-${GRADLE_CACHE_TARGET:-$GITHUB_JOB}-"
+          {
+            echo "warm-prefix=$warm_prefix"
+            echo "warm-key=$warm_prefix$day"
+            echo "target-prefix=$target_prefix"
+            echo "target-key=$target_prefix$BUILD_HASH-${day%-*}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Restore the shared Gradle cache
+        id: warm-cache
+        uses: actions/cache/restore@v4
+        with:
+          # Keep Maven artifacts and metadata. Loom can rebuild game jars outside this cache.
+          path: &gradle-dependency-paths |
+            ~/.gradle/caches/modules-2/files-2.1
+            ~/.gradle/caches/modules-2/metadata-*
+            ~/.gradle/caches/modules-2/resources-2.1
+          key: ${{ steps.gradle-keys.outputs.warm-key }}
+          restore-keys: ${{ steps.gradle-keys.outputs.warm-prefix }}
+      - name: Cache the Gradle distribution separately
+        if: steps.warm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with: &gradle-wrapper-cache-inputs
+          path: ~/.gradle/wrapper/dists
+          key: gradle-wrapper-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mod/**/gradle-wrapper.properties') }}
+      - uses: actions/setup-java@v4
+        if: steps.warm-cache.outputs.cache-hit != 'true'
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/wrapper-validation@v4
+        if: steps.warm-cache.outputs.cache-hit != 'true'
+      - &gradle-network
+        name: Configure Gradle network retries
+        run: |
+          mkdir -p "${GRADLE_USER_HOME:-$HOME/.gradle}"
+          cat .github/gradle.properties >> "${GRADLE_USER_HOME:-$HOME/.gradle}/gradle.properties"
+      - name: Resolve Gradle dependencies for every target
+        id: warm-resolve
+        if: steps.warm-cache.outputs.cache-hit != 'true'
+        run: |
+          gradle_args=(-I "$GITHUB_WORKSPACE/.github/scripts/resolve-gradle.init.gradle" resolveCiDependencies)
+          targets=$(jq -r '.[] | [.project // "fabric", .build] | @tsv' mod/targets.json)
+          complete=true
+          if ! mod/gradlew -p mod/core "${gradle_args[@]}"; then
+            echo '::warning::Could not warm Gradle dependencies for mod/core'
+            complete=false
+          fi
+          while IFS=$'\t' read -r project version <&3; do
+            if ! mod/gradlew -p "mod/versions/$project" "-Pminecraft_version=$version" "${gradle_args[@]}"; then
+              echo "::warning::Could not warm Gradle dependencies for $version ($project)"
+              complete=false
+            fi
+          done 3<<< "$targets"
+          mod/gradlew --stop
+          echo "complete=$complete" >> "$GITHUB_OUTPUT"
+      - name: Archive the shared Gradle dependencies
+        shell: bash
+        run: |
+          cd "$HOME/.gradle/caches/modules-2"
+          shopt -s nullglob
+          directories=()
+          for directory in files-2.1 metadata-* resources-2.1; do
+            if [[ -d "$directory" ]]; then
+              directories+=("$directory")
+            fi
+          done
+          tar --zstd -cf "$RUNNER_TEMP/gradle-warm.tar.zst" -- "${directories[@]}"
+      - name: Upload Gradle dependencies for this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-warm
+          path: ${{ runner.temp }}/gradle-warm.tar.zst
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: true
+      - name: Save the resolved Gradle cache
+        if: success() && steps.warm-resolve.outputs.complete == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: *gradle-dependency-paths
+          key: ${{ steps.gradle-keys.outputs.warm-key }}
+
+  # The in-game client: its shared core's tests and each Minecraft target's compile and
+  # mixin checks against that version's game jar (no game is started).
+  mod-core:
+    needs: gradle-warm
+    if: ${{ !cancelled() && inputs.only == '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -121,14 +229,63 @@ jobs:
         with:
           distribution: temurin
           java-version: 25
-      - uses: gradle/actions/setup-gradle@v4
-        env:
-          # v2: abandon a cache poisoned by a flaky run (missing gson/kotlin-metadata jars)
-          GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: gradle-v2
+      - &setup-gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: true
+      - *gradle-cache-keys
+      - &gradle-wrapper-cache
+        name: Cache the Gradle distribution separately
+        uses: actions/cache@v4
+        with: *gradle-wrapper-cache-inputs
+      # Prefer an exact target cache, then the shared dependencies from this run.
+      - &restore-target-cache
+        name: Restore this target's Gradle dependencies
+        id: target-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: *gradle-dependency-paths
+          key: ${{ steps.gradle-keys.outputs.target-key }}
+          restore-keys: ${{ steps.gradle-keys.outputs.target-prefix }}
+      - &download-warm-artifact
+        name: Download shared Gradle dependencies from this run
+        id: warm-artifact
+        if: steps.target-cache.outputs.cache-hit != 'true' && needs.gradle-warm.result == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: gradle-warm
+          path: ${{ runner.temp }}/gradle-warm
+      - &extract-warm-artifact
+        name: Extract the shared Gradle dependencies
+        id: extract-warm
+        if: steps.warm-artifact.outcome == 'success'
+        run: |
+          modules="$HOME/.gradle/caches/modules-2"
+          mkdir -p "$modules"
+          tar --zstd -xf "$RUNNER_TEMP/gradle-warm/gradle-warm.tar.zst" -C "$modules"
+      - &restore-warm-cache
+        name: Fall back to the shared Gradle cache
+        id: shared-cache
+        if: steps.target-cache.outputs.cache-matched-key == '' && steps.warm-artifact.outcome != 'success'
+        uses: actions/cache/restore@v4
+        with:
+          path: *gradle-dependency-paths
+          key: ${{ steps.gradle-keys.outputs.warm-key }}
+          restore-keys: ${{ steps.gradle-keys.outputs.warm-prefix }}
+      - *gradle-network
       - name: Live video integration tools
         run: bash .github/scripts/apt-install.sh --no-recommends ffmpeg
       - run: python3 -m unittest discover -s mod/tools -p 'test_mixin*.py'
       - run: chmod +x mod/gradlew && mod/gradlew -p mod/core test
+      # Successful main and manual runs populate target archives. PRs reuse the base branch's caches.
+      - &save-target-cache
+        name: Save this target's Gradle dependencies
+        if: success() && steps.target-cache.outputs.cache-hit != 'true' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+        uses: actions/cache/save@v4
+        with:
+          path: *gradle-dependency-paths
+          key: ${{ steps.gradle-keys.outputs.target-key }}
 
   mod-targets:
     runs-on: ubuntu-latest
@@ -142,22 +299,29 @@ jobs:
         run: echo "versions=$(jq -c --arg only "$ONLY" '[.[].build | . as $b | select($only == "" or ($only | split(" ") | index($b)))]' mod/targets.json)" >> "$GITHUB_OUTPUT"
 
   mod:
-    needs: mod-targets
+    needs: [mod-targets, gradle-warm]
+    if: ${{ !cancelled() && needs.mod-targets.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
         version: ${{ fromJSON(needs.mod-targets.outputs.versions) }}
     runs-on: ubuntu-latest
+    env:
+      GRADLE_CACHE_TARGET: ${{ matrix.version }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 25
-      - uses: gradle/actions/setup-gradle@v4
-        env:
-          # v2: abandon a cache poisoned by a flaky run (missing gson/kotlin-metadata jars)
-          GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: gradle-v2
+      - *setup-gradle
+      - *gradle-cache-keys
+      - *gradle-wrapper-cache
+      - *restore-target-cache
+      - *download-warm-artifact
+      - *extract-warm-artifact
+      - *restore-warm-cache
+      - *gradle-network
       - name: Compile and check mod hooks
         shell: bash
         run: |
@@ -175,19 +339,20 @@ jobs:
           fi
           exit "$status"
         env:
-          # This target's restored cache contains false "missing artifact" entries for
-          # published Maven Central jars. Refresh metadata instead of trusting those misses.
-          ARCTIC_GRADLE_FLAGS: ${{ matrix.version == '1.8.9' && '--refresh-dependencies' || '' }} ${{ inputs.gradle }}
+          ARCTIC_GRADLE_FLAGS: ${{ inputs.gradle }}
+          ARCTIC_GRADLE_WARM_CACHE: ${{ steps.extract-warm.outcome == 'success' || steps.shared-cache.outputs.cache-matched-key != '' || steps.target-cache.outputs.cache-matched-key != '' }}
       - name: Probe a game class
         if: ${{ always() && inputs.probe != '' }}
         env:
           PROBE: ${{ inputs.probe }}
         run: python3 mod/tools/probe.py ${{ matrix.version }} $PROBE
+      - *save-target-cache
 
   # Forge 1.8.9 is the same sources remapped to Forge's names, with its own bytecode: a mixin that fits
   # Legacy Fabric's vanilla classes can fail there at startup. Build the jar and check its hooks here.
   forge:
-    if: ${{ inputs.only == '' }}
+    needs: gradle-warm
+    if: ${{ !cancelled() && inputs.only == '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -195,10 +360,14 @@ jobs:
         with:
           distribution: temurin
           java-version: 25
-      - uses: gradle/actions/setup-gradle@v4
-        env:
-          # v2: abandon a cache poisoned by a flaky run (missing gson/kotlin-metadata jars)
-          GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: gradle-v2
+      - *setup-gradle
+      - *gradle-cache-keys
+      - *gradle-wrapper-cache
+      - *restore-target-cache
+      - *download-warm-artifact
+      - *extract-warm-artifact
+      - *restore-warm-cache
+      - *gradle-network
       - run: chmod +x mod/gradlew
       # The 1.8.9 build primes Gradle's cache (game jar, Yarn) that the Forge build remaps against.
       - run: python3 mod/build.py 1.8.9 forge-1.8.9 --jobs 1
@@ -208,3 +377,4 @@ jobs:
           name: arctic-forge-1.8.9
           path: mod/dist/arctic-forge-1.8.9.jar
           if-no-files-found: error
+      - *save-target-cache

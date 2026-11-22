@@ -21,6 +21,7 @@ final class LegacyGfx implements Gfx {
 
 	private final MinecraftClient mc = MinecraftClient.getInstance();
 	private final Window window = new Window(mc);
+	private boolean filling;
 
 	@Override
 	public int width() {
@@ -39,7 +40,30 @@ final class LegacyGfx implements Gfx {
 
 	@Override
 	public void fill(int x0, int y0, int x1, int y1, int color) {
-		DrawableHelper.fill(x0, y0, x1, y1, color);
+		if (filling) {
+			quad(x0, y0, x1, y1);
+		} else {
+			DrawableHelper.fill(x0, y0, x1, y1, color);
+		}
+	}
+
+	@Override
+	public void beginFills(int color) {
+		GlStateManager.enableBlend();
+		GlStateManager.disableTexture();
+		GlStateManager.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
+		GlStateManager.color((color >> 16 & 255) / 255f, (color >> 8 & 255) / 255f,
+				(color & 255) / 255f, (color >>> 24) / 255f);
+		GL11.glBegin(GL11.GL_QUADS);
+		filling = true;
+	}
+
+	@Override
+	public void endFills() {
+		filling = false;
+		GL11.glEnd();
+		GlStateManager.enableTexture();
+		GlStateManager.disableBlend();
 	}
 
 	/**

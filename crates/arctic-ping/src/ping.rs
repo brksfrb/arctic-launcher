@@ -30,6 +30,7 @@ const MAX_PACKET: usize = 2 * 1024 * 1024;
 /// A fresh status JSON and round trip for `address`.
 pub fn status_json(address: &Address, proxy: Option<Socks>) -> Result<(String, u32)> {
     let mut stream = connect(address, proxy)?;
+    stream.set_nodelay(true).map_err(net_error)?;
     stream
         .set_read_timeout(Some(TIMEOUT))
         .and_then(|()| stream.set_write_timeout(Some(TIMEOUT)))
@@ -61,9 +62,9 @@ pub fn status_json(address: &Address, proxy: Option<Socks>) -> Result<(String, u
     ping.extend_from_slice(&0x4172_6374_6963_u64.to_be_bytes());
     send(&mut stream, &ping)?;
     let rtt = match receive(&mut stream) {
-        Ok(_) => started.elapsed().as_millis().min(u32::MAX as u128) as u32,
+        Ok(pong) if pong == ping => started.elapsed().as_millis().min(u32::MAX as u128) as u32,
         // Some servers close after the status; the answer still counts.
-        Err(_) => 0,
+        _ => 0,
     };
     Ok((json, rtt))
 }
@@ -478,6 +479,41 @@ pub(crate) mod tests {
         assert_eq!(login_start(760).len(), base + 2);
         assert_eq!(login_start(763).len(), base + 17);
         assert_eq!(login_start(772).len(), base + 16);
+    }
+
+    #[test]
+    fn status_delay_is_not_ping_and_wrong_pong_is_unknown() {
+        for valid in [true, false] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream.set_nodelay(true).unwrap();
+                receive(&mut stream).unwrap();
+                receive(&mut stream).unwrap();
+                std::thread::sleep(Duration::from_millis(500));
+                let mut status = vec![0];
+                string(&mut status, "{}");
+                send(&mut stream, &status).unwrap();
+                let mut pong = receive(&mut stream).unwrap();
+                std::thread::sleep(Duration::from_millis(30));
+                if !valid {
+                    pong[1] ^= 1;
+                }
+                send(&mut stream, &pong).unwrap();
+            });
+            let address = Address::parse(&format!("127.0.0.1:{port}")).unwrap();
+            let (_, rtt) = status_json(&address, None).unwrap();
+            if valid {
+                assert!(
+                    (20..300).contains(&rtt),
+                    "status delay leaked into ping: {rtt}"
+                );
+            } else {
+                assert_eq!(rtt, 0);
+            }
+            server.join().unwrap();
+        }
     }
 
     #[test]

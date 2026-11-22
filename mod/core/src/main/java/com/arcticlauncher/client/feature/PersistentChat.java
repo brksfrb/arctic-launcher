@@ -47,6 +47,8 @@ public final class PersistentChat {
 	 * a million overflowed an 1800 MB heap), so older lines stay on disk past this.
 	 */
 	public static final int MAX_LOADED = 100_000;
+	/** Room for wrapped lines during replay, with headroom for other mods' limit modifiers. */
+	public static final int MAX_HUD_LINES = 1 << 20;
 	private static final int MAX_TEXT = 32768;
 	private static final int MAX_LINE_BYTES = 1 << 20;
 	private static final int MAX_LEGACY_BYTES = 16 * 1024 * 1024;
@@ -100,17 +102,42 @@ public final class PersistentChat {
 		legacy = new File(instanceConfig, LEGACY_NAME);
 	}
 
+	public static int historyLimit(boolean loading, int history, int loadedLines) {
+		if (loading) {
+			return MAX_HUD_LINES;
+		}
+		return (int) Math.max(1L, Math.min(MAX_HUD_LINES, (long) history + loadedLines));
+	}
+
 	private boolean enabled() {
 		return ArcticClient.config() != null && ArcticClient.config().chatPersistent;
 	}
 
-	/** Called once the chat HUD is usable, before new lines are added. */
-	public synchronized void restore(View view) {
-		if (restored || !enabled()) {
-			return;
-		}
-		restored = true;
-		long began = System.nanoTime();
+	/** The start pages, read ahead of {@link #restore} (null: not read yet). */
+	private List<String> startSent;
+	private List<Entry> startMessages;
+
+	/**
+	 * Read the start pages from disk now, on a background thread (at startup): the first frame in a world
+	 * then only hands them to the chat instead of also waiting on the disk. The same lines either way.
+	 */
+	public void readAhead() {
+		Thread t = new Thread(new Runnable() {
+			@Override
+			public void run() {
+				synchronized (PersistentChat.this) {
+					if (!restored && startMessages == null && enabled()) {
+						readStart();
+					}
+				}
+			}
+		}, "arctic-chat-history-read");
+		t.setDaemon(true);
+		t.start();
+	}
+
+	/** The disk half of {@link #restore}: the last sent lines and the last page of chat. */
+	private void readStart() {
 		try {
 			migrateLegacy();
 		} catch (Exception e) {
@@ -130,19 +157,41 @@ public final class PersistentChat {
 		} catch (Exception e) {
 			log("Could not read chat history: " + e);
 		}
+		startSent = sent;
+		startMessages = messages;
+	}
+
+	/** Called once the chat HUD is usable, before new lines are added. */
+	public synchronized void restore(View view) {
+		if (restored || !enabled()) {
+			return;
+		}
+		restored = true;
+		long began = System.nanoTime();
+		if (startMessages == null) {
+			readStart();
+		}
+		List<String> sent = startSent;
+		List<Entry> messages = startMessages;
+		startSent = null;
+		startMessages = null;
 		restoring = true;
 		try {
 			for (String text : sent) {
 				view.sent(text);
 			}
+			replay(messages, view);
+			if (!messages.isEmpty()) {
+				replay(Collections.singletonList(new Entry(0, null, Lang.t("hud.8_previous_session"), true)), view);
+			}
+		} catch (RuntimeException e) {
+			chatCursor.stop();
+			sentCursor.stop();
+			log("Could not restore saved chat into the HUD: " + e);
 		} finally {
 			restoring = false;
+			restoreNanos = System.nanoTime() - began;
 		}
-		replay(messages, view);
-		if (!messages.isEmpty()) {
-			replay(Collections.singletonList(new Entry(0, null, Lang.t("hud.8_previous_session"), true)), view);
-		}
-		restoreNanos = System.nanoTime() - began;
 	}
 
 	/** How long {@link #restore} took (reading the start page and handing it over), in ms; -1 before it ran. */

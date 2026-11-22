@@ -282,18 +282,18 @@ processResources {
 			chatCopyStyleAccess: atLeast('1.16') ? '"ChatCopyStyleAccess",' : '',
 			version: project.version,
 			ctmContents: atLeast('1.19.3'),
+			badgeSpaces: !atLeast('1.19'),
 			ctmPackOrder: !atLeast('1.16'),
 			ctmSodium: atLeast('1.21'),
 			ctmSodiumContext: atLeast('1.17') && !atLeast('1.21.5'),
 			ctmSodiumOld: atLeast('1.16') && !atLeast('1.21'),
 			ctmQuadAccess: !atLeast('1.21.5'),
-			ctmInfo: atLeast('1.15'),
-			ctmSpriteAccess: atLeast('1.14') && !atLeast('1.15'),
 			minecraft_range: minecraftRange,
 			java: javaVersion,
 			loader_min: loaderMin,
 			// Zoom, Freelook, Fullbright and the rest (see Compat.FEATURES): 1.20+ for now.
 			features: true,
+			hostedBans: atLeast('1.14'),
 			// Minecraft's own buttons, sliders, checkboxes and text boxes in the Arctic style (1.13: Widgets13).
 			restyleWidgets: atLeast('1.14'),
 			widgets13: !atLeast('1.14'),
@@ -322,6 +322,7 @@ processResources {
 			// Scaled-up smooth-font text drawn from letters rasterized near their size on screen (ScaledInter):
 			// needs 1.21.9+'s glyph API (baked glyphs that carry their metrics) and GUI text render states.
 			scaledFont: atLeast('1.21.9'),
+			badgeGuiFilter: atLeast('1.21.11'),
 			textProjection: atLeast('1.21.6'),
 			worldTextScale: atLeast('26.2'),
 			// 26.2 only: name tags have their own feature renderer (26.3 folded them back into TextFeatureRenderer).
@@ -352,6 +353,7 @@ processResources {
 			fastStart: atLeast('26.1'),
 			// The startup timeline, class pre-loader and the agent behind it: Java 17+ (1.18 and later).
 			startup: atLeast('1.18'),
+			startupTiming: atLeast('1.14'),
 			// 3D cosmetics: a layer on the player renderer (three shapes across versions), and emotes.
 			cosmeticsSubmit: atLeast('1.21.9'),
 			cosmeticsBuffers: !atLeast('1.21.9'),
@@ -405,6 +407,8 @@ processResources {
 			// The player list's Arctic picture without a shadow before styles could say so (1.21.4): a font hook / a blank shadow glyph.
 			badgeShadow: atLeast('1.16') && !atLeast('1.21.4'),
 			badgeShadow13: !atLeast('1.16'),
+			badgeSnap: true,
+			badgeGlyphInstance: atLeast('1.21.4'),
 			// Pixel-sharp glyphs through STB (1.20.5 and newer use FreeType, see FontWeight).
 			fontSharpStb: atLeast('1.14') && !atLeast('1.20.5'),
 			// 1.21.9+ look players up by name off the game's thread (player heads): made safe.
@@ -419,6 +423,18 @@ processResources {
 	inputs.properties props
 	filesMatching(['fabric.mod.json', 'arctic.mixins.json']) {
 		expand props
+	}
+	// GlyphProviderBuilderType gains SPACE in 1.19. Keep the bitmap providers;
+	// BadgeSpaceMixin supplies the same invisible advances on older clients.
+	if (!atLeast('1.19')) {
+		doLast {
+			fileTree(destinationDir).matching { include 'assets/**/font/*.json' }.each { f ->
+				def data = new groovy.json.JsonSlurper().parse(f)
+				if (data.providers?.removeAll { it.type == 'space' }) {
+					f.text = groovy.json.JsonOutput.toJson(data)
+				}
+			}
+		}
 	}
 	// Fabric Loader alone does not expose a mod's assets to Minecraft. The client
 	// pack is always enabled on these versions, even without Fabric Resource Loader
@@ -461,15 +477,42 @@ tasks.named('jar') {
 	}
 }
 
-// The startup diagnostics guard is exercised against generated Knot fixtures and the real Loader.
+// The startup diagnostics guard is exercised against generated Knot fixtures and the real Loader;
+// the replay protocol tests use the same version preprocessing as the adapter.
 if (atLeast('1.18')) {
+	def preprocessedTests = layout.buildDirectory.dir("preprocessed/${mc}/test")
+	tasks.register('preprocessTestJava') {
+		inputs.dir new File(adapterRoot, 'src/test/java')
+		inputs.property 'minecraft_version', mc
+		outputs.dir preprocessedTests
+		outputs.upToDateWhen { false }
+		doLast {
+			def outDir = preprocessedTests.get().asFile
+			project.delete(outDir)
+			def root = new File(adapterRoot, 'src/test/java')
+			if (root.exists()) root.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+				def rel = root.toPath().relativize(f.toPath()).toString()
+				def target = new File(outDir, rel)
+				target.parentFile.mkdirs()
+				target.text = applyRenames(preprocessSource(f.getText('UTF-8'), rel))
+			}
+		}
+	}
+	sourceSets.test.java.srcDirs = [preprocessedTests]
+	tasks.named('compileTestJava') { dependsOn 'preprocessTestJava' }
 	dependencies {
 		testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
 		testImplementation 'org.ow2.asm:asm:9.9'
 		testImplementation 'org.ow2.asm:asm-tree:9.9'
 		testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	}
-	tasks.named('test') { useJUnitPlatform() }
+	tasks.named('test') {
+		useJUnitPlatform()
+		maxHeapSize = '1G'
+		maxParallelForks = 1
+		workingDir = layout.buildDirectory.dir('test-runtime').get().asFile
+		doFirst { workingDir.mkdirs() }
+	}
 } else {
 	sourceSets.test.java.setSrcDirs([])
 }

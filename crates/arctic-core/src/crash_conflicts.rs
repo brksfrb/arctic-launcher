@@ -4,10 +4,11 @@
 
 use std::cmp::Ordering;
 use std::path::Path;
+use std::sync::OnceLock;
 
 use regex::Regex;
 
-use crate::crash::{Diagnosis, Fix};
+use crate::crash::{Diagnosis, Fix, warning_log_line};
 
 /// Mods that are forks of one another and break when both are installed: (original, fork).
 ///
@@ -21,7 +22,7 @@ const KNOWN_FORKS: &[(&str, &str)] = &[("noisium", "noisiumed")];
 /// A mod found in the instance's mods folder (or in a crash report's mod list).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct InstalledMod {
-    /// The jar's file name; empty when read from a crash report.
+    /// The jar's file name, if available.
     pub file: String,
     pub id: String,
     pub name: String,
@@ -85,7 +86,7 @@ pub fn read_jar(jar: &Path) -> Option<InstalledMod> {
     from_mods_toml(&file, &toml)
 }
 
-fn from_fabric_json(file: &str, text: &str) -> Option<InstalledMod> {
+pub(crate) fn from_fabric_json(file: &str, text: &str) -> Option<InstalledMod> {
     // Some mods put raw newlines inside strings; lenient enough for what is read here.
     let json: serde_json::Value =
         serde_json::from_str(&text.replace(['\n', '\r', '\t'], " ")).ok()?;
@@ -133,7 +134,7 @@ fn from_fabric_json(file: &str, text: &str) -> Option<InstalledMod> {
     })
 }
 
-fn from_mods_toml(file: &str, text: &str) -> Option<InstalledMod> {
+pub(crate) fn from_mods_toml(file: &str, text: &str) -> Option<InstalledMod> {
     let value = |key: &str| {
         Regex::new(&format!(r#"(?m)^\s*{key}\s*=\s*"([^"]*)""#))
             .ok()?
@@ -156,8 +157,7 @@ fn from_mods_toml(file: &str, text: &str) -> Option<InstalledMod> {
     })
 }
 
-/// The mods a crash report lists ("\t\tnoisium: Noisium 2.7.0+mc1.21-1.21.1"): ids, names and
-/// versions only. A fallback for when the instance's mods folder can't be read.
+/// Read Fabric's mod list and Forge's pipe-delimited `Mod List` table from a crash report.
 pub fn from_crash_report(text: &str) -> Vec<InstalledMod> {
     let Ok(re) = Regex::new(r"(?m)^\t+([a-z][a-z0-9_\-]*): (.+) (\S+)\r?$") else {
         return Vec::new();
@@ -169,6 +169,24 @@ pub fn from_crash_report(text: &str) -> Vec<InstalledMod> {
                 id: c[1].to_owned(),
                 name: c[2].to_owned(),
                 version: c[3].to_owned(),
+                ..InstalledMod::default()
+            });
+        }
+    }
+    static FORGE: OnceLock<Regex> = OnceLock::new();
+    let forge = FORGE.get_or_init(|| {
+        Regex::new(
+            r"(?m)^[\t ]+([^|\r\n]+\.jar) *\|([^|\r\n]+)\| *([a-z][a-z0-9_-]*) *\|([^|\r\n]+)\|",
+        )
+        .unwrap()
+    });
+    for c in forge.captures_iter(text) {
+        if !out.iter().any(|m| m.id == c[3]) {
+            out.push(InstalledMod {
+                file: c[1].trim().to_owned(),
+                name: c[2].trim().to_owned(),
+                id: c[3].to_owned(),
+                version: c[4].trim().to_owned(),
                 ..InstalledMod::default()
             });
         }
@@ -281,18 +299,32 @@ pub fn find_conflicts(mods: &[InstalledMod]) -> Vec<Conflict> {
 }
 
 struct MixinFailure<'a> {
-    config: &'a str,
+    config: Option<&'a str>,
     owner: Option<String>,
     line: &'a str,
 }
 
+pub(crate) const MIXIN_CONFIG_PATTERN: &str = r"[\w.-]+\.mixins\.json|mixins\.[\w.-]+\.json";
+pub(crate) const EXPLICIT_MIXIN_FAILURE_PATTERN: &str =
+    r"(?:InjectionError|InvalidInjectionException):[^\r\n]*\bfrom mod [\w-]+";
+pub(crate) const FABRIC_MIXIN_APPLY_FAILURE: &str = r"Mixin apply for mod ([\w-]+) failed\b";
+pub(crate) const MIXIN_APPLY_FAILURE: &str = r"Mixin \[[^\]\r\n]+\] from mod ([\w-]+) failed\b";
+
+pub(crate) fn mixin_warning(line: &str) -> bool {
+    line.trim_start().starts_with("@Mixin target ")
+        || line.contains("/WARN]")
+        || line.contains("[WARN]")
+}
+
 /// Prefer the explicit owner in the deepest injection error over outer transformation failures.
 fn mixin_failure(text: &str) -> Option<MixinFailure<'_>> {
-    let gate = Regex::new(
-        r"MixinPreProcessorStandard|MixinApplicatorStandard|Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinTransformerError|@Mixin target \S+ was not found|Mixin apply for mod|InjectionError",
-    )
+    let gate = Regex::new(&format!(
+        "MixinPreProcessorStandard|MixinApplicatorStandard|Critical injection failure|InvalidInjectionException|InvalidMixinException|MixinApplyError|MixinTransformerError|InjectionError|{FABRIC_MIXIN_APPLY_FAILURE}|{MIXIN_APPLY_FAILURE}"
+    ))
     .ok()?;
-    let text = if let Some(stack) = crate::crash::crash_exception(text) {
+    let text = if let Some(stack) =
+        crate::crash::crash_exception(text).filter(|s| !crate::crash::secondary_stack(s))
+    {
         // A handled startup mixin failure cannot explain an unrelated fatal exception.
         // Forge's {re:mixin, pl:mixin:APP:...} metadata merely lists applied mixins.
         let mixin_crash = stack.lines().any(|line| {
@@ -302,7 +334,8 @@ fn mixin_failure(text: &str) -> Option<MixinFailure<'_>> {
                 frame.contains("org.spongepowered.asm.mixin.")
                     || frame.contains("getPostMixinClassByteArray")
             } else {
-                gate.is_match(line) || line.contains("Mixin transformation of ")
+                !mixin_warning(line)
+                    && (gate.is_match(line) || line.contains("Mixin transformation of "))
             }
         });
         if !mixin_crash {
@@ -312,17 +345,24 @@ fn mixin_failure(text: &str) -> Option<MixinFailure<'_>> {
     } else {
         text
     };
-    let config = Regex::new(r"([\w\-.]+\.mixins\.json)").ok()?;
-    let owner = Regex::new(r"(?:from mod|apply for mod) ([\w\-]+)").ok()?;
-    let injection = Regex::new(r"(?:InjectionError|InvalidInjectionException):").ok()?;
+    let config = Regex::new(MIXIN_CONFIG_PATTERN).ok()?;
+    let from_mod = Regex::new(r"\bfrom mod ([\w-]+)").ok()?;
+    let apply_for = Regex::new(r"Mixin apply for mod ([\w-]+)").ok()?;
+    let injection = Regex::new(EXPLICIT_MIXIN_FAILURE_PATTERN).ok()?;
     text.lines()
         .rev()
-        .filter(|l| injection.is_match(l) && owner.is_match(l))
+        .filter(|l| injection.is_match(l))
         .chain(text.lines().filter(|l| gate.is_match(l)))
+        .filter(|line| !mixin_warning(line))
         .find_map(|line| {
-            Some(MixinFailure {
-                config: config.captures(line)?.get(1)?.as_str(),
-                owner: owner.captures(line).map(|o| o[1].to_lowercase()),
+            let owner = from_mod
+                .captures(line)
+                .or_else(|| apply_for.captures(line))
+                .map(|o| o[1].to_lowercase());
+            let config = config.find(line).map(|c| c.as_str());
+            (owner.is_some() || config.is_some()).then_some(MixinFailure {
+                config,
+                owner,
                 line,
             })
         })
@@ -333,10 +373,17 @@ pub(crate) fn mixin_failure_line(text: &str) -> Option<&str> {
     mixin_failure(text).map(|f| f.line)
 }
 
+fn mixin_config_stem(config: &str) -> &str {
+    config
+        .strip_suffix(".mixins.json")
+        .or_else(|| config.strip_prefix("mixins.")?.strip_suffix(".json"))
+        .unwrap_or(config)
+}
+
 /// Which installed mod owns mixin config `config`: the log's own answer, else the jar that lists
-/// the config, else the mod whose id starts the config's name ("noisiumed-common.mixins.json").
+/// the config, else the mod whose id starts the config's stem ("noisiumed-common").
 fn owner_of<'a>(
-    config: &str,
+    config: Option<&str>,
     said: Option<&str>,
     mods: &'a [InstalledMod],
 ) -> Option<&'a InstalledMod> {
@@ -344,15 +391,16 @@ fn owner_of<'a>(
     if let Some(id) = said {
         return by_id(id);
     }
+    let config = config?;
     mods.iter()
         .find(|m| m.mixins.iter().any(|c| c == config))
         .or_else(|| {
-            let stem = config.to_lowercase();
+            let stem = mixin_config_stem(config).to_lowercase();
             mods.iter()
                 .filter(|m| {
                     let id = m.id.to_lowercase();
                     stem.strip_prefix(&id)
-                        .is_some_and(|r| r.starts_with(['-', '.', '_']))
+                        .is_some_and(|r| r.is_empty() || r.starts_with(['-', '.', '_']))
                 })
                 .max_by_key(|m| m.id.len())
         })
@@ -516,6 +564,21 @@ fn clash_mattered(text: &str, c: &Conflict, mods: &[InstalledMod]) -> bool {
 /// owned by a clashing mod gets the clash explanation; other clashes require evidence from the
 /// run before they can explain an otherwise unknown crash.
 pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
+    // The exit diagnosis already ran the rules on the captured throwable.
+    if base.as_ref().is_some_and(|d| {
+        d.title == crate::crash::SAVE_FAILED_TITLE
+            || d.title == crate::crash_suspect::UNASSIGNED_ENTITY_TITLE
+            || d.title == crate::crash_suspect::THREADING_TITLE
+            || d.title.ends_with(CONFIG_CORRUPT)
+    }) {
+        return base;
+    }
+    if let Some((fatal, _)) = crate::crash::java_fatal_diagnosis(text) {
+        return Some(fatal);
+    }
+    if let Some((runtime, _)) = crate::crash::runtime_diagnosis(text) {
+        return Some(runtime);
+    }
     if let Some((registry, _)) = crate::crash::registry_sync_diagnosis(text) {
         return Some(registry);
     }
@@ -551,6 +614,7 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
         };
     }
     if failed.is_none()
+        && failure.as_ref().is_none_or(|f| f.owner.is_none())
         && let Some(c) = conflicts.iter().find(|c| clash_mattered(text, c, mods))
     {
         return Some(explain(c, mods, None, false));
@@ -561,14 +625,18 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
 /// Legacy Mixin can fail while resolving an invocation owner before injection begins.
 pub(crate) fn preprocessing_class_failure(text: &str) -> bool {
     let text = crate::crash::crash_exception(text).unwrap_or(text);
-    text.contains("ClassNotFoundException")
-        && [
-            "MixinTransformerError",
-            "MixinPreProcessorStandard",
-            "MixinApplicatorStandard",
-        ]
-        .iter()
-        .any(|marker| text.contains(marker))
+    text.lines()
+        .any(|line| line.contains("ClassNotFoundException") && !warning_log_line(line))
+        && text.lines().any(|line| {
+            [
+                "MixinTransformerError",
+                "MixinPreProcessorStandard",
+                "MixinApplicatorStandard",
+            ]
+            .iter()
+            .any(|marker| line.contains(marker))
+                && !warning_log_line(line)
+        })
 }
 
 /// Another mod targeting the same failed class can explain a missing injection target. Match
@@ -580,6 +648,7 @@ fn mixin_competitor(
     id: &str,
     mods: &[InstalledMod],
 ) -> Option<String> {
+    let config = failure.config?;
     let missing = Regex::new(r"Scanned 0 target\(s\)|(?i:target[^\r\n]*?(?:not found|was not found)|could not find any targets)").ok()?;
     if !missing.is_match(failure.line) {
         return None;
@@ -619,7 +688,7 @@ fn mixin_competitor(
             .filter_map(|l| entry.captures(l))
             .collect();
         if !entries.iter().any(|c| {
-            &c[1] == failure.config
+            &c[1] == config
                 && (&c[2] == failed_mixin
                     || c[2]
                         .strip_suffix(failed_mixin)
@@ -638,7 +707,7 @@ fn mixin_competitor(
                             || e[2].strip_suffix(mixin).is_some_and(|p| p.ends_with('.')))
                 })
             };
-            if &c[1] == failure.config
+            if &c[1] == config
                 && &c[2] == failed_mixin
                 && c[3].eq_ignore_ascii_case(id)
                 && failure.line.contains(&c[4])
@@ -652,10 +721,10 @@ fn mixin_competitor(
         let mut others = Vec::new();
         for c in entries {
             // The failed config's explicit owner also applies to its context entry.
-            if &c[1] == failure.config {
+            if &c[1] == config {
                 continue;
             }
-            let other = owner_of(&c[1], None, mods).map_or_else(
+            let other = owner_of(Some(&c[1]), None, mods).map_or_else(
                 || c[1].trim_end_matches(".mixins.json").to_owned(),
                 |m| m.id.clone(),
             );
@@ -678,6 +747,7 @@ fn redirect_clash(
     failure: &MixinFailure<'_>,
     mods: &[InstalledMod],
 ) -> Option<Diagnosis> {
+    let config = failure.config?;
     let failed = Regex::new(
         r"(?:InjectionError|InvalidInjectionException):[^\r\n]*?Redirector (\S+) in ([\w\-.]+\.mixins\.json):([\w.$]+)",
     )
@@ -690,7 +760,7 @@ fn redirect_clash(
     let before = &text[..text.rfind(failure.line)?];
     let c = before.lines().rev().find_map(|line| {
         let c = conflict.captures(line)?;
-        (&c[1] == failure.config
+        (&c[1] == config
             && c[1] == failed[2]
             && c[2] == failed[3]
             && c[4] == failed[1]
@@ -727,24 +797,46 @@ fn redirect_clash(
     ))
 }
 
+/// The top-level mod to update or remove for a bundled entry in Fabric's resolved mod tree.
+fn fabric_bundler<'a>(text: &'a str, id: &str) -> Option<&'a str> {
+    let header = Regex::new(r"\bLoading \d+ mods?:\s*$").ok()?;
+    let entry = Regex::new(r"^[ \t]*(-|[| ]*[|\\]--) ([a-z][a-z0-9_-]*) \S").ok()?;
+    let mut in_tree = false;
+    let mut root = None;
+    for line in text.lines() {
+        if header.is_match(line) {
+            in_tree = true;
+            root = None;
+        } else if in_tree && !line.trim().is_empty() {
+            let Some(c) = entry.captures(line) else {
+                in_tree = false;
+                continue;
+            };
+            let entry_id = c.get(2)?.as_str();
+            if &c[1] == "-" {
+                root = Some(entry_id);
+            } else if entry_id == id && root.is_some_and(|root| root != id) {
+                return root;
+            }
+        }
+    }
+    None
+}
+
 /// Attribute failures to their explicit owner, then installed metadata, then the config stem.
 pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagnosis> {
     let failure = mixin_failure(text)?;
     let owner = owner_of(failure.config, failure.owner.as_deref(), mods);
-    let id = owner.map_or_else(
-        || {
-            failure
-                .owner
-                .clone()
-                .unwrap_or_else(|| failure.config.trim_end_matches(".mixins.json").to_owned())
-        },
-        |m| m.id.clone(),
-    );
-    let name = owner.map_or(id.as_str(), |m| m.name.as_str());
+    let id = failure
+        .owner
+        .as_deref()
+        .or_else(|| owner.map(|m| m.id.as_str()))
+        .or_else(|| failure.config.map(mixin_config_stem))?;
+    let name = owner.map_or(if id == "modmenu" { "Mod Menu" } else { id }, |m| &m.name);
     if let Some(clash) = redirect_clash(text, &failure, mods) {
         return Some(clash);
     }
-    if let Some(other) = mixin_competitor(text, &failure, &id, mods) {
+    if let Some(other) = mixin_competitor(text, &failure, id, mods) {
         let display = |id: &str| {
             mods.iter()
                 .find(|m| m.id.eq_ignore_ascii_case(id))
@@ -759,7 +851,7 @@ pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagno
                     |m| m.name.clone(),
                 )
         };
-        let (name, other_name) = (display(&id), display(&other));
+        let (name, other_name) = (display(id), display(&other));
         let reason = if id == "particle_core" && other == "sodium" {
             " Sodium replaces the particle rendering code that Particle Core tries to change."
         } else {
@@ -770,7 +862,16 @@ pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagno
             format!(
                 "{name}'s mixin could not find its injection target. {name} and {other_name} both change the same game class, indicating a compatibility clash.{reason} Update or remove {name}, or check its compatibility with {other_name}."
             ),
-            vec![id, other],
+            vec![id.to_owned(), other],
+        ));
+    }
+    if let Some(bundler) = fabric_bundler(text, id) {
+        return Some(Diagnosis::new(
+            format!("{name} (bundled in {bundler}) failed to change the game"),
+            format!(
+                "{name}'s mixin doesn't fit this version of Minecraft or a mod it changes. Update or remove {bundler}, or install a newer {name} build for this Minecraft version to override the bundled copy."
+            ),
+            vec![id.to_owned(), bundler.to_owned()],
         ));
     }
     Some(Diagnosis::new(
@@ -784,28 +885,214 @@ pub(crate) fn diagnose_mixin(text: &str, mods: &[InstalledMod]) -> Option<Diagno
                 "{name}'s mixin doesn't fit this version of Minecraft or a mod it changes. Update {name} (or the mod it's an addon for), or remove {name}."
             )
         },
-        vec![id],
+        vec![id.to_owned()],
     ))
+}
+
+pub(crate) const CONFIG_CORRUPT: &str = "config file is corrupt or empty";
+
+/// Use a config parser's cause stack. A fatal report limits the search to that exception,
+/// unless its exception explicitly points to an earlier mod-loading failure.
+pub(crate) fn diagnose_config<'a>(
+    text: &'a str,
+    mods: &[InstalledMod],
+) -> Option<(Diagnosis, &'a str)> {
+    use crate::crash_suspect::frame;
+
+    static PARSE: OnceLock<Regex> = OnceLock::new();
+    static FORGE: OnceLock<Regex> = OnceLock::new();
+    static CONFIG_PATH: OnceLock<Regex> = OnceLock::new();
+    let parse = PARSE.get_or_init(|| {
+        Regex::new(r"\b(?:com\.electronwill\.nightconfig\.core\.io\.ParsingException|JsonSyntaxException|MalformedJsonException|JsonParseException|TomlParseException|TomlParseError):").unwrap()
+    });
+    let forge = FORGE.get_or_init(|| {
+        Regex::new(r"Failed loading config file ([\w.-]+\.(?:toml|json5?)) of type (?:CLIENT|COMMON|STARTUP) for modid ([\w-]+)").unwrap()
+    });
+    let path = CONFIG_PATH.get_or_init(|| {
+        Regex::new(r#"(?i)(?:^|[/\\\s\x22'`=:(\[])(config[/\\](?:[\w-][\w.-]*[/\\])*[\w.-]+\.(?:toml|json5?))(?:$|[\s\x22'`,;:)\]])"#).unwrap()
+    });
+    let stack = crate::crash::crash_exception(text);
+    let primary = stack.filter(|s| !crate::crash::secondary_stack(s));
+    let mut lines = primary.unwrap_or(text).lines();
+    let mut header = "";
+    let mut warning = false;
+    while let Some(line) = lines.next() {
+        let line = line.trim();
+        if line.starts_with('[') || line.is_empty() {
+            warning = mixin_warning(line);
+        }
+        if !line.starts_with("at ") && !line.starts_with("Caused by:") && !line.starts_with("... ")
+        {
+            header = line;
+        }
+        if !parse.is_match(line) || warning || line.starts_with("at ") {
+            continue;
+        }
+        let explicit = forge.captures(header).or_else(|| forge.captures(line));
+        let file = explicit.as_ref().and_then(|c| c.get(1)).map(|m| m.as_str());
+        let mod_id = explicit.as_ref().and_then(|c| c.get(2)).map(|m| m.as_str());
+        let relative_path = [line, header]
+            .into_iter()
+            .find_map(|l| path.captures(l)?.get(1))
+            .map(|m| m.as_str());
+        let mut frames = lines.clone().map_while(frame);
+        let mut file_load = false;
+        let caller = frames.find(|f| {
+            file_load |= f
+                .class
+                .starts_with("com.electronwill.nightconfig.core.file.")
+                && f.method == "load";
+            !f.is_platform()
+                && !f.class.starts_with("com.fasterxml.jackson.")
+                && !f.class.starts_with("org.tomlj.")
+        });
+        let config_caller = caller.as_ref().is_some_and(|f| {
+            f.class.to_ascii_lowercase().contains("config")
+                || f.method.to_ascii_lowercase().contains("config")
+        });
+        if !(file_load || config_caller || mod_id.is_some() || relative_path.is_some()) {
+            continue;
+        }
+
+        let reported = from_crash_report(text);
+        let owner_in = |inventory| {
+            if let Some(id) = mod_id {
+                owner_of(None, Some(id), inventory)
+            } else {
+                caller.as_ref()?.config_owner(inventory)
+            }
+        };
+        let owner = owner_in(mods).or_else(|| owner_in(&reported));
+        // Early Forge failures can truncate the inventory. A class named for its own package
+        // (e.g. com.performant.coremod.Performant is listed in the invoking stack) identifies it.
+        let inferred = caller
+            .as_ref()
+            .filter(|_| owner.is_none() && mod_id.is_none())
+            .and_then(|caller| {
+                let (namespace, _) = caller.class.rsplit_once('.')?;
+                let infer = |f: &crate::crash_suspect::Frame| {
+                    let (package, name) = f.class.rsplit_once('.')?;
+                    (package
+                        .split('.')
+                        .any(|component| component.eq_ignore_ascii_case(name))
+                        && namespace
+                            .strip_prefix(package)
+                            .is_some_and(|tail| tail.is_empty() || tail.starts_with('.')))
+                    .then(|| name.to_owned())
+                };
+                infer(caller).or_else(|| frames.find_map(|f| infer(&f)))
+            });
+        let name = owner
+            .map(|m| m.name.as_str())
+            .or(mod_id)
+            .or(inferred.as_deref());
+        let title = name.map_or_else(
+            || format!("A mod's {CONFIG_CORRUPT}"),
+            |name| format!("{name}'s {CONFIG_CORRUPT}"),
+        );
+        let folder = if relative_path.is_some() {
+            "the instance folder"
+        } else {
+            "the instance's `config` folder"
+        };
+        let target = if let Some(file) = relative_path.or(file) {
+            format!("`{file}`")
+        } else if let Some(name) = name {
+            format!("{name}'s config file")
+        } else {
+            "the affected mod's config file".to_owned()
+        };
+        let ids = owner
+            .map(|m| m.id.clone())
+            .or_else(|| mod_id.or(inferred.as_deref()).map(str::to_ascii_lowercase));
+        return Some((
+            Diagnosis::new(
+                title,
+                format!(
+                    "Delete {target} from {folder}, then launch the game again so the mod can regenerate it."
+                ),
+                ids.into_iter().collect(),
+            ),
+            line,
+        ));
+    }
+    None
 }
 
 /// `crash::diagnose` plus the clash check against the mods in `mods_dir`.
 pub fn diagnose_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
+    if crate::crash::logged_vanilla_crash_save_failure(text).is_some() {
+        return diagnose_exit_in(text, -2, mods_dir);
+    }
     if let Some((native, _)) = crate::crash::native_diagnosis(text) {
         return Some(native);
     }
-    refine(crate::crash::diagnose(text), text, &scan(mods_dir))
+    diagnose_with_mods(text, mods_dir, &scan(mods_dir), None).or_else(|| suspect_in(text, mods_dir))
+}
+
+/// The mod the fatal stack trace (or the game's "Suspected Mods" line) points at.
+fn suspect_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
+    crate::crash_suspect::diagnosis(text, &crate::crash_suspect::scan(mods_dir))
+}
+
+fn diagnose_with_mods(
+    text: &str,
+    mods_dir: &Path,
+    mods: &[InstalledMod],
+    java: Option<&str>,
+) -> Option<Diagnosis> {
+    let base = crate::crash::diagnose_with_java(text, java, mods_dir, mods);
+    if base.as_ref().is_some_and(|d| {
+        d.title.starts_with("A mod needs ") || d.title == "A mod dependency is missing"
+    }) && let Some(game_dir) = mods_dir.parent()
+    {
+        let files = crate::mods::performance::installed_files(game_dir);
+        for (by, needs) in crate::crash::fabric_missing_dependencies(text) {
+            if let Some(m) = mods.iter().find(|m| m.id == by && files.contains(&m.file)) {
+                return Some(Diagnosis::new(
+                    format!("Arctic performance mod {} needs {needs}", m.name),
+                    format!(
+                        "Arctic installed {}. On the next launch Arctic will check for {needs} and skip {} if the dependency is still missing.",
+                        m.name, m.name
+                    ),
+                    vec![m.id.clone(), needs.to_owned()],
+                ));
+            }
+        }
+    }
+    refine(base, text, mods)
 }
 
 /// The exit diagnosis, with incidental folder clashes kept as advice in the details. The UI has
 /// one fix action, so don't replace the actual cause's action with an unrelated DisableMods fix.
 pub fn diagnose_exit_in(text: &str, code: i32, mods_dir: &Path) -> Option<Diagnosis> {
+    diagnose_exit_in_with_java(text, code, mods_dir, None)
+}
+
+/// Use the launch's Java summary for heap advice while diagnosing the game's own output.
+pub fn diagnose_exit_in_with_java(
+    text: &str,
+    code: i32,
+    mods_dir: &Path,
+    java: Option<&str>,
+) -> Option<Diagnosis> {
     let mods = scan(mods_dir);
-    let with_exit = format!(
-        "{text}\n(exit code {})",
-        crate::crash::exit_description(code)
-    );
-    let diagnosis = refine(crate::crash::diagnose(&with_exit), &with_exit, &mods)
-        .or_else(|| crate::crash::silent_exit(text, code));
+    let diagnosis = if crate::crash::vanilla_crash_save_failed(text, code).is_some() {
+        let cause = crate::crash::captured_vanilla_crash(text)
+            .and_then(|trace| diagnose_with_mods(&trace, mods_dir, &mods, java));
+        Some(crate::crash::vanilla_crash_diagnosis(text, cause))
+    } else {
+        let with_exit = format!(
+            "{text}\n(exit code {})",
+            crate::crash::exit_description(code)
+        );
+        diagnose_with_mods(&with_exit, mods_dir, &mods, java)
+            .or_else(|| crate::crash::silent_exit(text, code))
+    };
+    let diagnosis = match diagnosis {
+        Some(d) if !crate::crash_suspect::is_generic(&d) => Some(d),
+        other => suspect_in(text, mods_dir).or(other),
+    };
     let conflicts = find_conflicts(&mods);
     let Some(c) = conflicts.first() else {
         return diagnosis;
@@ -835,12 +1122,174 @@ mod tests {
     use super::*;
     use std::io::Write;
 
+    const REPORT_443: &str = include_str!("../tests/fixtures/crash-443-config.log");
+
+    #[test]
+    fn report_451_attributes_the_unassigned_entity_to_the_cutscene() {
+        let text = include_str!("../tests/fixtures/crash-451-unassigned-entity.log");
+        let dir = tempfile::tempdir().unwrap();
+        let d = diagnose_exit_in(text, -805306369, dir.path()).unwrap();
+        assert_eq!(
+            d.title,
+            "A mod created an entity without an ID (26.2+ change)"
+        );
+        assert_eq!(d.mods, ["Random Cutscene"]);
+        assert!(
+            d.detail
+                .contains("Update it for this Minecraft version or remove it")
+        );
+        assert_eq!(diagnose_in(text, dir.path()), Some(d.clone()));
+        assert_eq!(crate::crash::diagnose(text), Some(d.clone()));
+
+        let (log, report) = text.split_once("---- crash report ----\n").unwrap();
+        let lines: Vec<_> = log.lines().collect();
+        let uploaded = crate::crash::Report::build(
+            "26.3",
+            "Fabric",
+            "Iris crashed the game",
+            &lines,
+            &[],
+            Some(report),
+            None,
+        );
+        assert_eq!(uploaded.title, d.title);
+        assert!(uploaded.log.starts_with("\n---- first error ----\njava.lang.IllegalStateException: Tried to access entity ID before ID assignment\n"));
+        assert!(
+            uploaded
+                .log
+                .contains("Random Cutscene appears to have created the entity")
+        );
+        assert!(!uploaded.log.contains("---- first exceptions ----"));
+    }
+
+    #[test]
+    fn report_443_identifies_performants_config_through_the_kubejs_consequence() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = diagnose_exit_in(REPORT_443, -1, &dir.path().join("mods")).unwrap();
+        assert_eq!(d.title, "Performant's config file is corrupt or empty");
+        assert_eq!(d.mods, ["performant"]);
+        assert_eq!(
+            d.detail,
+            "Delete Performant's config file from the instance's `config` folder, then launch the game again so the mod can regenerate it."
+        );
+        assert!(d.fix.is_none());
+        assert_eq!(crate::crash::diagnose(REPORT_443), Some(d));
+
+        let (log, report) = REPORT_443.split_once("---- crash report ----\n").unwrap();
+        let lines: Vec<_> = log.lines().collect();
+        let uploaded = crate::crash::Report::build(
+            "1.16.5",
+            "forge",
+            "KubeJS crashed the game",
+            &lines,
+            &[],
+            Some(report),
+            None,
+        );
+        assert_eq!(
+            uploaded.title,
+            "Performant's config file is corrupt or empty"
+        );
+        assert!(uploaded.log.starts_with("\n---- first error ----\nCaused by: com.electronwill.nightconfig.core.io.ParsingException: Not enough data available\n"));
+    }
+
+    #[test]
+    fn json_config_uses_its_callers_mod_list_entry_and_logged_path() {
+        let log = "---- Minecraft Crash Report ----\n\n\
+            com.google.gson.JsonSyntaxException: Unexpected EOF in config/example/settings.json\n\
+            \tat com.google.gson.Gson.fromJson(Gson.java:10)\n\
+            \tat com.example.settingsbridge.config.Store.load(Store.java:20)\n\
+            \tat com.example.launchhelper.Start.run(Start.java:30)\n\n\
+            \tMod List:\n\
+            \t\tlaunchhelper.jar | Launch Helper | launchhelper | 1.0 | DONE\n\
+            \t\tbridge.jar | Settings Bridge | settings_bridge | 2.0 | DONE";
+        let d = crate::crash::diagnose(log).unwrap();
+        assert_eq!(d.title, "Settings Bridge's config file is corrupt or empty");
+        assert_eq!(d.mods, ["settings_bridge"]);
+        assert!(d.detail.contains("`config/example/settings.json`"));
+    }
+
+    #[test]
+    fn unrelated_or_non_config_parse_errors_are_ignored() {
+        let asset_error = "com.google.gson.JsonSyntaxException: Unexpected EOF\n\
+            \tat com.google.gson.Gson.fromJson(Gson.java:10)\n\
+            \tat com.example.assets.ModelReader.read(ModelReader.java:20)";
+        assert!(diagnose_config(asset_error, &[]).is_none());
+
+        let handled = asset_error.replace("assets.ModelReader.read", "config.Store.load");
+        assert!(
+            diagnose_config(
+                &format!("[main/WARN] Reverting to defaults\n    {handled}"),
+                &[]
+            )
+            .is_none()
+        );
+        let log = format!(
+            "{handled}\n\n---- Minecraft Crash Report ----\n\njava.lang.IllegalStateException: Rendering failed\n\tat com.example.renderer.Renderer.draw(Renderer.java:30)"
+        );
+        assert!(diagnose_config(&log, &[]).is_none());
+    }
+
+    #[test]
+    fn forge_can_name_the_file_and_mod_without_a_mod_frame() {
+        let log = "net.minecraftforge.fml.config.ConfigFileTypeHandler$ConfigLoadingException: Failed loading config file sample-common.toml of type COMMON for modid sample\n\
+            \tat net.minecraftforge.fml.config.ConfigFileTypeHandler.reader(ConfigFileTypeHandler.java:46)\n\
+            Caused by: com.electronwill.nightconfig.core.io.ParsingException: Not enough data available\n\
+            \tat com.electronwill.nightconfig.core.file.WriteSyncFileConfig.load(WriteSyncFileConfig.java:73)\n\n\
+            \tMod List:\n\t\tsample.jar | Sample Mod | sample | 1.0 | DONE";
+        let d = crate::crash::diagnose(log).unwrap();
+        assert_eq!(d.title, "Sample Mod's config file is corrupt or empty");
+        assert!(
+            d.detail
+                .contains("`sample-common.toml` from the instance's `config` folder")
+        );
+    }
+
     fn jar(dir: &Path, file: &str, manifest: &str) {
         let mut zip = zip::ZipWriter::new(std::fs::File::create(dir.join(file)).unwrap());
         zip.start_file("fabric.mod.json", zip::write::SimpleFileOptions::default())
             .unwrap();
         zip.write_all(manifest.as_bytes()).unwrap();
         zip.finish().unwrap();
+    }
+
+    #[test]
+    fn missing_fabric_dependency_advice_uses_performance_file_ownership() {
+        let game = tempfile::tempdir().unwrap();
+        let mods = game.path().join("mods");
+        std::fs::create_dir(&mods).unwrap();
+        jar(
+            &mods,
+            "culling.jar",
+            r#"{"id":"entityculling","version":"1.5.2","name":"EntityCulling-Fabric"}"#,
+        );
+        let log = "Incompatible mods found!\n - Mod 'EntityCulling-Fabric' (entityculling) 1.5.2-mc1.19 requires any version of fabric, which is missing!";
+        assert!(
+            diagnose_exit_in(log, 1, &mods)
+                .unwrap()
+                .detail
+                .contains("Add it from Modrinth")
+        );
+
+        crate::storage::save_json(
+            &game.path().join("arctic-performance.json"),
+            &serde_json::json!({"mods": [{
+                "project_id": "NNAgCjsB", "version_id": "R0KPBo5r", "title": "EntityCulling",
+                "version_number": "1.5.2-fabric-1.19", "file_name": "culling.jar"
+            }]}),
+        )
+        .unwrap();
+        let resolver =
+            "Reason: [HARD_DEP_NO_CANDIDATE entityculling 1.5.2-mc1.19 {depends fabric @ [*]}]";
+        for log in [log, resolver] {
+            let d = diagnose_exit_in(log, 1, &mods).unwrap();
+            assert_eq!(
+                d.title,
+                "Arctic performance mod EntityCulling-Fabric needs fabric"
+            );
+            assert!(d.detail.contains("On the next launch"));
+            assert!(d.fix.is_none());
+        }
     }
 
     /// Do the diagnosis' fix and list the folder afterwards.
@@ -1278,6 +1727,79 @@ mod tests {
         assert_eq!(d.title, "Particle Core clashes with Sodium");
         assert_eq!(d.mods, ["particle_core", "sodium"]);
         assert!(d.detail.contains("Update or remove Particle Core"));
+    }
+
+    const REPORT_395: &str = include_str!("../tests/fixtures/crash-395-modmenu.log");
+
+    #[test]
+    fn report_395_names_bundled_modmenu_with_appleskin_first() {
+        let dir = tempfile::tempdir().unwrap();
+        jar(
+            dir.path(),
+            "appleskin.jar",
+            r#"{"id":"appleskin","name":"AppleSkin","version":"3.0.8+mc1.21.11"}"#,
+        );
+        jar(
+            dir.path(),
+            "chestesp.jar",
+            r#"{"id":"chestesp","version":"1.4.1-MC1.21.10-Fabric","jars":[{"file":"META-INF/jars/modmenu.jar"}]}"#,
+        );
+
+        let d = diagnose_exit_in(REPORT_395, 1, dir.path()).unwrap();
+        assert_eq!(
+            d.title,
+            "Mod Menu (bundled in chestesp) failed to change the game"
+        );
+        assert_eq!(d.mods, ["modmenu", "chestesp"]);
+        assert!(d.detail.contains("Update or remove chestesp"));
+        assert!(
+            d.detail
+                .contains("newer Mod Menu build for this Minecraft version")
+        );
+        assert!(d.fix.is_none());
+        assert_eq!(crate::crash::diagnose(REPORT_395), Some(d.clone()));
+
+        let lines: Vec<_> = REPORT_395.lines().collect();
+        let report =
+            crate::crash::Report::build("1.21.11", "fabric", &d.title, &lines, &[], None, None);
+        let failure = mixin_failure_line(REPORT_395).unwrap();
+        assert!(
+            report
+                .log
+                .contains(&format!("{}\nmatched: {failure}", d.title))
+        );
+    }
+
+    #[test]
+    fn report_395_explicit_owner_wins_over_an_unrelated_mixin_and_jar_metadata() {
+        let text = format!(
+            "InvalidMixinException: invalid appleskin.mixins.json:UnrelatedMixin\n{REPORT_395}"
+        )
+        .replace("mixins.modmenu.json", "title-screen-hooks.json")
+        .replace("\t   \\-- modmenu 16.0.0-rc.1", "\t- modmenu 17.0.0");
+        let mods = [
+            InstalledMod {
+                id: "appleskin".into(),
+                name: "AppleSkin".into(),
+                version: "3.0.8".into(),
+                mixins: vec!["title-screen-hooks.json".into()],
+                ..InstalledMod::default()
+            },
+            InstalledMod {
+                id: "appleskin".into(),
+                version: "3.0.7".into(),
+                ..InstalledMod::default()
+            },
+        ];
+        let d = refine(crate::crash::diagnose(&text), &text, &mods).unwrap();
+        assert_eq!(d.title, "Mod Menu failed to change the game");
+        assert_eq!(d.mods, ["modmenu"]);
+        assert_eq!(refine(None, &text, &mods), Some(d));
+        assert!(
+            mixin_failure_line(&text)
+                .unwrap()
+                .contains("from mod modmenu")
+        );
     }
 
     #[test]

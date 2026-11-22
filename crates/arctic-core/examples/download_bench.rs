@@ -34,6 +34,7 @@ fn main() {
             sha1: Some(sha1.clone()),
             size: known_size,
             lzma: None,
+            md5: None,
         };
         let t = Instant::now();
         download_all("bench", vec![job], &|_| {}).unwrap();

@@ -2,9 +2,12 @@
 //! game log and crash report: missing or wrong-version mods, broken mixins,
 //! the wrong Java, running out of memory, graphics drivers.
 
-use std::sync::OnceLock;
+use std::{path::Path, sync::OnceLock};
 
 use regex::Regex;
+use sha2::{Digest, Sha256};
+
+use crate::launch::args::{CUSTOM_MAX_HEAP_SOURCE, heap_size_mb};
 
 /// A fix the launcher can do for the player in one click (see `crash_fix`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,18 +58,35 @@ const BIG_PACK_MODS: usize = 80;
 /// …with less memory than this hardly gets through the loader reading its mods.
 const BIG_PACK_LEAST_MB: u32 = 3 * 1024;
 
-/// `-Xmx1918M` (or `-Xmx2G`) in how Java was started → MB.
+/// The last `-Xmx` in how Java was started, in MiB.
 pub fn max_memory_mb(java: &str) -> Option<u32> {
-    let flag = java
+    let flags = java.lines().rev().find_map(java_summary_parts);
+    let flag = flags
+        .map_or(java, |(_, flags)| flags)
         .split_whitespace()
+        .rev()
         .find_map(|w| w.strip_prefix("-Xmx"))?;
-    let (number, unit) = flag.split_at(flag.find(|c: char| !c.is_ascii_digit())?);
-    let n: u32 = number.parse().ok()?;
-    match unit.to_ascii_lowercase().as_str() {
-        "m" => Some(n),
-        "g" => n.checked_mul(1024),
-        _ => None,
+    heap_size_mb(flag)
+}
+
+fn java_summary_parts(line: &str) -> Option<(&str, &str)> {
+    let (java, flags) = line.strip_prefix("Java ")?.split_once(", flags: ")?;
+    let flags = flags.split_once(" | classpath:").map_or(flags, |(f, _)| f);
+    Some((java, flags))
+}
+
+fn custom_max_memory_mb(text: &str) -> Option<u32> {
+    let (java, flags) = text.lines().rev().find_map(java_summary_parts)?;
+    let mut sizes = flags
+        .split_whitespace()
+        .rev()
+        .filter_map(|w| w.strip_prefix("-Xmx"));
+    let effective = sizes.next()?;
+    // Older Arctic summaries start with the launcher's heap flag and append the custom one.
+    if java.ends_with(CUSTOM_MAX_HEAP_SOURCE) || sizes.next().is_some() {
+        return heap_size_mb(effective);
     }
+    None
 }
 
 /// A big pack that got too little memory (the computer has little to give): what to tell the
@@ -88,6 +108,8 @@ struct Rule {
     pattern: &'static str,
     explain: fn(&regex::Captures, &str) -> Diagnosis,
 }
+
+const OUT_OF_MEMORY: &str = r"java\.lang\.OutOfMemoryError";
 
 /// Checked in order: the most specific causes first.
 const RULES: &[Rule] = &[
@@ -163,54 +185,31 @@ const RULES: &[Rule] = &[
         explain: |c, _| split_package(&c[2], &c[3], &c[1]),
     },
     Rule {
-        // Fabric's newer wording, with names in quotes and ranges:
-        //  "- Mod 'SpruceUI' (spruceui) 9.1 requires any version between 1.21.11- (inclusive) and 1.22- (exclusive) of 'Minecraft' (minecraft), but only the wrong version is present: 26.3!"
-        //  "- Mod 'ModernFix' (modernfix) 5.2 requires version 0.16.10 or later of mod 'Fabric Loader' (fabricloader), but only the wrong version is present: 0.15.11!"
-        pattern: r"Mod '([^']+)' \(([^)]+)\) \S+ requires (?:any version|version) (.+?) of (?:mod )?'[^']+' \((minecraft|fabricloader)\), but only the wrong version is present: ([^!\s]+)",
+        // Fabric: "- Mod 'ModernFix' (modernfix) 5.2 requires version 0.16.10 or later of mod 'Fabric Loader' (fabricloader), but only the wrong version is present: 0.15.11!"
+        pattern: r"Mod '([^']+)' \([^)]+\) \S+ requires (?:any version|version) (.+?) of (?:mod )?'[^']+' \(fabricloader\), but only the wrong version is present: ([^!\s]+)",
         explain: |c, text| {
-            // Every mod the same complaint names, once each.
-            let target = c[4].to_owned();
-            let mut names: Vec<String> = Vec::new();
-            if let Ok(re) = Regex::new(&format!(
-                r"Mod '([^']+)' \([^)]+\) \S+ requires [^
-]*? \({target}\), but only the wrong version is present"
-            )) {
-                for m in re.captures_iter(text) {
-                    let name = m[1].to_owned();
-                    if !names.contains(&name) {
-                        names.push(name);
-                    }
+            static LOADER: OnceLock<Regex> = OnceLock::new();
+            let re = LOADER.get_or_init(|| Regex::new(
+                r"Mod '([^']+)' \([^)]+\) \S+ requires [^\r\n]*? \(fabricloader\), but only the wrong version is present"
+            ).unwrap());
+            let mut names = Vec::new();
+            for m in re.captures_iter(text) {
+                if !names.iter().any(|name| name == &m[1]) {
+                    names.push(m[1].to_owned());
                 }
             }
-            if names.is_empty() {
-                names.push(c[1].to_owned());
-            }
-            let have = &c[5];
-            if target == "minecraft" {
-                Diagnosis {
-                    fix: Some(Fix::DisableMods(names.clone())),
-                    ..Diagnosis::new(
-                        format!("{} mod(s) are for another Minecraft version", names.len()),
-                        format!(
-                            "These mods are made for another Minecraft version than {have}: {}. They are probably left over from another version (an instance copied or switched to a newer game). Switch them off, or update them from the instance's Mods page.",
-                            names.join(", ")
-                        ),
-                        names,
-                    )
-                }
-            } else {
-                Diagnosis {
-                    fix: Some(Fix::UpdateLoader),
-                    ..Diagnosis::new(
-                        "Fabric Loader is too old for these mods",
-                        format!(
-                            "{} need {} of Fabric Loader, but this instance has {have}. Update Fabric Loader in the instance's settings (Loader), or remove those mods.",
-                            names.join(", "),
-                            c[3].to_owned()
-                        ),
-                        names,
-                    )
-                }
+            Diagnosis {
+                fix: Some(Fix::UpdateLoader),
+                ..Diagnosis::new(
+                    "Fabric Loader is too old for these mods",
+                    format!(
+                        "{} need {} of Fabric Loader, but this instance has {}. Update Fabric Loader in the instance's settings (Loader), or remove those mods.",
+                        names.join(", "),
+                        &c[2],
+                        &c[3]
+                    ),
+                    names,
+                )
             }
         },
     },
@@ -347,23 +346,23 @@ const RULES: &[Rule] = &[
     },
     Rule {
         // Fabric's root injection failure owns the blame, ahead of outer Mixin errors.
-        pattern: r"(?:InjectionError|InvalidInjectionException):[^\r\n]*from mod [\w\-]+",
+        pattern: crate::crash_conflicts::EXPLICIT_MIXIN_FAILURE_PATTERN,
         explain: |_, text| {
             crate::crash_conflicts::diagnose_mixin(text, &[]).unwrap_or_else(Diagnosis::none)
         },
     },
     Rule {
         // Fabric: "Mixin apply for mod sodium failed sodium.mixins.json:..."
-        pattern: r"Mixin apply for mod ([\w\-]+) failed",
-        explain: |c, text| broken_mod(&c[1], text),
+        pattern: crate::crash_conflicts::FABRIC_MIXIN_APPLY_FAILURE,
+        explain: broken_mod,
     },
     Rule {
-        pattern: r"Mixin \[[^\]\r\n]+\] from mod ([\w\-]+)",
-        explain: |c, text| broken_mod(&c[1], text),
+        pattern: crate::crash_conflicts::MIXIN_APPLY_FAILURE,
+        explain: broken_mod,
     },
     Rule {
         // Forge/NeoForge and generic Mixin failures often name only the config.
-        pattern: r"[\w\-.]+\.mixins\.json",
+        pattern: crate::crash_conflicts::MIXIN_CONFIG_PATTERN,
         explain: |_, text| {
             crate::crash_conflicts::diagnose_mixin(text, &[]).unwrap_or_else(Diagnosis::none)
         },
@@ -459,13 +458,15 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
-        pattern: r"java\.lang\.OutOfMemoryError",
-        explain: |_, _| {
-            Diagnosis::new(
-                "Minecraft ran out of memory",
-                "Give it more memory in Settings → Memory (or the instance's own setting), or use fewer or lighter mods and resource packs.",
-                Vec::new(),
-            )
+        pattern: OUT_OF_MEMORY,
+        explain: |_, text| {
+            let detail = match custom_max_memory_mb(text) {
+                Some(mb) => format!(
+                    "Custom JVM arguments limit Minecraft's heap to {mb} MB. Remove the custom -Xmx flags to use the launcher's memory setting, or raise the last one if your computer has enough memory."
+                ),
+                None => "Give it more memory in Settings → Memory (or the instance's own setting), or use fewer or lighter mods and resource packs.".into(),
+            };
+            Diagnosis::new("Minecraft ran out of memory", detail, Vec::new())
         },
     },
     Rule {
@@ -542,6 +543,7 @@ const RULES: &[Rule] = &[
                     if !name.is_empty()
                         && !name.eq_ignore_ascii_case("none")
                         && !name.contains("Unknown")
+                        && !crate::crash_suspect::is_base_entry(name)
                         && !mods.iter().any(|m| m == name)
                     {
                         mods.push(name.to_owned());
@@ -577,7 +579,15 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
-        pattern: r"java\.lang\.(NoSuchMethodError|NoSuchFieldError|NoClassDefFoundError|AbstractMethodError)",
+        pattern: r"(?:NoClassDefFoundError|ClassNotFoundException):[ \t]+(net[./]fabricmc[./]fabric[./]api[./][\w./$]+)",
+        explain: missing_fabric_api_class,
+    },
+    Rule {
+        pattern: r"java\.lang\.(?:NoClassDefFoundError|ClassNotFoundException):[ \t]+([\w$]+(?:[./][\w$]+)+)",
+        explain: missing_recommended_dependency,
+    },
+    Rule {
+        pattern: r"java\.lang\.(NoSuchMethodError|NoSuchFieldError|NoClassDefFoundError|ClassNotFoundException|AbstractMethodError)",
         explain: |_, _| {
             Diagnosis::new(
                 "A mod is for a different version",
@@ -597,6 +607,133 @@ const RULES: &[Rule] = &[
         },
     },
 ];
+
+fn missing_fabric_api_class(c: &regex::Captures, text: &str) -> Diagnosis {
+    let class = c[1].replace('/', ".");
+    let package = class.trim_start_matches("net.fabricmc.fabric.api.");
+    let module = match package {
+        p if p.starts_with("client.event.lifecycle.v1.")
+            || p.starts_with("event.lifecycle.v1.") =>
+        {
+            Some(("lifecycle events", "fabric-lifecycle-events-v1"))
+        }
+        p if p.starts_with("client.keybinding.v1.") => {
+            Some(("key binding API", "fabric-key-binding-api-v1"))
+        }
+        p if p.starts_with("client.networking.v1.") || p.starts_with("networking.v1.") => {
+            Some(("networking API", "fabric-networking-api-v1"))
+        }
+        "event.Event" | "event.EventFactory" => Some(("base API", "fabric-api-base")),
+        _ => None,
+    };
+    // The current exception's entrypoint names the provider. The mod inventory may contain many
+    // unrelated mods, so use it only to look up the name of that provider.
+    static ENTRYPOINT: OnceLock<Regex> = OnceLock::new();
+    let entrypoint = ENTRYPOINT.get_or_init(|| {
+        Regex::new(r"Could not execute entrypoint stage '[^']+'[^\r\n]*?provided by '([\w-]+)'")
+            .unwrap()
+    });
+    let before = &text[..c.get(0).unwrap().start()];
+    let context = before
+        .rsplit("\n[")
+        .next()
+        .unwrap_or(before)
+        .rsplit("\n\n")
+        .next()
+        .unwrap_or(before)
+        .rsplit("\r\n\r\n")
+        .next()
+        .unwrap_or(before);
+    let id = entrypoint
+        .captures_iter(context)
+        .last()
+        .and_then(|m| m.get(1))
+        .map(|m| m.as_str());
+    let performance_name = id.and_then(crate::mods::performance::performance_mod_name);
+    let name = performance_name.map(str::to_owned).or_else(|| {
+        let id = id?;
+        Some(
+            crate::crash_conflicts::from_crash_report(text)
+                .into_iter()
+                .find(|m| m.id == id)
+                .map_or_else(|| id.to_owned(), |m| m.name),
+        )
+    });
+    let name = name.as_deref().unwrap_or("A mod");
+    let title = module.map_or_else(
+        || format!("{name} needs Fabric API"),
+        |(name_of_module, _)| format!("{name} needs Fabric API's {name_of_module}"),
+    );
+    let mut detail = module.map_or_else(
+        || format!("{name} needs {class}. Fabric API is missing or too old to provide it."),
+        |(name_of_module, id)| {
+            format!(
+                "{name} needs Fabric API's {name_of_module} module ({id}), which is missing or too old."
+            )
+        },
+    );
+    let vanilla = text.lines().any(|line| {
+        line.starts_with("──── Launching Vanilla (")
+            || (line.contains("--gameDir")
+                && line
+                    .replace('\\', "/")
+                    .contains("/instances/vanilla/minecraft"))
+    });
+    if performance_name.is_some() && vanilla {
+        detail.push_str(&format!(
+            " Arctic installed {name} through Performance for this Vanilla instance."
+        ));
+    }
+    Diagnosis::new(title, detail, id.into_iter().map(str::to_owned).collect())
+}
+
+fn missing_recommended_dependency(class: &regex::Captures, text: &str) -> Diagnosis {
+    static WARNING: OnceLock<Regex> = OnceLock::new();
+    static ENTRYPOINT: OnceLock<Regex> = OnceLock::new();
+    let warning = WARNING.get_or_init(|| {
+        Regex::new(r"Mod '([^\r\n]+?)' \(([\w.-]+)\) [^\r\n]*?\b(?:recommends|suggests) (?:[^\r\n]*?\bof )?(?:(?:mod )?'([^\r\n]+?)' \()?([\w.-]+)\)?, which is missing!").unwrap()
+    });
+    let entrypoint = ENTRYPOINT.get_or_init(|| {
+        Regex::new(r"Could not execute entrypoint stage [^\r\n]*?provided by '([\w.-]+)'").unwrap()
+    });
+    let before = &text[..class.get(0).unwrap().start()];
+    let owner = entrypoint
+        .captures_iter(before)
+        .last()
+        .and_then(|c| c.get(1))
+        .map(|id| id.as_str());
+    let (package, _) = class[1].rsplit_once(['/', '.']).unwrap();
+    let Some(missing) = warning
+        .captures_iter(text)
+        .filter(|c| {
+            let segment = match &c[4] {
+                "fabric-language-kotlin" => "kotlin".to_owned(),
+                id => id.replace(['-', '_'], ""),
+            };
+            package
+                .split(['/', '.'])
+                .any(|part| part.replace('_', "").eq_ignore_ascii_case(&segment))
+        })
+        .min_by_key(|c| owner != Some(&c[2]))
+    else {
+        return Diagnosis::none();
+    };
+    let name = &missing[1];
+    let dependency = missing.get(3).map_or_else(
+        || match &missing[4] {
+            "modernui" => "Modern UI",
+            "fabric-language-kotlin" => "Fabric Language Kotlin",
+            "cloth-config" => "Cloth Config",
+            id => id,
+        },
+        |display| display.as_str(),
+    );
+    Diagnosis::new(
+        format!("{name} needs {dependency}"),
+        format!("Install {dependency} or remove {name}."),
+        vec![name.to_owned(), dependency.to_owned()],
+    )
+}
 
 fn split_package(a: &str, b: &str, package: &str) -> Diagnosis {
     Diagnosis::new(
@@ -633,7 +770,13 @@ fn built_for_another_game(id: &str, text: &str) -> Option<(String, String, Strin
     other.then_some((version, built_for, game))
 }
 
-fn broken_mod(id: &str, text: &str) -> Diagnosis {
+fn broken_mod(c: &regex::Captures, text: &str) -> Diagnosis {
+    let before = &text[..c.get(0).expect("mixin failure match").start()];
+    let prefix = before.rsplit('\n').next().unwrap_or(before);
+    if warning_log_line(prefix) {
+        return Diagnosis::none();
+    }
+    let id = &c[1];
     if let Some((version, built_for, game)) = built_for_another_game(id, text) {
         return Diagnosis::new(
             format!("{id} is for another Minecraft version"),
@@ -652,6 +795,15 @@ fn broken_mod(id: &str, text: &str) -> Diagnosis {
     )
 }
 
+pub(crate) fn warning_log_line(line: &str) -> bool {
+    static WARNING: OnceLock<Regex> = OnceLock::new();
+    WARNING
+        .get_or_init(|| {
+            Regex::new(r"^(?:\[[^\]\r\n]*\][ \t]*)*\[(?:[^\]\r\n]*/)?WARN(?:ING)?\]").unwrap()
+        })
+        .is_match(line.trim_start())
+}
+
 /// Every match of capture group `group` of the first rule (deduplicated).
 fn collect(text: &str, group: usize) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -662,6 +814,21 @@ fn collect(text: &str, group: usize) -> Vec<String> {
         }
     }
     out
+}
+
+/// Fabric's missing-dependency reports give the id of the requiring mod.
+pub(crate) fn fabric_missing_dependencies(text: &str) -> impl Iterator<Item = (&str, &str)> {
+    static NO_CANDIDATE: OnceLock<Regex> = OnceLock::new();
+    let no_candidate = NO_CANDIDATE
+        .get_or_init(|| Regex::new(r"HARD_DEP_NO_CANDIDATE (\S+) \S+ \{depends (\S+) @").unwrap());
+    compiled()[0]
+        .captures_iter(text)
+        .filter_map(|c| Some((c.get(2)?.as_str(), c.get(3)?.as_str())))
+        .chain(
+            resolver_causes(text)
+                .flat_map(|line| no_candidate.captures_iter(line))
+                .filter_map(|c| Some((c.get(1)?.as_str(), c.get(2)?.as_str()))),
+        )
 }
 
 fn compiled() -> &'static [Regex] {
@@ -832,7 +999,142 @@ fn resolution_log(text: &str) -> Diagnosis {
 
 /// Explain a crash from the game log and/or crash report text.
 pub fn diagnose(text: &str) -> Option<Diagnosis> {
-    diagnose_match(text).map(|(diagnosis, _)| diagnosis)
+    diagnose_match(text, None).map(|(diagnosis, _)| diagnosis)
+}
+
+pub(crate) fn diagnose_with_java(
+    text: &str,
+    java: Option<&str>,
+    mods_dir: &Path,
+    mods: &[crate::crash_conflicts::InstalledMod],
+) -> Option<Diagnosis> {
+    diagnose_rules(text, java, Some(mods_dir), mods)
+        .or_else(|| hang_diagnosis(tail_of(text, MAX_TEXT), Some(mods_dir)))
+        .map(|(diagnosis, _)| diagnosis)
+}
+
+const VANILLA_CRASH: &str = "[Arctic diagnostics] vanilla crash";
+const VANILLA_CRASH_TRACE: &str = "[Arctic diagnostics] vanilla crash trace ";
+pub(crate) const SAVE_FAILED_TITLE: &str =
+    "Minecraft crashed while starting and couldn't save its crash report";
+
+pub(crate) fn vanilla_crash_save_failed(text: &str, code: i32) -> Option<&str> {
+    // POSIX process exit statuses carry only the low byte of Java's -2.
+    if !matches!(code, -2 | 254) {
+        return None;
+    }
+    text.lines().find(|line| {
+        line.strip_prefix("[Arctic diagnostics] exit caller vanilla ")
+            .and_then(|frame| frame.split('(').next())
+            .is_some_and(|method| {
+                matches!(
+                    method.rsplit('/').next(),
+                    Some(
+                        "net.minecraft.client.Minecraft.crash"
+                            | "net.minecraft.class_310.method_1565"
+                    )
+                )
+            })
+    })
+}
+
+pub(crate) fn logged_vanilla_crash_save_failure(text: &str) -> Option<&str> {
+    let code = text.lines().rev().find_map(|line| {
+        line.strip_prefix('(')
+            .unwrap_or(line)
+            .strip_prefix("exit code ")
+            .or_else(|| {
+                line.strip_prefix("[Arctic diagnostics] process ended after ")?
+                    .split_once("; exit code ")
+                    .map(|(_, code)| code)
+            })
+            .or_else(|| {
+                line.strip_prefix("[Arctic diagnostics] exit Runtime.exit() called with status: ")
+            })?
+            .split_whitespace()
+            .next()?
+            .parse()
+            .ok()
+    })?;
+    vanilla_crash_save_failed(text, code)
+}
+
+fn vanilla_crash_trace(text: &str) -> impl Iterator<Item = &str> {
+    text.lines()
+        .filter_map(|line| line.strip_prefix(VANILLA_CRASH_TRACE))
+}
+
+pub(crate) fn captured_vanilla_crash(text: &str) -> Option<String> {
+    let mut lines = vanilla_crash_trace(text).peekable();
+    lines.peek()?;
+    // The captured exception has the same provenance as a written report's exception.
+    let mut report = String::from("---- Minecraft Crash Report ----\n\n");
+    for line in lines {
+        report.push_str(line);
+        report.push('\n');
+    }
+    Some(report)
+}
+
+pub(crate) fn vanilla_crash_diagnosis(text: &str, cause: Option<Diagnosis>) -> Diagnosis {
+    if let Some(mut cause) = cause {
+        cause.detail = format!("{}\n\n{}", cause.title, cause.detail);
+        cause.title = SAVE_FAILED_TITLE.into();
+        return cause;
+    }
+    let detail = vanilla_crash_trace(text).next().map_or_else(
+        || "Minecraft exited from its crash handler before it could save a report.".into(),
+        |error| scrub(head_of(error, 2048), &Own::this_pc()),
+    );
+    Diagnosis::new(SAVE_FAILED_TITLE, detail, Vec::new())
+}
+
+fn quilt_load_errors() -> &'static Regex {
+    static ERRORS: OnceLock<Regex> = OnceLock::new();
+    ERRORS.get_or_init(|| Regex::new(
+        r"(?:Duplicate mandatory mod ids \[(?P<ids>[^\]\r\n]+)\]|[0-9]+ mods? requires version (?P<range>\[[^\r\n]+?\)) of fabricloader, which is missing!)(?P<files>(?:[ \t\r\n]+-[ \t]+[^\r\n]+)+)"
+    ).unwrap())
+}
+
+/// Quilt reports resolver failures without throwing an exception, then calls System.exit(1).
+/// Match both error kinds together so the first actual error in the report wins.
+fn quilt_load_error(text: &str) -> Option<(Diagnosis, String)> {
+    let c = quilt_load_errors().captures(text)?;
+    let files: Vec<String> = c["files"]
+        .lines()
+        .flat_map(|line| line.trim().trim_start_matches("- ").split(" - "))
+        .filter_map(|path| {
+            let file = path.trim().rsplit(['/', '\\']).next()?;
+            (!file.is_empty()).then(|| file.to_owned())
+        })
+        .collect();
+    let diagnosis = if let Some(ids) = c.name("ids") {
+        let ids: Vec<String> = ids
+            .as_str()
+            .split(',')
+            .map(|id| id.trim().to_owned())
+            .collect();
+        let name = &ids[0];
+        Diagnosis::new(
+            format!("Duplicate mod: {name} installed twice"),
+            format!(
+                "{name} is installed twice ({}). Remove one of these jars from the instance's Mods folder.",
+                files.join(", ")
+            ),
+            ids,
+        )
+    } else {
+        Diagnosis::new(
+            "Fabric Loader is too old for these mods",
+            format!(
+                "{} need Fabric Loader {}. Quilt's Fabric compatibility version does not meet this requirement. Update Quilt Loader to a version that provides the required Fabric Loader version, or use compatible versions of these mods.",
+                files.join(", "),
+                &c["range"]
+            ),
+            files,
+        )
+    };
+    Some((diagnosis, head_of(c.get(0)?.as_str(), 2048).to_owned()))
 }
 
 /// The report's primary exception and cause chain, before the detailed walkthrough/inventory.
@@ -851,6 +1153,22 @@ pub(crate) fn crash_exception(text: &str) -> Option<&str> {
         .min()
         .unwrap_or(stack.len());
     Some(&stack[..end])
+}
+
+/// Some mods explicitly report that their failure followed a failed mod load.
+pub(crate) fn secondary_mod_failure(line: &str) -> bool {
+    static SECONDARY: OnceLock<Regex> = OnceLock::new();
+    SECONDARY
+        .get_or_init(|| {
+            Regex::new(r"(?i)\b(?:another|other) mod (?:has )?failed (?:to (?:load|initialize)\b|first\b)|\bdue to (?:a )?previous mod loading (?:error|failure)\b").unwrap()
+        })
+        .is_match(line)
+}
+
+pub(crate) fn secondary_stack(stack: &str) -> bool {
+    stack.lines().enumerate().any(|(i, line)| {
+        (i == 0 || line.trim_start().starts_with("Caused by:")) && secondary_mod_failure(line)
+    })
 }
 
 /// Forge reports the failed entries separately from the exception. Only those explicit
@@ -917,6 +1235,7 @@ fn fatal_linkage(text: &str, at: usize) -> bool {
     let explicit = context.contains("exception in thread")
         || context.contains("uncaught exception")
         || context.contains("/fatal]")
+        || context.contains("minecraft has crashed!")
         || context.contains("encountered an unexpected exception")
         || context.contains("reported exception thrown");
     let later_progress = text[at..]
@@ -937,6 +1256,211 @@ fn fatal_linkage(text: &str, at: usize) -> bool {
                     || line.starts_with("... ")
             })
             && !freeze_evidence(text))
+}
+
+const JAVA_FATAL_HEADER: &str =
+    "# A fatal error has been detected by the Java Runtime Environment:";
+
+fn java_fatal_error(text: &str) -> Option<(&str, &str)> {
+    // HotSpot can print the header to stderr as well as writing the fuller hs_err file.
+    // The file is appended after the process output.
+    let (start, _) = text
+        .rmatch_indices(JAVA_FATAL_HEADER)
+        .find(|&(start, _)| start == 0 || text.as_bytes()[start - 1] == b'\n')?;
+    let report = &text[start..];
+    let report = report.split("\n---- ").next()?;
+    let fatal = report
+        .lines()
+        .skip(1)
+        .map(str::trim)
+        .find(|line| !line.is_empty() && *line != "#")?;
+    fatal.starts_with("# ").then_some((report, fatal))
+}
+
+fn native_library_owner<'a>(
+    text: &str,
+    report: &str,
+    frame_path: &str,
+    library: &str,
+    inventory: &'a str,
+) -> Option<&'a str> {
+    let mods = || inventory.lines().filter_map(|line| line.split_once(' '));
+    let paths = text.replace('\\', "/");
+    // Match the full library name. Sibling libraries can differ only by a suffix.
+    let path = Regex::new(&format!(
+        r"(?:^|[\s/])(?:config|mods)/([^/\r\n]+)/(?:[^\r\n]*/)?{}(?:$|[\s+!\]])",
+        regex::escape(library)
+    ))
+    .ok()?;
+    let owner_for_dir = |directory: &str| {
+        mods().find_map(|(id, version)| {
+            let stem = directory
+                .strip_suffix(".jar!")
+                .or_else(|| directory.strip_suffix(".jar"));
+            (directory == id
+                || stem.is_some_and(|stem| stem == id || stem == format!("{id}-{version}")))
+            .then_some(id)
+        })
+    };
+    for source in [frame_path, &paths] {
+        let mut owners = path
+            .captures_iter(source)
+            .filter_map(|c| owner_for_dir(c.get(1)?.as_str()));
+        if let Some(owner) = owners.next() {
+            return owners.all(|other| other == owner).then_some(owner);
+        }
+    }
+
+    // The first Java frame is the Java side of the native call. Later frames can
+    // belong to callers in other mods.
+    let frame = report
+        .lines()
+        .skip_while(|line| !line.starts_with("Java frames:"))
+        .nth(1)?;
+    let mut words = frame.split_whitespace();
+    let method = match words.next()? {
+        "j" => words.next()?,
+        "J" => words.nth(2)?,
+        _ => return None,
+    };
+    let (method, _) = method.split_once('(')?;
+    let (package, _) = method.rsplit_once('.')?;
+    let (package, _) = package.rsplit_once('.')?;
+    let mut owners = mods().filter_map(|(id, _)| {
+        let normalized = id.bytes().filter(u8::is_ascii_alphanumeric);
+        package
+            .split(['.', '/'])
+            .any(|part| {
+                part.bytes()
+                    .filter(u8::is_ascii_alphanumeric)
+                    .map(|b| b.to_ascii_lowercase())
+                    .eq(normalized.clone())
+            })
+            .then_some(id)
+    });
+    let owner = owners.next()?;
+    owners.next().is_none().then_some(owner)
+}
+
+fn native_library_diagnosis(text: &str, report: &str, fatal: &str) -> Option<Diagnosis> {
+    let signal = fatal.strip_prefix("# ")?.split_whitespace().next()?;
+    if !matches!(
+        signal,
+        "SIGILL" | "SIGSEGV" | "SIGBUS" | "SIGFPE" | "SIGABRT" | "SIGTRAP"
+    ) && !signal.starts_with("EXCEPTION_")
+    {
+        return None;
+    }
+    let frame = crate::stability::problematic_frame(report)?;
+    let frame = frame.strip_prefix("C ")?.trim_start().strip_prefix('[')?;
+    let (frame_path, _) = frame.split_once(']')?;
+    let (frame_path, _) = frame_path.rsplit_once("+0x")?;
+    let frame_path = frame_path.replace('\\', "/");
+    let library = frame_path.rsplit('/').next()?;
+    if matches!(
+        library.to_ascii_lowercase().as_str(),
+        "libjvm.so" | "libjvm.dylib" | "libjvm.a" | "jvm.dll"
+    ) {
+        return None;
+    }
+
+    let inventory = compact_mod_inventory(text, text);
+    let uploaded_inventory = text
+        .split_once("---- full mod list (id version) ----\n")
+        .map_or("", |(_, tail)| {
+            tail.split("\n---- ").next().unwrap_or_default().trim()
+        });
+    let inventory = if inventory.is_empty() {
+        uploaded_inventory
+    } else {
+        &inventory
+    };
+    let owner = native_library_owner(text, report, &frame_path, library, inventory);
+    let title = match owner {
+        Some(mod_id) => format!("{mod_id} crashed in native library {library}"),
+        None => format!("Minecraft crashed in native library {library}"),
+    };
+    let detail = if matches!(signal, "SIGILL" | "EXCEPTION_ILLEGAL_INSTRUCTION") {
+        let cpu = report
+            .lines()
+            .find_map(|line| line.strip_prefix("Host: "))
+            .and_then(|host| host.split(',').next())
+            .filter(|cpu| !cpu.is_empty());
+        let cpu = cpu.map_or_else(|| "this CPU".to_owned(), |cpu| format!("this CPU ({cpu})"));
+        match owner {
+            Some(mod_id) => format!(
+                "{mod_id}'s native code uses instructions that {cpu} doesn't support. Remove {mod_id} or replace it with a version that supports your CPU."
+            ),
+            None => format!(
+                "{library} uses instructions that {cpu} doesn't support. If it came with a mod, remove that mod or replace it with a version that supports your CPU."
+            ),
+        }
+    } else if let Some(mod_id) = owner {
+        format!(
+            "The game stopped with {signal} in {mod_id}'s native library. Update {mod_id} or try launching without it."
+        )
+    } else if let Some((driver, _)) = diagnose_log_rules(report, None)
+        .filter(|(diagnosis, _)| diagnosis.title == "The graphics driver crashed")
+    {
+        return Some(Diagnosis::new(
+            format!("{} ({library})", driver.title),
+            driver.detail,
+            Vec::new(),
+        ));
+    } else {
+        format!("The game stopped with {signal} in {library}.")
+    };
+    Some(Diagnosis::new(
+        title,
+        detail,
+        owner.into_iter().map(str::to_owned).collect(),
+    ))
+}
+
+pub(crate) fn java_fatal_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    let (report, fatal) = java_fatal_error(text)?;
+    let compiler_thread = report.lines().any(|line| {
+        line.trim_start().starts_with("Current thread ")
+            && (line.contains("\"C2 CompilerThread") || line.contains("\"C1 CompilerThread"))
+    });
+    let mut lines = report.lines();
+    let compile_task = lines
+        .find_map(|line| line.trim_start().strip_prefix("Current CompileTask:"))
+        .map(|task| {
+            if task.trim().is_empty() {
+                lines.next().unwrap_or_default()
+            } else {
+                task
+            }
+        });
+    let diagnosis = if compiler_thread || compile_task.is_some() {
+        let method =
+            compile_task.and_then(|task| task.split_whitespace().find(|word| word.contains("::")));
+        let task = method.map_or_else(String::new, |method| {
+            format!(" Java was compiling {method} when it crashed.")
+        });
+        Diagnosis::new(
+            "Java's JIT compiler crashed",
+            format!(
+                "A Java runtime bug or unstable hardware can cause this.{task} Clear the instance's custom Java setting to use the Java runtime Arctic recommends for this Minecraft version. If it happens again, test your RAM and turn off any CPU or RAM overclock."
+            ),
+            Vec::new(),
+        )
+    } else if let Some(native) = native_library_diagnosis(text, report, fatal) {
+        native
+    } else {
+        diagnose_log_rules(report, None).map_or_else(
+            || {
+                Diagnosis::new(
+                    "The Java runtime crashed",
+                    "Java reported a fatal error. Try the Java runtime Arctic recommends for this Minecraft version.",
+                    Vec::new(),
+                )
+            },
+            |(diagnosis, _)| diagnosis,
+        )
+    };
+    Some((diagnosis, head_of(fatal, 2048).to_owned()))
 }
 
 pub(crate) fn native_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
@@ -999,15 +1523,110 @@ pub(crate) fn native_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
     ))
 }
 
-fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
+/// A Minecraft mismatch is the cause even when the same report also lists
+/// missing libraries for the incompatible mods.
+fn fabric_wrong_game(text: &str) -> Option<(Diagnosis, String)> {
+    static WRONG_GAME: OnceLock<Regex> = OnceLock::new();
+    let re = WRONG_GAME.get_or_init(|| Regex::new(
+        r"Mod '([^\r\n]+?)' \(([\w.-]+)\) \S+ requires [^\r\n]+? of (?:mod )?'Minecraft' \(minecraft\), but only the wrong version is present: ([^!\s]+)"
+    ).unwrap());
+    let mut matches = re.captures_iter(text).peekable();
+    let first = matches.peek()?;
+    let have = first.get(3)?.as_str();
+    let matched = first.get(0)?.as_str();
+    let vanilla = text.contains("Launching Vanilla (") || text.contains("-Darctic.brand=vanilla");
+    let mut seen = std::collections::HashSet::new();
+    let mut names = Vec::new();
+    let mut performance = Vec::new();
+    for m in matches {
+        let (name, id) = (m.get(1)?.as_str(), m.get(2)?.as_str());
+        if seen.insert(id) {
+            names.push(name.to_owned());
+            if vanilla && crate::mods::performance::is_performance_mod(id) {
+                performance.push(name);
+            }
+        }
+    }
+    let summary = if names.len() == 1 {
+        "1 mod is for a different Minecraft version".to_owned()
+    } else {
+        format!("{} mods are for a different Minecraft version", names.len())
+    };
+    let mut detail = format!(
+        "Minecraft {have} cannot load these mods: {}.",
+        names.join(", ")
+    );
+    if performance.is_empty() {
+        detail.push_str(" Switch them off, or update them from the instance's Mods page.");
+    } else {
+        detail.push_str(&format!(
+            " Arctic's Performance mods from another Minecraft version are still in this Vanilla instance: {}.",
+            performance.join(", ")
+        ));
+    }
+    Some((
+        Diagnosis {
+            fix: Some(Fix::DisableMods(names.clone())),
+            ..Diagnosis::new(format!("{summary}: {}", names.join(", ")), detail, names)
+        },
+        head_of(matched, 2048).to_owned(),
+    ))
+}
+
+fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
+    diagnose_crash_match(text, java).or_else(|| hang_diagnosis(tail_of(text, MAX_TEXT), None))
+}
+
+fn diagnose_crash_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
+    if let Some(caller) = logged_vanilla_crash_save_failure(text) {
+        let captured = captured_vanilla_crash(text);
+        let (cause, matched) = captured
+            .as_deref()
+            .and_then(|trace| diagnose_rules(trace, java, None, &[]))
+            .map_or_else(
+                || {
+                    (
+                        None,
+                        head_of(vanilla_crash_trace(text).next().unwrap_or(caller), 2048)
+                            .to_owned(),
+                    )
+                },
+                |(cause, matched)| (Some(cause), matched),
+            );
+        return Some((vanilla_crash_diagnosis(text, cause), matched));
+    }
+    diagnose_rules(text, java, None, &[])
+}
+
+fn diagnose_rules(
+    text: &str,
+    java: Option<&str>,
+    mods_dir: Option<&Path>,
+    mods: &[crate::crash_conflicts::InstalledMod],
+) -> Option<(Diagnosis, String)> {
+    if let Some(fatal) = java_fatal_diagnosis(text) {
+        return Some(fatal);
+    }
+    if let Some(runtime) = runtime_diagnosis(text) {
+        return Some(runtime);
+    }
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
     }
-    let start = text.len().saturating_sub(MAX_TEXT);
-    let start = (start..text.len())
-        .find(|&i| text.is_char_boundary(i))
-        .unwrap_or(0);
-    let text = &text[start..];
+    if let Some((diagnosis, error)) = crate::crash_suspect::diagnose_threading(text, mods_dir, mods)
+    {
+        return Some((diagnosis, head_of(error, 2048).to_owned()));
+    }
+    if let Some((diagnosis, error)) =
+        crate::crash_suspect::diagnose_unassigned_entity(text, mods_dir, mods)
+    {
+        return Some((diagnosis, error.to_owned()));
+    }
+    let text = tail_of(text, MAX_TEXT);
+
+    if let Some(quilt) = quilt_load_error(text) {
+        return Some(quilt);
+    }
 
     if let Some(registry) = registry_sync_diagnosis(text) {
         return Some(registry);
@@ -1026,9 +1645,40 @@ fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
         ));
     }
 
+    if let Some(wrong_game) = fabric_wrong_game(text) {
+        return Some(wrong_game);
+    }
+
+    if let Some((config, evidence)) = crate::crash_conflicts::diagnose_config(text, mods) {
+        return Some((config, head_of(evidence, 2048).to_owned()));
+    }
+
+    diagnose_log_rules(text, java)
+}
+
+fn diagnose_log_rules(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
+    let secondary_report = crash_exception(text).is_some_and(secondary_stack);
     for (rule, re) in RULES.iter().zip(compiled()) {
         for c in re.captures_iter(text) {
             let matched = c.get(0)?;
+            let start = text[..matched.start()].rfind('\n').map_or(0, |n| n + 1);
+            let end = text[matched.start()..]
+                .find('\n')
+                .map_or(text.len(), |n| matched.start() + n);
+            let line = &text[start..end];
+            if secondary_mod_failure(line)
+                || (secondary_report && line.trim_start().starts_with("Suspected Mod"))
+            {
+                continue;
+            }
+            if matches!(
+                rule.pattern,
+                crate::crash_conflicts::FABRIC_MIXIN_APPLY_FAILURE
+                    | crate::crash_conflicts::MIXIN_APPLY_FAILURE
+            ) && crate::crash_conflicts::mixin_warning(line)
+            {
+                continue;
+            }
             if (rule.pattern.contains("NoSuchMethodError")
                 || rule.pattern.contains("ClassNotFoundException"))
                 // The JVM's missing entry point is fatal without an exception block.
@@ -1037,26 +1687,148 @@ fn diagnose_match(text: &str) -> Option<(Diagnosis, String)> {
             {
                 continue;
             }
-            let diagnosis = (rule.explain)(&c, text);
+            let context = if rule.pattern == OUT_OF_MEMORY {
+                java.unwrap_or(text)
+            } else {
+                text
+            };
+            let diagnosis = (rule.explain)(&c, context);
             if !diagnosis.title.is_empty() {
-                // The generic config rule can first match an unrelated refmap warning or
-                // inventory. Its explanation selects the actual failure; use that as evidence.
-                if rule.pattern == r"[\w\-.]+\.mixins\.json" {
+                // The mixin rules select the actual failure, which can differ from their first match.
+                if matches!(
+                    rule.pattern,
+                    crate::crash_conflicts::MIXIN_CONFIG_PATTERN
+                        | crate::crash_conflicts::EXPLICIT_MIXIN_FAILURE_PATTERN
+                ) {
                     let line = crate::crash_conflicts::mixin_failure_line(text)?;
                     return Some((diagnosis, head_of(line, 2048).to_owned()));
                 }
-                let start = text[..matched.start()].rfind('\n').map_or(0, |n| n + 1);
-                let end = text[matched.start()..]
-                    .find('\n')
-                    .map_or(text.len(), |n| matched.start() + n);
-                return Some((diagnosis, head_of(&text[start..end], 2048).to_owned()));
+                return Some((diagnosis, head_of(line, 2048).to_owned()));
             }
         }
     }
-    hang_diagnosis(text)
+    None
 }
 
-fn hang_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+/// The exception must name a native library in a managed JDK layout. Other
+/// UnsatisfiedLinkErrors are commonly caused by mods, LWJGL or system libraries.
+pub(crate) fn runtime_native_error(line: &str) -> Option<regex::Match<'_>> {
+    if !(line.contains("UnsatisfiedLinkError")
+        || line.contains("The specified procedure could not be found")
+        || line.contains("Can't find dependent libraries"))
+    {
+        return None;
+    }
+    const COMPONENT: &str = r"(?:java-runtime-[\w.-]+|jre-legacy(?:-x64)?)";
+    static LIBRARY: OnceLock<Regex> = OnceLock::new();
+    let library = LIBRARY.get_or_init(|| {
+        Regex::new(&format!(
+            r"(?i)(?P<runtime>[/\\]runtimes[/\\](?:{COMPONENT}|\.named[/\\]{COMPONENT}[/\\]Arctic Client))[/\\]{}",
+            r#"(?:jre\.bundle[/\\]Contents[/\\]Home[/\\])?(?:jre[/\\])?(?:bin|lib)[/\\](?:[\w-]+[/\\])*[\w.-]+\.(?:dll|dylib|so(?:\.\d+)*)(?:$|[:\s)'"])"#,
+        )).unwrap()
+    });
+    library.captures(line)?.name("runtime")
+}
+
+pub(crate) fn runtime_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    let line = text
+        .lines()
+        .find(|line| runtime_native_error(line).is_some())?;
+    Some((
+        Diagnosis::new(
+            "The Java runtime is broken",
+            "Java could not load one of its own libraries. Arctic will verify and repair the runtime on the next launch.",
+            Vec::new(),
+        ),
+        head_of(line.trim(), 2048).to_owned(),
+    ))
+}
+
+pub(crate) fn latest_freeze_snapshot(text: &str) -> &str {
+    text.rsplit_once("---- logs/arctic-freezes/")
+        .map_or(text, |(_, snapshot)| {
+            snapshot.split("\n---- ").next().unwrap_or(snapshot)
+        })
+}
+
+pub(crate) fn freeze_hot_frames(snapshot: &str) -> impl Iterator<Item = (u8, &str, &str)> {
+    const HEADING: &str = "== Where the time went (frames present in the most samples) ==";
+    snapshot
+        .rsplit_once(HEADING)
+        .into_iter()
+        .flat_map(|(_, rows)| {
+            rows.lines()
+                .skip(1)
+                .take_while(|line| !line.trim().is_empty() && !line.starts_with("== "))
+        })
+        .filter_map(|line| {
+            let (percent, frame) = line.trim().split_once('%')?;
+            Some((percent.parse().ok()?, frame.trim(), line.trim()))
+        })
+}
+
+fn freeze_frame(entry: &str) -> Option<&str> {
+    let (call, location) = entry.split_once('(')?;
+    location.split_once(')')?;
+    // Hidden lambda classes can carry a process-specific address after a slash.
+    if call.contains("$$Lambda") || call.contains("/0x") {
+        return None;
+    }
+    let call = call.rsplit('/').next()?;
+    let (class, _) = call.rsplit_once('.')?;
+    if ["java.", "javax.", "jdk.", "sun.", "com.sun."]
+        .iter()
+        .any(|prefix| class.starts_with(prefix))
+        || matches!(
+            class,
+            "net.minecraft.class_1255"
+                | "net.minecraft.util.thread.ThreadExecutor"
+                | "net.minecraft.util.thread.BlockableEventLoop"
+        )
+        || !call
+            .chars()
+            .all(|c| c.is_alphanumeric() || "._$<>".contains(c))
+    {
+        return None;
+    }
+    Some(call)
+}
+
+fn freeze_group_frame<'a>(text: &'a str, snapshot: &'a str) -> Option<&'a str> {
+    let top = snapshot.lines().find_map(|line| {
+        line.strip_prefix("Arctic: game froze for ")?
+            .split_once(", mostly in ")
+            .map(|(_, frame)| frame)
+    });
+    let hot = freeze_hot_frames(snapshot).map(|(_, frame, _)| frame);
+    let stack = snapshot
+        .split_once("== Distinct client-thread stacks")
+        .into_iter()
+        .flat_map(|(_, stacks)| {
+            stacks
+                .lines()
+                .skip_while(|line| !line.starts_with('[') && !line.starts_with("== "))
+                .skip(1)
+                .map_while(|line| line.trim_start().strip_prefix("at "))
+        });
+    // The long-hang dump writes the client thread first, followed by the other threads.
+    let dump = text
+        .rsplit_once("[Arctic diagnostics] hang begin")
+        .into_iter()
+        .flat_map(|(_, dump)| {
+            dump.lines()
+                .skip_while(|line| !line.starts_with("[Arctic diagnostics] thread \""))
+                .skip(1)
+                .map_while(|line| line.trim_start().strip_prefix("at "))
+        });
+    top.into_iter()
+        .chain(hot)
+        .chain(stack)
+        .chain(dump)
+        .find_map(freeze_frame)
+}
+
+fn hang_diagnosis(text: &str, mods_dir: Option<&Path>) -> Option<(Diagnosis, String)> {
     if !freeze_evidence(text)
         || text.contains("---- Minecraft Crash Report ----")
         || text.contains("---- crash report ----\n")
@@ -1071,6 +1843,48 @@ fn hang_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
         .any(|m| fatal_linkage(text, m.start()))
     {
         return None;
+    }
+    let summary = text
+        .lines()
+        .rev()
+        .find(|l| l.contains("Hang at exit:"))
+        .or_else(|| {
+            text.lines().rev().find(|l| {
+                l.contains("(still frozen when written)")
+                    || l.contains("[Arctic diagnostics] hang begin")
+                    || l.contains("0xCFFFFFFF")
+            })
+        })
+        .unwrap_or("The run contains an unrecovered watchdog freeze.");
+    let snapshot = latest_freeze_snapshot(text);
+    let short_menu_freeze = snapshot.contains("not in a world (menu/loading)")
+        || snapshot.contains("no world (menu/loading screen)");
+    // A first snapshot at about three seconds gives little evidence about who caused a menu stall.
+    let short_menu_freeze = short_menu_freeze
+        && snapshot.lines().any(|line| {
+            line.strip_prefix("duration: ")
+                .and_then(|duration| duration.split_once('s'))
+                .is_some_and(|(seconds, _)| seconds.parse::<f32>().is_ok_and(|s| s <= 4.0))
+        });
+    if !short_menu_freeze && let Some(culprit) = crate::crash_suspect::hang_culprit(text, mods_dir)
+    {
+        let owner = if culprit.mod_info.ours {
+            "This is an Arctic bug."
+        } else {
+            "The samples point to third-party code."
+        };
+        let method = format!("{}.{}", culprit.class, culprit.method);
+        return Some((
+            Diagnosis::new(
+                format!("{} froze the game", culprit.mod_info.name),
+                format!(
+                    "{summary}\nThe watchdog found {method} in {}% of client-thread samples. {owner}",
+                    culprit.percent
+                ),
+                vec![culprit.mod_info.id],
+            ),
+            format!("{summary}\n{}", culprit.sample),
+        ));
     }
     let heap =
         Regex::new(r"heap: (\d+) MB used of (\d+) MB max(?: at start, (\d+) MB at end)?").unwrap();
@@ -1090,18 +1904,6 @@ fn hang_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
                 c[1].parse::<u64>().unwrap_or(0) >= 10 && c[2].parse::<u64>().unwrap_or(0) >= 1000
             })
         });
-    let summary = text
-        .lines()
-        .rev()
-        .find(|l| l.contains("Hang at exit:"))
-        .or_else(|| {
-            text.lines().rev().find(|l| {
-                l.contains("(still frozen when written)")
-                    || l.contains("[Arctic diagnostics] hang begin")
-                    || l.contains("0xCFFFFFFF")
-            })
-        })
-        .unwrap_or("The run contains an unrecovered watchdog freeze.");
     if let Some(memory) = memory {
         let cap = if text.contains("is more than this computer can spare: using") {
             " Arctic capped the memory because this computer could not spare the requested amount."
@@ -1119,8 +1921,22 @@ fn hang_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
             format!("{summary}\nmatched: {}", &memory[0]),
         ))
     } else {
+        let create_world = short_menu_freeze
+            && snapshot.contains("(still frozen when written)")
+            && freeze_hot_frames(snapshot).any(|(percent, frame, _)| {
+                percent >= 60
+                    && freeze_frame(frame).is_some_and(|call| {
+                        call.starts_with("net.minecraft.class_525.")
+                            || call.contains(".CreateWorldScreen.")
+                    })
+            });
+        let title = if create_world {
+            "The game was closed while the Create World screen was loading"
+        } else {
+            "The game froze and was closed"
+        };
         Some((
-            Diagnosis::new("The game froze and was closed", summary, Vec::new()),
+            Diagnosis::new(title, summary, Vec::new()),
             summary.to_owned(),
         ))
     }
@@ -1136,16 +1952,22 @@ pub struct Report {
     pub os: String,
     pub title: String,
     pub log: String,
+    /// Installed and currently free physical memory in MiB, if they could be read.
+    pub ram_total_mb: Option<u64>,
+    pub ram_free_mb: Option<u64>,
     /// How the player can be reached (their own words, optional); filled in by the app when it sends.
     pub contact: String,
 }
 
 /// Lines of the game log's end that are sent.
 const REPORT_LOG_LINES: usize = 150;
-/// Most of the log's end, and of the crash report's start, that are sent (bytes). All together they
-/// stay under what the server keeps (48 KB).
+/// Leave room under the server's 48 KB cap.
+const REPORT_BYTES: usize = 47 * 1024;
 const REPORT_LOG_BYTES: usize = 8 * 1024;
+/// Usual size of the crash attachment. Its stacks may borrow from the rest of the upload.
 const REPORT_CRASH_BYTES: usize = 16 * 1024;
+/// Maximum crash excerpt, leaving at least 19 KiB for priority evidence and logs.
+const REPORT_CRASH_CORE_BYTES: usize = 28 * 1024;
 /// Latest registry warnings/errors, reserved ahead of verbose log tails and crash inventories.
 const REPORT_REGISTRY_BYTES: usize = 6 * 1024;
 /// How Java was started: its flags and the classpath's file names.
@@ -1154,9 +1976,36 @@ const REPORT_JAVA_BYTES: usize = 5 * 1024;
 const REPORT_LAUNCHER_LINES: usize = 80;
 const REPORT_LAUNCHER_BYTES: usize = 6 * 1024;
 
-/// Select fatal evidence before ordinary log warnings. A crash document is authoritative;
-/// without one, require an exception followed by a Java stack frame in the same log record.
+/// Prefer the captured exception or a crash document. In ordinary logs, require an exception
+/// followed by a Java stack frame in the same log record.
 fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a str> {
+    if let Some((_, error)) = crash_report
+        .and_then(java_fatal_error)
+        .or_else(|| java_fatal_error(log))
+    {
+        // The code is stable across runs. Fault addresses and process/thread IDs vary.
+        return Some(error.split_once(" at pc=").map_or(error, |(kind, _)| kind));
+    }
+    if let Some(stack) = crash_report
+        .and_then(crash_exception)
+        .or_else(|| crash_exception(log))
+    {
+        // Java indents causes belonging to suppressed failures. The main chain's causes are bare.
+        return stack
+            .lines()
+            .rev()
+            .find(|line| line.starts_with("Caused by: "))
+            .or_else(|| stack.lines().next());
+    }
+    if let Some(error) = vanilla_crash_trace(log).next() {
+        return Some(error);
+    }
+    if let Some(error) = crash_report
+        .and_then(|report| quilt_load_errors().find(report))
+        .or_else(|| quilt_load_errors().find(log))
+    {
+        return Some(error.as_str());
+    }
     static EXCEPTION: OnceLock<Regex> = OnceLock::new();
     let exception = EXCEPTION
         .get_or_init(|| Regex::new(r"(?:[\w$]+\.)*[\w$]*(?:Exception|Error)(?::|\s*$)").unwrap());
@@ -1164,8 +2013,13 @@ fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a st
         let mut warning = false;
         let mut lines = text.lines();
         while let Some(line) = lines.next() {
-            if line.starts_with('[') {
-                warning = line.contains("/WARN]") || line.contains("/INFO]");
+            if exception_record_boundary(line) {
+                warning = line.contains("/WARN]")
+                    || line.contains("/INFO]")
+                    || background_auth_record(
+                        line,
+                        lines.clone().take_while(|l| !exception_record_boundary(l)),
+                    );
             }
             if warning || line.contains("pack.mcmeta") || line.contains("pack metadata") {
                 continue;
@@ -1180,7 +2034,7 @@ fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a st
             if !report
                 && lines
                     .clone()
-                    .take_while(|l| !l.starts_with('['))
+                    .take_while(|l| !exception_record_boundary(l))
                     .any(|l| l.trim_start().starts_with("at "))
             {
                 return Some(line[found.start()..].trim());
@@ -1188,16 +2042,10 @@ fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a st
         }
         None
     };
-    if let Some(report) = crash_report {
-        let report = report
-            .split("---- Minecraft Crash Report ----")
-            .last()
-            .unwrap_or(report);
-        if let Some(error) = select(report, true) {
-            return Some(error);
-        }
-    }
-    select(log, false)
+    crash_report
+        .filter(|report| !report.contains("---- Minecraft Crash Report ----"))
+        .and_then(|report| select(report, true))
+        .or_else(|| select(log, false))
 }
 
 impl Report {
@@ -1213,20 +2061,13 @@ impl Report {
         crash_report: Option<&str>,
         java: Option<&str>,
     ) -> Self {
+        let own = Own::this_pc();
         let all = lines.join("\n");
         // Reserve the resolved mod inventory and agent failure context before trimming verbose
         // logs/reports. Fabric's mod list often starts beyond the old 16 KB report prefix.
         let mods = compact_mod_inventory(&all, crash_report.unwrap_or(""));
         let mixin = mixin_failure_evidence(&all);
         let mut priority = String::new();
-        // Put the fatal exception before the log tail so summary consumers cannot pick an
-        // earlier handled metadata warning. Keep the original warnings in the log for context.
-        if let Some(error) = first_error(&all, crash_report) {
-            priority.push_str(&format!(
-                "\n---- first error ----\n{}\n",
-                scrub(head_of(error, 2048), &Own::this_pc())
-            ));
-        }
         let diagnosis_text = format!(
             "{all}\n{}\n{}\n{}",
             crash_report
@@ -1236,29 +2077,118 @@ impl Report {
             java.unwrap_or("")
         );
         // Keep the exact triggering line even when it falls outside the uploaded log tail.
-        if let Some((diagnosis, matched)) = diagnose_match(&diagnosis_text) {
+        let crash = diagnose_crash_match(&diagnosis_text, java);
+        let diagnosis_tail = tail_of(&diagnosis_text, MAX_TEXT);
+        let watchdog = if crash.is_none() {
+            hang_diagnosis(diagnosis_tail, None)
+        } else {
+            None
+        };
+        let freeze_frame = if watchdog.is_some() && title != SAVE_FAILED_TITLE {
+            freeze_group_frame(diagnosis_tail, latest_freeze_snapshot(diagnosis_tail))
+        } else {
+            None
+        };
+        let diagnosis = crash.or(watchdog);
+        let failed_save = title == SAVE_FAILED_TITLE
+            || diagnosis
+                .as_ref()
+                .is_some_and(|(d, _)| d.title == SAVE_FAILED_TITLE);
+        if let Some(frame) = freeze_frame {
+            // The server groups by the first Error: line or exception and strips digits before
+            // hashing. Encode the frame with letters so intermediary class/method numbers survive.
+            let signature: String = Sha256::digest(frame.as_bytes())[..8]
+                .iter()
+                .flat_map(|byte| {
+                    [
+                        char::from(b'a' + (byte >> 4)),
+                        char::from(b'a' + (byte & 15)),
+                    ]
+                })
+                .collect();
+            priority.push_str(&format!("\nError: Watchdog freeze at exit [{signature}]\n"));
+        }
+        // A consequence message is kept in the original stack, while the summary uses the cause.
+        let error = first_error(&all, crash_report);
+        let error = if error.is_some_and(secondary_mod_failure)
+            || crash_exception(&diagnosis_text).is_some_and(secondary_stack)
+        {
+            diagnosis.as_ref().map(|(_, matched)| matched.as_str())
+        } else {
+            error
+        };
+        if let Some(error) = error {
+            priority.push_str(&format!(
+                "\n---- first error ----\n{}\n",
+                scrub(head_of(error, 2048), &own)
+            ));
+        }
+        if let Some((diagnosis, matched)) = &diagnosis {
             priority.push_str(&format!(
                 "\n---- diagnosis ----\n{}\nmatched: {}\n",
                 diagnosis.title,
-                scrub(&matched, &Own::this_pc())
+                scrub(matched, &own)
             ));
+            if (diagnosis.title == SAVE_FAILED_TITLE && vanilla_crash_trace(&all).next().is_some())
+                || diagnosis.title == crate::crash_suspect::UNASSIGNED_ENTITY_TITLE
+            {
+                priority.push_str(&scrub(head_of(&diagnosis.detail, 2048), &own));
+                priority.push('\n');
+            }
+        }
+        let vanilla_evidence = all
+            .lines()
+            .filter(|line| line.starts_with(VANILLA_CRASH))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !vanilla_evidence.is_empty() {
+            priority.push_str("\n---- vanilla crash ----\n");
+            priority.push_str(&scrub(head_of(&vanilla_evidence, 18 * 1024), &own));
+            priority.push('\n');
         }
         let registry = registry_failure_evidence(&all);
         if !registry.is_empty() {
             priority.push_str("\n---- registry failure context ----\n");
-            priority.push_str(&scrub(&registry, &Own::this_pc()));
+            priority.push_str(&scrub(&registry, &own));
         }
         if !mods.is_empty() {
             priority.push_str(&mod_inventory_section(&mods));
         }
         if !mixin.is_empty() {
             priority.push_str("\n---- mixin failure context ----\n");
-            priority.push_str(&scrub(&mixin, &Own::this_pc()));
+            priority.push_str(&scrub(&mixin, &own));
         }
-        let remaining = (47 * 1024usize).saturating_sub(priority.len() + 512);
+        let early = first_exceptions(&all);
+        if !early.is_empty() {
+            priority.push_str("\n---- first exceptions ----\n");
+            priority.push_str(&scrub(&early, &own));
+        }
+        let ram_total_mb = crate::system::total_memory_mb();
+        let ram_free_mb = crate::system::free_memory_mb();
+        priority.push_str(&memory_section(ram_total_mb, ram_free_mb));
+
+        // Reserve the completed priority sections first, and leave room for logs when stacks
+        // are large and priority evidence is small.
+        let crash_budget = REPORT_BYTES
+            .saturating_sub(priority.len())
+            .min(REPORT_CRASH_CORE_BYTES);
+        let (crash_core, crash_details) = crash_report.map_or_else(
+            || (String::new(), String::new()),
+            |report| crash_report_excerpt(report, crash_budget, &own),
+        );
+        let priority_budget = REPORT_BYTES - crash_core.len();
+        let remaining = priority_budget.saturating_sub(priority.len());
         let skip = lines.len().saturating_sub(REPORT_LOG_LINES);
         let tail = lines[skip..].join("\n");
-        let mut text = tail_of(&tail, REPORT_LOG_BYTES).to_owned();
+        // Preserve the latest bounded snapshot when earlier, handled errors fill their section.
+        let freeze_bytes = freeze_frame
+            .and_then(|_| tail.rfind("---- logs/arctic-freezes/"))
+            .map_or(0, |start| (tail.len() - start).min(REPORT_LOG_BYTES));
+        let tail_bytes = REPORT_LOG_BYTES
+            .saturating_sub(early.len())
+            .max(REPORT_LOG_BYTES / 4)
+            .max(freeze_bytes);
+        let mut text = format!("\n{}", tail_of(&tail, tail_bytes));
         text.push_str("\n\n---- initial output ----\n");
         text.push_str(head_of(&all, 2 * 1024));
         let launcher_compact = launcher_lines
@@ -1270,42 +2200,69 @@ impl Report {
             .collect::<Vec<_>>()
             .join("\n");
         let reserved = launcher_compact.len().min(REPORT_LAUNCHER_BYTES)
-            + java.map_or(0, |s| s.len().min(REPORT_JAVA_BYTES))
-            + crash_report.map_or(0, |s| s.len().min(REPORT_CRASH_BYTES));
-        let evidence_budget = (48 * 1024usize).saturating_sub(text.len() + reserved + 1024);
+            + java.map_or(0, |s| s.len().min(REPORT_JAVA_BYTES));
+        let evidence_budget = remaining.saturating_sub(text.len() + reserved + 512);
         let evidence = diagnostic_evidence(&all, evidence_budget);
         if !evidence.is_empty() {
             text.push_str("\n\n---- diagnostics ----\n");
             text.push_str(head_of(&evidence, evidence_budget));
         }
         if !launcher_lines.is_empty() {
-            let skip = launcher_lines.len().saturating_sub(REPORT_LAUNCHER_LINES);
-            let launcher = launcher_lines[skip..]
-                .iter()
-                .map(|l| compact_launch(l))
-                .collect::<Vec<_>>()
-                .join("\n");
             text.push_str("\n\n---- launcher log ----\n");
-            text.push_str(tail_of(&launcher, REPORT_LAUNCHER_BYTES));
+            text.push_str(tail_of(&launcher_compact, REPORT_LAUNCHER_BYTES));
         }
         if let Some(java) = java {
             text.push_str("\n\n---- java ----\n");
             text.push_str(head_of(java, REPORT_JAVA_BYTES));
         }
-        if let Some(report) = crash_report {
-            text.push_str("\n\n---- crash report ----\n");
-            text.push_str(head_of(report, REPORT_CRASH_BYTES));
-        }
+        let text = scrub(&text, &own);
+        let text = head_of(&text, remaining);
+        let crash_details = head_of(
+            &crash_details,
+            (remaining - text.len()).min(REPORT_CRASH_BYTES.saturating_sub(crash_core.len())),
+        );
         let title = exit_title(title, &all, java.unwrap_or(""));
-        let title = registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
-        let title = native_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title);
+        let title =
+            if title.is_empty() || title == "unknown" || title.starts_with("Game exited with code")
+            {
+                quilt_load_error(&diagnosis_text).map_or(title, |(d, _)| d.title)
+            } else {
+                title
+            };
+        let title = if title.is_empty()
+            || title == "unknown"
+            || title.starts_with("Game exited with code")
+            || title.starts_with("A mod needs ")
+        {
+            fabric_wrong_game(&diagnosis_text).map_or(title, |(d, _)| d.title)
+        } else {
+            title
+        };
+        let title = diagnosis
+            .as_ref()
+            .filter(|(d, _)| {
+                d.title == crate::crash_suspect::UNASSIGNED_ENTITY_TITLE
+                    || d.title == crate::crash_suspect::THREADING_TITLE
+                    || (d.title.ends_with(crate::crash_conflicts::CONFIG_CORRUPT)
+                        && !title.ends_with(crate::crash_conflicts::CONFIG_CORRUPT))
+            })
+            .map_or(title, |(d, _)| d.title.clone());
+        let title = if title == crate::crash_suspect::THREADING_TITLE {
+            title
+        } else {
+            registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title)
+        };
+        let title = java_fatal_diagnosis(&diagnosis_text)
+            .or_else(|| runtime_diagnosis(&diagnosis_text))
+            .or_else(|| native_diagnosis(&diagnosis_text))
+            .map_or(title, |(d, _)| d.title);
         let title = if crash_report.is_none()
             && (title.is_empty()
                 || title == "unknown"
                 || title.starts_with("Game exited with code")
                 || title == "The game froze and was closed")
         {
-            hang_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title)
+            hang_diagnosis(&diagnosis_text, None).map_or(title, |(d, _)| d.title)
         } else {
             title
         };
@@ -1315,31 +2272,135 @@ impl Report {
             loader: loader.to_owned(),
             os: std::env::consts::OS.to_owned(),
             title: scrub(
-                if orderly_shutdown(&all) && crash_report.is_none() && diagnose(&all).is_none() {
+                if failed_save {
+                    SAVE_FAILED_TITLE
+                } else if orderly_shutdown(&all)
+                    && crash_report.is_none()
+                    && diagnose(&all).is_none()
+                {
                     "Non-crash: Minecraft stopped normally"
                 } else {
                     &title
                 },
-                &Own::this_pc(),
+                &own,
             ),
             // Mod ids/versions are public loader metadata. Keep version strings verbatim;
             // the generic scrubber would mistake four-part versions for IP addresses.
-            log: head_of(
-                &format!(
-                    "{priority}\n{}",
-                    scrub(head_of(&text, remaining), &Own::this_pc())
-                ),
-                47 * 1024,
-            )
-            .to_owned(),
+            log: format!(
+                "{}{text}{crash_core}{crash_details}",
+                head_of(&priority, priority_budget)
+            ),
+            ram_total_mb,
+            ram_free_mb,
             contact: String::new(),
         }
     }
 }
 
+pub(crate) fn minecraft_report_section(line: &str) -> Option<&str> {
+    line.trim().strip_prefix("-- ")?.strip_suffix(" --")
+}
+
+/// Budget the exception and diagnostic sections before spending space on supplemental logs.
+fn crash_report_excerpt(report: &str, budget: usize, own: &Own) -> (String, String) {
+    const HEADER: &str = "\n\n---- crash report ----\n";
+    let Some(mut budget) = budget.checked_sub(HEADER.len()) else {
+        return (String::new(), String::new());
+    };
+    let mut excerpt = HEADER.to_owned();
+    if !report.contains("---- Minecraft Crash Report ----") {
+        excerpt.push_str(head_of(&scrub(report, own), budget.min(REPORT_CRASH_BYTES)));
+        return (excerpt, String::new());
+    }
+
+    // The preamble holds the complete exception chain. Mods can put their diagnostic fields
+    // inside otherwise optional sections, with the value on more deeply indented lines.
+    let mut required = vec![String::new()];
+    let mut details = String::new();
+    let mut required_section = true;
+    let mut section = "";
+    let mut field_indent = None;
+    for line in report.split_inclusive('\n') {
+        let trimmed = line.trim();
+        if let Some(name) = minecraft_report_section(line) {
+            section = name;
+            required_section = matches!(name, "Head" | "Thread dumps")
+                || name.starts_with("Mixins in Stack")
+                || matches!(name, "Suspected Mod" | "Suspected Mods");
+            field_indent = None;
+            if required_section {
+                required.push(String::new());
+            }
+        } else if required_section {
+            // Keep the start of each cause/thread if the stacks themselves need trimming.
+            if trimmed.starts_with("Caused by: ")
+                || (section == "Thread dumps" && trimmed.ends_with(':') && trimmed != "Details:")
+            {
+                required.push(String::new());
+            }
+        } else {
+            let indent = line.len() - line.trim_start().len();
+            if trimmed.split_once(':').is_some_and(|(name, _)| {
+                name.starts_with("Mixins in Stack")
+                    || matches!(name, "Suspected Mod" | "Suspected Mods")
+            }) {
+                field_indent = Some(indent);
+                required.push(String::new());
+            } else if !trimmed.is_empty() && field_indent.is_some_and(|field| indent <= field) {
+                field_indent = None;
+            }
+        }
+        if required_section || field_indent.is_some() {
+            required.last_mut().unwrap().push_str(line);
+        } else {
+            details.push_str(line);
+        }
+    }
+
+    let mut blocks: Vec<_> = required.iter().map(|part| scrub(part, own)).collect();
+    // If the diagnostic sections exceed their budget, preserve the short sections in full
+    // and split the remaining space between the oversized stacks.
+    let mut by_size: Vec<_> = (0..blocks.len()).collect();
+    by_size.sort_unstable_by_key(|&i| blocks[i].len());
+    let count = by_size.len();
+    for (rank, i) in by_size.into_iter().enumerate() {
+        let part = &mut blocks[i];
+        let allowance = budget / (count - rank);
+        if part.len() > allowance {
+            const CUT: &str = "\n[crash report section truncated]\n";
+            if allowance > CUT.len() {
+                let prefix = head_of(part, allowance - CUT.len());
+                let end = prefix.rfind('\n').unwrap_or(prefix.len());
+                part.truncate(end);
+                part.push_str(CUT);
+            } else {
+                part.clear();
+            }
+        }
+        budget -= part.len();
+    }
+    for part in blocks {
+        excerpt.push_str(&part);
+    }
+    if !details.is_empty() {
+        details.insert(0, '\n');
+    }
+    (excerpt, scrub(&details, own))
+}
+
+/// "---- memory ----\n16384 MB total, 4096 MB free\n", with "unknown" for what couldn't be read.
+fn memory_section(total_mb: Option<u64>, free_mb: Option<u64>) -> String {
+    let mb = |v: Option<u64>| v.map_or_else(|| "unknown".to_owned(), |v| format!("{v} MB"));
+    format!(
+        "\n---- memory ----\n{} total, {} free\n",
+        mb(total_mb),
+        mb(free_mb)
+    )
+}
+
 /// Resolve inventory from the untrimmed Fabric report, or its startup list when Minecraft
 /// died too early to write one. The agent sidecar also covers failures swallowed by preloading.
-fn compact_mod_inventory(output: &str, report: &str) -> String {
+pub(crate) fn compact_mod_inventory(output: &str, report: &str) -> String {
     let mut mods = std::collections::BTreeMap::new();
     static STARTUP_MOD: OnceLock<Regex> = OnceLock::new();
     let startup = STARTUP_MOD
@@ -1534,6 +2595,105 @@ pub fn orderly_shutdown(text: &str) -> bool {
         && !freeze_evidence(text)
 }
 
+/// Most of the first-exceptions section (bytes), and how many distinct entries it keeps.
+const FIRST_EXCEPTIONS_BYTES: usize = 8 * 1024;
+const FIRST_EXCEPTIONS: usize = 3;
+/// Stack frames kept per exception in a cause chain, and chain links kept per entry.
+const FIRST_EXCEPTION_FRAMES: usize = 25;
+const FIRST_EXCEPTION_CAUSES: usize = 6;
+
+fn exception_record_boundary(line: &str) -> bool {
+    line.starts_with('[') || line.starts_with("Exception in thread \"") || line.starts_with("---- ")
+}
+
+fn background_auth_record<'a>(header: &'a str, body: impl Iterator<Item = &'a str>) -> bool {
+    static THREAD: OnceLock<Regex> = OnceLock::new();
+    static AUTH: OnceLock<Regex> = OnceLock::new();
+    let thread = THREAD.get_or_init(|| {
+        Regex::new(r#"(?i)^(?:(?:\[[^\]]*\]\s*)?\[(?:Download|Realms)[^\]]*/(?:ERROR|FATAL)\]|Exception in thread "(?:Download|Realms)[^"]*")"#).unwrap()
+    });
+    if !thread.is_match(header) {
+        return false;
+    }
+    let auth = AUTH.get_or_init(|| Regex::new(r"(?i)\b(?:401|authlib|InvalidCredentialsException|RealmsServiceException|Failed to fetch user properties|Failed to fetch Realms feature flags|Couldn't connect to realms)\b").unwrap());
+    std::iter::once(header)
+        .chain(body)
+        .any(|line| !line.trim_start().starts_with("at ") && auth.is_match(line))
+}
+
+/// The first distinct ERROR/FATAL log entries that carry a stack trace, from the whole log, so a
+/// root cause that scrolled out of the tail (e.g. a join-time NPE that later leaves `player`
+/// null) is still reported. Repeats of the same trace are kept once.
+fn first_exceptions(text: &str) -> String {
+    let mut seen: Vec<String> = Vec::new();
+    let mut out = String::new();
+    let mut lines = text.lines().peekable();
+    while let Some(line) = lines.next() {
+        if !(line.starts_with('[') && (line.contains("/ERROR]") || line.contains("/FATAL]"))) {
+            continue;
+        }
+        let mut body = Vec::new();
+        while let Some(next) = lines.next_if(|l| !exception_record_boundary(l)) {
+            body.push(next);
+        }
+        if background_auth_record(line, body.iter().copied())
+            || !body.iter().any(|l| l.trim_start().starts_with("at "))
+        {
+            continue;
+        }
+        let message = line.split_once("]: ").map_or(line, |(_, m)| m);
+        let frames: Vec<&str> = body
+            .iter()
+            .copied()
+            .filter(|l| l.trim_start().starts_with("at "))
+            .take(4)
+            .collect();
+        let key = format!(
+            "{message}\n{}\n{}",
+            body.first().copied().unwrap_or(""),
+            frames.join("\n")
+        );
+        if seen.contains(&key) {
+            continue;
+        }
+        seen.push(key);
+        let mut entry = String::from(line);
+        entry.push('\n');
+        let (mut frames, mut causes) = (0, 0);
+        for l in body {
+            let t = l.trim_start();
+            if t.starts_with("at ") {
+                frames += 1;
+                if frames > FIRST_EXCEPTION_FRAMES || causes > FIRST_EXCEPTION_CAUSES {
+                    continue;
+                }
+            } else if t.starts_with("Caused by:") {
+                frames = 0;
+                causes += 1;
+                if causes > FIRST_EXCEPTION_CAUSES {
+                    continue;
+                }
+            } else if t.starts_with("...") || causes > FIRST_EXCEPTION_CAUSES {
+                continue;
+            }
+            entry.push_str(head_of(l, 512));
+            entry.push('\n');
+        }
+        if out.len() + entry.len() > FIRST_EXCEPTIONS_BYTES {
+            // A single oversized first entry is cut rather than dropped.
+            if out.is_empty() {
+                out.push_str(head_of(&entry, FIRST_EXCEPTIONS_BYTES));
+            }
+            break;
+        }
+        out.push_str(&entry);
+        if seen.len() >= FIRST_EXCEPTIONS {
+            break;
+        }
+    }
+    out
+}
+
 /// Preserve the latest dump and exit trace even when they are outside the log tail.
 fn diagnostic_evidence(text: &str, budget: usize) -> String {
     let mut out = String::new();
@@ -1559,7 +2719,10 @@ fn diagnostic_evidence(text: &str, budget: usize) -> String {
         }
     }
     for line in text.lines().filter(|l| {
-        l.contains("[Arctic diagnostics]") && !l.contains("hang ") && !l.contains("thread ")
+        l.contains("[Arctic diagnostics]")
+            && !l.starts_with(VANILLA_CRASH)
+            && !l.contains("hang ")
+            && !l.contains("thread ")
     }) {
         if out.len() < budget.saturating_sub(1024) {
             out.push_str(line);
@@ -1738,11 +2901,328 @@ pub fn scrub(text: &str, own: &Own) -> String {
 
 #[cfg(test)]
 mod tests {
+    const VANILLA_EXIT_398: &str = include_str!("../tests/fixtures/crash-398-vanilla-exit.log");
+    const HANG_436: &str = include_str!("../tests/fixtures/crash-436-customrecipe-hang.log");
+    const FREEZE_440: &str = include_str!("../tests/fixtures/crash-440-create-world-freeze.log");
+
+    #[test]
+    fn create_world_freeze_groups_by_the_client_call_site() {
+        let upload = |snapshot: &str| {
+            Report::build(
+                "1.21.11",
+                "Fabric",
+                "",
+                &[
+                    "[15:57:49] [Download-2/ERROR] Failed to fetch user properties",
+                    "    com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401",
+                    "    java.io.IOException: unrelated background error",
+                    "---- logs/arctic-freezes/freeze-test.txt ----",
+                    snapshot,
+                ],
+                &[],
+                None,
+                Some("exit code -805306369 (0xCFFFFFFF)"),
+            )
+        };
+        fn fingerprint_input(report: &Report) -> &str {
+            // The server reads Error: lines before falling back to the title.
+            let line = report.log.lines().find(|line| !line.is_empty()).unwrap();
+            assert!(line.starts_with("Error: Watchdog freeze at exit ["));
+            assert!(!line.contains(|c: char| c.is_ascii_digit()));
+            line
+        }
+        let report = upload(FREEZE_440);
+        assert_eq!(
+            report.title,
+            "The game was closed while the Create World screen was loading"
+        );
+        assert_eq!(
+            freeze_group_frame(FREEZE_440, FREEZE_440),
+            Some("net.minecraft.class_525.method_64244")
+        );
+        let repeat = FREEZE_440
+            .replace("3c4e4871", "abcdef12")
+            .replace("class_525.java:374", "class_525.java:375")
+            .replace("    at knot//", "    at app//")
+            .replace(
+                "100%  knot//net.minecraft.class_525",
+                "100%  app//net.minecraft.class_525",
+            );
+        assert_eq!(
+            fingerprint_input(&report),
+            fingerprint_input(&upload(&repeat))
+        );
+
+        let other_call = FREEZE_440.replace("method_64244", "method_64245");
+        let driver_hang = "Arctic: game froze for 3.0s, mostly in org.lwjgl.opengl.GL20C.nglGetProgramiv(Native Method)\nduration: 3.00s (still frozen when written)\n";
+        for different in [other_call.as_str(), driver_hang] {
+            assert_ne!(
+                fingerprint_input(&report),
+                fingerprint_input(&upload(different))
+            );
+        }
+    }
+
+    #[test]
+    fn brief_menu_wait_does_not_attribute_the_freeze_to_arctic() {
+        let snapshot = FREEZE_440.replace(
+            "knot//net.minecraft.class_437.method_25423(class_437.java:326)",
+            "knot//com.arcticlauncher.client.Example.open(Example.java:12)",
+        );
+        let diagnosis = diagnose(&snapshot).unwrap();
+        assert!(diagnosis.title.contains("Create World"));
+        assert!(diagnosis.mods.is_empty());
+        assert!(!diagnosis.detail.contains("Arctic bug"));
+
+        let fatal = "Exception in thread \"Render thread\" java.lang.IllegalStateException: crashed\n    at example.Game.stop(Game.java:42)";
+        let report = Report::build(
+            "1.21.11",
+            "Fabric",
+            "Crash",
+            &[FREEZE_440, fatal],
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(report.title, "Crash");
+        assert!(
+            report
+                .log
+                .starts_with("\n---- first error ----\njava.lang.IllegalStateException: crashed")
+        );
+    }
+
+    #[test]
+    fn report_436_names_the_frozen_mod_over_the_optional_mixin_warning() {
+        let (diagnosis, matched) = diagnose_match(HANG_436, None).unwrap();
+        assert_eq!(diagnosis.title, "customrecipe froze the game");
+        assert_eq!(diagnosis.mods, ["customrecipe"]);
+        assert!(diagnosis.detail.contains("third-party code"));
+        assert!(
+            diagnosis
+                .detail
+                .contains("VanillaRecipesScreen.findLocalRecipes")
+        );
+        assert!(matched.contains("94%"));
+
+        // The uploaded report can omit the snapshot header while retaining the samples.
+        let start = HANG_436.find("---- logs/arctic-freezes/").unwrap();
+        let end = HANG_436.find("samples: 97").unwrap();
+        let trimmed = [&HANG_436[..start], &HANG_436[end..]].concat();
+        let report = Report::build("26.3", "Fabric", "", &[&trimmed], &[], None, None);
+        assert_eq!(report.title, diagnosis.title);
+        assert!(
+            report
+                .log
+                .contains("---- diagnosis ----\ncustomrecipe froze the game\n")
+        );
+        assert!(!report.title.contains("c2me"));
+
+        let without_exit_summary = trimmed
+            .lines()
+            .filter(|l| !l.starts_with("Hang at exit:"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(
+            diagnose(&without_exit_summary).unwrap().title,
+            diagnosis.title
+        );
+    }
+
+    #[test]
+    fn hang_attribution_requires_current_samples_and_one_dominant_owner() {
+        let generic = "The game froze and was closed";
+        assert_eq!(
+            diagnose(&HANG_436.replace("94%", "59%")).unwrap().title,
+            generic
+        );
+        let competing = HANG_436.replace(
+            "   94%  knot//net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents",
+            "   94%  knot//example.other.ClientTickEvents",
+        );
+        assert_eq!(diagnose(&competing).unwrap().title, generic);
+
+        let start = HANG_436.find("Hang at exit:").unwrap();
+        let recovered = HANG_436[..start].replace(" (still frozen when written)", "");
+        assert!(diagnose(&recovered).is_none());
+        let windows_exit = format!("{recovered}\n(exit code -805306369 (0xCFFFFFFF))");
+        assert_eq!(diagnose(&windows_exit).unwrap().title, generic);
+    }
+
+    #[test]
+    fn direct_arctic_and_polarium_hang_frames_are_our_bug() {
+        for (package, name) in [
+            ("com.arcticlauncher.client", "Arctic Client"),
+            ("com.arcticlauncher.polarium", "Polarium"),
+            ("example.unknown.client", "example.unknown.client"),
+        ] {
+            let text = HANG_436.replace("fr.zazac1.customrecipe.client", package);
+            let diagnosis = diagnose(&text).unwrap();
+            assert_eq!(diagnosis.title, format!("{name} froze the game"));
+            assert_eq!(
+                diagnosis.detail.contains("This is an Arctic bug."),
+                name != package
+            );
+        }
+    }
+
+    #[test]
+    fn real_crashes_keep_precedence_over_sampled_hangs() {
+        for (failure, expected) in [
+            (
+                "(exit code -1073741819 (0xC0000005))",
+                "Minecraft crashed in native code",
+            ),
+            (
+                "java.lang.OutOfMemoryError: Java heap space",
+                "Minecraft ran out of memory",
+            ),
+            (
+                "InvalidMixinException: @Mixin target missing.Class was not found broken.mixins.json:BrokenMixin",
+                "broken failed to change the game",
+            ),
+        ] {
+            assert_eq!(
+                diagnose(&format!("{HANG_436}\n{failure}")).unwrap().title,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn crash_398_requires_vanilla_crash_and_failed_save_exit_code() {
+        let mods = tempfile::tempdir().unwrap();
+        let d =
+            crate::crash_conflicts::diagnose_exit_in(VANILLA_EXIT_398, -2, mods.path()).unwrap();
+        assert_eq!(d.title, SAVE_FAILED_TITLE);
+        assert!(d.mods.is_empty());
+        assert!(first_error(VANILLA_EXIT_398, None).is_none());
+        assert_eq!(diagnose(VANILLA_EXIT_398).unwrap().title, SAVE_FAILED_TITLE);
+        assert_eq!(
+            crate::crash_conflicts::diagnose_in(VANILLA_EXIT_398, mods.path())
+                .unwrap()
+                .title,
+            SAVE_FAILED_TITLE
+        );
+        let unix = VANILLA_EXIT_398.replace(
+            "(exit code -2 (0xFFFFFFFE; no known NTSTATUS name))",
+            "[Arctic diagnostics] process ended after 11000 ms; exit code 254 (0x000000FE)",
+        );
+        assert_eq!(diagnose(&unix).unwrap().title, SAVE_FAILED_TITLE);
+        assert!(vanilla_crash_save_failed(&unix, 254).is_some());
+        assert!(vanilla_crash_save_failed(VANILLA_EXIT_398, -1).is_none());
+        assert!(
+            vanilla_crash_save_failed(&VANILLA_EXIT_398.replace(".crash(", ".destroy("), -2)
+                .is_none()
+        );
+        assert!(
+            vanilla_crash_save_failed(
+                &VANILLA_EXIT_398.replace("client.Minecraft.crash(", "class_310.method_1565("),
+                -2,
+            )
+            .is_some()
+        );
+    }
+
+    #[test]
+    fn crash_398_prioritizes_captured_exception_and_keeps_save_evidence() {
+        // The original upload had no Throwable. Supplement it with a simulated startup failure.
+        let error = "java.lang.RuntimeException: Could not execute entrypoint stage 'client' due to errors, provided by 'example' at 'example.Client'!";
+        let log = format!(
+            "{VANILLA_EXIT_398}\n[Arctic diagnostics] vanilla crash: Initializing game\n\
+             {VANILLA_CRASH_TRACE}{error}\n\
+             {VANILLA_CRASH_TRACE}\tat knot//net.fabricmc.loader.impl.FabricLoaderImpl.invokeEntrypoints(FabricLoaderImpl.java:1)\n\
+             {VANILLA_CRASH_TRACE}Caused by: java.lang.ClassNotFoundException: org.lwjgl.Optional\n\
+             {VANILLA_CRASH_TRACE}\tat knot//example.Client.onInitializeClient(Client.java:10)\n\
+             [Arctic diagnostics] vanilla crash save failed: <home>/game/crash-reports/crash.txt\n\
+             [Arctic diagnostics] vanilla crash save trace java.nio.file.AccessDeniedException: <home>/game/crash-reports/crash.txt\n{}",
+            "[main/INFO]: shutdown output\n".repeat(200)
+        );
+        let mods = tempfile::tempdir().unwrap();
+        let d = crate::crash_conflicts::diagnose_exit_in(&log, -2, mods.path()).unwrap();
+        assert_eq!(d.title, SAVE_FAILED_TITLE);
+        assert!(d.detail.contains("A game library couldn't be loaded"));
+        assert!(d.repair);
+        let mixin = log.replace(
+            "java.lang.ClassNotFoundException: org.lwjgl.Optional",
+            "org.spongepowered.asm.mixin.injection.throwables.InjectionError: example.mixins.json from mod example",
+        );
+        let d = crate::crash_conflicts::diagnose_exit_in(&mixin, -2, mods.path()).unwrap();
+        assert_eq!(d.title, SAVE_FAILED_TITLE);
+        assert_eq!(d.mods, ["example"]);
+        assert!(d.detail.contains("example failed to change the game"));
+        let report = Report::build("26.1.2", "fabric", "unknown", &[&log], &[], None, None);
+        assert_eq!(report.title, SAVE_FAILED_TITLE);
+        assert!(report.log.contains("A game library couldn't be loaded"));
+        assert!(
+            report
+                .log
+                .starts_with(&format!("\n---- first error ----\n{error}\n"))
+        );
+        assert!(
+            report.log.contains(
+                "matched: Caused by: java.lang.ClassNotFoundException: org.lwjgl.Optional"
+            )
+        );
+        assert!(report.log.contains("vanilla crash: Initializing game"));
+        assert!(
+            report
+                .log
+                .contains("vanilla crash trace \tat knot//example")
+        );
+        assert!(
+            report
+                .log
+                .contains("save trace java.nio.file.AccessDeniedException: <home>")
+        );
+        assert!(report.log.len() < 48 * 1024);
+    }
+
+    #[test]
+    fn crash_380_prefers_the_runtime_dll_over_the_debug_screen_error() {
+        let text = include_str!("../tests/fixtures/crash-380-runtime-dll.log");
+        let (diagnosis, matched) = diagnose_match(text, None).unwrap();
+        assert_eq!(diagnosis.title, "The Java runtime is broken");
+        assert!(matched.contains("management.dll: The specified procedure could not be found"));
+        assert!(diagnosis.mods.is_empty());
+        assert!(!diagnosis.repair);
+        let diagnosis = crate::crash_conflicts::refine(None, text, &[]).unwrap();
+        assert_eq!(diagnosis.title, "The Java runtime is broken");
+        let report = Report::build(
+            "26.2",
+            "Fabric",
+            "A mod is for a different version",
+            &[],
+            &[],
+            Some(text),
+            None,
+        );
+        assert_eq!(report.title, "The Java runtime is broken");
+    }
+
+    #[test]
+    fn runtime_native_errors_require_a_managed_library_path() {
+        for line in [
+            r"C:\Arctic Data\runtimes\java-runtime-epsilon\bin\server\jvm.dll: Can't find dependent libraries",
+            r"C:\Arctic Data\runtimes\java-runtime-epsilon\bin\management.dll: The specified procedure could not be found",
+            "java.lang.UnsatisfiedLinkError: /home/user/Arctic Data/runtimes/java-runtime-epsilon/lib/libmanagement.so: undefined symbol",
+        ] {
+            assert!(runtime_native_error(line).is_some(), "{line}");
+        }
+        for line in [
+            r"java.lang.UnsatisfiedLinkError: C:\Windows\System32\ucrtbase.dll: The specified procedure could not be found",
+            "java.lang.UnsatisfiedLinkError: /usr/lib/jvm/java-25/lib/libmanagement.so: undefined symbol",
+            "java.lang.UnsatisfiedLinkError: /home/user/runtimes/java-runtime-epsilon/lib/library.jar",
+        ] {
+            assert!(runtime_native_error(line).is_none(), "{line}");
+        }
+    }
+
     #[test]
     fn first_error_prefers_crash_report_over_pack_metadata_warnings() {
         let log = include_str!("../tests/fixtures/crash-325-pack-warning.log");
         let report = include_str!("../tests/fixtures/crash-330-main-exception.log");
-        let expected = "java.lang.IllegalStateException: Failed to initialize renderer";
+        let expected = "Caused by: java.lang.RuntimeException: underlying failure";
         assert_eq!(first_error(log, Some(report)), Some(expected));
         let uploaded = Report::build("1.21", "fabric", "unknown", &[log], &[], Some(report), None);
         assert!(
@@ -1754,11 +3234,11 @@ mod tests {
         assert_eq!(
             first_error(
                 &format!(
-                    "{log}\n[Render thread/ERROR] Uncaught exception\n{expected}\n\tat example.Game.render(Game.java:42)"
+                    "{log}\n[Render thread/ERROR] Uncaught exception\njava.lang.IllegalStateException: Failed to initialize renderer\n\tat example.Game.render(Game.java:42)"
                 ),
                 None
             ),
-            Some(expected)
+            Some("java.lang.IllegalStateException: Failed to initialize renderer")
         );
         let earlier = format!(
             "[main/ERROR] java.lang.RuntimeException: handled\n\tat example.Optional.load(Optional.java:1)\n{log}"
@@ -1782,14 +3262,124 @@ mod tests {
         );
     }
 
+    #[test]
+    fn first_error_skips_background_auth_and_uses_the_deepest_report_cause() {
+        let fixture = include_str!("../tests/fixtures/crash-451-unassigned-entity.log");
+        let (startup, _) = fixture.split_once("---- logs/arctic-freezes/").unwrap();
+        let startup = format!(
+            "{startup}[Realms Availability/ERROR] Request failed\n\
+            java.io.IOException: HTTP status 401\n\tat example.Realms.request(Realms.java:1)"
+        );
+        assert_eq!(first_error(&startup, None), None);
+        assert!(first_exceptions(&startup).is_empty());
+        let uncaught = "Exception in thread \"Download-3\" java.io.IOException: HTTP 401\n\tat example.Auth.fetch(Auth.java:1)";
+        assert_eq!(first_error(uncaught, None), None);
+
+        let fatal = "java.lang.IllegalStateException: renderer failed";
+        let log = format!(
+            "{startup}\nException in thread \"Render thread\" {fatal}\n\tat example.Game.render(Game.java:1)"
+        );
+        assert_eq!(first_error(&log, None), Some(fatal));
+
+        let cause = "Caused by: java.lang.IllegalArgumentException: invalid renderer state";
+        let report = format!(
+            "---- Minecraft Crash Report ----\nDescription: Rendering entity in world\n\n\
+            {fatal}\n\tat example.Game.render(Game.java:1)\n\
+            Caused by: java.lang.RuntimeException: setup failed\n\tat example.Game.setup(Game.java:2)\n\
+            {cause}\n\tat example.Game.init(Game.java:3)\n\
+            \tSuppressed: java.lang.RuntimeException: cleanup failed\n\tCaused by: java.lang.IllegalStateException: cleanup\n"
+        );
+        assert_eq!(first_error(&log, Some(&report)), Some(cause));
+        assert_eq!(first_error(&format!("{log}\n{report}"), None), Some(cause));
+
+        let download = "java.io.IOException: disk full";
+        let log = format!(
+            "{startup}\n[Download-2/ERROR] Failed to save assets\n{download}\n\tat example.Assets.write(Assets.java:1)"
+        );
+        assert_eq!(first_error(&log, None), Some(download));
+    }
+
     use super::*;
 
     const REPORT_314: &str = include_str!("../tests/fixtures/crash-314-registry-sync.log");
 
+    const QUILT_DUPLICATE_355: &str = "Duplicate mandatory mod ids [fabric-api, fabric] - <mods>/fabric-api-0.141.3+1.21.11.jar - <mods>/fabric-api-0.141.6+1.21.11.jar";
+    const QUILT_LOADER_355: &str = "2 mods requires version [0.19.5, ∞) of fabricloader, which is missing! - <mods>/arctic-mod.jar - <mods>/fabric-language-kotlin-1.14.2+kotlin.2.4.21.jar";
+
+    #[test]
+    fn quilt_355_names_duplicate_jars_without_an_installed_mod_inventory() {
+        let d = diagnose(QUILT_DUPLICATE_355).unwrap();
+        assert_eq!(d.title, "Duplicate mod: fabric-api installed twice");
+        assert_eq!(d.mods, ["fabric-api", "fabric"]);
+        for file in [
+            "fabric-api-0.141.3+1.21.11.jar",
+            "fabric-api-0.141.6+1.21.11.jar",
+        ] {
+            assert!(d.detail.contains(file));
+        }
+        assert!(d.detail.contains("Remove one"));
+    }
+
+    #[test]
+    fn quilt_355_names_mods_requiring_a_newer_fabric_compatibility_version() {
+        let d = diagnose(QUILT_LOADER_355).unwrap();
+        assert_eq!(d.title, "Fabric Loader is too old for these mods");
+        assert_eq!(
+            d.mods,
+            [
+                "arctic-mod.jar",
+                "fabric-language-kotlin-1.14.2+kotlin.2.4.21.jar"
+            ]
+        );
+        assert!(d.detail.contains("[0.19.5, ∞)"));
+        assert!(d.detail.contains("Update Quilt Loader"));
+        // The existing one-click loader update only supports Fabric instances.
+        assert!(d.fix.is_none());
+    }
+
+    #[test]
+    fn quilt_355_first_error_outranks_system_exit_in_logs_and_crash_reports() {
+        for (first, second) in [
+            (QUILT_DUPLICATE_355, QUILT_LOADER_355),
+            (QUILT_LOADER_355, QUILT_DUPLICATE_355),
+        ] {
+            let expected = diagnose(first).unwrap().title;
+            let text = format!(
+                "---- Quilt Loader: Failed to load ----\n-- Error 1 --\n{first}\n-- Error 2 --\n{second}\n[Arctic diagnostics] exit caller other org.quiltmc.loader.impl.QuiltLoaderImpl.runPlugins\nexit code 1 (0x00000001)"
+            );
+            for text in [
+                text.clone(),
+                text.replace(" - ", "\n\n- "),
+                text.replace(" - ", "\r\n\r\n- "),
+            ] {
+                assert_eq!(diagnose(&text).unwrap().title, expected);
+                assert_eq!(diagnose(&text).unwrap().mods, diagnose(first).unwrap().mods);
+                for crash_report in [None, Some(text.as_str())] {
+                    let report = Report::build(
+                        "1.21.11",
+                        "Quilt 0.30.0-beta.3",
+                        "Game exited with code 1 (0x00000001)",
+                        &[&text],
+                        &[],
+                        crash_report,
+                        None,
+                    );
+                    assert_eq!(report.title, expected);
+                    assert!(report.log.contains("---- first error ----"));
+                    assert!(
+                        report
+                            .log
+                            .contains(&format!("---- diagnosis ----\n{expected}"))
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn report_314_diagnoses_registry_sync_without_guessing_a_mod() {
         for report in [REPORT_314.to_owned(), REPORT_314.replace('\n', "\r\n")] {
-            let (d, matched) = diagnose_match(&report).unwrap();
+            let (d, matched) = diagnose_match(&report, None).unwrap();
             assert_eq!(d.title, "Forge registry IDs did not sync");
             assert!(d.detail.contains("expected IDs"));
             assert!(d.detail.contains("mod conflict in the pack"));
@@ -1878,19 +3468,47 @@ mod tests {
         let warning = REPORT_314.lines().next().unwrap();
         let failure =
             "InjectionError: Critical injection failure in realaddon.mixins.json:AddonMixin";
-        let (_, matched) = diagnose_match(&format!("{warning}\n{failure}")).unwrap();
+        let (_, matched) = diagnose_match(&format!("{warning}\n{failure}"), None).unwrap();
         assert_eq!(matched, failure);
     }
 
     #[test]
     fn oneconfig_download_failure_317() {
         let text = include_str!("../tests/fixtures/crash-317-oneconfig.log");
-        let (d, matched) = diagnose_match(text).unwrap();
+        let (d, matched) = diagnose_match(text, None).unwrap();
         assert_eq!(d.title, "Patcher couldn't download OneConfig (network)");
         assert!(d.detail.contains("Arctic will retry"));
         assert!(matched.contains("failed to download"));
         assert!(diagnose("OneConfig loaded successfully\nexit code 1").is_none());
         assert!(diagnose("Unrelated mod failed to download texture").is_none());
+    }
+
+    #[test]
+    fn built_report_carries_installed_and_free_memory() {
+        let noise = "noise\n".repeat(4000);
+        let report = Report::build("1.21.1", "Fabric", "unknown", &[&noise], &[], None, None);
+        assert!(report.log.contains("---- memory ----\n"));
+        if let (Some(total), Some(free)) = (report.ram_total_mb, report.ram_free_mb) {
+            assert!(
+                report
+                    .log
+                    .contains(&format!("{total} MB total, {free} MB free\n"))
+            );
+            assert!(free <= total);
+        }
+        assert!(report.log.len() <= 48 * 1024);
+    }
+
+    #[test]
+    fn memory_section_marks_unreadable_values() {
+        assert_eq!(
+            memory_section(Some(16384), Some(4096)),
+            "\n---- memory ----\n16384 MB total, 4096 MB free\n"
+        );
+        assert_eq!(
+            memory_section(None, None),
+            "\n---- memory ----\nunknown total, unknown free\n"
+        );
     }
 
     #[test]
@@ -1917,6 +3535,63 @@ mod tests {
         assert!(diagnose(recovered).is_none());
         let fatal = "[Render thread/ERROR] Uncaught exception in thread main\njava.lang.IllegalStateException: broken\n---- logs/arctic-freezes/freeze-now.txt ----\nduration: 20.34s (still frozen when written)";
         assert!(diagnose(fatal).is_none());
+    }
+
+    #[test]
+    fn missing_recommended_dependency_crash_387() {
+        let log = include_str!("../tests/fixtures/crash-387-music-hud.log");
+        let (d, matched) = diagnose_match(log, None).unwrap();
+        assert_eq!(d.title, "Music HUD needs Modern UI");
+        assert_eq!(d.detail, "Install Modern UI or remove Music HUD.");
+        assert_eq!(d.mods, ["Music HUD", "Modern UI"]);
+        assert!(matched.contains("NoClassDefFoundError: icyllis/modernui/"));
+    }
+
+    #[test]
+    fn unrelated_recommendations_keep_the_version_diagnosis() {
+        let log = include_str!("../tests/fixtures/crash-387-music-hud.log");
+        let (warnings, crash) = log.split_once("---- Minecraft Crash Report ----").unwrap();
+        assert!(diagnose(warnings).is_none());
+        let text = format!(
+            "{}\n---- Minecraft Crash Report ----{crash}",
+            warnings
+                .lines()
+                .filter(|line| !line.contains("modernui"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        assert_eq!(
+            diagnose(&text).unwrap().title,
+            "A mod is for a different version"
+        );
+    }
+
+    #[test]
+    fn suggested_dependency_can_use_a_package_alias() {
+        for (warning, class, name) in [
+            (
+                "any version of fabric-language-kotlin",
+                "kotlin.jvm.internal.Intrinsics",
+                "Fabric Language Kotlin",
+            ),
+            (
+                "'Cloth Config' (cloth-config)",
+                "me.shedaniel.clothconfig.api.ConfigBuilder",
+                "Cloth Config",
+            ),
+        ] {
+            let log = format!(
+                "- Mod 'Other Mod' (other_mod) 1.0 suggests {warning}, which is missing!\n\
+                 - Mod 'Example' (example) 1.0 suggests {warning}, which is missing!\n\
+                 ---- Minecraft Crash Report ----\n\
+                 java.lang.RuntimeException: Could not execute entrypoint stage 'client' due to errors, provided by 'example' at 'example.Client'!\n\
+                 Caused by: java.lang.ClassNotFoundException: {class}"
+            );
+            assert_eq!(
+                diagnose(&log).unwrap().title,
+                format!("Example needs {name}")
+            );
+        }
     }
 
     #[test]
@@ -2173,6 +3848,31 @@ USERNAME=someone
     }
 
     #[test]
+    fn the_last_maximum_heap_flag_wins_in_a_java_summary() {
+        let java = "Java javaw.exe, flags: -Xms512M -Xmx6144M -Xmx3584M -XX:+UseG1GC | classpath: client.jar";
+        assert_eq!(max_memory_mb(java), Some(3584));
+        assert_eq!(max_memory_mb("-Xmx6144M -Xmx4g"), Some(4096));
+        assert_eq!(max_memory_mb("-Xmx6144M -Xmxbad"), None);
+    }
+
+    #[test]
+    fn heap_exhaustion_explains_custom_flags_in_old_and_new_java_summaries() {
+        let error = "java.lang.OutOfMemoryError: Java heap space";
+        let summaries = [
+            "Java javaw.exe, flags: -Xms512M -Xmx6144M -Xmx3584M -XX:+UseG1GC".to_owned(),
+            format!("Java javaw.exe{CUSTOM_MAX_HEAP_SOURCE}, flags: -Xms512M -Xmx3584M"),
+        ];
+        for summary in summaries {
+            let diagnosis = diagnose(&format!("{error}\n{summary}")).unwrap();
+            assert_eq!(diagnosis.title, "Minecraft ran out of memory");
+            assert!(diagnosis.detail.contains("heap to 3584 MB"));
+            assert!(diagnosis.detail.contains("Remove the custom -Xmx"));
+        }
+        let default = diagnose(&format!("{error}\nJava javaw.exe, flags: -Xmx3584M")).unwrap();
+        assert!(default.detail.contains("Settings → Memory"));
+    }
+
+    #[test]
     fn a_big_pack_with_little_memory_gets_a_warning_not_a_diagnosis() {
         assert_eq!(
             max_memory_mb("Java x, flags: -Xms512M -Xmx1918M -XX:+UseG1GC"),
@@ -2285,6 +3985,48 @@ USERNAME=someone
         let d = diagnose("java.lang.NoClassDefFoundError: com/example/coolmod/Thing").unwrap();
         assert_eq!(d.title, "A mod is for a different version");
         assert!(!d.repair);
+    }
+
+    #[test]
+    fn crash_378_names_entityculling_and_the_missing_fabric_api_module() {
+        let exception = r"[main/ERROR]: Minecraft has crashed!
+net.fabricmc.loader.impl.FormattedException: java.lang.RuntimeException: Could not execute entrypoint stage 'client' due to errors, provided by 'entityculling' at 'dev.tr7zw.entityculling.EntityCullingMod'!
+Caused by: java.lang.NoClassDefFoundError: net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents
+    at dev.tr7zw.entityculling.EntityCullingMod.initModloader(EntityCullingMod.java:23)
+Caused by: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents";
+        let log = format!(
+            r#"launching Minecraft --gameDir "C:\Arctic Launcher\profiles\default\instances\vanilla\minecraft"
+[main/INFO]: Loading Minecraft 1.16 with Fabric Loader 0.20.1
+[main/INFO]: Loading 8 mods:
+    - entityculling 1.5.2
+    - fabric 0.13.1+build.370-1.16
+       |-- fabric-api-base 0.1.3+12a8474c7c
+       \-- fabric-key-binding-api-v1 1.0.0+e16a97747c
+    - fabricloader 0.20.1
+       \-- mixinextras 0.5.5
+    - java 8
+    - minecraft 1.16
+{exception}"#
+        );
+        let (d, matched) = diagnose_match(&log, None).unwrap();
+        assert_eq!(d.title, "EntityCulling needs Fabric API's lifecycle events");
+        assert_eq!(d.mods, ["entityculling"]);
+        assert!(d.detail.contains("fabric-lifecycle-events-v1"));
+        assert!(d.detail.contains("missing or too old"));
+        assert!(d.detail.contains("Arctic installed EntityCulling"));
+        assert!(matched.contains("NoClassDefFoundError"));
+
+        let other_instance = exception.replace(
+            "java.lang.NoClassDefFoundError: net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents",
+            "java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents",
+        );
+        let d = diagnose(&other_instance).unwrap();
+        assert_eq!(d.title, "EntityCulling needs Fabric API's lifecycle events");
+        assert!(!d.detail.contains("Arctic installed"));
+        assert!(
+            diagnose("[main/WARN]: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents")
+                .is_none()
+        );
     }
 
     #[test]
@@ -2554,7 +4296,10 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
             	 - Mod 'SpruceUI' (spruceui) 9.1.0+1.21.11 requires any version between 1.21.11- (inclusive) and 1.22- (exclusive) of 'Minecraft' (minecraft), but only the wrong version is present: 26.3!
             	 - Mod 'Pride Lib' (pride) 1.5.1+1.21.11 requires any version between 1.21.11- (inclusive) and 1.22- (exclusive) of 'Minecraft' (minecraft), but only the wrong version is present: 26.3!";
         let d = diagnose(log).unwrap();
-        assert_eq!(d.title, "2 mod(s) are for another Minecraft version");
+        assert_eq!(
+            d.title,
+            "2 mods are for a different Minecraft version: SpruceUI, Pride Lib"
+        );
         assert_eq!(d.mods, ["SpruceUI", "Pride Lib"]);
         assert!(d.detail.contains("26.3") && d.detail.contains("Switch them off"));
         assert_eq!(
@@ -2564,6 +4309,38 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
                 "Pride Lib".into()
             ]))
         );
+    }
+
+    #[test]
+    fn report_377_names_stale_vanilla_performance_mods_before_missing_libraries() {
+        let log = "──── Launching Vanilla (1.8.9) as Player ────
+[main/INFO] Loading Minecraft 1.8.9 with Fabric Loader 0.20.1
+[main/ERROR] Incompatible mods found!
+ - Mod 'EntityCulling' (entityculling) 1.8.2 requires any version of fabric-api, which is missing!
+ - Mod 'Fzzy Config' (fzzy_config) 0.7.7+1.21 requires any version of fabric-language-kotlin, which is missing!
+ - Mod 'Particle Core' (particle_core) 0.3.3+1.21 requires version 1.21 or later of 'Minecraft' (minecraft), but only the wrong version is present: 1.8.9!
+ - Mod 'TRender' (trender) 1.0.5 requires any 1.21.x version of 'Minecraft' (minecraft), but only the wrong version is present: 1.8.9!
+ - Mod 'Sodium' (sodium) 0.6.13+mc1.21.1 requires version 1.21.1 of 'Minecraft' (minecraft), but only the wrong version is present: 1.8.9!";
+        let (d, matched) = diagnose_match(&format!("{log}\n{log}"), None).unwrap();
+        assert_eq!(
+            d.title,
+            "3 mods are for a different Minecraft version: Particle Core, TRender, Sodium"
+        );
+        assert_eq!(d.mods, ["Particle Core", "TRender", "Sodium"]);
+        assert!(d.detail.contains("Arctic's Performance mods"));
+        assert!(d.detail.contains("Vanilla instance"));
+        assert!(matched.contains("(minecraft)"));
+        assert!(!d.detail.contains("fabric-api"));
+        let report = Report::build(
+            "1.8.9",
+            "",
+            "A mod needs fabric-api",
+            &[log],
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(report.title, d.title);
     }
 
     #[test]
@@ -2704,7 +4481,7 @@ Stacktrace:
     #[test]
     fn report_323_names_the_arctic_redirect_clash() {
         for text in [REPORT_323.to_owned(), REPORT_323.replace('\n', "\r\n")] {
-            let (d, matched) = diagnose_match(&text).unwrap();
+            let (d, matched) = diagnose_match(&text, None).unwrap();
             assert_eq!(d.title, "Arctic Client conflict with mod_id");
             assert_eq!(d.mods, ["mod_id", "arctic"]);
             assert!(d.detail.contains("renderSpace"));
@@ -2752,7 +4529,7 @@ Stacktrace:
     fn unreadable_refmap_is_never_the_matched_mixin_evidence() {
         // Without an explicit failure owner, the generic config rule matches first.
         let text = REPORT_323.replace(" from mod mod_id failed", " failed");
-        let (d, matched) = diagnose_match(&text).unwrap();
+        let (d, matched) = diagnose_match(&text, None).unwrap();
         assert_eq!(d.title, "Arctic Client conflict with mod_id");
         assert!(matched.contains("InjectionError"));
         assert!(!matched.contains("could not be read"));
@@ -2760,7 +4537,7 @@ Stacktrace:
         assert!(diagnose(warning).is_none());
         let text =
             format!("{warning}\nInvalidMixinException: invalid broken.mixins.json:BrokenMixin");
-        let (d, matched) = diagnose_match(&text).unwrap();
+        let (d, matched) = diagnose_match(&text, None).unwrap();
         assert_eq!(d.mods, ["broken"]);
         assert!(matched.starts_with("InvalidMixinException:"));
     }
@@ -2871,7 +4648,6 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
         for failure in [
             "InvalidInjectionException: target not found superbaddon.mixins.json:CustomExplosionMixin",
             "InvalidMixinException: invalid superbaddon.mixins.json:CustomExplosionMixin",
-            "@Mixin target net.minecraft.Foo was not found superbaddon.mixins.json:FooMixin",
         ] {
             assert_eq!(diagnose(failure).unwrap().mods, ["superbaddon"]);
         }
@@ -2879,6 +4655,48 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
         assert!(
             diagnose("Mixin [ordinary log message\ncontinued] from mod necronomicon").is_none()
         );
+    }
+
+    #[test]
+    fn mixin_warnings_need_evidence_of_a_failure() {
+        for message in [
+            "@Mixin target net.minecraft.Foo was not found optional.mixins.json:FooMixin",
+            "Mixin apply for mod optional failed optional.mixins.json:FooMixin",
+            "Mixin [optional.mixins.json:FooMixin] from mod optional",
+            "MixinTransformerError: optional.mixins.json:FooMixin caused by ClassNotFoundException",
+            "InjectionError: Critical injection failure in optional.mixins.json:FooMixin from mod optional",
+        ] {
+            for prefix in ["[16:53:41] [main/WARN]:", "[main/WARN]", "[WARN]"] {
+                let log = format!("{prefix} {message}");
+                assert!(diagnose(&log).is_none(), "{log}");
+                assert!(crate::crash_conflicts::mixin_failure_line(&log).is_none());
+            }
+        }
+        let log = "[main/WARN] @Mixin target net.minecraft.Foo was not found optional.mixins.json:FooMixin\n\
+                   Caused by: org.spongepowered.asm.mixin.transformer.throwables.InvalidMixinException: @Mixin target net.minecraft.Foo was not found required.mixins.json:FooMixin";
+        assert_eq!(diagnose(log).unwrap().mods, ["required"]);
+    }
+
+    #[test]
+    fn optional_mixin_warnings_never_supply_mixin_failure_evidence() {
+        for warning in [
+            "@Mixin target net.minecraft.Foo was not found optional.mixins.json:FooMixin",
+            "@Mixin target example.InvalidMixinException was not found optional.mixins.json:FooMixin",
+            "[main/WARN] InvalidMixinException: target not found optional.mixins.json:FooMixin",
+            "[main/WARN] Mixin [optional.mixins.json:FooMixin] from mod optional failed",
+            "[main/WARN] Mixin apply for mod optional failed optional.mixins.json:FooMixin",
+            "[main/WARN] Mixin [optional.mixins.json:FooMixin] from mod optional skipped",
+        ] {
+            assert!(diagnose(warning).is_none(), "{warning}");
+            let mods = tempfile::tempdir().unwrap();
+            assert!(
+                crate::crash_conflicts::diagnose_exit_in(warning, 1, mods.path()).is_none(),
+                "{warning}"
+            );
+            let failure = "InvalidMixinException: target not found broken.mixins.json:BrokenMixin";
+            let (_, matched) = diagnose_match(&format!("{warning}\n{failure}"), None).unwrap();
+            assert_eq!(matched, failure);
+        }
     }
 
     #[test]
@@ -3099,6 +4917,113 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
     }
 
     #[test]
+    fn early_join_exception_survives_the_tail_once_and_report_fits() {
+        let npe = "java.lang.NullPointerException: Cannot invoke \"Object.x()\"\n\tat net.minecraft.class_634.method_11109(class_634.java:1)\n\tat net.minecraft.class_634.method_11154(class_634.java:2)";
+        let mut log = vec![
+            "[12:00:01] [main/INFO]: Starting".to_owned(),
+            "[12:00:02] [Render thread/ERROR]: Error on GameJoin".to_owned(),
+            "java.lang.NullPointerException: join".to_owned(),
+            "\tat com.example.mixin.JoinMixin.onJoin(JoinMixin.java:42)".to_owned(),
+            "\tat net.minecraft.class_634.method_11120(class_634.java:9)".to_owned(),
+            "Caused by: java.lang.IllegalStateException: boom".to_owned(),
+            "\tat com.example.Deep.run(Deep.java:3)".to_owned(),
+        ];
+        for i in 0..400 {
+            log.push(format!(
+                "[12:01:{:02}] [Render thread/INFO]: <Bob> {}",
+                i % 60,
+                "spam ".repeat(40)
+            ));
+            log.push("[12:01:00] [Render thread/ERROR]: Error executing task on Client".to_owned());
+            log.extend(npe.lines().map(str::to_owned));
+        }
+        let lines: Vec<&str> = log.iter().map(String::as_str).collect();
+        let all = lines.join("\n");
+        assert!(all.len() > REPORT_LOG_BYTES * 4);
+        let report = Report::build("1.16.5", "fabric", "", &lines, &[], None, None);
+        let section = first_exceptions(&all);
+        assert!(report.log.contains(&section));
+        assert!(section.contains("JoinMixin.onJoin(JoinMixin.java:42)"));
+        assert!(section.contains("Caused by: java.lang.IllegalStateException"));
+        assert_eq!(section.matches("Error executing task on Client").count(), 1);
+        assert!(report.log.len() <= 48 * 1024);
+        assert_eq!(
+            first_exceptions(&all).matches("Error on GameJoin").count(),
+            1
+        );
+    }
+
+    #[test]
+    fn oversized_crash_stacks_keep_later_causes_and_worker_frames() {
+        let long_stack =
+            "\tat knot//net.minecraft.class_638.method_2941(class_638.java:364)\n".repeat(1200);
+        let written = include_str!("../tests/fixtures/threading-detector-with-worker.log")
+            .replace("Caused by:", &format!("{long_stack}Caused by:"))
+            .replace(
+                "Particle worker #1:",
+                &format!("{long_stack}Particle worker #1:"),
+            );
+        let report = Report::build("1.20.1", "fabric", "", &[], &[], Some(&written), None);
+        assert!(report.log.len() <= REPORT_BYTES);
+        assert!(report.log.contains("[crash report section truncated]"));
+        assert!(report.log.contains("Example inner cause"));
+        assert!(report.log.contains("-- Head --\nThread: Render thread"));
+        assert!(report.log.contains("-- Thread dumps --"));
+        assert!(report.log.contains("Particle worker #1:"));
+        assert!(
+            report
+                .log
+                .contains("BlockSampler.sample(BlockSampler.java:17)")
+        );
+        assert!(report.log.contains("Mixins in Stacktrace:"));
+        assert!(report.log.contains("Suspected Mods:"));
+    }
+
+    #[test]
+    fn oversized_thread_dump_keeps_inventory_and_first_error_in_the_upload() {
+        let stack =
+            "\tat knot//net.minecraft.class_638.method_2941(class_638.java:364)\n".repeat(45);
+        let threads: String = (0..20).map(|i| format!("Worker #{i}:\n{stack}")).collect();
+        let written = include_str!("../tests/fixtures/threading-detector-with-worker.log").replace(
+            "Particle worker #1:",
+            &format!("{threads}Particle worker #1:"),
+        );
+        let registry = "[Render thread/WARN] Registry minecraft:item ID mismatch";
+        let log = [
+            registry,
+            "[Arctic mixin] example.mixins.json:ExampleMixin",
+            "[Render thread/INFO]: Latest game output",
+        ];
+        let report = Report::build("1.20.1", "fabric", "", &log, &[], Some(&written), None);
+
+        assert!(report.log.len() <= REPORT_BYTES);
+        assert!(report.log.contains(
+            "---- first error ----\nCaused by: java.lang.IllegalStateException: Example inner cause"
+        ));
+        assert!(report.log.contains(
+            "---- full mod list (id version) ----\nrender_hooks 1.0.0\nscheduler 3.0.0\nspark_particles 2.0.0\n"
+        ));
+        assert!(
+            report
+                .log
+                .contains(&format!("---- registry failure context ----\n{registry}"))
+        );
+        assert!(
+            report
+                .log
+                .contains("---- mixin failure context ----\nexample.mixins.json:ExampleMixin")
+        );
+        assert!(
+            report
+                .log
+                .contains("[Render thread/INFO]: Latest game output")
+        );
+        assert!(report.log.contains("-- Thread dumps --"));
+        assert!(report.log.contains("[crash report section truncated]"));
+        assert_eq!(diagnose(&report.log).unwrap().mods, ["spark_particles"]);
+    }
+
+    #[test]
     fn a_report_fits_what_the_server_keeps() {
         let line = "x".repeat(400);
         let lines: Vec<&str> = (0..500).map(|_| line.as_str()).collect();
@@ -3121,6 +5046,71 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
 #[cfg(test)]
 mod native_tests {
     use super::*;
+
+    #[test]
+    fn native_library_ownership_uses_the_path_or_the_first_java_frame() {
+        let fixture = include_str!("../tests/fixtures/crash-441-native-mod.log");
+        let no_package_match = fixture.replace("io.homo.superresolution.", "example.other.");
+        let no_path = fixture.replace("config/super_resolution/", "native/");
+        let jar_path = no_package_match.replace(
+            "config/super_resolution/",
+            r"mods\super_resolution-0.9.2-alpha.2+opengl.jar!\",
+        );
+        for text in [&no_package_match, &no_path, &jar_path] {
+            assert_eq!(diagnose(text).unwrap().mods, ["super_resolution"]);
+        }
+
+        let windows = no_path
+            .replace("SIGILL (0x4)", "EXCEPTION_ILLEGAL_INSTRUCTION (0xc000001d)")
+            .replace(
+                "libSuperResolution+linux64+release.so",
+                "superresolution.dll",
+            );
+        let diagnosis = diagnose(&windows).unwrap();
+        assert!(diagnosis.title.contains("superresolution.dll"));
+        assert!(diagnosis.detail.contains("doesn't support"));
+
+        let segfault = windows.replace(
+            "EXCEPTION_ILLEGAL_INSTRUCTION",
+            "EXCEPTION_ACCESS_VIOLATION",
+        );
+        assert!(
+            diagnose(&segfault)
+                .unwrap()
+                .detail
+                .contains("EXCEPTION_ACCESS_VIOLATION")
+        );
+
+        let jvm = fixture.replace("libSuperResolution+linux64+release.so", "libjvm.so");
+        assert_eq!(diagnose(&jvm).unwrap().title, "The Java runtime crashed");
+    }
+
+    #[test]
+    fn fatal_java_error_uses_the_crashing_thread_or_compile_task() {
+        let fatal = format!("{JAVA_FATAL_HEADER}\n#\n#  EXCEPTION_ACCESS_VIOLATION (0xc0000005)");
+        for clue in [
+            "Current thread (0x1): JavaThread \"C1 CompilerThread0\"",
+            "Current thread (0x1): JavaThread \"C2 CompilerThread5\"",
+            "Current CompileTask:\nC2: 123 4 example.Class::method (10 bytes)",
+        ] {
+            let text = format!("{fatal}\n\n{clue}");
+            let diagnosis = diagnose(&text).unwrap();
+            assert_eq!(diagnosis.title, "Java's JIT compiler crashed");
+            assert!(diagnosis.detail.contains("runtime Arctic recommends"));
+            assert!(diagnosis.detail.contains("test your RAM"));
+            if clue.starts_with("Current CompileTask:") {
+                assert!(diagnosis.detail.contains("example.Class::method"));
+            }
+        }
+        let text = format!(
+            "[main/WARN]: Mixin apply for mod optional failed optional.mixins.json:FooMixin\n{fatal}\nCurrent thread (0x1): JavaThread \"Render thread\""
+        );
+        assert_eq!(
+            diagnose(&text).unwrap().title,
+            "Minecraft crashed in native code"
+        );
+    }
+
     #[test]
     fn report_300_native_exit_outranks_resource_pack_and_logged_linkage() {
         let text = include_str!("../tests/fixtures/crash-300-failfast.log");

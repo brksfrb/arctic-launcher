@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use arctic_core::instances::Instance;
-use arctic_core::mods::{ProjectHit, SearchQuery, SortBy};
+use arctic_core::mods::{ProjectHit, ProjectType, SearchQuery, SortBy};
 use eframe::egui::{self, RichText};
 
 use super::mods_page::mod_icon;
@@ -15,9 +15,10 @@ use crate::{t, tf};
 const PAGE_SIZE: usize = 20;
 /// Seconds after the last keystroke before searching.
 const SEARCH_DELAY: f64 = 0.35;
-pub(super) const SORTS: [(SortBy, &str); 4] = [
+pub(super) const SORTS: [(SortBy, &str); 5] = [
     (SortBy::Relevance, "instances.sort_by.relevance"),
     (SortBy::Downloads, "instances.sort_by.most_downloads"),
+    (SortBy::Follows, "instances.sort_by.most_follows"),
     (SortBy::Updated, "instances.sort_by.recently_updated"),
     (SortBy::Newest, "instances.sort_by.newest"),
 ];
@@ -29,6 +30,7 @@ impl ArcticApp {
         if self.inst.search.instance.as_deref() != Some(instance.id.as_str()) {
             self.inst.search.instance = Some(instance.id.clone());
             self.inst.search.text.clear();
+            self.inst.search.selected.clear();
             self.inst.search.sort = SortBy::Downloads;
             self.run_mod_search(instance, 0);
         }
@@ -76,6 +78,7 @@ impl ArcticApp {
             .color(p.muted),
         );
         ui.add_space(8.0);
+        self.content_selection_bar(ui, ProjectType::Mod, instance);
         self.search_results(ui, instance);
     }
 
@@ -84,6 +87,7 @@ impl ArcticApp {
         search.request += 1;
         search.loading = true;
         search.more_from = offset;
+        search.more_failed = None;
         if offset == 0 {
             search.results = None;
         }
@@ -94,7 +98,8 @@ impl ArcticApp {
             sort: search.sort,
             offset,
             limit: PAGE_SIZE,
-            project_type: arctic_core::mods::ProjectType::Mod,
+            project_type: ProjectType::Mod,
+            ..SearchQuery::default()
         };
         self.tasks.mod_search(search.request, query);
     }
@@ -146,7 +151,7 @@ impl ArcticApp {
 
     /// What is being downloaded, as a bar over the whole width, right above the search field: the stage at
     /// the left, the share done at the right. Shown whatever the results below are (or aren't).
-    fn install_bar(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn install_bar(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         if self.inst.installing.is_empty() && self.inst.install_progress.is_none() {
             return;
@@ -201,6 +206,7 @@ impl ArcticApp {
     ) {
         let p = self.palette();
         crate::widgets::row(ui, |ui| {
+            super::content_install::select_content(ui, &mut self.inst.search.selected, hit);
             if ui
                 .scope(|ui| mod_icon(ui, self, hit.icon_url.as_deref()))
                 .response
@@ -264,17 +270,13 @@ impl ArcticApp {
 
 /// Sort dropdown, as tall as the search field next to it.
 pub(super) fn sort_combo(ui: &mut egui::Ui, id: &str, sort: &mut SortBy) {
-    ui.scope(|ui| {
-        ui.spacing_mut().interact_size.y = widgets::FIELD_HEIGHT;
-        ui.spacing_mut().button_padding.y = 9.0;
-        egui::ComboBox::from_id_salt(id)
-            .width(170.0)
-            .selected_text(sort_label(*sort))
-            .show_ui(ui, |ui| {
-                for (value, name) in SORTS {
-                    ui.selectable_value(sort, value, t!(name));
-                }
-            });
+    let combo = egui::ComboBox::from_id_salt(id)
+        .width(170.0)
+        .selected_text(sort_label(*sort));
+    widgets::field_combo(ui, combo, |ui| {
+        for (value, name) in SORTS {
+            ui.selectable_value(sort, value, t!(name));
+        }
     });
 }
 

@@ -11,6 +11,7 @@ const KEY_PREFIX: &str = "key_";
 const KEYBOARD: &str = "key.keyboard.";
 const MOUSE: &str = "key.mouse.";
 const UNKNOWN: &str = "key.keyboard.unknown";
+type Values = BTreeMap<String, String>;
 /// Minecraft's code for mouse button n (LWJGL 2 games).
 const MOUSE_OFFSET: i32 = -100;
 
@@ -146,12 +147,26 @@ pub fn names_keys(options: &BTreeMap<String, String>) -> bool {
 
 /// The settings as they go into an `options.txt` for that game: keys in the
 /// form that file declares (see [`KEY_NAMES_SINCE`]), whatever the game.
-pub fn for_file(
-    values: &BTreeMap<String, String>,
-    game: Option<&str>,
-    file_names_keys: bool,
-) -> BTreeMap<String, String> {
-    for_codes(values, uses_key_codes(game) || !file_names_keys)
+pub fn for_file(values: &Values, game: Option<&str>, file_names_keys: bool) -> (Values, Values) {
+    let legacy = uses_key_codes(game);
+    let outgoing = for_codes(values, legacy || !file_names_keys);
+    let projected = outgoing
+        .iter()
+        .filter(|(key, value)| {
+            key.starts_with(KEY_PREFIX) && to_name(value) != to_name(&values[*key])
+        })
+        .map(|(key, value)| {
+            (
+                key.clone(),
+                if legacy {
+                    value.clone()
+                } else {
+                    to_name(value)
+                },
+            )
+        })
+        .collect();
+    (outgoing, projected)
 }
 
 /// The settings as that game version stores them (for a file that already names keys).
@@ -263,14 +278,20 @@ mod tests {
         let shared: BTreeMap<String, String> =
             [("key_key.jump".to_owned(), "key.keyboard.space".to_owned())].into();
         // Last written by 1.8.9 (no version) or new: codes, which 26.x converts itself.
-        assert_eq!(for_file(&shared, Some("26.2"), false)["key_key.jump"], "57");
+        assert_eq!(
+            for_file(&shared, Some("26.2"), false).0["key_key.jump"],
+            "57"
+        );
         // Written by a newer game: names.
         assert_eq!(
-            for_file(&shared, Some("26.2"), true)["key_key.jump"],
+            for_file(&shared, Some("26.2"), true).0["key_key.jump"],
             "key.keyboard.space"
         );
         // An old game always gets codes.
-        assert_eq!(for_file(&shared, Some("1.8.9"), true)["key_key.jump"], "57");
+        assert_eq!(
+            for_file(&shared, Some("1.8.9"), true).0["key_key.jump"],
+            "57"
+        );
         let modern: BTreeMap<String, String> = [("version".to_owned(), "4903".to_owned())].into();
         assert!(names_keys(&modern));
         let old: BTreeMap<String, String> = [("version".to_owned(), "1343".to_owned())].into();

@@ -193,7 +193,28 @@ final class ModCatalog {
 						}
 					});
 			m.widget = w;
-			out.add(m);
+			Mod feature = null;
+			for (Mod existing : out) {
+				// Merge semantic pairs by stable ids so the card set is the same in every locale.
+				if (("scoreboard".equals(w.id) && "scoreboard".equals(existing.id))
+						|| ("held".equals(w.id) && "helditem".equals(existing.id) && p.hasScreenHooks())) feature = existing;
+			}
+			if (feature == null) {
+				out.add(m);
+			} else {
+				final Mod.Settings appearance = feature.settings;
+				final Mod.Settings hudSettings = m.settings;
+				feature.widget = w;
+				feature.hudControls = m;
+				feature.keywords += " " + m.name + " " + m.description + " " + m.keywords;
+				feature.settings((host, f) -> {
+					if (appearance != null) appearance.build(host, f);
+					f.section(w.name);
+					f.toggle(Lang.t("mods.show"), w.description, () -> slot.enabled, on -> slot.enabled = on);
+					f.key(Lang.t("mods.toggle_key"), w.description, Form.key(() -> ToggleKeys.get(m), key -> ToggleKeys.set(m, key)));
+					hudSettings.build(host, f);
+				});
+			}
 		}
 		for (Mod m : out) {
 			Category moved = REGROUP.get(m.id);
@@ -215,6 +236,16 @@ final class ModCatalog {
 			}
 		}
 		return out;
+	}
+
+	/** Includes the original HUD toggle ids without adding duplicate visible cards. */
+	static List<Mod> withToggleAliases() {
+		List<Mod> cards = all();
+		List<Mod> controls = new ArrayList<Mod>(cards);
+		for (Mod card : cards) {
+			if (card.hudControls != null) controls.add(card.hudControls);
+		}
+		return controls;
 	}
 
 	private static void gameplay(List<Mod> out, final ClientConfig c, Platform p) {
@@ -332,6 +363,9 @@ final class ModCatalog {
 			out.add(new Mod("lanauto", Lang.t("mods.auto_lan"), Lang.t("mods.while_you_host_in_arctic_launchers_play"), "friends", Category.SOCIAL,
 					"lan open world friends together host share p2p")
 					.toggle(() -> c.lanAuto, on -> c.lanAuto = on));
+			out.add(new Mod("offlinefriends", Lang.t("mods.let_offline_friends_join"), Lang.t("mods.friends_who_play_offline_can_join_your_play"), "friends",
+					Category.SOCIAL, "offline friends join play together invite code microsoft login")
+					.toggle(() -> c.allowOfflineFriends, on -> c.allowOfflineFriends = on));
 		}
 		out.add(new Mod("rangeindicator", Lang.t("mods.attack_range_indicator"), Lang.t("mods.brackets_around_the_crosshair_while_a_player"), "reach",
 				Category.GAMEPLAY, "reach range crosshair hit attack distance pvp")
@@ -435,6 +469,12 @@ final class ModCatalog {
 								() -> (c.particleOff & bit) == 0, on -> c.particleOff = on ? c.particleOff & ~bit : c.particleOff | bit);
 					}
 				}));
+		out.add(new Mod("hideownpotionparticles", Lang.t("mods.hide_my_potion_particles"), Lang.t("mods.hide_my_potion_particles_description"), "particles",
+				Category.VISUAL, "self local player potion effect swirl beacon particles")
+				.toggle(() -> c.hideOwnPotionParticles, on -> c.hideOwnPotionParticles = on));
+		out.add(new Mod("hideotherplayerspotionparticles", Lang.t("mods.hide_other_players_potion_particles"), Lang.t("mods.hide_other_players_potion_particles_description"), "particles",
+				Category.VISUAL, "remote other players potion effect swirl beacon particles")
+				.toggle(() -> c.hideOtherPlayersPotionParticles, on -> c.hideOtherPlayersPotionParticles = on));
 		out.add(new Mod("helditem", Lang.t("mods.held_item"), Lang.t("mods.move_and_resize_your_hands_and_the_item_you"), "helditem",
 				Category.VISUAL, "hand item position size view model offset")
 				.toggle(() -> c.heldItem, on -> c.heldItem = on)

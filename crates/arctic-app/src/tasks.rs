@@ -23,6 +23,17 @@ use arctic_core::update::{self, UpdateChannel, UpdateInfo};
 use arctic_core::versions::{VersionEntry, VersionManifest};
 use arctic_core::{ProgressInfo, Result};
 use eframe::egui;
+/// Translate compatibility failures from the exact-version install paths.
+pub(crate) fn content_install_error(error: arctic_core::Error) -> String {
+    match error {
+        arctic_core::Error::IncompatibleContentVersion => {
+            t!("instances.hub.incompatible_blocked").into()
+        }
+        arctic_core::Error::DataPackWorldMissing => t!("instances.hub.world_missing").into(),
+        other => other.to_string(),
+    }
+}
+
 /// Owned copy of a core `ProgressInfo`, sendable to the UI thread.
 #[derive(Debug, Clone, Default)]
 pub struct ProgressSnapshot {
@@ -98,15 +109,24 @@ pub enum Event {
     LoaderGames(LoaderKind, Outcome<Vec<String>>),
     /// The versions of a modpack project (project id, result).
     PackVersions(String, Outcome<Vec<mods::modpack::PackVersion>>),
+    /// What a modpack version contains (version id, result).
+    PackPreview(
+        String,
+        Outcome<std::sync::Arc<mods::pack_preview::PackPreview>>,
+    ),
     /// Loader versions for (loader, Minecraft version).
     LoaderVersions(LoaderKind, String, Outcome<Vec<LoaderVersion>>),
     /// Mod search results for request id.
     ModSearch(u64, Outcome<SearchPage>),
+    /// The filter lists of the discovery page.
+    HubTags(Outcome<mods::discovery::Tags>),
     /// Installed mod scan (instance, request, changed snapshot).
     ModsScanned(String, u64, Outcome<Option<crate::mod_tasks::ModSnapshot>>),
     ModProgress(ProgressSnapshot),
     /// (instance id, project id, result)
     ModInstalled(String, String, Outcome<Vec<InstalledMod>>),
+    ContentProgress(crate::content_tasks::ContentProgress),
+    ContentInstalled(crate::content_tasks::ContentReport),
     /// What an instance's mods become on another version: (instance id, version, result).
     /// The newer builds of an instance's mods (from `mod_updates_check`).
     ModUpdatesChecked(String, Outcome<Vec<arctic_core::mods::ModUpdate>>),
@@ -129,15 +149,19 @@ pub enum Event {
     LoaderSwitched(String, LoaderKind, Outcome<Retargeted>),
     /// Icon bytes for a URL.
     ModIcon(String, Outcome<Vec<u8>>),
-    ModGalleryImage(String, Outcome<Vec<u8>>),
+    ModGalleryImage(String, Outcome<Arc<[u8]>>),
+    /// Fallback gallery URL for a Discover project with no featured search image.
+    HubBanner(String, Option<String>),
     /// Skin and capes of an account (account id, result).
     SkinAccount(String, Outcome<crate::skin_tasks::AccountSkin>),
     /// Another player's skin by name.
     PlayerSkin(String, Outcome<(Vec<u8>, arctic_core::skins::Variant)>),
-    /// The Arctic look of an account (account id, result).
-    ArcticLook(String, Outcome<crate::skin_tasks::ArcticState>),
+    /// The Arctic look and catalog (account id, result).
+    ArcticLook(String, Outcome<crate::skin_tasks::LoadedArcticState>),
+    /// The result of publishing a change to an account's look.
+    ArcticLookSaved(String, Outcome<crate::skin_tasks::ArcticState>),
     /// Public capes and cosmetics, available without an account.
-    ArcticCatalog(Outcome<crate::skin_tasks::ArcticState>),
+    ArcticCatalog(Outcome<crate::skin_tasks::LoadedArcticState>),
     /// A picked cape image, or `None` if cancelled.
     CapeFile(Outcome<Option<Vec<u8>>>),
     /// The OptiFine cape of a player name (a Minecraft-layout PNG), `None` when there is none.
@@ -229,6 +253,7 @@ pub struct Tasks {
     dirs: DataDirs,
     /// The in-game account switcher's bridge, passed to launched games.
     bridge: Option<Arc<arctic_core::bridge::BridgeInfo>>,
+    content_lock: Arc<Mutex<()>>,
 }
 
 /// How a game starts beyond its instance: which copy it is, and where it
@@ -251,6 +276,7 @@ impl Tasks {
             ctx,
             dirs,
             bridge: None,
+            content_lock: Arc::default(),
         }
     }
 
@@ -261,12 +287,18 @@ impl Tasks {
             ctx: self.ctx.clone(),
             dirs,
             bridge: self.bridge.clone(),
+            content_lock: Arc::clone(&self.content_lock),
         }
     }
 
     pub fn with_bridge(mut self, bridge: Option<Arc<arctic_core::bridge::BridgeInfo>>) -> Self {
         self.bridge = bridge;
         self
+    }
+
+    /// Installs that share a mod index or pack settings must not race.
+    pub(crate) fn content_lock(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.content_lock.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub(crate) fn dirs(&self) -> &DataDirs {
@@ -374,8 +406,15 @@ impl Tasks {
         settings: Settings,
         start: StartAt,
     ) {
+        let play_started = std::time::Instant::now();
         self.run(move |t| {
             let result = t.launch_blocking(id, &version, &instance, account, &settings, start);
+            if result.is_ok() {
+                log::info!(
+                    "[startup] Play to Java process: {} ms",
+                    play_started.elapsed().as_millis()
+                );
+            }
             let result = result.map(|(game, log, java)| (game, log, version.id.clone(), java));
             // The toast shows this string; it has to be the whole cause chain, not just Display.
             t.send(Event::Launched(id, result.map_err(|e| e.chain())));
@@ -391,6 +430,8 @@ impl Tasks {
         settings: &Settings,
         start: StartAt,
     ) -> Result<(GameHandle, PathBuf, String)> {
+        // Launches can share installer caches, and a new copy snapshots the instance's mods.
+        let _content = self.content_lock();
         let tracker = Mutex::new(LaunchProgress::new(LaunchSteps::from_instance(instance)));
         let progress = |p: ProgressInfo| {
             let percent = tracker
@@ -420,9 +461,11 @@ impl Tasks {
             copy: start.copy,
             quick_play: start.quick_play,
         };
-        let plan = launch::prepare(&req, &progress)?;
+        let prepared = launch::prepare_watched(&req, &progress)?;
+        let log_file = prepared.plan.log_file.clone();
+        let java = prepared.plan.java_summary();
         let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
-        let game = launch::spawn(&plan, move |event| {
+        let game = prepared.spawn(move |event| {
             let _ = tx.send(Event::Game(id, event));
             ctx.request_repaint();
         })?;
@@ -439,7 +482,7 @@ impl Tasks {
                 ..ProgressSnapshot::default()
             },
         ));
-        Ok((game, plan.log_file.clone(), plan.java_summary()))
+        Ok((game, log_file, java))
     }
 
     pub fn login_device_code(&self, attempt: LoginAttempt, cancel: Arc<AtomicBool>) {
@@ -490,6 +533,14 @@ impl Tasks {
         });
     }
 
+    /// Categories, game versions and loaders for the discovery filters.
+    pub fn hub_tags(&self) {
+        self.run(move |t| {
+            let result = mods::discovery::tags().map_err(|e| e.to_string());
+            t.send(Event::HubTags(result));
+        });
+    }
+
     pub fn mod_search(&self, request: u64, query: SearchQuery) {
         self.run(move |t| {
             let result = mods::search(&query).map_err(|e| e.to_string());
@@ -527,6 +578,16 @@ impl Tasks {
         self.run(move |t| {
             let result = mods::modpack::pack_versions(&project_id).map_err(|e| e.to_string());
             t.send(Event::PackVersions(project_id, result));
+        });
+    }
+
+    /// Read what a modpack version contains, without installing it.
+    pub fn pack_preview(&self, version_id: String) {
+        self.run(move |t| {
+            let result = mods::pack_preview::preview(&t.dirs, &version_id)
+                .map(std::sync::Arc::new)
+                .map_err(|e| e.to_string());
+            t.send(Event::PackPreview(version_id, result));
         });
     }
 
@@ -579,6 +640,7 @@ impl Tasks {
     /// Install the newest builds of `projects` (each replacing the old one).
     pub fn mod_updates_apply(&self, instance: Instance, projects: Vec<String>) {
         self.run(move |t| {
+            let _guard = t.content_lock();
             let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
             let result = match instance.loader.kind() {
                 Some(loader) => {
@@ -632,6 +694,7 @@ impl Tasks {
         checks: Vec<arctic_core::mods::retarget::ModCheck>,
     ) {
         self.run(move |t| {
+            let _guard = t.content_lock();
             let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
             let result = (|| -> Outcome<Retargeted> {
                 let loader = instance
@@ -685,6 +748,7 @@ impl Tasks {
         checks: Vec<arctic_core::mods::retarget::ModCheck>,
     ) {
         self.run(move |t| {
+            let _guard = t.content_lock();
             let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
             let result = (|| -> Outcome<Retargeted> {
                 let game = instance.version.clone().unwrap_or_default();
@@ -714,15 +778,35 @@ impl Tasks {
     /// Install a mod (and what it needs); `replacing` (an older copy's file) is switched off
     /// once it's in.
     pub fn mod_install(&self, instance: Instance, project_id: String, replacing: Option<String>) {
+        self.mod_install_selected(instance, project_id, replacing, None);
+    }
+
+    pub fn mod_install_version(&self, instance: Instance, project_id: String, version_id: String) {
+        self.mod_install_selected(instance, project_id, None, Some(version_id));
+    }
+
+    fn mod_install_selected(
+        &self,
+        instance: Instance,
+        project_id: String,
+        replacing: Option<String>,
+        version_id: Option<String>,
+    ) {
         self.run(move |t| {
             let progress = |p: ProgressInfo| t.send(Event::ModProgress(ProgressSnapshot::from(p)));
+            let _guard = t.content_lock();
             let game = instance.version.clone().unwrap_or_default();
             let result = match instance.loader.kind() {
                 Some(loader) => {
                     let dir = t.dirs.instance_dir(&instance.id);
                     let mods_dir = instance.game_dir(&t.dirs).join("mods");
-                    let result = mods::install(
-                        &project_id,
+                    let install = if version_id.is_some() {
+                        mods::install_version
+                    } else {
+                        mods::install
+                    };
+                    let result = install(
+                        version_id.as_deref().unwrap_or(&project_id),
                         &game,
                         loader,
                         &mods_dir,
@@ -736,7 +820,7 @@ impl Tasks {
                     {
                         log::warn!("could not turn off {old}: {e}");
                     }
-                    result.map_err(|e| e.to_string())
+                    result.map_err(content_install_error)
                 }
                 None => Err(t!("tasks.vanilla_instances_cant_load_mods").to_owned()),
             };
@@ -747,8 +831,18 @@ impl Tasks {
     pub fn mod_gallery_image(&self, url: String) {
         self.run(move |t| {
             let result = mods::gallery_image(&url, &t.dirs.cache().join("gallery"))
+                .map(Arc::from)
                 .map_err(|e| e.to_string());
             t.send(Event::ModGalleryImage(url, result));
+        });
+    }
+
+    pub fn hub_banner(&self, project: String) {
+        self.run(move |t| {
+            let url = mods::project_detail(&project)
+                .ok()
+                .and_then(|detail| detail.banner_url().map(str::to_owned));
+            t.send(Event::HubBanner(project, url));
         });
     }
 

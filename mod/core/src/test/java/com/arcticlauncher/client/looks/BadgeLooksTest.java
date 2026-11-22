@@ -56,6 +56,34 @@ class BadgeLooksTest {
 	}
 
 	@Test
+	void publishedRolesAndTextMarkersAreAllowlisted() throws Exception {
+		Looks looks = new Looks(platform(), new ClientConfig(), "http://127.0.0.1:1", "fixture");
+		try {
+			for (String role : new String[] {"founder", "dev", "admin", "mod", "beta"}) {
+				Look look = looks.parseLook(new JsonParser().parse("{\"badge_role\":\"" + role + "\",\"badge_style\":2}"), 1);
+				assertEquals(role, look.badgeRole);
+				assertEquals(2, look.badgeStyle);
+				int index = Badge.roleIndex(role);
+				for (Badge.Style style : Badge.STYLES) {
+					for (boolean tab : new boolean[] {false, true}) {
+						String mark = Badge.mark(tab, style.id, role);
+						assertTrue(Badge.marked(mark));
+						assertEquals(style.id, Badge.markedStyle(mark));
+						assertEquals(role, Badge.markedRole(mark));
+						assertEquals(tab, Badge.markedTab(mark));
+						assertEquals("brksfrb2", Badge.unmark(mark + "brksfrb2"));
+						assertEquals(Badge.slot(style.id, index, tab), Badge.glyphSlot(Badge.glyph(style.id, index, tab)));
+					}
+				}
+			}
+			for (String json : new String[] {"{}", "{\"badge_role\":null}", "{\"badge_role\":\"owner\"}", "{\"badge_role\":12}"}) {
+				assertNull(looks.parseLook(new JsonParser().parse(json), 1).badgeRole);
+			}
+			assertEquals("", Badge.markedRole(Badge.mark(false, 0, "owner")));
+		} finally { close(looks); }
+	}
+
+	@Test
 	void aFailedLookupKeepsTheBadgeAlreadyShownAndRetriesSoon() throws Exception {
 		java.util.concurrent.atomic.AtomicInteger status = new java.util.concurrent.atomic.AtomicInteger(200);
 		HttpServer server = players(() -> "{\"" + Looks.compact(B) + "\":{\"badge_style\":1,\"arctic\":true}}", status::get);
@@ -144,10 +172,11 @@ class BadgeLooksTest {
 	void lookupCarriesTwoWearersChoicesAndSavingPreservesTheCurrentLook() throws Exception {
 		HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 		AtomicReference<JsonObject> written = new AtomicReference<>();
+		java.util.concurrent.atomic.AtomicInteger storedBadge = new java.util.concurrent.atomic.AtomicInteger(1);
 		java.util.concurrent.atomic.AtomicBoolean acceptsBadge = new java.util.concurrent.atomic.AtomicBoolean(true);
 		String hash = new String(new char[40]).replace('\0', 'a');
 		server.createContext("/v1/players", ex -> {
-			String reply = "{\"" + Looks.compact(A) + "\":{\"badge_style\":1,\"arctic\":true},\""
+			String reply = "{\"" + Looks.compact(A) + "\":{\"badge_style\":" + storedBadge.get() + ",\"arctic\":true},\""
 					+ Looks.compact(B) + "\":{\"badge_style\":2,\"arctic\":true}}";
 			byte[] bytes = reply.getBytes(StandardCharsets.UTF_8);
 			ex.sendResponseHeaders(200, bytes.length); ex.getResponseBody().write(bytes); ex.close();
@@ -160,7 +189,10 @@ class BadgeLooksTest {
 				while ((n = ex.getRequestBody().read(buffer)) != -1) out.write(buffer, 0, n);
 				JsonObject body = new JsonParser().parse(new String(out.toByteArray(), StandardCharsets.UTF_8)).getAsJsonObject();
 				written.set(body);
-				if (acceptsBadge.get()) response = response.replace("\"badge_style\":0", "\"badge_style\":" + body.get("badge_style"));
+				if (acceptsBadge.get()) {
+					storedBadge.set(body.get("badge_style").getAsInt());
+					response = response.replace("\"badge_style\":0", "\"badge_style\":" + storedBadge.get());
+				}
 			}
 			byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
 			ex.sendResponseHeaders(200, bytes.length); ex.getResponseBody().write(bytes); ex.close();
@@ -189,9 +221,10 @@ class BadgeLooksTest {
 			acceptsBadge.set(false);
 			looks.wearBadgeStyle(1);
 			until = System.nanoTime() + 5_000_000_000L;
-			while (looks.busy() && System.nanoTime() < until) Thread.sleep(10);
+			String failure = com.arcticlauncher.client.Lang.t("looks.couldnt_save_your_badge_try_again");
+			while ((looks.busy() || !failure.equals(looks.status())) && System.nanoTime() < until) Thread.sleep(10);
 			assertFalse(looks.busy());
-			assertTrue(looks.status().startsWith("Couldn't save"));
+			assertEquals(failure, looks.status());
 			assertEquals(2, looks.myLook().badgeStyle);
 		} finally { close(looks); server.stop(0); }
 	}

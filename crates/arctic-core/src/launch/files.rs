@@ -300,6 +300,7 @@ fn library_job(
         sha1: artifact.sha1.clone(),
         size: artifact.size,
         lzma: None,
+        md5: None,
     })
 }
 
@@ -318,6 +319,7 @@ pub fn client_job(dirs: &DataDirs, version: &VersionJson) -> Result<DownloadJob>
         sha1: Some(client.sha1.clone()),
         size: Some(client.size),
         lzma: None,
+        md5: None,
     })
 }
 
@@ -330,6 +332,7 @@ pub fn logging_job(dirs: &DataDirs, version: &VersionJson) -> Option<(DownloadJo
         sha1: Some(client.file.sha1.clone()),
         size: Some(client.file.size),
         lzma: None,
+        md5: None,
     };
     Some((job, client.argument.clone()))
 }
@@ -397,6 +400,7 @@ pub fn plan_assets(dirs: &DataDirs, version: &VersionJson, game_dir: &Path) -> R
         sha1: Some(index_ref.sha1.clone()),
         size: Some(index_ref.size),
         lzma: None,
+        md5: None,
     };
     download_all("Asset index", vec![index_job], &|_| {})?;
     let index: AssetIndex = load_json(&index_path)?
@@ -415,6 +419,7 @@ pub fn plan_assets(dirs: &DataDirs, version: &VersionJson, game_dir: &Path) -> R
             sha1: Some(o.hash.clone()),
             size: Some(o.size),
             lzma: None,
+            md5: None,
         };
         if !legacy && can_wait(name, &language) {
             later.push(job);
@@ -720,6 +725,7 @@ mod tests {
             }),
             size: Some(5),
             lzma: None,
+            md5: None,
         };
         let jobs = [job(&good, b"right"), job(&bad, b"right")];
         // Not asked: nothing is hashed or removed.
@@ -779,6 +785,7 @@ mod tests {
                 sha1: None,
                 size: None,
                 lzma: None,
+                md5: None,
             });
         }
         request_repair(&dirs);
@@ -802,6 +809,7 @@ mod tests {
             sha1: None,
             size: None,
             lzma: None,
+            md5: None,
         };
         request_repair(&dirs);
         let repair = LibraryRepair::new(&dirs).unwrap();

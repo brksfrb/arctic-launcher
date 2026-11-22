@@ -1,4 +1,4 @@
-//#if MC >= 1.18
+//#if MC >= 1.14
 package com.arcticlauncher.mod.startup;
 
 
@@ -16,7 +16,7 @@ public final class Timeline {
 
 	private static long processStart() {
 		try {
-			return ProcessHandle.current().info().startInstant().map(java.time.Instant::toEpochMilli).orElse(System.currentTimeMillis());
+			return java.lang.management.ManagementFactory.getRuntimeMXBean().getStartTime();
 		} catch (RuntimeException e) {
 			return System.currentTimeMillis();
 		}
@@ -58,7 +58,9 @@ public final class Timeline {
 		//#endif
 		done = true;
 		System.out.println("[Arctic startup] " + MARKS); // i18n-ignore
+		//#if MC >= 1.18
 		Preloader.record();
+		//#endif
 		tellMixinCache();
 	}
 

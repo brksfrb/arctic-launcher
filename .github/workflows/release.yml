@@ -61,6 +61,8 @@ jobs:
         env:
           ARCTIC_MSA_CLIENT_ID: ${{ secrets.ARCTIC_MSA_CLIENT_ID }}
         run: |
+          # Use the target rustflags in .cargo/config.toml even on a shared runner.
+          unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS
           cargo xwin build --release --locked --target x86_64-pc-windows-msvc -p arctic-app -p arctic-cli 2>&1 | tee xwin.log
           # build.rs only warns when the icon can't go in; a release must have it.
           if grep -q "could not embed exe icon" xwin.log; then echo "the Windows exe has no icon"; exit 1; fi
@@ -199,7 +201,9 @@ jobs:
           case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
           # A draft: the Windows files are signed on the maintainer's PC (Certum's cloud certificate),
           # which then publishes it: packaging/windows/sign-release.ps1.
-          gh release create "$GITHUB_REF_NAME" dist/* --title "Arctic Launcher $GITHUB_REF_NAME" --notes-file notes.md --generate-notes --draft $prerelease
+          # No --generate-notes: that appends GitHub's "What's Changed" PR list,
+          # which we don't want in the notes or the Discord / website changelog.
+          gh release create "$GITHUB_REF_NAME" dist/* --title "Arctic Launcher $GITHUB_REF_NAME" --notes-file notes.md --draft $prerelease
 
   # The Mac app, into the release made above (draft or already published): its checksums join
   # the file and the notes' table.

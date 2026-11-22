@@ -99,7 +99,7 @@ final class FabricPlatform implements Platform {
 			return -1;
 		}
 		PlayerInfo info = connection.getPlayerInfo(mc.player.getUUID());
-		return info == null ? -1 : info.getLatency();
+		return com.arcticlauncher.client.net.MeasuredPing.value(server(), info == null ? -1 : info.getLatency());
 	}
 
 	@Override
@@ -109,6 +109,8 @@ final class FabricPlatform implements Platform {
 		if (connection == null || mc.hasSingleplayerServer()) {
 			return -1;
 		}
+		// Our own entry: the measured round trip, as the ping widget shows.
+		if (mc.player != null && player.equals(mc.player.getUUID())) return ping();
 		PlayerInfo info = connection.getPlayerInfo(player);
 		return info == null ? -1 : info.getLatency();
 	}
@@ -765,15 +767,18 @@ final class FabricPlatform implements Platform {
 		}
 		List<NativeImage> parts = splitFrames(image, frames);
 		image.close();
-		com.arcticlauncher.client.gfx.RenderWork.post(() -> {
-			boolean ok = true;
-			for (int i = 0; i < parts.size(); i++) {
-				ok &= register(hash + "/" + i, parts.get(i));
-			}
-			if (ok) {
-				ArcticClient.looks().textureReady(hash, parts.size());
-			}
-		});
+		// One upload per job (frame), so a long animated cape is spread over frames like everything else;
+		// it shows once the last frame is up, as before.
+		boolean[] ok = {true};
+		for (int i = 0; i < parts.size(); i++) {
+			int frame = i;
+			com.arcticlauncher.client.gfx.RenderWork.post(() -> {
+				ok[0] &= register(hash + "/" + frame, parts.get(frame));
+				if (frame == parts.size() - 1 && ok[0]) {
+					ArcticClient.looks().textureReady(hash, parts.size());
+				}
+			});
+		}
 	}
 
 	/** Upload on the render thread; a failure is logged, never thrown into the game loop. */

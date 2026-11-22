@@ -255,6 +255,8 @@ public final class ClientConfig {
 	public boolean chatPersistent = true;
 	/** While you host a world in Arctic Launcher's play together, the world you're in opens to LAN by itself. */
 	public boolean lanAuto = true;
+	/** Friends who play offline can join the world through Play Together, an invite or a code. */
+	public boolean allowOfflineFriends = true;
 	/** Brackets around the crosshair while a creature is within hit reach. */
 	public boolean rangeIndicator;
 	/** Items you pick up are listed on the HUD for a moment. */
@@ -347,6 +349,8 @@ public final class ClientConfig {
 	/** Particle Control: keep only this share (percent) of the particles. */
 	public boolean particleControl;
 	public int particleAmount = 50;
+	public boolean hideOwnPotionParticles;
+	public boolean hideOtherPlayersPotionParticles;
 	/** Particle kinds switched off (bit per {@code ParticleKinds.LABELS} entry). */
 	public int particleOff;
 	/** Ctrl+K opens the command palette (mods, servers, friends). */
@@ -391,8 +395,8 @@ public final class ClientConfig {
 	public boolean replayAutoExport;
 	/** Encode the game framebuffer while playing, alongside the independent 3D recording. */
 	/** The whole replay system: instant clips, recordings and gameplay video. Applies from the next world join. */
-	public boolean replayEnabled = true;
-	public boolean replayVideoEnabled = true;
+	public boolean replayEnabled;
+	public boolean replayVideoEnabled;
 	public int replayVideoHeight = 720;
 	public int replayVideoFps = 30;
 	/** Saves only the recent rolling window, independently of manual recording. */

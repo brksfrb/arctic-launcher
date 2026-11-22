@@ -207,7 +207,7 @@ Every command works on the active profile unless you pass `-p, --profile <NAME>`
 Brings instances over from other launchers and clients: version, loader, mods, configs,
 worlds, resource and shader packs, options and servers. Originals are never changed and
 accounts never come along. Supported: Minecraft Launcher, TLauncher, Prism, PolyMC,
-MultiMC (with `--folder`), Modrinth App, CurseForge, ATLauncher, GDLauncher (new and
+MultiMC (with `--folder`), Modrinth App, ATLauncher, GDLauncher (new and
 old), and the own mods of LabyMod, Lunar and Feather. LabyMod and Lunar HUD layouts and
 keys can be applied too.
 

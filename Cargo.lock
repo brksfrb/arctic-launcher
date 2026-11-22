@@ -316,7 +316,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-app"
-version = "0.6.3"
+version = "0.6.6"
 dependencies = [
  "aes-gcm",
  "arboard",
@@ -333,13 +333,16 @@ dependencies = [
  "ksni",
  "libc",
  "log",
+ "lzma-rs",
  "memmap2",
  "open",
+ "png",
  "pulldown-cmark",
  "raw-window-handle",
  "rfd",
  "serde",
  "serde_json",
+ "skrifa",
  "tempfile",
  "tray-icon",
  "uuid 1.26.1",
@@ -347,12 +350,13 @@ dependencies = [
  "windows-core",
  "windows-sys 0.61.2",
  "winresource",
+ "xz2",
  "zip",
 ]
 
 [[package]]
 name = "arctic-cli"
-version = "0.6.3"
+version = "0.6.6"
 dependencies = [
  "arctic-core",
  "arctic-share",
@@ -364,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-core"
-version = "0.6.3"
+version = "0.6.6"
 dependencies = [
  "aes-gcm",
  "arctic-mesh",
@@ -405,7 +409,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-mesh"
-version = "0.6.3"
+version = "0.6.6"
 dependencies = [
  "png",
  "serde_json",
@@ -413,7 +417,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-ping"
-version = "0.6.3"
+version = "0.6.6"
 dependencies = [
  "base64 0.23.1",
  "serde_json",
@@ -422,7 +426,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-share"
-version = "0.6.3"
+version = "0.6.6"
 dependencies = [
  "bytes",
  "data-encoding",
@@ -436,7 +440,7 @@ dependencies = [
 
 [[package]]
 name = "arctic-voice"
-version = "0.6.3"
+version = "0.6.6"
 dependencies = [
  "aes-gcm",
  "cpal",
@@ -1885,7 +1889,6 @@ dependencies = [
  "bytemuck",
  "ecolor",
  "emath",
- "epaint_default_fonts",
  "font-types",
  "harfrust",
  "log",
@@ -1899,12 +1902,6 @@ dependencies = [
  "unicode-segmentation",
  "vello_cpu",
 ]
-
-[[package]]
-name = "epaint_default_fonts"
-version = "0.36.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "773fa9c96dd0dbef887e39d0ed6177f141cce4d68e6041df77570aa3702dfa13"
 
 [[package]]
 name = "equivalent"
@@ -3411,6 +3408,17 @@ checksum = "297e814c836ae64db86b36cf2a557ba54368d03f6afcd7d947c266692f71115e"
 dependencies = [
  "byteorder",
  "crc",
+]
+
+[[package]]
+name = "lzma-sys"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fda04ab3764e6cde78b9974eec4f779acaba7c4e84b36eca3cf77c581b85d27"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
 ]
 
 [[package]]
@@ -7512,6 +7520,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7d8a75eaf6557bb84a65ace8609883db44a29951042ada9b393151532e41fcb"
 dependencies = [
  "xml-rs",
+]
+
+[[package]]
+name = "xz2"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "388c44dc09d76f1536602ead6d325eb532f5c122f17782bd57fb47baeeb767e2"
+dependencies = [
+ "lzma-sys",
 ]
 
 [[package]]

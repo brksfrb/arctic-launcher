@@ -570,7 +570,7 @@ public final class Cosmetics {
 	private boolean load(Item item) {
 		if (item.mesh != null) {
 			try {
-				item.meshModel = MeshModel.parse(AppearanceAssets.fetch(platform,baseUrl,"asset",item.mesh));
+				item.meshModel = MeshModel.parse(AssetCache.get(item.mesh, () -> AppearanceAssets.fetch(platform, baseUrl, "asset", item.mesh)));
 				platform.registerMesh(item.id, item.meshModel);
 				return true;
 			} catch (Exception | StackOverflowError e) {
@@ -631,7 +631,7 @@ public final class Cosmetics {
 
 	/** A cosmetic texture by hash; it must be a PNG within the size limit. */
 	private byte[] texture(String hash) throws Exception {
-		byte[] png = AppearanceAssets.fetch(platform,baseUrl,"texture",hash);
+		byte[] png = AssetCache.get(hash, () -> AppearanceAssets.fetch(platform, baseUrl, "texture", hash));
 		int[] size = Looks.pngSize(png);
 		if (size == null || size[0] > Geometry.MAX_TEXTURE_SIDE || size[1] > Geometry.MAX_TEXTURE_SIDE) {
 			throw new IllegalArgumentException("texture isn't a small PNG");
@@ -640,7 +640,7 @@ public final class Cosmetics {
 	}
 
 	private JsonElement json(String hash) throws Exception {
-		byte[] bytes = AppearanceAssets.fetch(platform,baseUrl,"asset",hash);
+		byte[] bytes = AssetCache.get(hash, () -> AppearanceAssets.fetch(platform, baseUrl, "asset", hash));
 		return GSON.fromJson(new String(bytes, StandardCharsets.UTF_8), JsonElement.class);
 	}
 

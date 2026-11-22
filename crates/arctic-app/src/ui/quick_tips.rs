@@ -181,7 +181,7 @@ impl ArcticApp {
             }
             Target::Modpacks => {
                 self.set_tab(Tab::Instances, now);
-                self.inst.modpacks_open = true;
+                self.open_hub(crate::ui::Section::Modpacks);
             }
             Target::Shaders => {
                 self.open_quick_tip(Target::Instance(crate::ui::InstancePage::Packs), now);

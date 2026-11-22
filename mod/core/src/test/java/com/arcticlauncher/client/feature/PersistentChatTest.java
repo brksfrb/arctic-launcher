@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,8 +23,11 @@ class PersistentChatTest {
 	private Object oldConfig;
 	private Object oldPlatform;
 	private ClientConfig config;
+	private final List<String> warnings = new ArrayList<String>();
 
 	@BeforeEach void setup() throws Exception {
+		// The chat's own markers ("previous session", ...) are Arctic text: English, as in the game.
+		com.arcticlauncher.client.Lang.init(null, "en");
 		configField = ArcticClient.class.getDeclaredField("config");
 		platformField = ArcticClient.class.getDeclaredField("platform");
 		configField.setAccessible(true);
@@ -33,7 +37,12 @@ class PersistentChatTest {
 		config = new ClientConfig();
 		configField.set(null, config);
 		platformField.set(null, Proxy.newProxyInstance(Platform.class.getClassLoader(), new Class<?>[]{Platform.class},
-				(proxy, method, args) -> null));
+				(proxy, method, args) -> {
+					if (method.getName().equals("log") && Boolean.TRUE.equals(args[0])) {
+						warnings.add((String) args[1]);
+					}
+					return null;
+				}));
 	}
 
 	@AfterEach void teardown() throws Exception {
@@ -64,6 +73,46 @@ class PersistentChatTest {
 	}
 
 	private java.io.File[] logs() { return dir.resolve("chat-history").toFile().listFiles(); }
+
+	@Test void hudLimitSaturatesAndLeavesRoomForMoreChatHistory() {
+		int moreChatHistoryOffset = 16_384 - 100;
+		int duringReplay = PersistentChat.historyLimit(true, 10_000, 300);
+		assertEquals(PersistentChat.MAX_HUD_LINES, duringReplay);
+		assertTrue(duringReplay + moreChatHistoryOffset > 0);
+		int overflow = PersistentChat.historyLimit(false, Integer.MAX_VALUE, Integer.MAX_VALUE);
+		assertEquals(PersistentChat.MAX_HUD_LINES, overflow);
+		assertTrue(overflow + moreChatHistoryOffset > 0);
+		assertEquals(1, PersistentChat.historyLimit(false, Integer.MIN_VALUE, -1));
+		assertEquals(10_300, PersistentChat.historyLimit(false, 10_000, 300));
+	}
+
+	@Test void hudFailureStopsRestoreWithoutRetryingOrDisablingArchiving() {
+		PersistentChat first = open();
+		first.restore(new View());
+		for (int i = 0; i <= PersistentChat.START_PAGE; i++) {
+			first.message("old " + i);
+		}
+		first.flush();
+
+		PersistentChat next = open();
+		next.restore(new PersistentChat.View() {
+			public void message(String text, long time) { throw new NoSuchElementException(); }
+			public void sent(String text) {}
+		});
+		assertFalse(next.restoring());
+		assertEquals(0L, next.restoringTime());
+		assertFalse(next.hasOlder());
+		View retry = new View();
+		next.restore(retry);
+		assertTrue(retry.messages.isEmpty());
+		assertEquals(1, warnings.size());
+
+		next.message("new session");
+		next.flush();
+		View restart = new View();
+		open().restore(restart);
+		assertTrue(restart.messages.contains("new session"));
+	}
 
 	@Test void restartRestoresMessagesWithTimesAndSentHistoryWithoutRearchiving() throws Exception {
 		PersistentChat first = open();
@@ -325,5 +374,30 @@ class PersistentChatTest {
 		assertTrue(page.get(0).separator && page.get(0).text.contains("not loaded"));
 		assertTrue(b.olderMessages(300).isEmpty());
 		assertTrue(texts(page).size() <= 150);
+	}
+	@Test void readingAheadRestoresTheSameLines() throws Exception {
+		PersistentChat first = open();
+		first.restore(new View());
+		for (int i = 0; i < 40; i++) first.message("line " + i);
+		first.sent("/one");
+		first.sent("/two");
+		first.flush();
+		View direct = new View();
+		open().restore(direct);
+		PersistentChat ahead = open();
+		ahead.readAhead();
+		// The read runs on its own thread; restore waits for it (or reads itself if it hasn't started).
+		View early = new View();
+		ahead.restore(early);
+		assertEquals(direct.messages, early.messages);
+		assertEquals(direct.sent, early.sent);
+		assertEquals(40, real(early.messages).size());
+		// Read ahead, but off by the time the chat is shown: nothing restored.
+		config.chatPersistent = false;
+		PersistentChat off = open();
+		off.readAhead();
+		View none = new View();
+		off.restore(none);
+		assertTrue(none.messages.isEmpty());
 	}
 }

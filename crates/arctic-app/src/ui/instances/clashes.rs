@@ -20,7 +20,6 @@ const LIST_HEIGHT: f32 = 400.0;
 /// A Play that clashes stopped, to start once they're fixed (or anyway).
 pub struct PendingStart {
     instance_id: String,
-    another_copy: bool,
     quick_play: Option<QuickPlay>,
 }
 
@@ -60,7 +59,6 @@ impl ArcticApp {
     pub(crate) fn held_by_clashes(
         &mut self,
         instance: &Instance,
-        another_copy: bool,
         quick_play: &Option<QuickPlay>,
     ) -> bool {
         if self.mod_clashes(instance).is_empty() {
@@ -68,7 +66,6 @@ impl ArcticApp {
         }
         self.inst.clashes.pending = Some(PendingStart {
             instance_id: instance.id.clone(),
-            another_copy,
             quick_play: quick_play.clone(),
         });
         true
@@ -136,7 +133,7 @@ impl ArcticApp {
             let Some(pending) = self.inst.clashes.pending.take() else {
                 return;
             };
-            self.launch_unchecked(pending.another_copy, pending.quick_play);
+            self.launch_unchecked(pending.quick_play);
         } else if cancel || modal.should_close() {
             self.inst.clashes.pending = None;
         }

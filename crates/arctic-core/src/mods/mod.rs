@@ -6,6 +6,8 @@
 //! too (untracked). Disabled mods are renamed to `*.jar.disabled`, which is
 //! what loaders ignore.
 
+pub mod datapack;
+pub mod discovery;
 mod exact;
 mod files;
 mod identify;
@@ -14,6 +16,8 @@ pub mod modpack;
 mod modrinth;
 mod oneconfig;
 pub mod pack_groups;
+pub mod pack_index;
+pub mod pack_preview;
 pub mod packs;
 pub mod performance;
 pub mod polarium;
@@ -53,25 +57,38 @@ pub enum SortBy {
     Downloads,
     Updated,
     Newest,
+    Follows,
 }
 
 /// What kind of Modrinth project to search for.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum ProjectType {
     #[default]
     Mod,
     Modpack,
     ResourcePack,
     Shader,
+    DataPack,
 }
 
 impl ProjectType {
+    /// The game-folder directory for instance-wide content.
+    pub fn folder(self) -> Option<&'static str> {
+        match self {
+            ProjectType::Mod => Some("mods"),
+            ProjectType::ResourcePack => Some("resourcepacks"),
+            ProjectType::Shader => Some("shaderpacks"),
+            ProjectType::Modpack | ProjectType::DataPack => None,
+        }
+    }
+
     pub fn id(self) -> &'static str {
         match self {
             ProjectType::Mod => "mod",
             ProjectType::Modpack => "modpack",
             ProjectType::ResourcePack => "resourcepack",
             ProjectType::Shader => "shader",
+            ProjectType::DataPack => "datapack",
         }
     }
 }
@@ -85,6 +102,21 @@ pub struct SearchQuery {
     pub offset: usize,
     pub limit: usize,
     pub project_type: ProjectType,
+    /// Categories the project must carry (all of them), as Modrinth names them.
+    pub categories: Vec<String>,
+    /// Loader ids (any of them). Added to `loader`'s own facet when both are set.
+    pub loaders: Vec<String>,
+    /// Which side the content must run on.
+    pub environment: Option<Environment>,
+    /// Filter packs and shaders by `game_version` too (mods and modpacks always are).
+    pub strict_version: bool,
+}
+
+/// Where content runs, for the discovery filter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Environment {
+    Client,
+    Server,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,7 +127,9 @@ pub struct ProjectHit {
     pub description: String,
     pub author: String,
     pub downloads: u64,
+    pub follows: u64,
     pub icon_url: Option<String>,
+    pub featured_gallery: Option<String>,
     pub categories: Vec<String>,
     /// Minecraft versions tagged on the project's files.
     pub game_versions: Vec<String>,
@@ -124,16 +158,38 @@ pub struct ProjectDetail {
     pub title: String,
     #[serde(default)]
     pub body: String,
+    /// The short summary.
+    #[serde(default)]
+    pub description: String,
     #[serde(default)]
     pub downloads: u64,
     #[serde(default)]
+    pub followers: u64,
+    #[serde(default)]
     pub icon_url: Option<String>,
+    #[serde(default)]
+    pub categories: Vec<String>,
+    #[serde(default)]
+    pub client_side: String,
+    #[serde(default)]
+    pub server_side: String,
     #[serde(default)]
     pub game_versions: Vec<String>,
     #[serde(default)]
     pub loaders: Vec<String>,
     #[serde(default)]
     pub gallery: Vec<GalleryImage>,
+}
+
+impl ProjectDetail {
+    /// The featured gallery thumbnail, or the first gallery thumbnail if none is featured.
+    pub fn banner_url(&self) -> Option<&str> {
+        self.gallery
+            .iter()
+            .find(|image| image.featured)
+            .or_else(|| self.gallery.first())
+            .map(|image| image.url.as_str())
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -164,9 +220,9 @@ pub fn project_detail(id: &str) -> Result<ProjectDetail> {
     Ok(project)
 }
 
-/// Gallery images share the URL-keyed disk cache, with a larger download limit.
+/// Gallery images use a URL-keyed disk cache with a larger download limit and a total size cap.
 pub fn gallery_image(url: &str, cache_dir: &Path) -> Result<Vec<u8>> {
-    files::cached_image(url, cache_dir, 20 * 1024 * 1024)
+    files::cached_image(url, cache_dir, 20 * 1024 * 1024, Some(256 * 1024 * 1024))
 }
 
 /// A Modrinth mod installed into an instance (from `mods.json`).
@@ -218,12 +274,53 @@ pub fn install(
     index: &Path,
     progress: Progress,
 ) -> Result<Vec<InstalledMod>> {
+    install_selected(
+        project_id,
+        None,
+        game_version,
+        loader,
+        mods_dir,
+        index,
+        progress,
+    )
+}
+
+/// Install this exact mod version, retaining normal dependency resolution and replacement.
+/// Incompatible roots are rejected before downloading anything.
+pub fn install_version(
+    version_id: &str,
+    game_version: &str,
+    loader: LoaderKind,
+    mods_dir: &Path,
+    index: &Path,
+    progress: Progress,
+) -> Result<Vec<InstalledMod>> {
+    install_selected(
+        "",
+        Some(version_id),
+        game_version,
+        loader,
+        mods_dir,
+        index,
+        progress,
+    )
+}
+
+fn install_selected(
+    project_id: &str,
+    version_id: Option<&str>,
+    game_version: &str,
+    loader: LoaderKind,
+    mods_dir: &Path,
+    index: &Path,
+    progress: Progress,
+) -> Result<Vec<InstalledMod>> {
     progress(ProgressInfo::stage("Resolving dependencies"));
     let loaders = modrinth::compatible_loaders(loader, game_version);
     let target = Target {
         loaders: &loaders,
         game_version,
-        loader,
+        loader_name: loader.label(),
     };
     let current = ModIndex::load(index)?;
     let installed = installed_projects(&current, mods_dir);
@@ -231,7 +328,10 @@ pub fn install(
         loaders: &loaders,
         game_version,
     };
-    let plan = resolve::resolve(project_id, target, &installed, &source)?;
+    let plan = match version_id {
+        Some(id) => resolve::resolve_version(id, target, &installed, &source)?,
+        None => resolve::resolve(project_id, target, &installed, &source)?,
+    };
     let (mods, jobs) = prepare(&plan, mods_dir)?;
     let mods = with_project_info(mods);
 
@@ -257,7 +357,8 @@ pub fn install_many(
 ) -> Result<(Vec<InstalledMod>, Vec<Failed>)> {
     progress(ProgressInfo::stage("Finding mods"));
     let current = ModIndex::load(index)?;
-    let (plan, failed) = plan_many(projects, game_version, loader, &current, mods_dir);
+    let installed = installed_projects(&current, mods_dir);
+    let (plan, failed) = plan_many(projects, game_version, loader, &installed);
     if plan.is_empty() {
         return Ok((Vec::new(), failed));
     }
@@ -281,7 +382,8 @@ pub fn updates_waiting(
     present: &dyn Fn(&str) -> bool,
 ) -> Result<Option<bool>> {
     let current = ModIndex::load(index)?;
-    let (plan, failed) = plan_many(projects, game_version, loader, &current, mods_dir);
+    let installed = installed_projects(&current, mods_dir);
+    let (plan, failed) = plan_many(projects, game_version, loader, &installed);
     if failed
         .iter()
         .any(|(_, e)| matches!(e, crate::Error::Http(_)))
@@ -330,7 +432,8 @@ pub fn available_updates(
     if projects.is_empty() {
         return Ok(Vec::new());
     }
-    let (plan, _failed) = plan_many(&projects, game_version, loader, &current, mods_dir);
+    let installed = installed_projects(&current, mods_dir);
+    let (plan, _failed) = plan_many(&projects, game_version, loader, &installed);
     let mut updates: Vec<ModUpdate> = plan
         .iter()
         .filter_map(|planned| {
@@ -356,21 +459,18 @@ fn plan_many(
     projects: &[&str],
     game_version: &str,
     loader: LoaderKind,
-    current: &ModIndex,
-    mods_dir: &Path,
+    installed: &HashSet<String>,
 ) -> (Vec<Planned>, Vec<Failed>) {
     let loaders = modrinth::compatible_loaders(loader, game_version);
     let target = Target {
         loaders: &loaders,
         game_version,
-        loader,
+        loader_name: loader.label(),
     };
-    let installed = installed_projects(current, mods_dir);
     let results: Vec<(String, Result<Vec<Planned>>)> = std::thread::scope(|s| {
         let handles: Vec<_> = projects
             .iter()
             .map(|project| {
-                let installed = &installed;
                 let loaders = &loaders;
                 s.spawn(move || {
                     let source = resolve::Modrinth {
@@ -455,6 +555,11 @@ pub fn index_path(instance_dir: &Path) -> PathBuf {
     instance_dir.join("mods.json")
 }
 
+/// Read the tracked projects without inspecting any JAR contents.
+pub fn tracked_projects(mods_dir: &Path, index: &Path) -> Result<HashSet<String>> {
+    Ok(installed_projects(&ModIndex::load(index)?, mods_dir))
+}
+
 // ---------------------------------------------------------------- helpers
 
 /// Projects in the index whose file is still in the mods folder.
@@ -499,6 +604,7 @@ fn prepare_one(
         sha1: file.hashes.sha1.clone(),
         size: file.size,
         lzma: None,
+        md5: None,
     };
     Ok((entry, job))
 }

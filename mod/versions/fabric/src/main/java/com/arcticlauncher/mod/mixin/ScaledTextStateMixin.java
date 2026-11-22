@@ -29,17 +29,11 @@ abstract class ScaledTextStateMixin {
 			target = "Lnet/minecraft/client/gui/Font;prepareText(Lnet/minecraft/util/FormattedCharSequence;FFIZZI)Lnet/minecraft/client/gui/Font$PreparedText;"))
 	private Font.PreparedText arctic$scaled(Font font, FormattedCharSequence text, float x, float y,
 			int color, boolean shadow, boolean includeEmpty, int background) {
-		if (!TextDrawScale.on()) {
-			return font.prepareText(text, x, y, color, shadow, includeEmpty, background);
-		}
 	//#else
 	@Redirect(method = "ensurePrepared", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/gui/Font;prepareText(Lnet/minecraft/util/FormattedCharSequence;FFIZI)Lnet/minecraft/client/gui/Font$PreparedText;"))
 	private Font.PreparedText arctic$scaled(Font font, FormattedCharSequence text, float x, float y,
 			int color, boolean shadow, int background) {
-		if (!TextDrawScale.on()) {
-			return font.prepareText(text, x, y, color, shadow, background);
-		}
 	//#endif
 		Matrix3x2fc pose = ((GuiTextRenderState) (Object) this).pose;
 		float pixels = TextPixelScale.stretch(pose.m00(), pose.m01(), pose.m10(), pose.m11())

@@ -8,7 +8,9 @@ use std::{
 };
 
 use arctic_core::instances::Instance;
-use arctic_core::mods::{self, ProjectDetail, ProjectHit, packs::PackKind};
+use arctic_core::loaders::LoaderKind;
+use arctic_core::mods::discovery::{ShaderRequirement, VersionInfo};
+use arctic_core::mods::{self, ProjectDetail, ProjectHit, ProjectType, packs::PackKind};
 use eframe::egui::{self, RichText};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use egui_commonmark_backend::pulldown::parser_options;
@@ -18,13 +20,24 @@ use super::{IconState, browse::compact, mods_page::mod_icon};
 use crate::{app::ArcticApp, art::icons::Icon, widgets};
 use crate::{t, tf};
 type DetailResult = Result<ProjectDetail, String>;
+type VersionsResult = Result<Vec<VersionInfo>, String>;
+/// Number of versions revealed at a time.
+const VERSIONS_SHOWN: usize = 30;
 
 pub struct Preview {
     instance_id: String,
     hit: ProjectHit,
     kind: Option<PackKind>,
+    /// A modpack: installs as an instance of its own.
+    modpack: bool,
+    discover_kind: Option<ProjectType>,
     receiver: Receiver<DetailResult>,
     detail: Option<DetailResult>,
+    versions_rx: Receiver<VersionsResult>,
+    versions: Option<VersionsResult>,
+    versions_shown: usize,
+    /// A version tagged for another Minecraft version, waiting for "Install anyway".
+    confirm_version: Option<String>,
     markdown: CommonMarkCache,
     enlarged: Option<String>,
     context: egui::Context,
@@ -44,7 +57,7 @@ impl Drop for Preview {
 }
 
 impl Preview {
-    pub(super) fn gallery_result(&mut self, url: String, result: Result<Vec<u8>, String>) {
+    pub(super) fn gallery_result(&mut self, url: String, result: Result<Arc<[u8]>, String>) {
         if !matches!(self.gallery.get(&url), Some(IconState::Loading)) {
             return;
         }
@@ -62,6 +75,16 @@ impl Preview {
     fn for_instance(self, instance_id: &str) -> Option<Self> {
         (self.instance_id == instance_id).then_some(self)
     }
+}
+
+fn fetch_versions(id: String, ctx: egui::Context) -> Receiver<VersionsResult> {
+    let (send, receive) = mpsc::channel();
+    std::thread::spawn(move || {
+        let result = mods::discovery::project_version_list(&id).map_err(|e| e.to_string());
+        let _ = send.send(result);
+        ctx.request_repaint();
+    });
+    receive
 }
 
 fn fetch(id: String, ctx: egui::Context) -> Receiver<DetailResult> {
@@ -132,6 +155,103 @@ fn prepare_html(body: &str) -> HashMap<String, String> {
     prepared
 }
 
+/// What the version list hands back to the page.
+struct VersionListState {
+    shown: usize,
+    confirm: Option<String>,
+    retry: bool,
+}
+
+/// How one version relates to the instance it would go into.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VersionFit {
+    Fits,
+    /// The right pack type, tagged for another Minecraft version: installs after a confirm.
+    OtherGame,
+    /// The wrong loader or pack type: never installed into this instance.
+    Incompatible,
+    /// A modpack version; it makes an instance of its own.
+    NewInstance,
+}
+
+impl VersionFit {
+    fn of(v: &VersionInfo, kind: ProjectType, loader: Option<LoaderKind>, game: &str) -> Self {
+        let pack = matches!(
+            kind,
+            ProjectType::ResourcePack | ProjectType::Shader | ProjectType::DataPack
+        );
+        if kind == ProjectType::Modpack {
+            Self::NewInstance
+        } else if v.fits(kind, loader, game) {
+            Self::Fits
+        } else if pack && v.fits(kind, loader, "") {
+            Self::OtherGame
+        } else {
+            Self::Incompatible
+        }
+    }
+
+    fn installable(self) -> bool {
+        self != Self::Incompatible
+    }
+}
+
+fn preview_project_type(modpack: bool, kind: Option<PackKind>) -> ProjectType {
+    match (modpack, kind) {
+        (true, _) => ProjectType::Modpack,
+        (_, Some(PackKind::Resource)) => ProjectType::ResourcePack,
+        (_, Some(PackKind::Shader)) => ProjectType::Shader,
+        _ => ProjectType::Mod,
+    }
+}
+
+/// Fitting versions first, then those tagged for another game version, then the rest;
+/// the API's newest-first order is kept within each group.
+fn ordered_versions<'a>(
+    versions: &'a [VersionInfo],
+    kind: ProjectType,
+    loader: Option<LoaderKind>,
+    game: &str,
+) -> Vec<(&'a VersionInfo, VersionFit)> {
+    let mut ordered: Vec<_> = versions
+        .iter()
+        .map(|v| (v, VersionFit::of(v, kind, loader, game)))
+        .collect();
+    ordered.sort_by_key(|(_, fit)| match fit {
+        VersionFit::Fits | VersionFit::NewInstance => 0,
+        VersionFit::OtherGame => 1,
+        VersionFit::Incompatible => 2,
+    });
+    ordered
+}
+
+/// "1.20.1, 1.20.2" or, for long lists, the first and last ("1.16 – 1.21.4").
+pub(super) fn short_game_list(games: &[String]) -> String {
+    match games {
+        [first, .., last] if games.len() > 3 => format!("{first} – {last}"),
+        _ => games.join(", "),
+    }
+}
+
+/// The small line under a version: channel, game versions, loaders, date, shader needs.
+fn version_details(v: &VersionInfo, kind: ProjectType) -> String {
+    let mut parts = vec![
+        v.version_type.clone(),
+        short_game_list(&v.game_versions),
+        v.loaders.join(", "),
+        v.date.chars().take(10).collect(),
+    ];
+    if kind == ProjectType::Shader {
+        match v.shader_requirement() {
+            Some(ShaderRequirement::Iris) => parts.push("Iris".into()),
+            Some(ShaderRequirement::OptiFineFormat) => parts.push("OptiFine".into()),
+            None => {}
+        }
+    }
+    parts.retain(|p| !p.is_empty());
+    parts.join(" · ")
+}
+
 impl ArcticApp {
     pub(super) fn open_project_preview(
         &mut self,
@@ -142,9 +262,27 @@ impl ArcticApp {
         let Some(instance_id) = self.inst.open.clone() else {
             return;
         };
+        self.open_project_preview_in(ctx, instance_id, hit, kind, false);
+    }
+
+    /// The project page, installing into `instance_id` (`modpack`: as a new instance instead).
+    pub(super) fn open_project_preview_in(
+        &mut self,
+        ctx: &egui::Context,
+        instance_id: String,
+        hit: ProjectHit,
+        kind: Option<PackKind>,
+        modpack: bool,
+    ) {
         self.inst.preview = Some(Preview {
             instance_id,
             receiver: fetch(hit.project_id.clone(), ctx.clone()),
+            versions_rx: fetch_versions(hit.project_id.clone(), ctx.clone()),
+            versions: None,
+            versions_shown: VERSIONS_SHOWN,
+            confirm_version: None,
+            modpack,
+            discover_kind: None,
             hit,
             kind,
             detail: None,
@@ -155,6 +293,20 @@ impl ArcticApp {
             body: String::new(),
             html: Arc::default(),
         });
+    }
+
+    pub(super) fn open_discover_project(
+        &mut self,
+        ctx: &egui::Context,
+        target: &Instance,
+        hit: &ProjectHit,
+        project_type: ProjectType,
+        pack: Option<PackKind>,
+    ) {
+        self.open_project_preview_in(ctx, target.id.clone(), hit.clone(), pack, false);
+        if let Some(preview) = &mut self.inst.preview {
+            preview.discover_kind = Some(project_type);
+        }
     }
 
     pub(super) fn project_preview(&mut self, ctx: &egui::Context, instance: &Instance) {
@@ -176,7 +328,9 @@ impl ArcticApp {
                         description: String::new(),
                         author: std::env::var("ARCTIC_DEVSHOT_AUTHOR").unwrap_or_default(),
                         downloads: 0,
+                        follows: 0,
                         icon_url: None,
+                        featured_gallery: None,
                         categories: vec![],
                         game_versions: vec![],
                     },
@@ -209,6 +363,28 @@ impl ArcticApp {
                     preview.detail = Some(Err(
                         t!("instances.project_request_stopped_please_retry").into()
                     ))
+                }
+                Err(mpsc::TryRecvError::Empty) => {}
+            }
+        }
+        if preview.versions.is_none() {
+            match preview.versions_rx.try_recv() {
+                Ok(result) => {
+                    if let (Some(kind), Ok(versions)) = (preview.discover_kind, &result) {
+                        self.inst.hub.installed.remember_versions(
+                            kind,
+                            &preview.hit.project_id,
+                            versions,
+                        );
+                        ctx.request_repaint();
+                    }
+                    preview.versions = Some(result);
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    preview.versions = Some(Err(t!(
+                        "instances.project_request_stopped_please_retry"
+                    )
+                    .into()))
                 }
                 Err(mpsc::TryRecvError::Empty) => {}
             }
@@ -259,6 +435,19 @@ impl ArcticApp {
                             "instances.downloads_2",
                             value = compact(detail.map_or(preview.hit.downloads, |d| d.downloads))
                         ));
+                        ui.label(
+                            RichText::new(tf!(
+                                "instances.hub.follows",
+                                compact =
+                                    compact(detail.map_or(preview.hit.follows, |d| d.followers))
+                            ))
+                            .color(p.muted),
+                        );
+                        if preview.kind == Some(PackKind::Shader)
+                            && let Some(note) = self.shader_note(instance)
+                        {
+                            ui.label(RichText::new(note).small().color(p.accent));
+                        }
                         if preview.kind.is_some()
                             && preview.hit.is_incompatible(&self.pack_game(instance))
                         {
@@ -269,11 +458,21 @@ impl ArcticApp {
                                 ));
                         }
                     });
-                    let busy = match preview.kind {
-                        Some(_) => self.inst.packs.installing.contains(&preview.hit.project_id),
-                        None => self.inst.installing.contains(&preview.hit.project_id),
+                    let busy = if preview.modpack {
+                        self.inst.pack_installing.is_some()
+                    } else {
+                        match preview.kind {
+                            Some(_) => self.inst.packs.installing.contains(&preview.hit.project_id),
+                            None => self.inst.installing.contains(&preview.hit.project_id),
+                        }
                     };
-                    let installed = preview.kind.is_none()
+                    let vanilla_mods = preview.discover_kind.is_none()
+                        && !preview.modpack
+                        && preview.kind.is_none()
+                        && instance.loader.kind().is_none();
+                    let installed = preview.discover_kind.is_none()
+                        && preview.kind.is_none()
+                        && !preview.modpack
                         && self
                             .inst
                             .mod_scans
@@ -291,34 +490,62 @@ impl ArcticApp {
                     } else if busy {
                         ui.spinner();
                         ui.label(t!("instances.installing"));
-                    } else if widgets::button(
-                        ui,
-                        p,
-                        Some(Icon::Plus),
-                        t!("instances.install"),
-                        true,
-                    )
-                    .clicked()
-                    {
-                        if let Some(kind) = preview.kind {
-                            self.inst
-                                .packs
-                                .installing
-                                .insert(preview.hit.project_id.clone());
-                            self.tasks.pack_install(
-                                instance.clone(),
-                                kind,
-                                preview.hit.project_id.clone(),
-                                self.pack_game(instance),
-                            );
+                    } else {
+                        let button = ui
+                            .add_enabled_ui(
+                                !vanilla_mods
+                                    && (preview.discover_kind.is_none()
+                                        || self.inst.content.progress.is_none()),
+                                |ui| {
+                                    widgets::button(
+                                        ui,
+                                        p,
+                                        Some(Icon::Plus),
+                                        t!("instances.install"),
+                                        true,
+                                    )
+                                },
+                            )
+                            .inner;
+                        let clicked = if vanilla_mods {
+                            button.on_disabled_hover_text(t!("instances.hub.vanilla_has_no_mods"));
+                            false
                         } else {
-                            self.inst.installing.insert(preview.hit.project_id.clone());
-                            self.tasks.mod_install(
-                                instance.clone(),
-                                preview.hit.project_id.clone(),
-                                None,
-                            );
+                            button.clicked()
+                        };
+                        if clicked {
+                            if let Some(kind) = preview.discover_kind {
+                                self.pick_single_content(ctx, kind, &preview.hit, None, instance);
+                            } else if preview.modpack {
+                                self.inst.pack_installing = Some(preview.hit.project_id.clone());
+                                self.inst.install_progress = None;
+                                self.tasks
+                                    .install_modpack(preview.hit.project_id.clone(), None);
+                            } else if let Some(kind) = preview.kind {
+                                self.inst
+                                    .packs
+                                    .installing
+                                    .insert(preview.hit.project_id.clone());
+                                self.tasks.pack_install(
+                                    instance.clone(),
+                                    kind,
+                                    preview.hit.project_id.clone(),
+                                    self.pack_game(instance),
+                                );
+                            } else {
+                                self.inst.installing.insert(preview.hit.project_id.clone());
+                                self.tasks.mod_install(
+                                    instance.clone(),
+                                    preview.hit.project_id.clone(),
+                                    None,
+                                );
+                            }
                         }
+                    }
+                    if preview.modpack
+                        && widgets::button(ui, p, None, t!("instances.view_mods"), false).clicked()
+                    {
+                        self.open_pack_preview(&preview.hit.project_id, &preview.hit.title, None);
                     }
                 });
                 ui.separator();
@@ -340,6 +567,15 @@ impl ArcticApp {
                             }
                         }
                         Some(Ok(detail)) => {
+                            let list = self.project_version_list(ui, &preview, instance);
+                            preview.versions_shown = list.shown;
+                            preview.confirm_version = list.confirm;
+                            if list.retry {
+                                preview.versions_rx =
+                                    fetch_versions(preview.hit.project_id.clone(), ctx.clone());
+                                preview.versions = None;
+                            }
+                            ui.separator();
                             ui.label(RichText::new(t!("instances.gallery")).strong());
                             if detail.gallery.is_empty() {
                                 ui.label(
@@ -373,6 +609,17 @@ impl ArcticApp {
                             ui.label(detail.game_versions.join(", "));
                             ui.label(RichText::new(t!("instances.loaders_platforms")).strong());
                             ui.label(detail.loaders.join(", "));
+                            if !detail.categories.is_empty() {
+                                ui.label(RichText::new(t!("instances.hub.categories")).strong());
+                                ui.label(
+                                    detail
+                                        .categories
+                                        .iter()
+                                        .map(|c| mods::discovery::pretty_name(c))
+                                        .collect::<Vec<_>>()
+                                        .join(", "),
+                                );
+                            }
                             ui.separator();
                             ui.heading(t!("instances.about_this_project"));
                             let prepared_html = Arc::clone(&preview.html);
@@ -409,6 +656,197 @@ impl ArcticApp {
         if !close {
             self.inst.preview = Some(preview);
         }
+    }
+
+    /// The project's versions, those that fit the target instance first and marked. Any of
+    /// them can be installed: a mod only when it fits, a pack tagged for another Minecraft
+    /// version after the player confirms it, a modpack always (it makes its own instance).
+    fn project_version_list(
+        &mut self,
+        ui: &mut egui::Ui,
+        preview: &Preview,
+        instance: &Instance,
+    ) -> VersionListState {
+        let p = self.palette();
+        let mut state = VersionListState {
+            shown: preview.versions_shown,
+            confirm: preview.confirm_version.clone(),
+            retry: false,
+        };
+        ui.label(RichText::new(t!("instances.hub.versions")).strong());
+        let versions = match &preview.versions {
+            None => {
+                ui.spinner();
+                return state;
+            }
+            Some(Err(e)) => {
+                ui.colored_label(p.error, e);
+                state.retry = ui.button(t!("instances.retry")).clicked();
+                return state;
+            }
+            Some(Ok(v)) if v.is_empty() => {
+                ui.label(RichText::new(t!("instances.hub.no_versions")).color(p.muted));
+                return state;
+            }
+            Some(Ok(v)) => v,
+        };
+        let kind = preview
+            .discover_kind
+            .unwrap_or_else(|| preview_project_type(preview.modpack, preview.kind));
+        let (loader, game) = if preview.modpack {
+            (None, String::new())
+        } else {
+            (instance.loader.kind(), self.pack_game(instance))
+        };
+        if !preview.modpack {
+            ui.label(tf!(
+                "instances.hub.version_target",
+                name = instance.name,
+                game = game
+            ));
+            let hint = if preview.discover_kind.is_some() {
+                t!("instances.hub.choose_instance")
+            } else if preview.kind.is_some() {
+                t!("instances.hub.other_game_needs_confirm")
+            } else {
+                t!("instances.hub.incompatible_blocked")
+            };
+            ui.label(RichText::new(hint).small().color(p.muted));
+        }
+        let busy = if preview.discover_kind.is_some() && self.inst.content.progress.is_some() {
+            true
+        } else if preview.modpack {
+            self.inst.pack_installing.is_some()
+        } else if preview.kind.is_some() {
+            self.inst.packs.installing.contains(&preview.hit.project_id)
+        } else {
+            self.inst.installing.contains(&preview.hit.project_id)
+        };
+        let mut chosen: Option<(String, VersionFit)> = None;
+        for (v, fit) in ordered_versions(versions, kind, loader, &game)
+            .into_iter()
+            .take(preview.versions_shown)
+        {
+            let confirming = state.confirm.as_deref() == Some(v.id.as_str());
+            ui.horizontal(|ui| {
+                match fit {
+                    VersionFit::Fits => {
+                        ui.label(RichText::new("✔").color(p.accent))
+                            .on_hover_text(tf!("instances.hub.fits", name = instance.name));
+                    }
+                    VersionFit::OtherGame => {
+                        ui.label(
+                            RichText::new(t!("instances.hub.other_game"))
+                                .small()
+                                .color(p.warn),
+                        );
+                    }
+                    VersionFit::Incompatible => {
+                        ui.label(
+                            RichText::new(t!("instances.incompatible"))
+                                .small()
+                                .color(p.error),
+                        );
+                    }
+                    VersionFit::NewInstance => {}
+                }
+                ui.label(RichText::new(&v.number).strong().color(p.text));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let install = ui
+                        .add_enabled_ui(
+                            !busy
+                                && (fit.installable() || preview.discover_kind.is_some())
+                                && !confirming,
+                            |ui| {
+                                widgets::button(
+                                    ui,
+                                    p,
+                                    Some(Icon::Plus),
+                                    t!("instances.install"),
+                                    false,
+                                )
+                            },
+                        )
+                        .inner;
+                    let install =
+                        if fit == VersionFit::Incompatible && preview.discover_kind.is_none() {
+                            install.on_disabled_hover_text(t!("instances.hub.incompatible_blocked"))
+                        } else {
+                            install
+                        };
+                    if install.clicked() {
+                        if fit == VersionFit::OtherGame && preview.discover_kind.is_none() {
+                            state.confirm = Some(v.id.clone());
+                        } else {
+                            chosen = Some((v.id.clone(), fit));
+                        }
+                    }
+                });
+            });
+            ui.label(
+                RichText::new(version_details(v, kind))
+                    .small()
+                    .color(p.muted),
+            );
+            if confirming {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        RichText::new(tf!(
+                            "instances.hub.other_game_warning",
+                            versions = short_game_list(&v.game_versions),
+                            game = game
+                        ))
+                        .color(p.warn),
+                    );
+                    if ui
+                        .add_enabled(!busy, egui::Button::new(t!("instances.hub.install_anyway")))
+                        .clicked()
+                    {
+                        chosen = Some((v.id.clone(), VersionFit::OtherGame));
+                    }
+                    if ui.button(t!("instances.cancel")).clicked() {
+                        state.confirm = None;
+                    }
+                });
+            }
+        }
+        if versions.len() > preview.versions_shown
+            && ui.button(t!("instances.hub.show_more_versions")).clicked()
+        {
+            state.shown += VERSIONS_SHOWN;
+        }
+        if let Some((version_id, fit)) = chosen {
+            state.confirm = None;
+            self.inst.install_progress = None;
+            if let Some(kind) = preview.discover_kind {
+                self.pick_single_content(ui.ctx(), kind, &preview.hit, Some(version_id), instance);
+            } else if preview.modpack {
+                self.inst.pack_installing = Some(preview.hit.project_id.clone());
+                self.tasks
+                    .install_modpack(preview.hit.project_id.clone(), Some(version_id));
+            } else if let Some(pack) = preview.kind {
+                self.inst
+                    .packs
+                    .installing
+                    .insert(preview.hit.project_id.clone());
+                self.tasks.pack_install_version(
+                    instance.clone(),
+                    pack,
+                    preview.hit.project_id.clone(),
+                    game,
+                    version_id,
+                    fit == VersionFit::OtherGame,
+                );
+            } else {
+                self.inst.installing.insert(preview.hit.project_id.clone());
+                self.tasks.mod_install_version(
+                    instance.clone(),
+                    preview.hit.project_id.clone(),
+                    version_id,
+                );
+            }
+        }
+        state
     }
 
     fn preview_image(
@@ -457,6 +895,121 @@ impl ArcticApp {
 mod tests {
     use super::*;
 
+    fn info(id: &str, games: &[&str], loaders: &[&str]) -> VersionInfo {
+        VersionInfo {
+            id: id.into(),
+            number: id.into(),
+            name: id.into(),
+            version_type: "release".into(),
+            date: "2025-03-04T10:00:00Z".into(),
+            downloads: 0,
+            game_versions: games.iter().map(|g| g.to_string()).collect(),
+            loaders: loaders.iter().map(|l| l.to_string()).collect(),
+            file_name: Some("content.zip".into()),
+            file_sha1: None,
+        }
+    }
+
+    #[test]
+    fn mod_versions_fit_only_on_the_instance_loader_and_game() {
+        let fabric = Some(LoaderKind::Fabric);
+        let fit = |v: &VersionInfo, loader| VersionFit::of(v, ProjectType::Mod, loader, "1.21.4");
+        assert_eq!(
+            fit(&info("a", &["1.21.4"], &["fabric"]), fabric),
+            VersionFit::Fits
+        );
+        // Mods never go in on the wrong game version or loader, nor into Vanilla.
+        let old = info("b", &["1.20.1"], &["fabric"]);
+        assert_eq!(fit(&old, fabric), VersionFit::Incompatible);
+        let forge = info("c", &["1.21.4"], &["forge"]);
+        assert_eq!(fit(&forge, fabric), VersionFit::Incompatible);
+        let any = info("d", &["1.21.4"], &["fabric"]);
+        assert_eq!(fit(&any, None), VersionFit::Incompatible);
+        assert!(!VersionFit::Incompatible.installable());
+    }
+
+    #[test]
+    fn pack_versions_for_another_game_need_a_confirm_and_wrong_types_are_blocked() {
+        let shader = |v: &VersionInfo| VersionFit::of(v, ProjectType::Shader, None, "1.21.4");
+        assert_eq!(shader(&info("a", &["1.21.4"], &["iris"])), VersionFit::Fits);
+        let old = info("b", &["1.20.1"], &["optifine"]);
+        assert_eq!(shader(&old), VersionFit::OtherGame);
+        assert!(VersionFit::OtherGame.installable());
+        let canvas = info("c", &["1.21.4"], &["canvas"]);
+        assert_eq!(shader(&canvas), VersionFit::Incompatible);
+        let pack = |v: &VersionInfo| VersionFit::of(v, ProjectType::ResourcePack, None, "1.21.4");
+        assert_eq!(
+            pack(&info("d", &["1.8.9"], &["minecraft"])),
+            VersionFit::OtherGame
+        );
+        assert_eq!(
+            pack(&info("e", &["1.21.4"], &["iris"])),
+            VersionFit::Incompatible
+        );
+    }
+
+    #[test]
+    fn modpack_versions_always_install_as_a_new_instance() {
+        let v = info("a", &["1.12.2"], &["forge"]);
+        let fit = VersionFit::of(&v, ProjectType::Modpack, None, "");
+        assert_eq!(fit, VersionFit::NewInstance);
+        assert!(fit.installable());
+        assert_eq!(preview_project_type(true, None), ProjectType::Modpack);
+        assert_eq!(
+            preview_project_type(false, Some(PackKind::Shader)),
+            ProjectType::Shader
+        );
+        assert_eq!(
+            preview_project_type(false, Some(PackKind::Resource)),
+            ProjectType::ResourcePack
+        );
+        assert_eq!(preview_project_type(false, None), ProjectType::Mod);
+    }
+
+    #[test]
+    fn versions_order_fitting_first_and_keep_newest_first_within_groups() {
+        let versions = [
+            info("new-old-game", &["1.20.1"], &["minecraft"]),
+            info("wrong-type", &["1.21.4"], &["iris"]),
+            info("new-fit", &["1.21.4"], &["minecraft"]),
+            info("old-fit", &["1.21.4"], &["minecraft"]),
+            info("old-old-game", &["1.19"], &["minecraft"]),
+        ];
+        let ids: Vec<_> = ordered_versions(&versions, ProjectType::ResourcePack, None, "1.21.4")
+            .into_iter()
+            .map(|(v, _)| v.id.as_str())
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                "new-fit",
+                "old-fit",
+                "new-old-game",
+                "old-old-game",
+                "wrong-type"
+            ]
+        );
+    }
+
+    #[test]
+    fn version_details_shorten_long_game_lists_and_name_the_shader_loader() {
+        let games = ["1.20", "1.20.1", "1.21", "1.21.4"];
+        let v = info("a", &games, &["optifine"]);
+        assert_eq!(
+            version_details(&v, ProjectType::Shader),
+            "release · 1.20 – 1.21.4 · optifine · 2025-03-04 · OptiFine"
+        );
+        let short = info("b", &["1.21.4"], &[]);
+        assert_eq!(
+            version_details(&short, ProjectType::Mod),
+            "release · 1.21.4 · 2025-03-04"
+        );
+        assert_eq!(
+            short_game_list(&["1.8.9".into(), "1.9".into()]),
+            "1.8.9, 1.9"
+        );
+    }
+
     fn preview_fixture() -> Preview {
         let (_, receiver) = mpsc::channel();
         Preview {
@@ -468,11 +1021,18 @@ mod tests {
                 description: String::new(),
                 author: String::new(),
                 downloads: 0,
+                follows: 0,
                 icon_url: None,
+                featured_gallery: None,
                 categories: vec![],
                 game_versions: vec![],
             },
             kind: None,
+            modpack: false,
+            versions_rx: mpsc::channel().1,
+            versions: None,
+            versions_shown: VERSIONS_SHOWN,
+            confirm_version: None,
             receiver,
             detail: None,
             markdown: CommonMarkCache::default(),
@@ -481,6 +1041,7 @@ mod tests {
             gallery: HashMap::new(),
             body: String::new(),
             html: Arc::default(),
+            discover_kind: None,
         }
     }
 
@@ -490,7 +1051,7 @@ mod tests {
         let ctx = preview.context.clone();
         let url = "https://example.com/screenshot.png".to_owned();
         preview.gallery.insert(url.clone(), IconState::Loading);
-        preview.gallery_result(url.clone(), Ok(vec![1, 2, 3]));
+        preview.gallery_result(url.clone(), Ok([1, 2, 3].into()));
         let IconState::Ready(uri) = preview.gallery.get(&url).unwrap() else {
             panic!("image not ready")
         };
@@ -499,11 +1060,11 @@ mod tests {
         drop(preview);
         assert!(ctx.try_load_bytes(&uri).is_err());
         let mut reopened = preview_fixture();
-        reopened.gallery_result(url.clone(), Ok(vec![4, 5, 6]));
+        reopened.gallery_result(url.clone(), Ok([4, 5, 6].into()));
         assert!(!reopened.gallery.contains_key(&url));
         assert!(ctx.try_load_bytes(&uri).is_err());
         reopened.gallery.insert(url.clone(), IconState::Loading);
-        reopened.gallery_result(url, Ok(vec![4, 5, 6]));
+        reopened.gallery_result(url, Ok([4, 5, 6].into()));
         assert!(reopened.context.try_load_bytes(&uri).is_ok());
     }
 
@@ -513,7 +1074,7 @@ mod tests {
         let ctx = preview.context.clone();
         let url = "https://example.com/screenshot.png".to_owned();
         preview.gallery.insert(url.clone(), IconState::Loading);
-        preview.gallery_result(url.clone(), Ok(vec![1, 2, 3]));
+        preview.gallery_result(url.clone(), Ok([1, 2, 3].into()));
         let IconState::Ready(uri) = preview.gallery.get(&url).unwrap() else {
             panic!("image not ready")
         };

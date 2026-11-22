@@ -3,7 +3,7 @@
 //! (keys, video, sound...). Kept in step whenever a game starts and after
 //! it quits: the newest copy wins and goes to every other instance.
 //!
-//! Minecraft's settings go through [`Defaults`], which converts keys
+//! Minecraft's settings go through [`Defaults`], which converts preferences
 //! between old and new games, so a 1.8.9 instance and a 26.x one can share
 //! them. The first time a file of an instance is replaced it's kept next to
 //! it as `*.before-sharing`.
@@ -13,9 +13,11 @@ use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::IoContext;
 use crate::game_defaults::Defaults;
 use crate::instances::{self, Instance};
 use crate::storage::DataDirs;
+use crate::storage::write_atomic as write;
 use crate::{Error, Result};
 
 /// Where the shared copies live, in the profile's folder.
@@ -28,6 +30,7 @@ const CLIENT_FILES: [&str; 3] = [
 ];
 const OPTIONS: &str = "options.txt";
 const SHARED_OPTIONS: &str = "options.json";
+const OPTIONS_PROJECTION: &str = ".arctic-shared-options-projection.json";
 const BACKUP: &str = ".before-sharing";
 
 /// What this profile's instances share (all on by default).
@@ -66,9 +69,49 @@ pub fn sync(
     shared: SharedSettings,
     launching: Option<(&Instance, &str)>,
 ) -> Result<()> {
+    let launching =
+        launching.map(|(instance, version)| (instance, version, instance.game_dir(dirs)));
+    sync_at(dirs, shared, launching)
+}
+
+pub(crate) fn sync_at(
+    dirs: &DataDirs,
+    shared: SharedSettings,
+    launching: Option<(&Instance, &str, PathBuf)>,
+) -> Result<()> {
     if !shared.any() {
         return Ok(());
     }
+    let _lock = lock(dirs)?;
+    sync_locked(dirs, shared, launching)
+}
+
+pub(crate) fn lock(dirs: &DataDirs) -> Result<std::fs::File> {
+    let store = dirs.profile_root().join(DIR);
+    std::fs::create_dir_all(&store).at(&store)?;
+    let path = store.join(".sync.lock");
+    let file = std::fs::File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .at(&path)?;
+    file.lock().at(&path)?;
+    Ok(file)
+}
+
+pub(crate) fn sync_locked(
+    dirs: &DataDirs,
+    shared: SharedSettings,
+    launching: Option<(&Instance, &str, PathBuf)>,
+) -> Result<()> {
+    if !shared.any() {
+        return Ok(());
+    }
+    let dest = launching
+        .filter(|(instance, _, _)| !instance.own_settings)
+        .map(|(_, version, dir)| (dir, version));
     let mut all = vec![instances::load_default(dirs)?];
     all.extend(instances::list_custom(dirs)?);
     // Instances that keep their own settings neither give nor get any.
@@ -78,7 +121,9 @@ pub fn sync(
         .map(|i| {
             let dir = i.game_dir(dirs);
             GameFolder {
-                busy: crate::sharing::client::in_use(&dir),
+                busy: crate::sharing::client::in_use(&dir)
+                    || (dest.as_ref().is_none_or(|(target, _)| *target != dir)
+                        && crate::launch::session::in_use(&dir)),
                 dir,
             }
         })
@@ -89,25 +134,24 @@ pub fn sync(
         let shared_servers = store.join(crate::servers::SERVERS_FILE);
         if !shared_servers.exists() {
             // First time: every instance's servers, none lost.
-            let sources: Vec<PathBuf> = newest_first(&folders, crate::servers::SERVERS_FILE);
+            let sources = newest_first(&folders, crate::servers::SERVERS_FILE);
             crate::servers::merge_files(&sources, &shared_servers)?;
         }
-        sync_file(&folders, &shared_servers, crate::servers::SERVERS_FILE)?;
+        sync_file(
+            &folders,
+            dest.as_ref(),
+            &shared_servers,
+            crate::servers::SERVERS_FILE,
+        )?;
     }
     if shared.client {
         for rel in CLIENT_FILES {
             let name = Path::new(rel).file_name().unwrap_or_default();
-            sync_file(&folders, &store.join(name), rel)?;
+            sync_file(&folders, dest.as_ref(), &store.join(name), rel)?;
         }
     }
     if shared.game {
-        sync_options(
-            &folders,
-            &store.join(SHARED_OPTIONS),
-            launching
-                .filter(|(i, _)| !i.own_settings)
-                .map(|(i, v)| (i.game_dir(dirs), v)),
-        )?;
+        sync_options(&folders, &store.join(SHARED_OPTIONS), dest)?;
     }
     Ok(())
 }
@@ -126,6 +170,7 @@ fn modified(path: &Path) -> Option<SystemTime> {
 fn newest_first(folders: &[GameFolder], rel: &str) -> Vec<PathBuf> {
     let mut found: Vec<(SystemTime, PathBuf)> = folders
         .iter()
+        .filter(|f| !f.busy)
         .map(|f| f.dir.join(rel))
         .filter_map(|p| Some((modified(&p)?, p)))
         .collect();
@@ -135,10 +180,15 @@ fn newest_first(folders: &[GameFolder], rel: &str) -> Vec<PathBuf> {
 
 /// Newest copy wins: it becomes the shared one, then goes to every idle
 /// instance that has something else.
-fn sync_file(folders: &[GameFolder], shared: &Path, rel: &str) -> Result<()> {
+fn sync_file(
+    folders: &[GameFolder],
+    dest: Option<&(PathBuf, &str)>,
+    shared: &Path,
+    rel: &str,
+) -> Result<()> {
     let mut best = std::fs::read(shared).ok().filter(|b| usable(rel, b));
     let mut best_time = best.as_ref().and_then(|_| modified(shared));
-    for folder in folders {
+    for folder in folders.iter().filter(|f| !f.busy) {
         let path = folder.dir.join(rel);
         let Some(time) = modified(&path) else {
             continue;
@@ -167,15 +217,19 @@ fn sync_file(folders: &[GameFolder], shared: &Path, rel: &str) -> Result<()> {
         }
         write(shared, &best)?;
     }
-    for folder in folders.iter().filter(|f| !f.busy) {
-        let path = folder.dir.join(rel);
+    let extra = dest
+        .map(|(dir, _)| dir)
+        .filter(|dir| !folders.iter().any(|f| &f.dir == *dir));
+    let targets = folders.iter().filter(|f| !f.busy).map(|f| &f.dir);
+    for dir in targets.chain(extra) {
+        let path = dir.join(rel);
         let current = std::fs::read(&path).ok();
         if current.as_ref() == Some(&best) {
             continue;
         }
         if current.is_some() {
             keep_backup(&path)?;
-        } else if !folder.dir.exists() {
+        } else if !dir.exists() {
             // An instance never started yet gets it on its first start.
             continue;
         }
@@ -192,23 +246,26 @@ fn sync_options(
     shared: &Path,
     launching: Option<(PathBuf, &str)>,
 ) -> Result<()> {
-    let mut known: Defaults = crate::storage::load_json(shared)?.unwrap_or_default();
+    let stored: Defaults = crate::storage::load_json(shared)?.unwrap_or_default();
+    let mut known = stored.clone();
+    crate::game_defaults_options::canonicalize(&mut known.values);
     let shared_time = modified(shared);
     if let Some(newest) = newest_first(folders, OPTIONS).into_iter().next()
         && modified(&newest).is_some_and(|t| shared_time.is_none_or(|s| t > s))
-        && let Ok(captured) = Defaults::capture(newest.parent().unwrap_or(Path::new(".")))
+        && let Some(game_dir) = newest.parent()
+        && let Ok(mut captured) = Defaults::capture(game_dir)
         && !captured.is_empty()
     {
+        discard_projected_options(game_dir, &mut captured)?;
         // What the newest file says wins, but a setting it doesn't have stays: an older game
         // drops options it doesn't know (1.8.9 has no entity distance), and playing it must not
         // reset them for every newer game.
         let mut merged = known.clone();
-        merged.values.extend(captured.values);
-        let merged = keep_acknowledged(&known, merged);
-        if merged.values != known.values {
-            known = merged;
-            crate::storage::save_json(shared, &known)?;
-        }
+        crate::game_defaults_options::merge(&mut merged.values, captured.values);
+        known = keep_acknowledged(&known, merged);
+    }
+    if known != stored {
+        crate::storage::save_json(shared, &known)?;
     }
     let Some((game_dir, version)) = launching else {
         return Ok(());
@@ -220,7 +277,35 @@ fn sync_options(
     if options.exists() {
         keep_backup(&options)?;
     }
-    known.apply_to(&game_dir, Some(version))?;
+    let projected = known.apply_with_projection(&game_dir, Some(version))?;
+    let path = game_dir.join(OPTIONS_PROJECTION);
+    if !projected.is_empty() || path.exists() {
+        crate::storage::save_json(&path, &projected)?;
+    }
+    Ok(())
+}
+
+/// Keep the more precise shared preference when a client saves back the
+/// fallback it received at launch. A different value is a player change.
+fn discard_projected_options(game_dir: &Path, captured: &mut Defaults) -> Result<()> {
+    let path = game_dir.join(OPTIONS_PROJECTION);
+    let Some(mut projected) = crate::storage::load_json::<Defaults>(&path)? else {
+        return Ok(());
+    };
+    let count = projected.values.len();
+    projected
+        .values
+        .retain(|key, value| match captured.values.get(key) {
+            Some(current) if current == value => {
+                captured.values.remove(key);
+                true
+            }
+            Some(_) => false,
+            None => true,
+        });
+    if projected.values.len() != count {
+        crate::storage::save_json(&path, &projected)?;
+    }
     Ok(())
 }
 
@@ -293,15 +378,51 @@ fn keep_backup(path: &Path) -> Result<()> {
     std::fs::write(slot(1), &current).map_err(|e| Error::io(slot(1), e))
 }
 
-fn write(path: &Path, bytes: &[u8]) -> Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+/// Publish a finished copy's settings to the instance, leaving unreadable or partial files behind.
+pub(crate) fn save_copy(from: &Path, to: &Path, shared: SharedSettings) -> Result<()> {
+    let options = from.join(OPTIONS);
+    if let Ok(bytes) = std::fs::read(&options)
+        && bytes.ends_with(b"\n")
+        && Defaults::capture(from).is_ok_and(|options| !options.is_empty())
+    {
+        let path = to.join(OPTIONS);
+        let current = match std::fs::read(&path) {
+            Ok(current) => current,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(e) => return Err(Error::io(&path, e)),
+        };
+        // Copies have their own pack directories and may run a different game
+        // version. The instance's pack selection and compatibility decisions
+        // belong to the primary directory.
+        let is_pack_option = |line: &[u8]| {
+            line.starts_with(b"resourcePacks:") || line.starts_with(b"incompatibleResourcePacks:")
+        };
+        let mut merged = Vec::with_capacity(bytes.len());
+        for line in bytes.split_inclusive(|&byte| byte == b'\n') {
+            if !is_pack_option(line) {
+                merged.extend_from_slice(line);
+            }
+        }
+        for line in current.split_inclusive(|&byte| byte == b'\n') {
+            if is_pack_option(line) {
+                merged.extend_from_slice(line);
+            }
+        }
+        write(&path, &merged)?;
+        let projection = crate::storage::load_json::<Defaults>(&from.join(OPTIONS_PROJECTION))?
+            .unwrap_or_default();
+        crate::storage::save_json(&to.join(OPTIONS_PROJECTION), &projection)?;
     }
-    let mut tmp = path.as_os_str().to_os_string();
-    tmp.push(".arctic-tmp");
-    let tmp = PathBuf::from(tmp);
-    std::fs::write(&tmp, bytes).map_err(|e| Error::io(&tmp, e))?;
-    std::fs::rename(&tmp, path).map_err(|e| Error::io(path, e))
+    let client = shared.client.then_some(CLIENT_FILES).into_iter().flatten();
+    let servers = shared.servers.then_some(crate::servers::SERVERS_FILE);
+    for rel in client.chain(servers) {
+        if let Ok(bytes) = std::fs::read(from.join(rel))
+            && usable(rel, &bytes)
+        {
+            write(&to.join(rel), &bytes)?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -422,6 +543,138 @@ mod tests {
         assert!(text.contains("fov:0.5"), "{text}");
         // 1.8.9 stores keys as LWJGL 2 codes.
         assert!(text.contains("key_key.jump:57"), "{text}");
+    }
+
+    #[test]
+    fn sharing_game_options_keeps_each_instances_pack_lists() {
+        let (_tmp, dirs, a, b) = setup();
+        let target = b.game_dir(&dirs).join(OPTIONS);
+        let local = "resourcePacks:[\"local.zip\"]\nincompatibleResourcePacks:[\"local.zip\"]\n";
+        std::fs::write(&target, local).unwrap();
+        later();
+        std::fs::write(
+            a.game_dir(&dirs).join(OPTIONS),
+            "fov:0.5\nresourcePacks:[\"file/other.zip\"]\nincompatibleResourcePacks:[]\n",
+        )
+        .unwrap();
+        sync(&dirs, SharedSettings::default(), Some((&b, "1.8.9"))).unwrap();
+        let saved = std::fs::read_to_string(target).unwrap();
+        assert!(saved.contains(local), "{saved}");
+        assert!(saved.contains("fov:0.5"), "{saved}");
+    }
+
+    #[test]
+    fn all_cloud_modes_survive_26_2_to_1_8_9_and_back() {
+        for mode in ["false", "fast", "true"] {
+            // Vanilla can also switch versions in a single folder, leaving no version
+            // line after 1.8.9 saves it. The next 26.2 launch still needs quotes.
+            for same_folder in [false, true] {
+                let (_tmp, dirs, a, b) = setup();
+                let legacy = if same_folder { &a } else { &b };
+                let modern_file = a.game_dir(&dirs).join(OPTIONS);
+                let legacy_file = legacy.game_dir(&dirs).join(OPTIONS);
+                std::fs::write(
+                    &modern_file,
+                    format!("version:4903\nrenderClouds:\"{mode}\"\n"),
+                )
+                .unwrap();
+                let settings = SharedSettings::default();
+                sync(&dirs, settings, Some((legacy, "1.8.9"))).unwrap();
+                let text = std::fs::read_to_string(&legacy_file).unwrap();
+                assert!(
+                    text.lines()
+                        .any(|line| line == format!("renderClouds:{mode}")),
+                    "{text}"
+                );
+
+                // Model the 1.8.9 save, which removes the version line and
+                // changes the file's mtime. A second preference proves it was captured.
+                later();
+                std::fs::write(&legacy_file, format!("renderClouds:{mode}\nfov:0.5\n")).unwrap();
+                sync(&dirs, settings, None).unwrap();
+                sync(&dirs, settings, Some((&a, "26.2"))).unwrap();
+                let text = std::fs::read_to_string(&modern_file).unwrap();
+                assert!(
+                    text.lines()
+                        .any(|line| line == format!("renderClouds:\"{mode}\"")),
+                    "{text}"
+                );
+                assert!(text.contains("graphicsPreset:\"custom\""), "{text}");
+                assert!(text.contains("fov:0.5"), "{text}");
+                let shared: Defaults =
+                    crate::storage::load_json(&dirs.profile_root().join(DIR).join(SHARED_OPTIONS))
+                        .unwrap()
+                        .unwrap();
+                assert_eq!(shared.values["renderClouds"], mode);
+            }
+        }
+    }
+
+    #[test]
+    fn lossy_legacy_saves_preserve_shared_values_and_accept_edits() {
+        let (_tmp, dirs, a, b) = setup();
+        let modern = a.game_dir(&dirs).join(OPTIONS);
+        let legacy = b.game_dir(&dirs).join(OPTIONS);
+        std::fs::write(
+            &modern,
+            "version:4903\nrenderClouds:\"true\"\ngraphicsPreset:\"fabulous\"\nguiScale:6\nkey_key.jump:key.keyboard.world.1\n",
+        )
+        .unwrap();
+        let settings = SharedSettings::default();
+        sync(&dirs, settings, Some((&b, "1.7.10"))).unwrap();
+        let text = std::fs::read_to_string(&legacy).unwrap();
+        assert!(text.contains("clouds:true") && text.contains("fancyGraphics:true"));
+        assert!(
+            text.contains("guiScale:3") && text.contains("key_key.jump:0"),
+            "{text}"
+        );
+        later();
+        std::fs::write(
+            &legacy,
+            "clouds:true\nfancyGraphics:true\nguiScale:3\nkey_key.jump:0\n",
+        )
+        .unwrap();
+        sync(&dirs, settings, Some((&a, "26.2"))).unwrap();
+        let text = std::fs::read_to_string(&modern).unwrap();
+        assert!(
+            text.contains("renderClouds:\"true\"") && text.contains("graphicsPreset:\"fabulous\"")
+        );
+        assert!(
+            text.contains("guiScale:6") && text.contains("key_key.jump:key.keyboard.world.1"),
+            "{text}"
+        );
+
+        later();
+        std::fs::write(&legacy, "clouds:false\nfancyGraphics:false\nguiScale:1\n").unwrap();
+        sync(&dirs, settings, Some((&a, "26.2"))).unwrap();
+        let text = std::fs::read_to_string(&modern).unwrap();
+        assert!(
+            text.contains("renderClouds:\"false\"") && text.contains("graphicsPreset:\"custom\"")
+        );
+        assert!(
+            text.contains("guiScale:1") && text.contains("cutoutLeaves:false"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_legacy_cloud_edit_disables_the_modern_preset_that_would_reset_it() {
+        let (_tmp, dirs, a, b) = setup();
+        let modern = a.game_dir(&dirs).join(OPTIONS);
+        let legacy = b.game_dir(&dirs).join(OPTIONS);
+        std::fs::write(
+            &modern,
+            "version:4903\ngraphicsPreset:\"fancy\"\nrenderClouds:\"true\"\n",
+        )
+        .unwrap();
+        let settings = SharedSettings::default();
+        sync(&dirs, settings, Some((&b, "1.8.9"))).unwrap();
+        later();
+        std::fs::write(&legacy, "fancyGraphics:true\nrenderClouds:false\n").unwrap();
+        sync(&dirs, settings, Some((&a, "26.2"))).unwrap();
+        let text = std::fs::read_to_string(&modern).unwrap();
+        assert!(text.contains("graphicsPreset:\"custom\""), "{text}");
+        assert!(text.contains("renderClouds:\"false\""), "{text}");
     }
 
     #[test]

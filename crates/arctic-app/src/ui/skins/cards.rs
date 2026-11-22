@@ -680,7 +680,7 @@ impl ArcticApp {
         if ids.is_empty() {
             return WornModels::default();
         }
-        let Some(entries) = self.catalog_state().map(|state| {
+        let Some(entries) = self.cosmetic_catalog().map(|state| {
             cosmetic_entries_matching(state, |id| ids.iter().any(|wanted| wanted == id))
         }) else {
             return WornModels::default();
@@ -743,8 +743,10 @@ impl ArcticApp {
 
     pub(super) fn cosmetics_body(&mut self, ui: &mut egui::Ui, slot: &'static str) {
         let p = self.palette();
-        let Some(entries) = self.catalog_state().map(cosmetic_entries) else {
-            ui.label(RichText::new(t!("skins.cosmetics_are_loading")).color(p.muted));
+        let Some(entries) = self.cosmetic_catalog().map(cosmetic_entries) else {
+            if self.skins.cosmetic_catalog.error.is_none() {
+                ui.label(RichText::new(t!("skins.cosmetics_are_loading")).color(p.muted));
+            }
             return;
         };
         let can_wear = self.arctic_state().is_some();
@@ -1095,12 +1097,12 @@ pub(super) enum Shape3d {
     },
 }
 
-pub(super) fn cosmetic_entries(state: &crate::skin_tasks::ArcticState) -> Vec<Entry3d> {
+pub(super) fn cosmetic_entries(state: &crate::skin_tasks::CosmeticCatalog) -> Vec<Entry3d> {
     cosmetic_entries_matching(state, |_| true)
 }
 
 fn cosmetic_entries_matching(
-    state: &crate::skin_tasks::ArcticState,
+    state: &crate::skin_tasks::CosmeticCatalog,
     include: impl Fn(&str) -> bool,
 ) -> Vec<Entry3d> {
     let mut out: Vec<Entry3d> = state

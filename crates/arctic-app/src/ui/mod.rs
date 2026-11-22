@@ -11,6 +11,7 @@ mod instances;
 mod logs;
 pub(crate) mod suggest;
 
+pub(crate) use instances::Section;
 pub(crate) use instances::dialog_frame;
 pub use instances::{InstancePage, InstancesUi};
 pub use logs::LogViewKey;

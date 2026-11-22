@@ -9,6 +9,7 @@ use crate::theme;
 use crate::widgets;
 use crate::{t, tf};
 const WEBSITE: &str = "https://arcticlauncher.com";
+const FEATURES_URL: &str = "https://arcticlauncher.com/features";
 pub(crate) const DISCORD: &str = "https://discord.arcticlauncher.com";
 const SUPPORT_EMAIL: &str = "support@arcticlauncher.com";
 
@@ -85,6 +86,19 @@ impl ArcticApp {
                 {
                     ui.ctx()
                         .open_url(egui::OpenUrl::new_tab(format!("mailto:{SUPPORT_EMAIL}")));
+                }
+            });
+            crate::widgets::row(ui, |ui| {
+                if widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::External),
+                    t!("nav.see_all_features"),
+                    false,
+                )
+                .clicked()
+                {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(FEATURES_URL));
                 }
             });
             ui.add_space(6.0);

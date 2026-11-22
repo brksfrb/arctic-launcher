@@ -2,7 +2,7 @@
   "settings.127_0_0_1_or_proxy_example_com": "127.0.0.1 或 proxy.example.com",
   "settings.4_gb_suits_vanilla_giving_java_more_than_it": "原版 4 GB 就够了。给 Java 超出所需的内存可能导致卡顿。",
   "settings.a_few_seconds_after_the_launcher_opens_so_it": "启动器打开几秒后再检查，这样启动更快",
-  "settings.a_launchers_instances_folder_portable": "某个启动器的实例文件夹（便携版 MultiMC、移动过的 CurseForge 文件夹…）",
+  "settings.a_launchers_instances_folder_portable": "某个启动器的实例文件夹（便携版 MultiMC…）",
   "settings.a_tip_about_one_of_arctics_features_in_the": "侧边栏里显示一条关于 Arctic 功能的小提示，每 5 分钟换一条。",
   "settings.address": "地址",
   "settings.after_an_update_a_popup_lists_whats_new_and": "更新后弹窗列出新变化和修复内容",

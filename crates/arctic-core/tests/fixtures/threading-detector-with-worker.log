@@ -1,0 +1,44 @@
+---- Minecraft Crash Report ----
+
+Description: Accessing PalettedContainer from multiple threads
+
+java.lang.RuntimeException: Rendering a block
+	at knot//com.example.render.RenderHooks.draw(RenderHooks.java:11)
+Caused by: java.lang.IllegalStateException: Accessing PalettedContainer from multiple threads
+	at knot//net.minecraft.class_5798.method_33564(class_5798.java:84)
+Caused by: java.lang.IllegalStateException: Example inner cause
+	at knot//net.minecraft.class_638.method_2943(class_638.java:383)
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Stacktrace:
+	at knot//com.example.render.RenderHooks.draw(RenderHooks.java:11)
+
+-- Thread dumps --
+Details:
+	Thread dumps: Render thread:
+	at java.base/java.lang.Thread.getStackTrace(Thread.java:1619)
+	at knot//com.example.render.RenderHooks.draw(RenderHooks.java:11)
+Particle worker #1:
+	at knot//net.minecraft.class_5798.method_33564(class_5798.java:84)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at knot//net.fabricmc.fabric.impl.event.EventImpl.invoke(EventImpl.java:12)
+	at knot//com.example.sparkparticles.async.BlockSampler.sample(BlockSampler.java:17)
+	at knot//com.example.scheduler.Work.run(Work.java:27)
+Stacktrace:
+	at knot//com.example.render.RenderHooks.draw(RenderHooks.java:11)
+
+-- System Details --
+Details:
+	Operating System: Example OS
+	Mixins in Stacktrace:
+		net.minecraft.class_638:
+			com.example.render.ClientWorldMixin (render.mixins.json)
+	Suspected Mods: Render Hooks (render_hooks)
+	Fabric Mods:
+		render_hooks: Render Hooks 1.0.0
+		spark_particles: Spark Particles 2.0.0
+		scheduler: Scheduler 3.0.0

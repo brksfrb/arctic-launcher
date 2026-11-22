@@ -55,7 +55,8 @@ def check(version):
         for name in ("GlassPacks", "GlassTiles"):
             source = MOD / f"core/src/main/java/com/arcticlauncher/client/ctm/{name}.java"
             write(f"com/arcticlauncher/client/ctm/{name}.java", source.read_text())
-        write("com/arcticlauncher/mod/GlassCtm.java", "package com.arcticlauncher.mod; class GlassCtm { static boolean available(){return true;} }")
+        write("com/arcticlauncher/mod/GlassCtm.java", "package com.arcticlauncher.mod; class GlassCtm { static boolean available(){return true;} static void reloading(){} static int tileCount(){return 47;} }")
+        write("com/arcticlauncher/mod/ArcticMod.java", "package com.arcticlauncher.mod; class ArcticMod { static final Log LOG=new Log(); static class Log { void info(String s,Object... args){} } }")
         write("com/arcticlauncher/mod/GlassImages.java", "package com.arcticlauncher.mod; class GlassImages { static net.minecraft.resources.Identifier id(String s){return new net.minecraft.resources.Identifier(s);} }")
         write("net/minecraft/resources/Identifier.java", """package net.minecraft.resources;
 public class Identifier {

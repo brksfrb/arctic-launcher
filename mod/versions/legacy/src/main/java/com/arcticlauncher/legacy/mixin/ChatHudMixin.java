@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.arcticlauncher.client.Lang;
+import com.arcticlauncher.client.feature.PersistentChat;
 /** Chat timestamps, repeated lines stacked, mentions of you marked, and Auto GG. */
 @Mixin(ChatHud.class)
 abstract class ChatHudMixin {
@@ -54,7 +55,7 @@ abstract class ChatHudMixin {
 		try {
 			history.restore(new com.arcticlauncher.client.feature.PersistentChat.View() {
 				public void message(String text, long time) {
-					chat.addMessage(new net.minecraft.text.LiteralText(text));
+					chat.addMessage(new net.minecraft.text.LiteralText(com.arcticlauncher.client.feature.ChatArchiveText.toLegacy(text)));
 				}
 				public void sent(String text) {
 					chat.getMessageHistory().add(text);
@@ -86,7 +87,7 @@ abstract class ChatHudMixin {
 			// Added the usual way, each at the front (oldest first), then the block moves to the far end.
 			history.replay(page, new com.arcticlauncher.client.feature.PersistentChat.View() {
 				public void message(String text, long time) {
-					chat.addMessage(new net.minecraft.text.LiteralText(text));
+					chat.addMessage(new net.minecraft.text.LiteralText(com.arcticlauncher.client.feature.ChatArchiveText.toLegacy(text)));
 				}
 				public void sent(String text) {}
 			});
@@ -147,15 +148,15 @@ abstract class ChatHudMixin {
 	@ModifyConstant(method = "addMessage(Lnet/minecraft/text/Text;IIZ)V", constant = @Constant(intValue = 100))
 	private int arctic$history(int vanilla) {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
-		if (arctic$loading) return Integer.MAX_VALUE;
-		return c == null ? vanilla : c.chatHistory + arctic$loadedLines;
+		return PersistentChat.historyLimit(arctic$loading, c == null ? vanilla : c.chatHistory,
+				c == null ? 0 : arctic$loadedLines);
 	}
 
-	/** The up-arrow list is not capped at 100 while it is saved (the log would have gaps). */
+	/** Keep a larger up-arrow history while chat is saved to disk. */
 	@ModifyConstant(method = "addToMessageHistory", constant = @Constant(intValue = 100), require = 0)
 	private int arctic$sentLimit(int vanilla) {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
-		return c != null && c.chatPersistent ? Integer.MAX_VALUE : vanilla;
+		return c != null && c.chatPersistent ? PersistentChat.MAX_HUD_LINES : vanilla;
 	}
 
 	/** Hide the chat: none of its lines are drawn. */
@@ -205,7 +206,7 @@ abstract class ChatHudMixin {
 				return LegacyHooks.restoredChat(message, ArcticClient.persistentChat().restoringTime());
 			}
 			if (!ArcticClient.chatHidden(message.asUnformattedString())) {
-				ArcticClient.persistentChat().message(message.asFormattedString());
+				ArcticClient.persistentChat().message(com.arcticlauncher.client.feature.ChatArchiveText.toLegacy(message.asFormattedString()));
 			}
 		}
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();

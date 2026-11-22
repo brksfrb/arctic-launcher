@@ -80,6 +80,7 @@ pub struct PackVersion {
 }
 
 fn pack_versions_raw(project_id: &str) -> Result<Vec<Version>> {
+    crate::curseforge::check_link(project_id)?;
     modrinth::get_api(
         &format!(
             "https://api.modrinth.com/v2/project/{}/version",
@@ -189,6 +190,7 @@ pub fn install_version(
             sha1,
             size,
             lzma: None,
+            md5: None,
         }],
         progress,
     )?;
@@ -205,6 +207,7 @@ pub fn is_modrinth_pack(path: &Path) -> bool {
 }
 
 pub fn install_file(dirs: &DataDirs, pack: &Path, progress: Progress) -> Result<Instance> {
+    crate::curseforge::check_file(pack)?;
     let size = fs::metadata(pack).at(pack)?.len();
     if size > MAX_PACK_BYTES {
         return Err(Error::Other("the modpack file is too large".into()));
@@ -212,16 +215,9 @@ pub fn install_file(dirs: &DataDirs, pack: &Path, progress: Progress) -> Result<
     let mut zip = zip::ZipArchive::new(fs::File::open(pack).at(pack)?)
         .map_err(|e| Error::Other(format!("not a modpack file: {e}")))?;
     let index: PackIndex = {
-        let curseforge = zip.file_names().any(|n| n == "manifest.json");
         let entry = zip
             .by_name(INDEX)
-            .map_err(|_| {
-                if curseforge {
-                    Error::Other("this is a CurseForge modpack; Arctic installs Modrinth modpacks (.mrpack). Look for the pack on Modrinth".into())
-                } else {
-                    Error::Other("not a Modrinth modpack (no modrinth.index.json)".into())
-                }
-            })?;
+            .map_err(|_| Error::Other("not a Modrinth modpack (no modrinth.index.json)".into()))?;
         serde_json::from_reader(entry)?
     };
     let (game, loader) = index.target()?;
@@ -280,13 +276,14 @@ pub fn download_jobs(index: &PackIndex, game_dir: &Path) -> Result<Vec<DownloadJ
             sha1: file.hashes.get("sha1").cloned(),
             size: file.file_size,
             lzma: None,
+            md5: None,
         });
     }
     Ok(jobs)
 }
 
 /// Only https downloads from the hosts the pack format allows.
-fn check_url(url: &str) -> Result<()> {
+pub(super) fn check_url(url: &str) -> Result<()> {
     let host = url
         .strip_prefix("https://")
         .and_then(|rest| rest.split(['/', '?', '#']).next())
@@ -341,7 +338,7 @@ fn extract_overrides(
     Ok(())
 }
 
-fn sanitize(name: &str) -> String {
+pub(super) fn sanitize(name: &str) -> String {
     name.chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || ".-_".contains(c) {

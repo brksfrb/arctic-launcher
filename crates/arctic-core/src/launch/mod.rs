@@ -9,11 +9,15 @@ pub mod files;
 mod game_window;
 mod language;
 pub mod logparse;
+#[cfg(any(windows, test))]
+mod named_runtime;
 mod priority;
 pub mod process;
 pub mod progress;
 #[cfg(test)]
 mod repair_tests;
+mod runtime_repair;
+pub(crate) mod session;
 pub mod startup;
 pub mod startup_cache;
 mod truststore;
@@ -39,6 +43,7 @@ use crate::{
 use self::args::{JvmOptions, Placeholders, split_jvm_args, substitute};
 
 /// Everything needed to launch one version for one account.
+#[derive(Clone)]
 pub struct LaunchRequest<'a> {
     pub dirs: &'a DataDirs,
     pub version: &'a VersionEntry,
@@ -108,6 +113,7 @@ fn unix_now() -> u64 {
 #[derive(Debug, Clone)]
 pub struct LaunchPlan {
     pub java: PathBuf,
+    managed_runtime: Option<PathBuf>,
     pub args: Vec<String>,
     pub game_dir: PathBuf,
     pub log_file: PathBuf,
@@ -115,6 +121,7 @@ pub struct LaunchPlan {
     pub high_performance_gpu: bool,
     /// Maximize the game window once it opens.
     pub maximize_window: bool,
+    custom_max_heap: bool,
     /// Access token and proxy password, kept only to redact them from logs.
     secrets: Vec<String>,
 }
@@ -190,8 +197,13 @@ impl LaunchPlan {
             }
             flags.push(java_flag_without_path(arg));
         }
+        let heap_source = if self.custom_max_heap {
+            args::CUSTOM_MAX_HEAP_SOURCE
+        } else {
+            ""
+        };
         format!(
-            "Java {java}, flags: {} | classpath: {}",
+            "Java {java}{heap_source}, flags: {} | classpath: {}",
             flags.join(" "),
             classpath.join(", ")
         )
@@ -213,8 +225,7 @@ fn java_flag_without_path(arg: &str) -> String {
     format!("{name}{sep}{file}")
 }
 
-/// A version whose files are all downloaded and laid out; command lines
-/// for any account can be built from it without further I/O.
+/// A version whose files are all downloaded and laid out for launch.
 pub struct Installation {
     pub version: VersionJson,
     pub java: PathBuf,
@@ -272,7 +283,15 @@ fn install_with_repair(
     let java_override = java_override.filter(|p| p.is_file());
     let (runtime, assets) = std::thread::scope(|scope| {
         let runtime = scope.spawn(|| match &java_override {
-            Some(_) => Ok(None),
+            Some(path) => java::managed_runtime(dirs, path)
+                .map(|runtime| {
+                    let name = runtime.file_name().unwrap().to_string_lossy();
+                    let intel = cfg!(target_os = "macos")
+                        .then(|| name.strip_suffix("-x64"))
+                        .flatten();
+                    java::plan_runtime_for(dirs, intel.unwrap_or(&name), intel.is_some())
+                })
+                .transpose(),
             None => java::plan_runtime_for(
                 dirs,
                 java::component_for(&version),
@@ -286,7 +305,7 @@ fn install_with_repair(
             .unwrap_or_else(|_| Err(Error::Other("Java runtime check crashed".into())));
         (runtime, assets)
     });
-    let (runtime, assets) = (runtime?, assets?);
+    let (mut runtime, assets) = (runtime?, assets?);
     log::info!(
         "install: runtime and asset plan done at {} ms",
         clock.elapsed().as_millis()
@@ -297,12 +316,19 @@ fn install_with_repair(
     // After a crash that pointed at a damaged file: each library and the client checked in full.
     repair.check(&jobs, &libs.bootstrap, libs.main_class.as_ref())?;
     jobs.extend(logging.iter().map(|(job, _)| job.clone()));
-    jobs.extend(runtime.iter().flat_map(|r| r.jobs.iter().cloned()));
+    let replacements = runtime
+        .as_mut()
+        .map_or_else(Vec::new, |r| std::mem::take(&mut r.jobs));
     let assets_fresh = files::assets_verified_recently(dirs, &assets.index_name);
     if !assets_fresh {
         jobs.extend(assets.jobs.iter().cloned());
     }
-    download_all("Downloading game files", jobs, progress)?;
+    crate::net::download_all_with_replacements(
+        "Downloading game files",
+        jobs,
+        replacements,
+        progress,
+    )?;
     files::verify_main_class(libs.main_class.as_ref())?;
     if !assets_fresh {
         finish_assets_later(dirs, assets.index_name.clone(), assets.later.clone());
@@ -362,6 +388,33 @@ fn finish_assets_later(dirs: &DataDirs, index_name: String, later: Vec<DownloadJ
 /// installer needs its client jar and Java), then the loader profile is
 /// layered on top and its extra libraries are downloaded.
 pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
+    prepare_in(req, &req.instance.game_dir(req.dirs), progress)
+}
+
+/// Prepare a game whose lifetime will be watched by the launcher.
+pub fn prepare_watched(req: &LaunchRequest, progress: Progress) -> Result<WatchedLaunch> {
+    let (session, copy) =
+        session::GameSession::reserve(req.dirs, req.instance, req.settings.shared, req.copy)?;
+    let req = LaunchRequest {
+        copy,
+        ..req.clone()
+    };
+    let plan = prepare_in(&req, session.game_dir(), progress)?;
+    Ok(WatchedLaunch { plan, session })
+}
+
+pub struct WatchedLaunch {
+    pub plan: LaunchPlan,
+    session: session::GameSession,
+}
+
+impl WatchedLaunch {
+    pub fn spawn(self, on_event: impl Fn(GameEvent) + Send + Sync + 'static) -> Result<GameHandle> {
+        process::spawn_with_session(&self.plan, Some(self.session), on_event)
+    }
+}
+
+fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Result<LaunchPlan> {
     // "Play with Arctic Client" is off in Settings: the game starts as if the instance had no client
     // (the mod is taken out of its mods folder, no client flags or login sharing).
     if !req.settings.play_with_client && req.instance.arctic_mod {
@@ -377,7 +430,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
             copy: req.copy,
             quick_play: req.quick_play.clone(),
         };
-        return prepare(&without_client, progress);
+        return prepare_in(&without_client, game_dir, progress);
     }
     // "Gentle launch": few downloads at a time, and the game starts behind other programs.
     crate::net::set_gentle(req.settings.gentle_launch);
@@ -397,30 +450,31 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         )));
     }
     let dirs = req.dirs;
-    let game_dir = req.instance.game_dir(dirs);
     let repair = files::LibraryRepair::new(dirs)?;
     let mut timer = StepTimer::new();
     // The Arctic session (a network round trip) is fetched while the game files are checked.
     let mut share_session = false;
     // First start of this game folder: the profile's default game settings.
     match crate::game_defaults::Defaults::load(dirs)
-        .and_then(|d| d.apply_if_new(&game_dir, Some(&req.version.id)))
+        .and_then(|d| d.apply_if_new(game_dir, Some(&req.version.id)))
     {
         Ok(true) => log::info!("applied default game settings to {}", game_dir.display()),
         Ok(false) => {}
         Err(e) => log::warn!("default game settings: {e}"),
     }
+    timer.step("default settings");
     // What the profile's instances share: the newest copies, into this one.
-    if let Err(e) = crate::shared::sync(
+    if let Err(e) = crate::shared::sync_at(
         dirs,
         req.settings.shared,
-        Some((req.instance, &req.version.id)),
+        Some((req.instance, &req.version.id, game_dir.to_path_buf())),
     ) {
         log::warn!("sharing between instances: {e}");
     }
-    if let Err(e) = crate::game_defaults::skip_multiplayer_warning(&game_dir) {
+    if let Err(e) = crate::game_defaults::skip_multiplayer_warning(game_dir) {
         log::warn!("multiplayer warning: {e}");
     }
+    timer.step("shared files sync");
     let java_override = req
         .instance
         .java_path
@@ -428,8 +482,19 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         .or_else(|| req.settings.java_override.clone());
     progress(ProgressInfo::stage("Reading version"));
     let vanilla = load_version(dirs, req.version, &|_| {})?;
+    let runtime = match java_override.as_ref().filter(|p| p.is_file()) {
+        Some(java) => java::managed_runtime(dirs, java),
+        None => Some(java::runtime_dir(
+            dirs,
+            java::component_for(&vanilla),
+            crate::versions::rules::needs_rosetta(&vanilla),
+        )?),
+    };
+    if let Some(runtime) = runtime {
+        runtime_repair::recover_detached(&runtime, &game_log_file(req), game_dir);
+    }
     // Going up to a newer game version upgrades worlds for good: back the recent ones up first.
-    let backed_up = crate::worlds::backup_before_version_change(&game_dir, &vanilla.id);
+    let backed_up = crate::worlds::backup_before_version_change(game_dir, &vanilla.id);
     if backed_up > 0 {
         log::info!(
             "backing up {backed_up} recent world(s) before {}",
@@ -437,7 +502,12 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
         );
     }
     timer.step("read version");
-    let loader = effective_loader(dirs, req.instance, &vanilla.id);
+    let launcher_owned_vanilla =
+        req.instance.loader.kind().is_none() && req.instance.game_folder.is_none();
+    if launcher_owned_vanilla {
+        crate::mods::performance::recover_vanilla_api(game_dir)?;
+    }
+    let loader = effective_loader(dirs, req.instance, &vanilla.id, game_dir);
     timer.step("pick loader");
     let version = match loader
         .as_ref()
@@ -448,7 +518,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
             let base = install_with_repair(
                 dirs,
                 vanilla.clone(),
-                &game_dir,
+                game_dir,
                 java_override.clone(),
                 progress,
                 &repair,
@@ -456,7 +526,7 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
             timer.step("vanilla files");
             let stage = format!("Installing {} {loader_version}", kind.label());
             progress(ProgressInfo::stage(&stage));
-            let profile = loaders::install_profile(
+            let mut profile = loaders::install_profile(
                 dirs,
                 kind,
                 loader_version,
@@ -469,13 +539,13 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 kind,
                 loaders::LoaderKind::Fabric | loaders::LoaderKind::Quilt
             ) {
-                // An older Fabric Loader than the mod needs would stop the
-                // game at startup: play without the Arctic Client then.
-                let fits = kind != loaders::LoaderKind::Fabric
-                    || arctic_mod::loader_fits(&vanilla.id, loader_version);
+                // Quilt provides its own Fabric compatibility version, not its loader version.
+                let fits =
+                    arctic_mod_fits(dirs, &vanilla.id, kind, loader_version, &profile, progress)?;
                 if req.instance.arctic_mod && !fits {
                     log::warn!(
-                        "Fabric Loader {loader_version} is too old for the Arctic Client on {}; starting without it",
+                        "{} Loader {loader_version} cannot provide the Fabric Loader version needed by the Arctic Client on {}; starting without it",
+                        kind.label(),
                         vanilla.id
                     );
                 }
@@ -490,13 +560,10 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 progress(ProgressInfo::stage("Checking performance mods"));
                 // Best effort, like the Forge branch: no Sodium is better than no game (an
                 // unreachable Modrinth CDN, a locked or truncated index).
-                if let Err(e) = crate::mods::performance::sync(
-                    &game_dir,
+                if let Err(e) = crate::mods::performance::sync_for_launch(
+                    game_dir,
                     &vanilla.id,
-                    req.instance.performance,
-                    req.instance.shaders,
-                    &req.instance.extras,
-                    req.instance.loader.kind().is_some(),
+                    req.instance,
                     progress,
                 ) {
                     log::warn!("performance mods: {e}");
@@ -510,14 +577,17 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                 }
                 // Vanilla instances (nothing in the folder but the launcher's own mods): load only
                 // the Fabric API modules those use, which starts the game noticeably faster.
-                if req.instance.performance
-                    && req.instance.loader.kind().is_none()
-                    && let Err(e) = crate::mods::slim_api::apply(&game_dir.join("mods"))
-                {
-                    log::warn!("couldn't cut Fabric API down: {e}");
+                if req.instance.loader.kind().is_none() {
+                    crate::mods::performance::finish_vanilla(
+                        game_dir,
+                        &vanilla.id,
+                        launcher_owned_vanilla,
+                        req.instance.performance,
+                    )?;
                 }
                 timer.step("performance mods");
-                share_session = req.instance.arctic_mod && arctic_mod::supports(&vanilla.id);
+                share_session =
+                    req.instance.arctic_mod && fits && arctic_mod::supports(&vanilla.id);
             } else if kind == loaders::LoaderKind::Forge {
                 // Forge instances: the Arctic Client's Forge build, where there is one (1.8.9).
                 arctic_mod::sync_forge(
@@ -526,11 +596,14 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
                     req.instance.arctic_mod,
                 )?;
                 share_session = req.instance.arctic_mod && arctic_mod::supports_forge(&vanilla.id);
+                if share_session {
+                    arctic_mod::update_forge_asm(&vanilla.id, &mut profile);
+                }
                 timer.step("arctic client");
                 // 1.8.9: Patcher and Entity Culling for FPS (the Performance switch); never stops a start.
                 progress(ProgressInfo::stage("Checking performance mods"));
                 if let Err(e) = crate::mods::performance::sync_forge(
-                    &game_dir,
+                    game_dir,
                     &vanilla.id,
                     req.instance.performance,
                     progress,
@@ -541,23 +614,39 @@ pub fn prepare(req: &LaunchRequest, progress: Progress) -> Result<LaunchPlan> {
             }
             profile
         }
-        _ => vanilla,
+        _ => {
+            if launcher_owned_vanilla
+                && let Err(e) =
+                    crate::mods::performance::finish_vanilla(game_dir, &vanilla.id, true, false)
+            {
+                log::warn!("vanilla performance cleanup: {e}");
+            }
+            vanilla
+        }
     };
     // The Arctic sign-in (a network round trip) runs while the game files are checked.
-    let session = share_session.then(|| start_cosmetics_session(req, &game_dir));
-    let installation =
-        install_with_repair(dirs, version, &game_dir, java_override, progress, &repair)?;
+    let session = share_session.then(|| start_cosmetics_session(req, game_dir));
+    let mut installation =
+        install_with_repair(dirs, version, game_dir, java_override, progress, &repair)?;
+    if share_session && matches!(loader, Some((loaders::LoaderKind::Forge, _))) {
+        // Make Arctic's Mixin available before Forge discovers mods that embed an
+        // older version. Forge still discovers the mod at the same path.
+        installation
+            .classpath
+            .push(game_dir.join("mods").join(arctic_mod::FILE_NAME));
+    }
     if let Some(finished) = session {
         let _ = finished.recv_timeout(SESSION_WAIT);
     }
     timer.step("game files + arctic session");
-    timer.done();
     if proxy.active().is_some() {
         let hosts = game_dir.join(crate::proxy::HOSTS_FILE);
         std::fs::write(&hosts, proxy.hosts_file()).map_err(|e| crate::Error::io(&hosts, e))?;
     }
     let plan = plan(req, &installation);
     repair.finish();
+    timer.step("JVM arguments + startup cache");
+    timer.done();
     Ok(plan)
 }
 
@@ -594,6 +683,34 @@ impl StepTimer {
     }
 }
 
+/// Imports and shares keep the chosen Quilt loader; check its actual compatibility at launch.
+fn arctic_mod_fits(
+    dirs: &DataDirs,
+    game: &str,
+    kind: loaders::LoaderKind,
+    loader_version: &str,
+    profile: &VersionJson,
+    progress: Progress,
+) -> Result<bool> {
+    if kind != loaders::LoaderKind::Quilt {
+        return Ok(arctic_mod::loader_fits(game, loader_version));
+    }
+    if arctic_mod::min_loader(game).is_none() {
+        return Ok(true);
+    }
+    let libs = files::resolve_libraries(dirs, profile, &RuleEnv::for_version(profile));
+    let Some((jar, _)) = libs.main_class else {
+        return Ok(false);
+    };
+    let jobs = libs
+        .jobs
+        .into_iter()
+        .filter(|job| job.dest == jar)
+        .collect();
+    download_all("Checking Quilt compatibility", jobs, progress)?;
+    Ok(arctic_mod::quilt_loader_fits(game, &jar))
+}
+
 /// The loader to launch with. Vanilla instances run on Fabric, invisible
 /// to the player, for the Arctic Client (versions it supports) and the
 /// Performance mods (any version Fabric supports), unless both are off
@@ -602,6 +719,7 @@ fn effective_loader(
     dirs: &DataDirs,
     instance: &Instance,
     game: &str,
+    game_dir: &Path,
 ) -> Option<(loaders::LoaderKind, String)> {
     if let (Some(kind), Some(version)) = (instance.loader.kind(), instance.loader.version()) {
         return Some((kind, version.to_owned()));
@@ -612,10 +730,12 @@ fn effective_loader(
         .flatten();
     if fabric.is_none() {
         // Pure vanilla: make sure earlier Fabric runs left nothing behind.
-        let game_dir = instance.game_dir(dirs);
-        let _ = crate::mods::slim_api::undo(&game_dir.join("mods"));
         let _ = arctic_mod::sync(&game_dir.join("mods"), game, false);
-        let _ = crate::mods::performance::sync(&game_dir, game, false, false, &[], false, &|_| {});
+        if let Err(e) =
+            crate::mods::performance::sync(game_dir, game, false, false, &[], None, &|_| {})
+        {
+            log::warn!("vanilla performance cleanup: {e}");
+        }
         let _ = crate::mods::polarium::sync(&game_dir.join("mods"), game, false);
     }
     fabric.map(|v| (loaders::LoaderKind::Fabric, v))
@@ -820,12 +940,28 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         }
         _ => Vec::new(),
     };
+    // Quoted values stay one argument (`-Dx="1.8.9 Forge"`). A leftover word is not passed on:
+    // Java would take it as the main class.
+    let user_args = split_jvm_args(&settings.extra_jvm_args)
+        .into_iter()
+        .chain(split_jvm_args(&req.instance.jvm_args))
+        .filter(|arg| user_jvm_arg_allowed(arg))
+        .collect::<Vec<_>>();
+    let custom_max_heap = user_args
+        .iter()
+        .rev()
+        .find_map(|arg| arg.strip_prefix("-Xmx"));
+    let custom_memory_mb = custom_max_heap.and_then(args::heap_size_mb);
+    let mods = if req.instance.max_memory_mb.is_none() || custom_max_heap.is_some() {
+        mod_count(&inst.game_dir.join("mods"))
+    } else {
+        0
+    };
     let asked = match req.instance.max_memory_mb {
         Some(own) => own,
         None => {
-            let mods = mod_count(&inst.game_dir.join("mods"));
             let asked = crate::system::memory_for_mods(settings.max_memory_mb, mods);
-            if asked > settings.max_memory_mb {
+            if asked > settings.max_memory_mb && custom_max_heap.is_none() {
                 log::info!(
                     "{mods} mods: giving the game {asked} MB (more than the {} MB setting)",
                     settings.max_memory_mb
@@ -835,24 +971,38 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         }
     };
     let max_memory_mb = crate::system::playable_memory_mb(asked);
-    if max_memory_mb < asked {
+    if let Some(size) = custom_max_heap {
+        log::warn!(
+            "JVM arguments set -Xmx{size}, overriding the launcher memory setting ({max_memory_mb} MB)"
+        );
+        // Use the pack's recommendation independently of the player's memory settings.
+        let recommended = crate::system::memory_for_mods(0, mods);
+        if let Some(custom_mb) = custom_memory_mb.filter(|&mb| mb < recommended) {
+            log::warn!(
+                "JVM arguments limit the heap to {custom_mb} MB, below the recommended {recommended} MB for {mods} mods"
+            );
+        }
+    } else if max_memory_mb < asked {
         log::warn!(
             "memory setting {asked} MB is more than this computer can spare: using {max_memory_mb} MB"
         );
     }
-    // Quoted values stay one argument (`-Dx="1.8.9 Forge"`). A leftover word is not passed on:
-    // Java would take it as the main class.
-    let user_args = split_jvm_args(&settings.extra_jvm_args)
-        .into_iter()
-        .chain(split_jvm_args(&req.instance.jvm_args))
-        .collect::<Vec<_>>();
+    let native_x86_64 =
+        java::native_x86_64() && !crate::versions::rules::needs_rosetta(&inst.version);
+    let java_major = if !native_x86_64 {
+        None
+    } else if req.instance.java_path.is_some() || settings.java_override.is_some() {
+        process::runtime_major_version(&inst.java)
+    } else {
+        inst.version.java_version.as_ref().map(|j| j.major_version)
+    };
     let opts = JvmOptions {
         min_memory_mb: settings.min_memory_mb.min(max_memory_mb),
         max_memory_mb,
-        extra: user_args
+        extra: args::java4shell_flags(java_major, native_x86_64, &user_args)
             .iter()
-            .filter(|arg| user_jvm_arg_allowed(arg))
-            .cloned()
+            .map(|&arg| arg.to_owned())
+            .chain(user_args.iter().cloned())
             .chain(arctic_mod::jvm_flag())
             .chain(arctic_mod::brand_flag(&req.instance.loader))
             .chain(Some(arctic_mod::version_flag()))
@@ -868,7 +1018,7 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
                     .then(|| inst.version.java_version.as_ref().map(|j| j.major_version))
                     .flatten(),
                 std::thread::available_parallelism().map_or(1, |n| n.get()),
-                max_memory_mb,
+                custom_memory_mb.unwrap_or(max_memory_mb),
             ))
             .chain(fast_start_flags(req.instance))
             .chain(lwjgl_stack_flag(
@@ -909,13 +1059,23 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         java: inst.java.clone(),
         args: args::build(&inst.version, &env, &vars, &opts),
         game_dir: inst.game_dir.clone(),
-        log_file: req.dirs.logs().join(match req.copy {
-            0 => format!("game-{}.log", req.instance.id),
-            n => format!("game-{}-{}.log", req.instance.id, n + 1),
-        }),
+        managed_runtime: java::managed_runtime(req.dirs, &inst.java),
+        log_file: game_log_file(req),
         high_performance_gpu: settings.high_performance_gpu,
         maximize_window: settings.game_maximized && !settings.fullscreen,
+        custom_max_heap: custom_max_heap.is_some(),
         secrets: vec![identity.access_token, proxy.password.clone()],
+    }
+}
+
+fn game_log_file(req: &LaunchRequest) -> PathBuf {
+    let logs = req.dirs.logs();
+    if req.copy == 0 {
+        logs.join(format!("game-{}.log", req.instance.id))
+    } else {
+        logs.join("copies")
+            .join(&req.instance.id)
+            .join(format!("game-{}.log", req.copy))
     }
 }
 
@@ -1033,6 +1193,71 @@ mod tests {
     use super::*;
 
     #[test]
+    fn quilt_client_fit_reads_the_selected_jar_and_removes_an_incompatible_client() {
+        use loaders::LoaderKind;
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        let game = "1.21.11";
+        assert_eq!(arctic_mod::min_loader(game).as_deref(), Some("0.19.5"));
+        // https://github.com/QuiltMC/quilt-loader/blob/0.30.0-beta.3/src/main/resources/quilt.mod.json
+        let metadata = include_str!("../../tests/fixtures/quilt-loader-0.30.0-beta.3.mod.json");
+        let profile: VersionJson = serde_json::from_value(serde_json::json!({
+            "id": "quilt-loader-0.30.0-beta.3-1.21.11",
+            "mainClass": "org.quiltmc.loader.impl.launch.knot.KnotClient",
+            "libraries": [{"name": "org.quiltmc:quilt-loader:0.30.0-beta.3", "url": "https://example.invalid/"}]
+        })).unwrap();
+        let jar = dirs
+            .libraries()
+            .join(crate::versions::maven_path("org.quiltmc:quilt-loader:0.30.0-beta.3").unwrap());
+        fs::create_dir_all(jar.parent().unwrap()).unwrap();
+        let mods = dir.path().join("mods");
+        for (metadata, expected) in [
+            (metadata.to_owned(), false),
+            // Synthetic future compatibility declaration; Quilt's version stays unchanged.
+            (metadata.replace("0.18.4", "0.19.5"), true),
+            (metadata.replace("fabricloader", "other"), false),
+            ("{}".to_owned(), false),
+            ("broken metadata".to_owned(), false),
+        ] {
+            let mut zip = zip::ZipWriter::new(fs::File::create(&jar).unwrap());
+            zip.start_file("quilt.mod.json", zip::write::SimpleFileOptions::default())
+                .unwrap();
+            zip.write_all(metadata.as_bytes()).unwrap();
+            zip.finish().unwrap();
+            let fits = arctic_mod_fits(
+                &dirs,
+                game,
+                LoaderKind::Quilt,
+                "0.30.0-beta.3",
+                &profile,
+                &|_| {},
+            )
+            .unwrap();
+            assert_eq!(fits, expected);
+            arctic_mod::sync(&mods, game, true).unwrap();
+            assert!(mods.join(arctic_mod::FILE_NAME).exists());
+            arctic_mod::sync(&mods, game, fits).unwrap();
+            assert_eq!(mods.join(arctic_mod::FILE_NAME).exists(), expected);
+        }
+        assert!(
+            !arctic_mod_fits(&dirs, game, LoaderKind::Fabric, "0.18.4", &profile, &|_| {}).unwrap()
+        );
+        assert!(
+            arctic_mod_fits(&dirs, game, LoaderKind::Fabric, "0.19.5", &profile, &|_| {}).unwrap()
+        );
+        assert!(arctic_mod::quilt_loader_fits(
+            "unsupported-game",
+            Path::new("missing.jar")
+        ));
+        assert!(!arctic_mod::quilt_loader_fits(
+            game,
+            Path::new("missing.jar")
+        ));
+    }
+
+    #[test]
     fn quick_play_uses_the_versions_own_flags() {
         let modern: VersionJson = serde_json::from_str(
             r#"{"id":"1.21","mainClass":"M","arguments":{"jvm":[],"game":[
@@ -1093,6 +1318,88 @@ mod tests {
     }
 
     #[test]
+    fn launch_uses_each_last_custom_heap_flag_once() {
+        let temp = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(temp.path());
+        let account = Account {
+            id: "test".into(),
+            username: "Test".into(),
+            uuid: "0".into(),
+            kind: crate::auth::AccountKind::Offline,
+        };
+        let version = VersionEntry {
+            id: "1.20.1".into(),
+            kind: crate::versions::VersionKind::Release,
+            url: String::new(),
+            release_time: String::new(),
+            sha1: String::new(),
+        };
+        let settings = Settings {
+            max_memory_mb: 6144,
+            extra_jvm_args: "-Xms768M -Xmx5G -XX:+UseG1GC".into(),
+            ..Settings::default()
+        };
+        let instance = Instance {
+            arctic_mod: false,
+            jvm_args: "-Xmx4G -Xms1G -Xmx3584M".into(),
+            ..Instance::vanilla_default()
+        };
+        let inst = Installation {
+            version: serde_json::from_str(
+                r#"{"id":"1.20.1","mainClass":"M","javaVersion":{"component":"java-runtime-gamma","majorVersion":17},"arguments":{"jvm":["-cp","${classpath}","-Xms512M","-Xmx6G"]}}"#,
+            )
+            .unwrap(),
+            java: "java".into(),
+            game_dir: temp.path().into(),
+            classpath: Vec::new(),
+            natives_dir: temp.path().into(),
+            game_assets: temp.path().into(),
+            asset_index: String::new(),
+            logging: None,
+        };
+        let plan = plan(
+            &LaunchRequest {
+                dirs: &dirs,
+                version: &version,
+                instance: &instance,
+                account: &account,
+                settings: &settings,
+                bridge: None,
+                copy: 0,
+                quick_play: None,
+            },
+            &inst,
+        );
+        let heap_flags: Vec<_> = plan
+            .args
+            .iter()
+            .filter(|arg| arg.starts_with("-Xm"))
+            .collect();
+        assert_eq!(heap_flags, ["-Xms1G", "-Xmx3584M"]);
+        assert!(plan.args.iter().any(|arg| arg == "-XX:+UseG1GC"));
+        if java::native_x86_64() {
+            assert_eq!(
+                &plan.args[..3],
+                [
+                    "-XX:+UnlockDiagnosticVMOptions",
+                    "-XX:-UseBASE64Intrinsics",
+                    "-XX:+UseG1GC",
+                ]
+            );
+        } else {
+            assert!(
+                !plan
+                    .args
+                    .iter()
+                    .any(|arg| arg.contains("UseBASE64Intrinsics"))
+            );
+        }
+        let summary = plan.java_summary();
+        assert!(summary.contains(args::CUSTOM_MAX_HEAP_SOURCE));
+        assert_eq!(crate::crash::max_memory_mb(&summary), Some(3584));
+    }
+
+    #[test]
     fn java_summary_names_flags_and_jars_but_not_folders_or_the_account() {
         let plan = LaunchPlan {
             java: PathBuf::from("C:/Users/me/runtimes/java-runtime-epsilon/bin/javaw.exe"),
@@ -1117,6 +1424,8 @@ mod tests {
             log_file: PathBuf::new(),
             high_performance_gpu: false,
             maximize_window: false,
+            managed_runtime: None,
+            custom_max_heap: false,
             secrets: vec!["SECRET123".into()],
         };
         let s = plan.java_summary();
@@ -1158,6 +1467,8 @@ mod tests {
             log_file: PathBuf::new(),
             high_performance_gpu: false,
             maximize_window: false,
+            managed_runtime: None,
+            custom_max_heap: false,
             secrets: Vec::new(),
         };
         let s = plan.java_summary();
@@ -1184,6 +1495,8 @@ mod tests {
             log_file: PathBuf::new(),
             high_performance_gpu: false,
             maximize_window: false,
+            managed_runtime: None,
+            custom_max_heap: false,
             secrets: vec!["SECRET123".into(), String::new()],
         };
         let cmd = plan.redacted_command();
@@ -1200,6 +1513,8 @@ mod tests {
             log_file: PathBuf::new(),
             high_performance_gpu: false,
             maximize_window: false,
+            managed_runtime: None,
+            custom_max_heap: false,
             secrets: vec!["tok".into(), "hunter2".into()],
         };
         assert!(plan.redacted_command().ends_with("--proxyPass <redacted>"));

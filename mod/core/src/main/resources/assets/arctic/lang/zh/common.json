@@ -23,6 +23,8 @@
   "common.ok": "确定",
   "common.on": "开",
   "common.open_folder": "打开文件夹",
+  "common.outside_arctic_launcher": "未通过 Arctic Launcher 启动",
+  "common.outside_arctic_launcher_details": "登录、外观和同步功能可能受限。 arcticlauncher.com",
   "common.refresh": "刷新",
   "common.remove": "移除",
   "common.reset": "重置",

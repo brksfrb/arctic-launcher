@@ -3,6 +3,10 @@ package com.arcticlauncher.mod.mixin;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.mod.Compat;
 import com.arcticlauncher.mod.Input;
+//#if MC >= 1.21.2
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+//#endif
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.MouseHandler;
 //#if MC >= 1.21.9
@@ -11,9 +15,6 @@ import net.minecraft.client.input.MouseButtonInfo;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-//#if MC >= 1.21.2
-import org.spongepowered.asm.mixin.injection.Redirect;
-//#endif
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Counts clicks for the CPS widgets and keeps held buttons; the wheel zooms while zooming. */
@@ -56,11 +57,11 @@ abstract class MouseHandlerMixin {
 	 * Bundle scrolling and every open screen call {@code getNextScrollWheelSelection} on their own.
 	 */
 	//#if MC >= 1.21.2
-	@Redirect(method = "onScroll", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/ScrollWheelHandler;getNextScrollWheelSelection(DII)I"))
-	private int arctic$hotbarWrap(double wheel, int current, int limit) {
+	@WrapOperation(method = "onScroll", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/ScrollWheelHandler;getNextScrollWheelSelection(DII)I"))
+	private int arctic$hotbarWrap(double wheel, int current, int limit, Operation<Integer> original) {
 		com.arcticlauncher.client.config.ClientConfig config = ArcticClient.config();
 		if (config == null || !config.hotbarScrollStop || limit != com.arcticlauncher.client.feature.HotbarScroll.SLOTS) {
-			return net.minecraft.client.ScrollWheelHandler.getNextScrollWheelSelection(wheel, current, limit);
+			return original.call(wheel, current, limit);
 		}
 		return com.arcticlauncher.client.feature.HotbarScroll.wheel(current, wheel, false);
 	}

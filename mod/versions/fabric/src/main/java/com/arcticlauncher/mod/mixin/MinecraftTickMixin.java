@@ -27,6 +27,7 @@ abstract class MinecraftTickMixin {
 		//#endif
 		//#if MC >= 1.13
 		com.arcticlauncher.mod.replay.ReplayRecording.tick();
+		com.arcticlauncher.mod.BadgeTexture.onTick();
 		//#endif
 		//#if MC >= 26.1
 		com.arcticlauncher.mod.ArcticPacks.checkFontScale();
