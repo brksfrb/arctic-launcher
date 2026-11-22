@@ -225,5 +225,6 @@
   "settings.your_newest_screenshot_or_the_versions_title": "Je nieuwste schermafbeelding, of het titelscherm van de versie",
   "settings.your_picture": "Je afbeelding…",
   "settings.your_screenshot": "Je schermafbeelding",
-  "settings.your_settings_instances_as_mod_lists_and_hud": "Je instellingen, instanties (als modlijsten) en HUD-opstellingen, als code, tekst of bestand. Accounts en wachtwoorden zitten er nooit bij."
+  "settings.your_settings_instances_as_mod_lists_and_hud": "Je instellingen, instanties (als modlijsten) en HUD-opstellingen, als code, tekst of bestand. Accounts en wachtwoorden zitten er nooit bij.",
+  "settings.check_mods_for_malware": "Mods op malware controleren"
 }

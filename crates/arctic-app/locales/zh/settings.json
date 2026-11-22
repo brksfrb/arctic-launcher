@@ -225,5 +225,6 @@
   "settings.your_newest_screenshot_or_the_versions_title": "你最新的截图，或该版本的标题画面",
   "settings.your_picture": "你的图片…",
   "settings.your_screenshot": "你的截图",
-  "settings.your_settings_instances_as_mod_lists_and_hud": "你的设置、实例（以模组列表形式）和 HUD 布局，以代码、文本或文件形式导出。绝不包含账户和密码。"
+  "settings.your_settings_instances_as_mod_lists_and_hud": "你的设置、实例（以模组列表形式）和 HUD 布局，以代码、文本或文件形式导出。绝不包含账户和密码。",
+  "settings.check_mods_for_malware": "检查模组中的恶意软件"
 }

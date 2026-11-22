@@ -226,5 +226,5 @@
   "settings.your_picture": "Your picture…",
   "settings.your_screenshot": "Your screenshot",
   "settings.your_settings_instances_as_mod_lists_and_hud": "Your settings, instances (as mod lists) and HUD setups, as a code, text or file. Accounts and passwords are never included.",
-  "check_mods_for_malware": "Check mods for malware"
+  "settings.check_mods_for_malware": "Check mods for malware"
 }

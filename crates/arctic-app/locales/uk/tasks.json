@@ -177,5 +177,19 @@
   "tasks.you_can_turn_this_question_back_on_in": "Це питання можна знову ввімкнути в налаштуваннях.",
   "tasks.youll_see_it_next_time_you_play": "Побачиш у наступній грі.",
   "tasks.your_discord_account": "твій акаунт Discord",
-  "tasks.your_profile_and_friends_are_here_now": "Твій профіль і друзі тепер тут"
+  "tasks.your_profile_and_friends_are_here_now": "Твій профіль і друзі тепер тут",
+  "tasks.checking_mods_for_malware": "Перевірка модів на шкідливе ПЗ",
+  "tasks.mod_malware_warning": "У модах може бути шкідливе ПЗ",
+  "tasks.malware_scope": "Перевірка шукає відоме шкідливе ПЗ та очевидні ознаки зараження. Вона не гарантує безпеку мода.",
+  "tasks.malware_hash_match": "Відоме шкідливе ПЗ (хеш файла збігається із записом у списку блокування)",
+  "tasks.malware_suspicious": "Підозріло — {reason}",
+  "tasks.malware_fractureiser": "Містить ознаки, пов’язані з Fractureiser",
+  "tasks.malware_shell": "Виконує команду PowerShell або командного рядка",
+  "tasks.malware_credentials": "Звертається до сховища облікових даних і використовує мережу або запускає процес",
+  "tasks.malware_download": "Може завантажувати й виконувати зовнішній код",
+  "tasks.malware_undeclared_jar": "Завантажує код із незадекларованого вкладеного JAR-файла",
+  "tasks.malware_disable": "Вимкнути мод",
+  "tasks.malware_disable_failed": "Не вдалося вимкнути мод",
+  "tasks.malware_launch": "Запустити",
+  "tasks.malware_launch_anyway": "Усе одно запустити"
 }

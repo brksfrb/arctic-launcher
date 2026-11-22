@@ -526,6 +526,7 @@ impl Tasks {
                 let (proceed, decision) = std::sync::mpsc::channel();
                 self.send(Event::ModMalwareWarning(ModMalwareWarning {
                     findings,
+                    instance_mods: instance.game_dir(&self.dirs).join("mods"),
                     proceed,
                 }));
                 if decision.recv() != Ok(true) {
