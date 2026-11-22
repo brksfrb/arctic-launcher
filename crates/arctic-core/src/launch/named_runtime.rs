@@ -6,7 +6,9 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
-use crate::java::{ensure_directory, file_metadata, is_link, require_directory};
+use crate::java::{
+    ensure_directory, file_metadata, is_link, is_runtime_control_file, require_directory,
+};
 
 pub(super) const FOLDER: &str = "Arctic Client";
 const EXE: &str = "Arctic Client.exe";
@@ -39,21 +41,18 @@ pub(super) fn prepare(runtime: &Path, java: &Path) -> io::Result<(PathBuf, bool)
 
     let named = parent.join(FOLDER);
     let branded = Path::new("bin").join(EXE);
-    if mirror_matches(runtime, &named, java, &branded).unwrap_or(false) {
-        return Ok((named.join(branded), false));
+    match check_mirror(runtime, &named, java, &branded) {
+        Ok(()) => return Ok((named.join(branded), false)),
+        Err(e) => log::info!("rebuilding named Java runtime {}: {e}", named.display()),
     }
     let staging = tempfile::Builder::new()
         .prefix(STAGING)
         .tempdir_in(&parent)?;
     let replacement = staging.path().join(FOLDER);
-    copy_tree(runtime, &replacement)?;
+    copy_tree(runtime, &replacement, true)?;
     let source = replacement.join(java.strip_prefix(runtime).unwrap());
-    fs::copy(source, replacement.join(&branded))?;
-    if !mirror_matches(runtime, &replacement, java, &branded)? {
-        return Err(io::Error::other(
-            "Java runtime changed while making the named copy",
-        ));
-    }
+    copy_with_mtime(&source, &replacement.join(&branded))?;
+    check_mirror(runtime, &replacement, java, &branded)?;
 
     let previous = staging.path().join("previous");
     // Renaming a junction or symlink moves the link itself. Removal of the temporary tree
@@ -75,14 +74,28 @@ pub(super) fn prepare(runtime: &Path, java: &Path) -> io::Result<(PathBuf, bool)
     Ok((named.join(branded), true))
 }
 
-fn mirror_matches(src: &Path, dst: &Path, java: &Path, branded: &Path) -> io::Result<bool> {
-    // Check the tree before accessing the branded executable, including its bin directory.
-    Ok(tree_matches(src, dst)? && same_file(java, &dst.join(branded))?)
+fn check_mirror(src: &Path, dst: &Path, java: &Path, branded: &Path) -> io::Result<()> {
+    // Validate the bin directory before accessing the branded executable.
+    check_tree(src, dst, true)?;
+    let exe = dst.join(branded);
+    if let Some(source) = file_metadata(java)?
+        && same_file(java, &source, &exe)?
+    {
+        return Ok(());
+    }
+    Err(mismatch(
+        &exe,
+        "branded executable missing or size, mtime or contents changed",
+    ))
 }
 
-fn tree_matches(src: &Path, dst: &Path) -> io::Result<bool> {
+fn mismatch(path: &Path, reason: &str) -> io::Error {
+    io::Error::other(format!("{reason}: {}", path.display()))
+}
+
+fn check_tree(src: &Path, dst: &Path, root: bool) -> io::Result<()> {
     require_directory(src)?;
-    require_directory(dst)?;
+    require_directory(dst).map_err(|e| mismatch(dst, &e.to_string()))?;
     let mut remaining: HashSet<_> = fs::read_dir(dst)?
         .map(|entry| entry.map(|e| e.file_name()))
         .collect::<io::Result<_>>()?;
@@ -92,35 +105,37 @@ fn tree_matches(src: &Path, dst: &Path) -> io::Result<bool> {
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let name = entry.file_name();
-        if excluded(src, &name) {
+        if excluded(src, &name, root) {
             continue;
         }
+        let to = dst.join(&name);
         if !remaining.remove(&name) {
-            return Ok(false);
+            return Err(mismatch(&to, "missing named entry"));
         }
         let from = entry.path();
-        let to = dst.join(name);
         let meta = fs::symlink_metadata(&from)?;
-        let matches = !is_link(&meta)
-            && if meta.is_dir() {
-                tree_matches(&from, &to)?
-            } else {
-                meta.is_file() && same_file(&from, &to)?
-            };
-        if !matches {
-            return Ok(false);
+        if is_link(&meta) {
+            return Err(mismatch(&from, "source entry is a link"));
+        }
+        if meta.is_dir() {
+            check_tree(&from, &to, false)?;
+        } else if !meta.is_file() || !same_file(&from, &meta, &to)? {
+            return Err(mismatch(&to, "file size, mtime or contents changed"));
         }
     }
-    Ok(remaining.is_empty())
+    if let Some(extra) = remaining.into_iter().next() {
+        return Err(mismatch(&dst.join(extra), "unexpected named entry"));
+    }
+    Ok(())
 }
 
-fn copy_tree(src: &Path, dst: &Path) -> io::Result<()> {
+fn copy_tree(src: &Path, dst: &Path, root: bool) -> io::Result<()> {
     require_directory(src)?;
     fs::create_dir(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let name = entry.file_name();
-        if excluded(src, &name) {
+        if excluded(src, &name, root) {
             continue;
         }
         let from = entry.path();
@@ -133,10 +148,10 @@ fn copy_tree(src: &Path, dst: &Path) -> io::Result<()> {
             )));
         }
         if meta.is_dir() {
-            copy_tree(&from, &to)?;
+            copy_tree(&from, &to, false)?;
         } else if meta.is_file() {
             if fs::hard_link(&from, &to).is_err() {
-                fs::copy(&from, &to)?;
+                copy_with_mtime(&from, &to)?;
             }
         } else {
             return Err(io::Error::other(format!(
@@ -148,9 +163,22 @@ fn copy_tree(src: &Path, dst: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn excluded(dir: &Path, name: &OsStr) -> bool {
+fn copy_with_mtime(from: &Path, to: &Path) -> io::Result<()> {
+    let modified = fs::metadata(from)?.modified()?;
+    fs::copy(from, to)?;
+    if fs::metadata(to)?.modified()? != modified {
+        File::options()
+            .write(true)
+            .open(to)?
+            .set_modified(modified)?;
+    }
+    Ok(())
+}
+
+fn excluded(dir: &Path, name: &OsStr, root: bool) -> bool {
     // The named copy gets a fresh branded executable. Windows supplies its own C runtime.
-    in_bin(dir) && (name.eq_ignore_ascii_case(EXE) || is_system_dll(name))
+    (root && is_runtime_control_file(name))
+        || (in_bin(dir) && (name.eq_ignore_ascii_case(EXE) || is_system_dll(name)))
 }
 
 fn in_bin(dir: &Path) -> bool {
@@ -163,19 +191,30 @@ pub(super) fn is_system_dll(name: &OsStr) -> bool {
     name == "ucrtbase.dll" || (name.starts_with("api-ms-win-") && name.ends_with(".dll"))
 }
 
-fn same_file(a: &Path, b: &Path) -> io::Result<bool> {
-    let (Some(a_meta), Some(b_meta)) = (file_metadata(a)?, file_metadata(b)?) else {
+fn matching_metadata(a: &fs::Metadata, b: &fs::Metadata) -> io::Result<bool> {
+    Ok(a.len() == b.len() && a.modified()? == b.modified()?)
+}
+
+fn same_file(a: &Path, a_meta: &fs::Metadata, b: &Path) -> io::Result<bool> {
+    let Some(b_meta) = file_metadata(b)? else {
         return Ok(false);
     };
-    if a_meta.len() != b_meta.len() {
+    if !matching_metadata(a_meta, &b_meta)? {
         return Ok(false);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if a_meta.dev() == b_meta.dev() && a_meta.ino() == b_meta.ino() {
+            return Ok(true);
+        }
     }
     let (mut a, mut b) = (File::open(a)?, File::open(b)?);
     #[cfg(windows)]
     if file_id(&a).zip(file_id(&b)).is_some_and(|(a, b)| a == b) {
         return Ok(true);
     }
-    // Compare ordinary copies, including on filesystems that don't report file IDs.
+    // Ordinary copies and filesystems without IDs still need content comparison.
     let (mut left, mut right) = ([0; 64 * 1024], [0; 64 * 1024]);
     let mut remaining = a_meta.len();
     while remaining > 0 {
@@ -276,6 +315,29 @@ mod tests {
             fs::read(named.join("release")).unwrap(),
             b"JAVA_VERSION=\"25.0.2\"\n"
         );
+    }
+
+    #[test]
+    fn removes_legacy_control_stamps_from_the_mirror_and_reuses_it() {
+        let temp = tempfile::tempdir().unwrap();
+        let (runtime, java, named) = runtime(temp.path());
+        let stamps = [
+            ".arctic-runtime",
+            ".arctic-runtime-repair",
+            ".arctic-runtime-repair-ack",
+        ];
+        assert!(prepare(&runtime, &java).unwrap().1);
+        for stamp in stamps {
+            fs::write(runtime.join(stamp), "old").unwrap();
+            fs::hard_link(runtime.join(stamp), named.join(stamp)).unwrap();
+        }
+
+        assert!(prepare(&runtime, &java).unwrap().1);
+        for stamp in stamps {
+            assert!(!named.join(stamp).exists());
+            fs::write(runtime.join(stamp), "updated").unwrap();
+        }
+        assert!(!prepare(&runtime, &java).unwrap().1);
     }
 
     #[test]
