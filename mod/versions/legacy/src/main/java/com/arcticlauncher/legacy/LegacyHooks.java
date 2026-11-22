@@ -331,7 +331,7 @@ public final class LegacyHooks {
 		float pixelsPerUnit = LegacySmoothFont.badgePixels(x, y);
 		if (pixelsPerUnit <= 0) return;
 		int resolution = Badge.rasterSize(tab, pixelsPerUnit);
-		float side = resolution / pixelsPerUnit;
+		float side = Badge.quadSide(tab, pixelsPerUnit);
 		if (LegacySmoothFont.snapOrigin(x, y, BADGE_SNAP)) {
 			x = BADGE_SNAP[0];
 			y = BADGE_SNAP[1];
