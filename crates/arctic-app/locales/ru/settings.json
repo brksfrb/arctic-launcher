@@ -225,5 +225,6 @@
   "settings.your_newest_screenshot_or_the_versions_title": "Ваш последний скриншот или титульный экран версии",
   "settings.your_picture": "Своё изображение…",
   "settings.your_screenshot": "Ваш скриншот",
-  "settings.your_settings_instances_as_mod_lists_and_hud": "Ваши настройки, сборки (как списки модов) и раскладки HUD — кодом, текстом или файлом. Аккаунты и пароли никогда не включаются."
+  "settings.your_settings_instances_as_mod_lists_and_hud": "Ваши настройки, сборки (как списки модов) и раскладки HUD — кодом, текстом или файлом. Аккаунты и пароли никогда не включаются.",
+  "settings.check_mods_for_malware": "Проверять моды на вредоносное ПО"
 }

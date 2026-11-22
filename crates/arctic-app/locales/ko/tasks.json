@@ -175,5 +175,19 @@
   "tasks.you_can_turn_this_question_back_on_in": "설정에서 이 질문을 다시 켤 수 있습니다.",
   "tasks.youll_see_it_next_time_you_play": "다음에 플레이할 때 보게 됩니다.",
   "tasks.your_discord_account": "내 Discord 계정",
-  "tasks.your_profile_and_friends_are_here_now": "프로필과 친구가 이제 여기에 있습니다"
+  "tasks.your_profile_and_friends_are_here_now": "프로필과 친구가 이제 여기에 있습니다",
+  "tasks.checking_mods_for_malware": "모드에서 악성코드를 검사하는 중",
+  "tasks.mod_malware_warning": "모드에 악성코드가 있을 수 있습니다",
+  "tasks.malware_scope": "알려진 악성코드와 뚜렷한 징후를 검사합니다. 모드의 안전을 보장하지는 않습니다.",
+  "tasks.malware_hash_match": "알려진 악성코드 (파일 해시가 차단 목록과 일치함)",
+  "tasks.malware_suspicious": "의심스러움 — {reason}",
+  "tasks.malware_fractureiser": "Fractureiser와 관련된 징후가 있습니다",
+  "tasks.malware_shell": "PowerShell 또는 명령 프롬프트 명령을 실행합니다",
+  "tasks.malware_credentials": "인증 정보 저장소에 접근하며 네트워크를 사용하거나 프로세스를 시작합니다",
+  "tasks.malware_download": "외부 코드를 다운로드하고 실행할 수 있습니다",
+  "tasks.malware_undeclared_jar": "선언되지 않은 내장 JAR에서 코드를 불러옵니다",
+  "tasks.malware_disable": "모드 비활성화",
+  "tasks.malware_disable_failed": "모드를 비활성화하지 못했습니다",
+  "tasks.malware_launch": "실행",
+  "tasks.malware_launch_anyway": "그래도 실행"
 }

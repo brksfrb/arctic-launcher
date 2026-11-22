@@ -175,5 +175,19 @@
   "tasks.you_can_turn_this_question_back_on_in": "Você pode reativar esta pergunta em Configurações.",
   "tasks.youll_see_it_next_time_you_play": "Você vai ver na próxima vez que jogar.",
   "tasks.your_discord_account": "sua conta do Discord",
-  "tasks.your_profile_and_friends_are_here_now": "Seu perfil e seus amigos agora estão aqui"
+  "tasks.your_profile_and_friends_are_here_now": "Seu perfil e seus amigos agora estão aqui",
+  "tasks.checking_mods_for_malware": "Verificando mods em busca de malware",
+  "tasks.mod_malware_warning": "Possível malware nos seus mods",
+  "tasks.malware_scope": "Esta verificação busca malware conhecido e sinais evidentes. Ela não garante que um mod seja seguro.",
+  "tasks.malware_hash_match": "Malware conhecido (o hash do arquivo consta na lista de bloqueio)",
+  "tasks.malware_suspicious": "Suspeito — {reason}",
+  "tasks.malware_fractureiser": "Contém indicadores associados ao Fractureiser",
+  "tasks.malware_shell": "Executa um comando do PowerShell ou do Prompt de Comando",
+  "tasks.malware_credentials": "Acessa credenciais armazenadas e usa a rede ou inicia um processo",
+  "tasks.malware_download": "Pode baixar e executar código externo",
+  "tasks.malware_undeclared_jar": "Carrega código de um JAR incorporado não declarado",
+  "tasks.malware_disable": "Desativar mod",
+  "tasks.malware_disable_failed": "Não foi possível desativar o mod",
+  "tasks.malware_launch": "Iniciar",
+  "tasks.malware_launch_anyway": "Iniciar mesmo assim"
 }

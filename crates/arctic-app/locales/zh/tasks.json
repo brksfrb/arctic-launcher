@@ -175,5 +175,19 @@
   "tasks.you_can_turn_this_question_back_on_in": "你可以在设置中重新开启这个问题。",
   "tasks.youll_see_it_next_time_you_play": "下次游戏时就会看到。",
   "tasks.your_discord_account": "你的 Discord 账户",
-  "tasks.your_profile_and_friends_are_here_now": "你的配置文件和好友现在都在这里了"
+  "tasks.your_profile_and_friends_are_here_now": "你的配置文件和好友现在都在这里了",
+  "tasks.checking_mods_for_malware": "正在检查模组中的恶意软件",
+  "tasks.mod_malware_warning": "模组可能包含恶意软件",
+  "tasks.malware_scope": "此检查会查找已知恶意软件和明显迹象，但无法保证模组安全。",
+  "tasks.malware_hash_match": "已知恶意软件（文件哈希与阻止列表匹配）",
+  "tasks.malware_suspicious": "可疑 — {reason}",
+  "tasks.malware_fractureiser": "包含与 Fractureiser 相关的迹象",
+  "tasks.malware_shell": "执行 PowerShell 或命令提示符命令",
+  "tasks.malware_credentials": "访问凭据存储，并使用网络或启动进程",
+  "tasks.malware_download": "可以下载并执行外部代码",
+  "tasks.malware_undeclared_jar": "从未声明的内嵌 JAR 加载代码",
+  "tasks.malware_disable": "禁用模组",
+  "tasks.malware_disable_failed": "无法禁用模组",
+  "tasks.malware_launch": "启动",
+  "tasks.malware_launch_anyway": "仍要启动"
 }

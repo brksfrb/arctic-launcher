@@ -47,6 +47,18 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --no-fail-fast --locked
+      - name: Verify the signed launcher with Windows Authenticode
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:ARCTIC_SIGNED_EXE = Join-Path $env:RUNNER_TEMP "arctic-launcher-v0.6.6.exe"
+          curl.exe --fail --location --retry 3 --output $env:ARCTIC_SIGNED_EXE https://github.com/brksfrb/arctic-launcher/releases/download/v0.6.6/arctic-launcher-windows-x64.exe
+          if ($LASTEXITCODE -ne 0) { throw "Could not download the signed launcher fixture" }
+          $digest = (Get-FileHash $env:ARCTIC_SIGNED_EXE -Algorithm SHA256).Hash
+          if ($digest -ne "37fb8840325d67cd1ac319a463b1653b3af833bf4db087cea1125fe5891ec651") {
+            throw "Signed launcher fixture checksum changed"
+          }
+          cargo test -p arctic-app --locked authenticode_accepts_the_official_publisher_and_rejects_tampering -- --ignored
 
   # Mojang's Java runtimes ship ucrtbase.dll and api-ms-win-*.dll, which the named copy no longer
   # writes (security tools flag that). Prove Java still starts from the named copy without them.

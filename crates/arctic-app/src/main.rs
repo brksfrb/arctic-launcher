@@ -6,6 +6,8 @@ mod art;
 mod auto_update;
 mod bedrock_tasks;
 mod bridge_host;
+#[cfg(any(windows, test))]
+mod build_signature;
 mod content_tasks;
 mod desktop_shortcut;
 mod devshot;

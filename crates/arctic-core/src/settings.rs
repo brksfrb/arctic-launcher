@@ -116,6 +116,7 @@ pub struct Settings {
     pub share_server_with_friends: bool,
     /// Ask before starting Minecraft just to join a server (the dialog's "Don't show again" turns it off).
     pub confirm_join_launch: bool,
+    pub check_mods_for_malware: bool,
     /// Quitting the launcher also closes games it started (off: they keep running).
     pub exit_games_with_launcher: bool,
     /// Mentions of Arctic's supporter (About, playing together).
@@ -337,6 +338,7 @@ impl Default for Settings {
             client_fancy: false,
             share_server_with_friends: false,
             confirm_join_launch: true,
+            check_mods_for_malware: true,
             exit_games_with_launcher: false,
             show_sponsor: true,
             quick_tips: true,

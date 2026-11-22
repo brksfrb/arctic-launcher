@@ -225,5 +225,6 @@
   "settings.your_newest_screenshot_or_the_versions_title": "Dein neuester Screenshot oder der Titelbildschirm der Version",
   "settings.your_picture": "Dein Bild…",
   "settings.your_screenshot": "Dein Screenshot",
-  "settings.your_settings_instances_as_mod_lists_and_hud": "Deine Einstellungen, Instanzen (als Mod-Listen) und HUD-Setups, als Code, Text oder Datei. Konten und Passwörter sind nie enthalten."
+  "settings.your_settings_instances_as_mod_lists_and_hud": "Deine Einstellungen, Instanzen (als Mod-Listen) und HUD-Setups, als Code, Text oder Datei. Konten und Passwörter sind nie enthalten.",
+  "settings.check_mods_for_malware": "Mods auf Schadsoftware prüfen"
 }

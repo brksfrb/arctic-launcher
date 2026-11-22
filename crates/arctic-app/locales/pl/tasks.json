@@ -177,5 +177,19 @@
   "tasks.you_can_turn_this_question_back_on_in": "To pytanie możesz ponownie włączyć w Ustawieniach.",
   "tasks.youll_see_it_next_time_you_play": "Zobaczysz to przy następnej grze.",
   "tasks.your_discord_account": "twoje konto Discord",
-  "tasks.your_profile_and_friends_are_here_now": "Twój profil i znajomi są teraz tutaj"
+  "tasks.your_profile_and_friends_are_here_now": "Twój profil i znajomi są teraz tutaj",
+  "tasks.checking_mods_for_malware": "Sprawdzanie modów pod kątem złośliwego oprogramowania",
+  "tasks.mod_malware_warning": "Możliwe złośliwe oprogramowanie w modach",
+  "tasks.malware_scope": "Sprawdzanie wykrywa znane i wyraźne oznaki złośliwego oprogramowania. Nie gwarantuje bezpieczeństwa modu.",
+  "tasks.malware_hash_match": "Znane złośliwe oprogramowanie (skrót pliku znajduje się na liście blokad)",
+  "tasks.malware_suspicious": "Podejrzane — {reason}",
+  "tasks.malware_fractureiser": "Zawiera wskaźniki powiązane z Fractureiser",
+  "tasks.malware_shell": "Wykonuje polecenie programu PowerShell lub wiersza polecenia",
+  "tasks.malware_credentials": "Uzyskuje dostęp do zapisanych poświadczeń i używa sieci lub uruchamia proces",
+  "tasks.malware_download": "Może pobierać i wykonywać zewnętrzny kod",
+  "tasks.malware_undeclared_jar": "Wczytuje kod z niezadeklarowanego osadzonego pliku JAR",
+  "tasks.malware_disable": "Wyłącz mod",
+  "tasks.malware_disable_failed": "Nie udało się wyłączyć modu",
+  "tasks.malware_launch": "Uruchom",
+  "tasks.malware_launch_anyway": "Uruchom mimo to"
 }

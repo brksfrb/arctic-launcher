@@ -175,5 +175,19 @@
   "tasks.you_can_turn_this_question_back_on_in": "この質問は設定で再びオンにできます。",
   "tasks.youll_see_it_next_time_you_play": "次回のプレイ時に表示されます。",
   "tasks.your_discord_account": "あなたの Discord アカウント",
-  "tasks.your_profile_and_friends_are_here_now": "プロファイルとフレンドがここに移りました"
+  "tasks.your_profile_and_friends_are_here_now": "プロファイルとフレンドがここに移りました",
+  "tasks.checking_mods_for_malware": "Mod のマルウェアを確認中",
+  "tasks.mod_malware_warning": "Mod にマルウェアが含まれている可能性があります",
+  "tasks.malware_scope": "既知のマルウェアや明らかな兆候を確認します。Mod の安全性を保証するものではありません。",
+  "tasks.malware_hash_match": "既知のマルウェア（ファイルのハッシュがブロックリストと一致）",
+  "tasks.malware_suspicious": "要注意 — {reason}",
+  "tasks.malware_fractureiser": "Fractureiser に関連する兆候が含まれています",
+  "tasks.malware_shell": "PowerShell またはコマンドプロンプトのコマンドを実行します",
+  "tasks.malware_credentials": "認証情報の保存先にアクセスし、ネットワークを使用するかプロセスを起動します",
+  "tasks.malware_download": "外部コードをダウンロードして実行する可能性があります",
+  "tasks.malware_undeclared_jar": "宣言されていない内蔵 JAR からコードを読み込みます",
+  "tasks.malware_disable": "Mod を無効にする",
+  "tasks.malware_disable_failed": "Mod を無効にできませんでした",
+  "tasks.malware_launch": "起動",
+  "tasks.malware_launch_anyway": "そのまま起動"
 }

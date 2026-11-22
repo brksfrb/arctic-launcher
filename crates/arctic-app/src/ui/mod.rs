@@ -8,6 +8,7 @@ mod client_style;
 mod dialogs;
 mod instances;
 mod logs;
+mod mod_malware;
 pub(crate) mod suggest;
 
 pub(crate) use instances::Section;

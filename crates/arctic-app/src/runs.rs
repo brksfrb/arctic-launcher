@@ -644,6 +644,10 @@ impl Runs {
         self.next_id
     }
 
+    pub fn cancel(&mut self, id: LaunchId) {
+        self.list.retain(|run| run.id != id);
+    }
+
     pub fn get(&self, id: LaunchId) -> Option<&Run> {
         self.list.iter().find(|r| r.id == id)
     }

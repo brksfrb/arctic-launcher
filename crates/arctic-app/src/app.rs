@@ -1,6 +1,6 @@
 //! Application state and event handling. Layout lives in `ui/`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
@@ -134,6 +134,8 @@ pub enum UpdateState {
 }
 
 pub struct ArcticApp {
+    #[cfg(windows)]
+    pub(crate) build_signature: crate::build_signature::BuildSignature,
     /// Launcher-wide layout (shared downloads, caches).
     pub(crate) root: DataDirs,
     pub(crate) profiles: ProfileStore,
@@ -237,6 +239,7 @@ pub struct ArcticApp {
     pub(crate) close_prompt: bool,
     /// "Launch Minecraft to join this server?" is up for this address.
     pub(crate) join_confirm: Option<String>,
+    pub(crate) mod_malware_warnings: VecDeque<crate::tasks::ModMalwareWarning>,
     /// That dialog's "Don't show again" box.
     pub(crate) join_confirm_never: bool,
     /// "Play this world?" is up (a world never starts from one click).
@@ -302,6 +305,8 @@ impl ArcticApp {
             };
         let intro = data.settings.intro && !startup.no_intro;
         let mut app = Self {
+            #[cfg(windows)]
+            build_signature: crate::build_signature::BuildSignature::start(&root, &cc.egui_ctx),
             splash: Splash::new(intro),
             applied_theme: None,
             theme_fade: None,
@@ -331,6 +336,7 @@ impl ArcticApp {
             open_flushed: std::time::Instant::now(),
             close_prompt: false,
             join_confirm: None,
+            mod_malware_warnings: VecDeque::new(),
             join_confirm_never: false,
             world_confirm: None,
             software_gl: false,
@@ -1125,6 +1131,20 @@ impl ArcticApp {
                 }
             }
             Event::LaunchProgress(id, snapshot) => self.on_launch_progress(id, snapshot, now),
+            Event::ModMalwareWarning(warning) => {
+                crate::window::show();
+                self.mod_malware_warnings.push_back(warning);
+            }
+            Event::LaunchCancelled(id) => {
+                self.runs.cancel(id);
+                self.bridge.forget_launch(id);
+                if matches!(self.log_source, LogSource::Game(run) if run == id) {
+                    self.log_source = self
+                        .runs
+                        .latest()
+                        .map_or(LogSource::Launcher, |run| LogSource::Game(run.id));
+                }
+            }
             Event::UpdateProgress(p) => {
                 if let UpdateState::Installing { done, total, .. } = &mut self.update {
                     (*done, *total) = (p.bytes_done, p.bytes_total);
@@ -1497,6 +1517,8 @@ impl eframe::App for ArcticApp {
         self.update_theme(&ctx, frame);
         crate::zoom::apply(&ctx, self.settings.interface_size);
         self.go_back(&ctx);
+        #[cfg(windows)]
+        self.build_signature.poll();
         self.shell(ui);
         self.splash.show(&ctx, self.palette());
         self.autosave_settings(&ctx);
