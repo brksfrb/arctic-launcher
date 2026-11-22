@@ -140,6 +140,7 @@
 <% } %>
 		"LightmapMixin",
 		"ChatComponentMixin",
+		"ChatHistoryLimitMixin",
 <% if (emoteLayout) { %>		"ChatEmoteLayoutMixin",
 <% } %>
 		"ChatCopyStyleMixin",
