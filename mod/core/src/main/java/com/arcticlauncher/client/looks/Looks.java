@@ -718,9 +718,13 @@ public final class Looks {
 			return hash + "/0";
 		}
 		Integer fps = capeFps.get(hash);
-		long frameMs = 1000L / (fps == null ? DEFAULT_CAPE_FPS : fps);
-		long frame = (System.currentTimeMillis() / frameMs) % frames;
-		return hash + "/" + frame;
+		return hash + "/" + capeFrameAt(System.currentTimeMillis(), frames,
+				fps == null ? DEFAULT_CAPE_FPS : fps);
+	}
+
+	/** Scale milliseconds before dividing so fractional frame durations do not accumulate drift. */
+	static long capeFrameAt(long timeMs, int frames, int fps) {
+		return (timeMs * fps / 1000L) % frames;
 	}
 
 	/** Frames in a cape image: 1 plain, more when animated, 0 if invalid. */
