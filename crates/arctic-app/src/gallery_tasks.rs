@@ -47,8 +47,8 @@ impl Tasks {
         });
     }
 
-    /// Download a gallery skin (counting the use); `wear` also puts it on.
-    pub fn gallery_take(&self, item: GalleryItem, wear: bool) {
+    /// Download a gallery skin (counting the use), optionally for an equip request.
+    pub fn gallery_take(&self, item: GalleryItem, wear: Option<uuid::Uuid>) {
         self.run(move |t| {
             let base = cosmetics::base_url();
             let cache = t.dirs().cache().join("arctic-looks");
@@ -59,9 +59,9 @@ impl Tasks {
                         None => cosmetics::texture(&base, &hash),
                     },
                 )
-                .map(|png| (item.name.clone(), png, item.variant(), wear))
+                .map(|png| (item.name.clone(), png, item.variant()))
                 .map_err(|e| friendly(&e.to_string()));
-            t.send(Event::GalleryTaken(result));
+            t.send(Event::GalleryTaken(wear, result));
         });
     }
 

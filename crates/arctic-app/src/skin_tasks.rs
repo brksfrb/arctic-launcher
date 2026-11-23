@@ -91,6 +91,13 @@ pub struct AccountSkin {
     pub capes: Vec<(String, Vec<u8>)>,
 }
 
+#[derive(Debug)]
+pub struct SyncedMinecraftSkin {
+    pub profile: Profile,
+    pub png: Vec<u8>,
+    pub undo: Option<SkinChange>,
+}
+
 /// What to change on Mojang's side before re-reading the profile.
 #[derive(Debug, Clone)]
 pub enum SkinChange {
@@ -98,6 +105,16 @@ pub enum SkinChange {
     Upload(Variant, Vec<u8>),
     Reset,
     Cape(Option<String>),
+}
+
+fn previous_skin_change(
+    profile: &Profile,
+    texture: impl FnOnce(&str) -> CoreResult<Vec<u8>>,
+) -> CoreResult<SkinChange> {
+    match profile.active_skin() {
+        Some(skin) => Ok(SkinChange::Upload(skin.variant(), texture(&skin.url)?)),
+        None => Ok(SkinChange::Reset),
+    }
 }
 
 impl Tasks {
@@ -120,6 +137,35 @@ impl Tasks {
                 .skin_account_blocking(account, change)
                 .map_err(|e| e.to_string());
             t.send(Event::SkinAccount(id, result));
+        });
+    }
+
+    pub fn sync_minecraft_skin(
+        &self,
+        account: Account,
+        variant: Variant,
+        png: Vec<u8>,
+        capture_previous: bool,
+    ) {
+        self.run(move |t| {
+            let id = account.id.clone();
+            let result = (|| -> CoreResult<_> {
+                let token = t.fresh_token(account)?;
+                let undo = if capture_previous {
+                    let profile = api::profile(&token)?;
+                    Some(previous_skin_change(&profile, api::texture)?)
+                } else {
+                    None
+                };
+                let profile = api::upload_skin(&token, variant, &png)?;
+                Ok(SyncedMinecraftSkin { profile, png, undo })
+            })()
+            .map_err(|e| e.to_string());
+            t.send(Event::MinecraftSkinSynced(
+                t.dirs().profile_root().to_owned(),
+                id,
+                result,
+            ));
         });
     }
 
@@ -428,6 +474,32 @@ mod tests {
     use super::*;
     use cosmetic_models::{Geometry, Item, Mesh, MeshItem};
     use std::sync::Arc;
+
+    #[test]
+    fn undo_uses_only_the_active_skin_and_its_original_variant() {
+        let mut profile = Profile {
+            id: "player".into(),
+            name: "Alex".into(),
+            skins: vec![],
+            capes: vec![],
+        };
+        assert!(matches!(
+            previous_skin_change(&profile, |_| panic!("default has no texture")).unwrap(),
+            SkinChange::Reset
+        ));
+        profile.skins.push(api::ProfileSkin {
+            id: "old".into(),
+            state: "ACTIVE".into(),
+            url: "https://textures.minecraft.net/texture/old".into(),
+            variant: "SLIM".into(),
+        });
+        let undo = previous_skin_change(&profile, |url| {
+            assert_eq!(url, profile.skins[0].url);
+            Ok(b"previous".to_vec())
+        })
+        .unwrap();
+        assert!(matches!(undo, SkinChange::Upload(Variant::Slim, png) if png == b"previous"));
+    }
 
     #[test]
     fn failed_catalog_load_keeps_assets_until_a_successful_refresh() {

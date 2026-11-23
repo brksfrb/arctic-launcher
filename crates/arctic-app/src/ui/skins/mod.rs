@@ -12,6 +12,7 @@ mod gallery;
 mod gpu;
 mod model;
 mod panels;
+mod sync;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -133,6 +134,7 @@ pub struct SkinsUi {
     /// Account id → Minecraft skin state (Microsoft accounts).
     pub account: HashMap<String, Result<AccountSkin, String>>,
     pub busy: bool,
+    skin_sync: sync::SkinSync,
     /// Account id → Arctic look.
     pub arctic: HashMap<String, Result<ArcticState, String>>,
     pub arctic_busy: bool,
@@ -170,6 +172,12 @@ pub struct SkinsUi {
     pub zoom: f32,
     /// When the preview was last dragged (it turns by itself after a while).
     pub dragged_at: f64,
+}
+
+impl SkinsUi {
+    fn hover_skin(&mut self, key: &str, variant: Variant) {
+        self.hover = Some(Hover::Skin(key.to_owned(), variant));
+    }
 }
 
 impl ArcticApp {
@@ -372,6 +380,10 @@ impl ArcticApp {
         let Some(account) = self.accounts.active().cloned() else {
             return;
         };
+        if matches!(change, SkinChange::Upload(..) | SkinChange::Reset) {
+            self.skins.skin_sync.cancel();
+            self.skins.skin_sync.dismiss_notice();
+        }
         self.skins.busy = true;
         self.tasks.skin_account(account, change);
     }
@@ -465,15 +477,28 @@ impl ArcticApp {
             Ok(png) => {
                 let variant = entry.variant;
                 let key = format!("lib:{}", entry.id);
-                self.change_look(
-                    |l| l.skin = Some((Texture::Png(png), variant)),
-                    |t| t.skin = Some(Some((key, variant))),
-                );
+                self.wear_skin_png(key, png, variant);
             }
             Err(e) => self
                 .toasts
                 .push(Kind::Error, t!("skins.could_not_read_skin"), e.to_string()),
         }
+    }
+
+    fn wear_skin_png(&mut self, key: String, png: Vec<u8>, variant: Variant) {
+        self.skins.gallery.cancel_wear();
+        if self.arctic_state().is_none() {
+            return;
+        }
+        if let Some(account) = sync::sync_account(&self.settings, self.accounts.active()) {
+            self.skins
+                .skin_sync
+                .equip(&account.id, &png, variant, Instant::now());
+        }
+        self.change_look(
+            |l| l.skin = Some((Texture::Png(png), variant)),
+            |t| t.skin = Some(Some((key, variant))),
+        );
     }
 
     /// The game's skin picker chose a library skin (`None`: the Minecraft skin).
@@ -512,6 +537,8 @@ impl ArcticApp {
 
     /// Back to the Minecraft skin (for Arctic players too).
     fn stop_wearing_skin(&mut self) {
+        self.skins.gallery.cancel_wear();
+        self.skins.skin_sync.cancel();
         self.change_look(|l| l.skin = None, |t| t.skin = Some(None));
     }
 
@@ -864,48 +891,52 @@ impl ArcticApp {
             .arctic
             .get(&account_id)
             .is_some_and(Result::is_ok);
-        let queued = self.skins.queued.take();
+        let ok = result.is_ok();
         match result {
             Err(e) if had_look && saving => {
-                // A save failed: back to the look the server has.
-                self.skins.intended = None;
-                self.skins.trying = Trying::default();
                 self.toasts
                     .push(Kind::Error, t!("skins.couldnt_save_your_look"), e);
             }
             result => {
-                let ok = result.is_ok();
                 if let Ok(state) = &result {
                     self.update_offline_face(&account_id, state);
+                    if saving {
+                        self.skins.skin_sync.saved(&account_id, &state.look);
+                    }
                 }
                 if ok || !had_look {
                     self.skins.arctic.insert(account_id.clone(), result);
                 }
-                let active = self.accounts.active().cloned();
-                let state = self.arctic_state().cloned();
-                match (queued, active, state) {
-                    (Some(next), Some(account), Some(state)) if account.id == account_id => {
-                        self.skins.arctic_busy = true;
-                        self.tasks.save_arctic_look(account, next, state);
-                    }
-                    _ => {
-                        self.skins.intended = None;
-                        self.skins.trying = Trying::default();
-                        if saving && ok {
-                            self.skins.saved_at = Some(now_secs_f64());
-                        }
-                        if ok
-                            && self
-                                .accounts
-                                .active()
-                                .is_some_and(|account| account.id == account_id)
-                            && let Some(picked) = self.skins.from_game.take()
-                        {
-                            self.wear_skin_from_game(picked);
-                        }
-                    }
-                }
             }
+        }
+        let queued = self.skins.queued.take();
+        let active = self.accounts.active().filter(|a| a.id == account_id);
+        let next_save = queued.zip(active).and_then(|(next, account)| {
+            self.arctic_state()
+                .map(|state| (next, account.clone(), state.clone()))
+        });
+        if saving && !ok {
+            self.skins
+                .skin_sync
+                .save_failed(&account_id, next_save.is_some());
+        }
+        if let Some((next, account, state)) = next_save {
+            // A queued look is a complete replacement. It can still be saved if
+            // the preceding request failed and we kept the last known state.
+            self.tasks.save_arctic_look(account, next, state);
+            self.skins.arctic_busy = true;
+            return;
+        }
+        self.skins.intended = None;
+        self.skins.trying = Trying::default();
+        if saving && ok {
+            self.skins.saved_at = Some(now_secs_f64());
+        }
+        if ok
+            && active.is_some()
+            && let Some(picked) = self.skins.from_game.take()
+        {
+            self.wear_skin_from_game(picked);
         }
     }
 
@@ -945,6 +976,9 @@ impl ArcticApp {
                     self.request_public_catalog();
                 }
                 self.on_look_finished(account_id, result, false);
+            }
+            Event::MinecraftSkinSynced(root, account_id, result) => {
+                self.on_minecraft_skin_synced(root, account_id, result);
             }
             Event::ArcticLookSaved(account_id, result) => {
                 self.on_look_finished(account_id, result, true);
