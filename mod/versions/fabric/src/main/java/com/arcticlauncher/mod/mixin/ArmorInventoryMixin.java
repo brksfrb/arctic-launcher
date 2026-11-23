@@ -50,7 +50,7 @@ abstract class ArmorInventoryMixin {
 	private void arctic$toggle(MouseButtonEvent event, boolean doubleClick, CallbackInfoReturnable<Boolean> ci) {
 		double mouseX = event.x();
 		double mouseY = event.y();
-		int button = event.button();
+		int button = event.button() == com.arcticlauncher.mod.compat.KeyCodes.MOUSE_LEFT ? 0 : -1;
 	//#else
 	private void arctic$toggle(double mouseX, double mouseY, int button, CallbackInfoReturnable<Boolean> ci) {
 	//#endif

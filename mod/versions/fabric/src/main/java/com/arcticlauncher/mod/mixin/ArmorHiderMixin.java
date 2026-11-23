@@ -22,7 +22,6 @@ import net.minecraft.client.renderer.SubmitNodeCollector;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 //#elif MC >= 1.21.2
-import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.MultiBufferSource;
 //#endif
@@ -47,11 +46,12 @@ abstract class ArmorHiderMixin {
 		}
 	}
 	//#elif MC >= 1.21.2
-	@WrapOperation(method = "extractRenderState", at = @At(value = "INVOKE",
+	@WrapOperation(method = "extractRenderState(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/renderer/entity/state/HumanoidRenderState;FF)V", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/renderer/entity/layers/HumanoidArmorLayer;renderArmorPiece(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/entity/EquipmentSlot;ILnet/minecraft/client/model/HumanoidModel;)V"))
 	private void arctic$hide(HumanoidArmorLayer<?, ?, ?> layer, PoseStack pose, MultiBufferSource buffers,
 			ItemStack stack, EquipmentSlot slot, int light, HumanoidModel<?> model, Operation<Void> original,
-			@Local(argsOnly = true) HumanoidRenderState state) {
+			PoseStack renderPose, MultiBufferSource renderBuffers, int renderLight, HumanoidRenderState state,
+			float yaw, float pitch) {
 		if (!((ArmorVisibility) state).arctic$isLocalPlayer() || stack.is(Items.ELYTRA) || !ArmorVisibility.hides(slot)) {
 			original.call(layer, pose, buffers, stack, slot, light, model);
 		}

@@ -4,7 +4,11 @@ import com.arcticlauncher.client.feature.EnchantDescriptions;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
+//#if MC >= 1.14
 import net.minecraft.world.item.Items;
+//#else
+import net.minecraft.item.Items;
+//#endif
 //#if MC >= 1.21
 import net.minecraft.tags.ItemTags;
 //#else
