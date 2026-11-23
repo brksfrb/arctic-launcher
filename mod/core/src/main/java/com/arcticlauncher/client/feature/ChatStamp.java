@@ -14,14 +14,14 @@ public final class ChatStamp {
 	public static volatile Date proofNow;
 
 	public static String text(ClientConfig c) {
-		Date fixed = proofNow;
-		return text(c, fixed != null ? fixed : new Date());
+		return text(c, new Date());
 	}
 
 	public static String text(ClientConfig c, Date now) {
 		String pattern = (c.chatStamp12h ? "h:mm" : "HH:mm") + (c.chatStampSeconds ? ":ss" : "")
 				+ (c.chatStampAmPm ? " a" : "");
-		String time = LocalClock.formatter(pattern, java.util.Locale.ENGLISH).format(now);
+		Date fixed = proofNow;
+		String time = LocalClock.formatter(pattern, java.util.Locale.ENGLISH).format(fixed == null ? now : fixed);
 		return (c.chatStampBrackets ? "[" + time + "]" : time) + " ";
 	}
 }

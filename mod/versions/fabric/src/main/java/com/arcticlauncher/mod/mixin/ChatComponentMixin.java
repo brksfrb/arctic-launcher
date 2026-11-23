@@ -349,13 +349,8 @@ abstract class ChatComponentMixin implements PersistentChat.Hud {
 			if (c.chatStampItalic) {
 				stamp = stamp.withStyle(ChatFormatting.ITALIC);
 			}
-			// The slot padding sits beside the tagged stamp, so the hover/click target is only the time.
-			net.minecraft.client.gui.Font font = net.minecraft.client.Minecraft.getInstance().font;
-			String shown = com.arcticlauncher.client.feature.ChatStamp.text(c, when);
-			Component pad = com.arcticlauncher.mod.ChatHistoryText.decode(com.arcticlauncher.client.feature.ChatStampWidth.padding(c, font, arctic$measure(font), shown));
-			out = com.arcticlauncher.client.feature.ChatStampWidth.right()
-					? com.arcticlauncher.mod.Compat.empty().append(pad).append(com.arcticlauncher.mod.ChatCopyComponents.tag(stamp, text, true)).append(out)
-					: com.arcticlauncher.mod.Compat.empty().append(com.arcticlauncher.mod.ChatCopyComponents.tag(stamp, text, true)).append(pad).append(out);
+			out = com.arcticlauncher.mod.Compat.empty().append(com.arcticlauncher.mod.ChatCopyComponents.tag(
+					stamp, new com.arcticlauncher.client.feature.ChatCopy.Data(text, true, true))).append(out);
 		} else if (c.chatCopy) {
 			out = com.arcticlauncher.mod.Compat.empty()
 					.append(com.arcticlauncher.mod.ChatCopyComponents.tag(

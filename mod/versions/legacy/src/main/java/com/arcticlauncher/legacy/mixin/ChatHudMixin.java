@@ -2,6 +2,15 @@ package com.arcticlauncher.legacy.mixin;
 
 import com.arcticlauncher.legacy.LegacyHooks;
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.feature.ChatCopy;
+import com.arcticlauncher.client.feature.ChatStampWidth;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import java.util.ArrayList;
+import java.util.List;
+import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.util.Texts;
+import net.minecraft.text.LiteralText;
 import net.minecraft.client.gui.hud.ChatHud;
 import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Final;
@@ -117,11 +126,40 @@ abstract class ChatHudMixin implements PersistentChat.Hud {
 
 	@Unique private boolean arctic$emojiWasOn = true;
 
-	/** Only the argument passed to wrapping changes; the stored message is untouched. */
-	@org.spongepowered.asm.mixin.injection.ModifyArg(method = "addMessage(Lnet/minecraft/text/Text;IIZ)V",
-			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/Texts;wrapLines(Lnet/minecraft/text/Text;ILnet/minecraft/client/font/TextRenderer;ZZ)Ljava/util/List;"), index = 0)
-	private Text arctic$emotes(Text message) {
-		return com.arcticlauncher.legacy.LegacyEmotes.layout(message);
+	@WrapOperation(method = "addMessage(Lnet/minecraft/text/Text;IIZ)V",
+			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/Texts;wrapLines(Lnet/minecraft/text/Text;ILnet/minecraft/client/font/TextRenderer;ZZ)Ljava/util/List;"))
+	private List<Text> arctic$layout(Text message, int width, TextRenderer font, boolean trimSpace, boolean colors,
+			Operation<List<Text>> wrap) {
+		List<Text> parts = message.getSiblings();
+		Text stamp = parts.isEmpty() ? null : parts.get(0);
+		ChatCopy.Data data = stamp == null ? null : ChatCopy.data(stamp.getStyle());
+		if (data == null || !data.stamp) {
+			return wrap.call(com.arcticlauncher.legacy.LegacyEmotes.layout(message), width, font, trimSpace, colors);
+		}
+		ChatStampWidth.Measure measure = text -> font.getStringWidth(Texts.getRenderChatMessage(text, colors));
+		int stampWidth = (int) measure.width(((LiteralText) stamp).getRawString());
+		int slot = Math.max(stampWidth, ChatStampWidth.slot(ArcticClient.config(), font, measure));
+		if (slot >= width) {
+			return wrap.call(com.arcticlauncher.legacy.LegacyEmotes.layout(message), width, font, trimSpace, colors);
+		}
+
+		Text body = new LiteralText("");
+		for (int i = 1; i < parts.size(); i++) body.append(parts.get(i).copy());
+		List<Text> wrapped = wrap.call(com.arcticlauncher.legacy.LegacyEmotes.layout(body), width - slot, font, trimSpace, colors);
+		List<Text> lines = new ArrayList<Text>(wrapped.size());
+		String indent = ChatStampWidth.spacer(slot);
+		String gap = ChatStampWidth.spacer(slot - stampWidth);
+		for (int i = 0; i < wrapped.size(); i++) {
+			Text line = new LiteralText("");
+			if (i == 0) {
+				line.append(new LiteralText(Texts.getRenderChatMessage(((LiteralText) stamp).getRawString(), colors))
+						.setStyle(stamp.getStyle().deepCopy()));
+			}
+			line.append(new LiteralText(i == 0 ? gap : indent));
+			line.append(wrapped.get(i));
+			lines.add(line);
+		}
+		return lines;
 	}
 
 	@Inject(method = "render", at = @At("HEAD"))

@@ -9,7 +9,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArgs;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import com.arcticlauncher.client.feature.ChatStampWidth;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.mojang.blaze3d.platform.GlStateManager;
 import org.lwjgl.opengl.GL11;
@@ -104,15 +106,14 @@ abstract class SmoothTextRendererMixin {
 		}
 	}
 
-	@Shadow
-	private float drawLayer(char c, boolean italic) {
-		throw new AssertionError();
-	}
-
 	/** One character at the pen; a direct fallback avoids a cancellable callback per vanilla glyph. */
-	@Redirect(method = "draw(Ljava/lang/String;Z)V", at = @At(value = "INVOKE",
+	@WrapOperation(method = "draw(Ljava/lang/String;Z)V", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/font/TextRenderer;drawLayer(CZ)F"))
-	private float arctic$draw(TextRenderer renderer, char c, boolean italic) {
+	private float arctic$draw(TextRenderer renderer, char c, boolean italic, Operation<Float> draw) {
+		int advance = (int) ChatStampWidth.advance(c);
+		if (advance > 0) {
+			return advance;
+		}
 		com.arcticlauncher.client.feature.EmoteAtlas.Emote emote = com.arcticlauncher.client.feature.EmoteAtlas.glyph(c);
 		if (emote != null) {
 			boolean second = bold && arctic$boldSecond;
@@ -124,7 +125,7 @@ abstract class SmoothTextRendererMixin {
 			return com.arcticlauncher.client.feature.EmoteAtlas.ADVANCE - (bold && arctic$smooth() ? 1 : 0);
 		}
 		if (!arctic$smooth()) {
-			return drawLayer(c, italic);
+			return draw.call(renderer, c, italic);
 		}
 		// Bold: the game's way thickens a bitmap font with a second copy a whole pixel over, which on a
 		// thin font (and a big title) reads as two letters. One pass, thickened a little, instead.
@@ -144,7 +145,7 @@ abstract class SmoothTextRendererMixin {
 			}
 			return arctic$returned(c);
 		}
-		return drawLayer(c, italic);
+		return draw.call(renderer, c, italic);
 	}
 
 	/**
@@ -169,6 +170,11 @@ abstract class SmoothTextRendererMixin {
 	/** Whole GUI pixels, the same step drawing moves the pen by. */
 	@Inject(method = "getCharWidth", at = @At("HEAD"), cancellable = true)
 	private void arctic$charWidth(char c, CallbackInfoReturnable<Integer> cir) {
+		int advance = (int) ChatStampWidth.advance(c);
+		if (advance > 0) {
+			cir.setReturnValue(advance);
+			return;
+		}
 		if (com.arcticlauncher.client.feature.EmoteAtlas.glyph(c) != null) {
 			cir.setReturnValue(com.arcticlauncher.client.feature.EmoteAtlas.ADVANCE);
 			return;
