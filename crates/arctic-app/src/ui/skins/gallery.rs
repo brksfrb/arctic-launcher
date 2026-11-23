@@ -46,6 +46,10 @@ pub struct GalleryUi {
 }
 
 impl GalleryUi {
+    pub(super) fn wear_pending(&self) -> bool {
+        self.wear_request.is_some()
+    }
+
     pub(super) fn cancel_wear(&mut self) {
         if self.wear_request.take().is_some() {
             self.busy = false;
@@ -145,7 +149,7 @@ impl ArcticApp {
             Some(Ok(items)) => items.clone(),
         };
         let can_wear = self.arctic_state().is_some()
-            && (!self.skins.gallery.busy || self.skins.gallery.wear_request.is_some());
+            && (!self.skins.gallery.busy || self.skins.gallery.wear_pending());
         let trying = match &self.skins.trying.skin {
             Some(Some((key, _))) => Some(key.clone()),
             _ => None,
@@ -201,7 +205,6 @@ impl ArcticApp {
             self.skins.gallery.busy = true;
             let request = uuid::Uuid::new_v4();
             self.skins.gallery.wear_request = Some((request, account.id.clone()));
-            self.skins.skin_sync.cancel();
             self.tasks.gallery_take(item, Some(request));
         }
         if blocked {
@@ -402,6 +405,7 @@ impl ArcticApp {
                         return;
                     }
                     let current = g.wear_request.take();
+                    self.skins.trying.skin = None;
                     self.accounts
                         .active()
                         .is_some_and(|account| current.is_some_and(|(_, id)| id == account.id))
@@ -417,9 +421,6 @@ impl ArcticApp {
                         }
                     }
                     Err(e) => {
-                        if wear {
-                            self.skins.trying.skin = None;
-                        }
                         self.toasts
                             .push(Kind::Error, t!("skins.could_not_get_skin"), e);
                     }

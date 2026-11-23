@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use arctic_core::auth::Account;
 use arctic_core::cosmetics::{Look, texture_hash};
+use arctic_core::settings::Settings;
 use arctic_core::skins::Variant;
 use eframe::egui;
 
@@ -11,6 +13,13 @@ use crate::t;
 use crate::toasts::Kind;
 
 const DEBOUNCE: Duration = Duration::from_millis(500);
+
+pub(super) fn sync_account<'a>(
+    settings: &Settings,
+    active: Option<&'a Account>,
+) -> Option<&'a Account> {
+    active.filter(|account| settings.sync_minecraft_skin && account.is_microsoft())
+}
 
 struct PendingSkin {
     account: String,
@@ -47,17 +56,21 @@ impl SkinSync {
         self.notice = None;
     }
 
-    pub(super) fn saved(&mut self, account: &str, look: Option<&Look>) {
-        let Some(pending) = self.pending.as_mut().filter(|skin| skin.account == account) else {
-            return;
-        };
-        match look {
-            Some(look) => {
-                pending.saved = look.skin.as_deref() == Some(&pending.hash)
-                    && look.variant() == pending.variant;
-            }
-            None if !pending.saved => self.cancel(),
-            None => {}
+    pub(super) fn saved(&mut self, account: &str, look: &Look) {
+        if let Some(pending) = self.pending.as_mut().filter(|skin| skin.account == account) {
+            pending.saved =
+                look.skin.as_deref() == Some(&pending.hash) && look.variant() == pending.variant;
+        }
+    }
+
+    pub(super) fn save_failed(&mut self, account: &str, will_save_queued: bool) {
+        if !will_save_queued
+            && self
+                .pending
+                .as_ref()
+                .is_some_and(|skin| skin.account == account && !skin.saved)
+        {
+            self.cancel();
         }
     }
 
@@ -83,16 +96,17 @@ impl ArcticApp {
             self.skins.skin_sync.cancel();
             return;
         }
-        let account = self.accounts.active().filter(|account| {
-            self.settings.sync_minecraft_skin
-                && account.is_microsoft()
-                && account.id == pending.account
-        });
+        let account = sync_account(&self.settings, self.accounts.active())
+            .filter(|account| account.id == pending.account);
         let Some(account) = account else {
             self.skins.skin_sync.cancel();
             return;
         };
-        if !pending.saved || self.skins.busy || self.skins.arctic_busy {
+        if !pending.saved
+            || self.skins.busy
+            || self.skins.arctic_busy
+            || self.skins.gallery.wear_pending()
+        {
             return;
         }
         let now = Instant::now();
@@ -102,7 +116,8 @@ impl ArcticApp {
                 account.clone(),
                 skin.variant,
                 skin.png,
-                !self.settings.minecraft_skin_sync_explained,
+                !self.settings.minecraft_skin_sync_explained
+                    && self.skins.skin_sync.notice.is_none(),
             );
         } else if let Some(pending) = &self.skins.skin_sync.pending {
             ctx.request_repaint_after(pending.due.saturating_duration_since(now));
@@ -132,8 +147,6 @@ impl ArcticApp {
                 }
                 if let Some(undo) = skin.undo {
                     self.skins.skin_sync.notice = Some((account, undo));
-                    self.settings.minecraft_skin_sync_explained = true;
-                    self.persist_settings();
                 }
             }
             Err(error) => {
@@ -163,6 +176,10 @@ impl ArcticApp {
                 .is_some_and(|active| &active.id == id)
         }) {
             return;
+        }
+        if !self.settings.minecraft_skin_sync_explained {
+            self.settings.minecraft_skin_sync_explained = true;
+            self.persist_settings();
         }
         ui.horizontal_wrapped(|ui| {
             ui.label(t!("skins.minecraft_skin_synced"));
@@ -202,10 +219,10 @@ mod tests {
         let now = Instant::now();
         let second_pick = now + Duration::from_millis(100);
         sync.equip("player", b"first", Variant::Classic, now);
-        sync.saved("player", Some(&look(b"first", Variant::Classic)));
+        sync.saved("player", &look(b"first", Variant::Classic));
         sync.equip("player", b"second", Variant::Slim, second_pick);
         assert!(sync.take_ready(second_pick + DEBOUNCE).is_none());
-        sync.saved("player", Some(&look(b"second", Variant::Slim)));
+        sync.saved("player", &look(b"second", Variant::Slim));
         assert!(sync.take_ready(now + DEBOUNCE).is_none());
         let upload = sync.take_ready(second_pick + DEBOUNCE).unwrap();
         assert_eq!(upload.png, b"second");
@@ -228,7 +245,7 @@ mod tests {
         // Changing a cape can save a look that already has an equipped skin.
         skins
             .skin_sync
-            .saved("player", Some(&look(b"already worn", Variant::Classic)));
+            .saved("player", &look(b"already worn", Variant::Classic));
         assert!(skins.skin_sync.take_ready(now + DEBOUNCE).is_none());
     }
 
@@ -237,10 +254,10 @@ mod tests {
         let mut sync = SkinSync::default();
         let now = Instant::now();
         sync.equip("player", b"same pixels", Variant::Slim, now);
-        sync.saved("player", Some(&look(b"same pixels", Variant::Classic)));
-        sync.saved("other", Some(&look(b"same pixels", Variant::Slim)));
+        sync.saved("player", &look(b"same pixels", Variant::Classic));
+        sync.saved("other", &look(b"same pixels", Variant::Slim));
         assert!(sync.take_ready(now + DEBOUNCE).is_none());
-        sync.saved("player", Some(&look(b"same pixels", Variant::Slim)));
+        sync.saved("player", &look(b"same pixels", Variant::Slim));
         assert_eq!(
             sync.take_ready(now + DEBOUNCE).unwrap().variant,
             Variant::Slim
@@ -248,15 +265,54 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_earlier_save_does_not_cancel_a_queued_equip() {
+        let mut sync = SkinSync::default();
+        let now = Instant::now();
+        sync.equip("player", b"latest", Variant::Slim, now);
+        sync.save_failed("player", true);
+        assert!(sync.take_ready(now + DEBOUNCE).is_none());
+        sync.saved("player", &look(b"latest", Variant::Slim));
+        assert_eq!(sync.take_ready(now + DEBOUNCE).unwrap().png, b"latest");
+    }
+
+    #[test]
+    fn legacy_settings_enable_sync_only_for_microsoft_accounts() {
+        use arctic_core::auth::{AccountKind, MicrosoftSession};
+        use arctic_core::secret::Secret;
+
+        let premium = Account {
+            id: "premium".into(),
+            username: "Alex".into(),
+            uuid: "uuid".into(),
+            kind: AccountKind::Microsoft(MicrosoftSession {
+                refresh_token: Secret::new(""),
+                access_token: Secret::new(""),
+                expires_at: 0,
+                xuid: None,
+            }),
+        };
+        let mut settings: Settings = serde_json::from_str("{}").unwrap();
+        assert!(sync_account(&settings, Some(&premium)).is_some());
+        assert!(sync_account(&settings, None).is_none());
+        #[cfg(feature = "offline-accounts")]
+        {
+            let offline = arctic_core::auth::offline::create("Steve").unwrap();
+            assert!(sync_account(&settings, Some(&offline)).is_none());
+        }
+        settings.sync_minecraft_skin = false;
+        assert!(sync_account(&settings, Some(&premium)).is_none());
+    }
+
+    #[test]
     fn failed_save_or_taking_skin_off_cancels_upload() {
         let mut sync = SkinSync::default();
         let now = Instant::now();
         sync.equip("player", b"skin", Variant::Classic, now);
-        sync.saved("player", None);
-        sync.saved("player", Some(&look(b"skin", Variant::Classic)));
+        sync.save_failed("player", false);
+        sync.saved("player", &look(b"skin", Variant::Classic));
         assert!(sync.take_ready(now + DEBOUNCE).is_none());
         sync.equip("player", b"skin", Variant::Classic, now);
-        sync.saved("player", Some(&look(b"skin", Variant::Classic)));
+        sync.saved("player", &look(b"skin", Variant::Classic));
         sync.cancel();
         assert!(sync.take_ready(now + DEBOUNCE).is_none());
     }

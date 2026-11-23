@@ -490,9 +490,7 @@ impl ArcticApp {
         if self.arctic_state().is_none() {
             return;
         }
-        if self.settings.sync_minecraft_skin
-            && let Some(account) = self.accounts.active().filter(|a| a.is_microsoft())
-        {
+        if let Some(account) = sync::sync_account(&self.settings, self.accounts.active()) {
             self.skins
                 .skin_sync
                 .equip(&account.id, &png, variant, Instant::now());
@@ -893,48 +891,52 @@ impl ArcticApp {
             .arctic
             .get(&account_id)
             .is_some_and(Result::is_ok);
-        let queued = self.skins.queued.take();
+        let ok = result.is_ok();
         match result {
             Err(e) if had_look && saving => {
-                // A save failed: back to the look the server has.
-                self.skins.intended = None;
-                self.skins.trying = Trying::default();
                 self.toasts
                     .push(Kind::Error, t!("skins.couldnt_save_your_look"), e);
             }
             result => {
-                let ok = result.is_ok();
                 if let Ok(state) = &result {
                     self.update_offline_face(&account_id, state);
+                    if saving {
+                        self.skins.skin_sync.saved(&account_id, &state.look);
+                    }
                 }
                 if ok || !had_look {
                     self.skins.arctic.insert(account_id.clone(), result);
                 }
-                let active = self.accounts.active().cloned();
-                let state = self.arctic_state().cloned();
-                match (queued, active, state) {
-                    (Some(next), Some(account), Some(state)) if account.id == account_id => {
-                        self.skins.arctic_busy = true;
-                        self.tasks.save_arctic_look(account, next, state);
-                    }
-                    _ => {
-                        self.skins.intended = None;
-                        self.skins.trying = Trying::default();
-                        if saving && ok {
-                            self.skins.saved_at = Some(now_secs_f64());
-                        }
-                        if ok
-                            && self
-                                .accounts
-                                .active()
-                                .is_some_and(|account| account.id == account_id)
-                            && let Some(picked) = self.skins.from_game.take()
-                        {
-                            self.wear_skin_from_game(picked);
-                        }
-                    }
-                }
             }
+        }
+        let queued = self.skins.queued.take();
+        let active = self.accounts.active().filter(|a| a.id == account_id);
+        let next_save = queued.zip(active).and_then(|(next, account)| {
+            self.arctic_state()
+                .map(|state| (next, account.clone(), state.clone()))
+        });
+        if saving && !ok {
+            self.skins
+                .skin_sync
+                .save_failed(&account_id, next_save.is_some());
+        }
+        if let Some((next, account, state)) = next_save {
+            // A queued look is a complete replacement. It can still be saved if
+            // the preceding request failed and we kept the last known state.
+            self.tasks.save_arctic_look(account, next, state);
+            self.skins.arctic_busy = true;
+            return;
+        }
+        self.skins.intended = None;
+        self.skins.trying = Trying::default();
+        if saving && ok {
+            self.skins.saved_at = Some(now_secs_f64());
+        }
+        if ok
+            && active.is_some()
+            && let Some(picked) = self.skins.from_game.take()
+        {
+            self.wear_skin_from_game(picked);
         }
     }
 
@@ -979,9 +981,6 @@ impl ArcticApp {
                 self.on_minecraft_skin_synced(root, account_id, result);
             }
             Event::ArcticLookSaved(account_id, result) => {
-                self.skins
-                    .skin_sync
-                    .saved(&account_id, result.as_ref().ok().map(|s| &s.look));
                 self.on_look_finished(account_id, result, true);
             }
             Event::ArcticCatalog(result) => {
