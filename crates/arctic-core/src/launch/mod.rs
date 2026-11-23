@@ -905,16 +905,10 @@ fn share_cosmetics_session(
     }
 }
 
-fn requires_java_8(version: &VersionJson) -> bool {
-    version
-        .java_version
-        .as_ref()
-        .is_some_and(|j| j.major_version == 8)
-        || version.main_class == "net.minecraft.launchwrapper.Launch"
-}
+const LAUNCHWRAPPER_MAIN_CLASS: &str = "net.minecraft.launchwrapper.Launch";
 
 fn incompatible_custom_java(version: &VersionJson, major: Option<u32>) -> Option<u32> {
-    major.filter(|&major| major >= 9 && requires_java_8(version))
+    major.filter(|&major| major >= 9 && version.main_class == LAUNCHWRAPPER_MAIN_CLASS)
 }
 
 /// Build the command line for `req` from a finished installation.
@@ -1008,7 +1002,10 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
         .or(settings.java_override.as_ref());
     let custom_java_exists = custom_java.is_some_and(|p| p.is_file());
     let custom_major = custom_java
-        .filter(|_| native_x86_64 || (custom_java_exists && requires_java_8(&inst.version)))
+        .filter(|_| {
+            native_x86_64
+                || (custom_java_exists && inst.version.main_class == LAUNCHWRAPPER_MAIN_CLASS)
+        })
         .and_then(|_| process::runtime_major_version(&inst.java));
     if custom_java_exists && let Some(major) = incompatible_custom_java(&inst.version, custom_major)
     {
@@ -1220,9 +1217,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn newer_custom_java_conflicts_with_java_8_metadata_or_launchwrapper() {
+    fn newer_custom_java_conflicts_with_launchwrapper() {
         for (main_class, major, expected) in [
-            ("net.minecraft.client.main.Main", Some(8), true),
+            ("net.minecraft.client.main.Main", Some(8), false),
             ("net.minecraft.launchwrapper.Launch", None, true),
             ("net.minecraft.client.main.Main", Some(21), false),
             ("net.minecraft.client.main.Main", None, false),

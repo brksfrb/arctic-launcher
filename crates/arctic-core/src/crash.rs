@@ -62,9 +62,8 @@ const BIG_PACK_MODS: usize = 80;
 /// …with less memory than this hardly gets through the loader reading its mods.
 const BIG_PACK_LEAST_MB: u32 = 3 * 1024;
 const CUSTOM_JAVA_FIX: &str =
-    "Turn off custom Java for this instance or in Settings to use Arctic's runtime.";
-const JAVA_8_MISMATCH_TITLE: &str = "This version needs Java 8, but custom Java";
-const CLASS_VERSION_TITLE: &str = "This needs Java";
+    "If you set custom Java, turn it off for this instance or in Settings to use Arctic's runtime.";
+const JAVA_8_MISMATCH_TITLE: &str = "This version needs Java 8, but is running on Java";
 
 /// The last `-Xmx` in how Java was started, in MiB.
 pub fn max_memory_mb(java: &str) -> Option<u32> {
@@ -397,9 +396,9 @@ const RULES: &[Rule] = &[
         explain: |c, _| {
             let java = |v: &str| v.parse::<u32>().map_or(0, |v| v.saturating_sub(44));
             Diagnosis::new(
-                format!("{CLASS_VERSION_TITLE} {}", java(&c[1])),
+                format!("This needs Java {}", java(&c[1])),
                 format!(
-                    "Something here was built for Java {}, but the game runs on Java {}. If you set a custom Java, turn it off for this instance or in Settings so Arctic uses its own runtime.",
+                    "Something here was built for Java {}, but the game runs on Java {}. Clear the instance's custom Java so Arctic picks the right one.",
                     java(&c[1]),
                     java(&c[2])
                 ),
@@ -1727,8 +1726,28 @@ fn diagnose_crash_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, St
 }
 
 fn launchwrapper_java_mismatch(text: &str) -> Option<(Diagnosis, String)> {
-    const CAST: &str = "java.lang.ClassCastException: class jdk.internal.loader.ClassLoaders$AppClassLoader cannot be cast to class java.net.URLClassLoader";
-    let error = text[text.find(CAST)?..].lines().next()?;
+    const EXCEPTION: &str = "java.lang.ClassCastException: ";
+    const CAST: &str = "jdk.internal.loader.ClassLoaders$AppClassLoader cannot be cast to ";
+    const TARGET: &str = "java.net.URLClassLoader";
+    let mut lines = text.lines().peekable();
+    let error = loop {
+        let line = lines.next()?;
+        if let Some((_, message)) = line.split_once(EXCEPTION)
+            && let Some(target) = message.trim_start_matches("class ").strip_prefix(CAST)
+            && target
+                .trim_start_matches("class ")
+                .split_whitespace()
+                .next()
+                == Some(TARGET)
+            && lines.peek().is_some_and(|frame| {
+                frame
+                    .trim_start()
+                    .starts_with("at net.minecraft.launchwrapper.Launch.")
+            })
+        {
+            break &line[line.find(EXCEPTION)?..];
+        }
+    };
     let major = text
         .lines()
         .rev()
@@ -1737,7 +1756,7 @@ fn launchwrapper_java_mismatch(text: &str) -> Option<(Diagnosis, String)> {
     let version = major.map_or_else(|| "9 or newer".to_owned(), |major| major.to_string());
     Some((
         Diagnosis::new(
-            format!("{JAVA_8_MISMATCH_TITLE} {version} is set"),
+            format!("{JAVA_8_MISMATCH_TITLE} {version}"),
             CUSTOM_JAVA_FIX,
             Vec::new(),
         ),
@@ -2564,9 +2583,9 @@ impl Report {
             .filter(|(d, _)| d.title == SODIUM_DRIVER_TITLE);
         let sodium_error =
             sodium_driver.map(|(_, frame)| format!("Error: {SODIUM_DRIVER_TITLE}\n{frame}"));
-        let wrong_java = diagnosis.as_ref().filter(|(d, _)| {
-            d.title.starts_with(JAVA_8_MISMATCH_TITLE) || d.title.starts_with(CLASS_VERSION_TITLE)
-        });
+        let wrong_java = diagnosis
+            .as_ref()
+            .filter(|(d, _)| d.title.starts_with(JAVA_8_MISMATCH_TITLE));
         let error = if let Some(error) = sodium_error.as_deref() {
             Some(error)
         } else if let Some((_, matched)) = wrong_java {
@@ -5156,7 +5175,7 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
     fn crash_505_explains_the_custom_java_mismatch() {
         let log = include_str!("../tests/fixtures/crash-505-launchwrapper-java.log");
         let generic = "Game exited with code 1 (0x00000001)";
-        let expected = "This version needs Java 8, but custom Java 9 or newer is set";
+        let expected = "This version needs Java 8, but is running on Java 9 or newer";
         let mods = tempfile::tempdir().unwrap();
         let diagnosis = crate::crash_conflicts::diagnose_exit_in(log, 1, mods.path()).unwrap();
         assert_eq!(diagnosis.title, expected);
@@ -5178,9 +5197,15 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
         let known = log.replace("status=exit code: 0", "Java 25; status=exit code: 0");
         assert_eq!(
             title(&known),
-            "This version needs Java 8, but custom Java 25 is set"
+            "This version needs Java 8, but is running on Java 25"
         );
+        let early_java = log
+            .replace("Exception: class ", "Exception: ")
+            .replace("cast to class ", "cast to ");
+        assert_eq!(title(&early_java), expected);
         let unrelated = log.replace("java.net.URLClassLoader", "java.lang.String");
+        assert!(diagnose(&unrelated).is_none());
+        let unrelated = log.replace("net.minecraft.launchwrapper.Launch", "com.example.Main");
         assert!(diagnose(&unrelated).is_none());
     }
 
