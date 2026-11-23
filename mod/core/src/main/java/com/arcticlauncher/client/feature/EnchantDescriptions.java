@@ -36,50 +36,49 @@ public final class EnchantDescriptions {
 			if (value != null) return value;
 		}
 		switch (name) {
-			case "aqua_affinity":
-			case "bane_of_arthropods":
-			case "binding_curse":
-			case "blast_protection":
-			case "breach":
-			case "channeling":
-			case "density":
-			case "depth_strider":
-			case "efficiency":
-			case "feather_falling":
-			case "fire_aspect":
-			case "fire_protection":
-			case "flame":
-			case "fortune":
-			case "frost_walker":
-			case "impaling":
-			case "infinity":
-			case "knockback":
-			case "looting":
-			case "loyalty":
-			case "luck_of_the_sea":
-			case "lunge":
-			case "lure":
-			case "mending":
-			case "multishot":
-			case "piercing":
-			case "power":
-			case "projectile_protection":
-			case "protection":
-			case "punch":
-			case "quick_charge":
-			case "respiration":
-			case "riptide":
-			case "sharpness":
-			case "silk_touch":
-			case "smite":
-			case "soul_speed":
-			case "sweeping_edge":
-			case "swift_sneak":
-			case "thorns":
-			case "unbreaking":
-			case "vanishing_curse":
-			case "wind_burst":
-				return Lang.t("mods.enchant_desc." + name);
+			case "aqua_affinity": return Lang.t("mods.enchant_desc.aqua_affinity");
+			case "bane_of_arthropods": return Lang.t("mods.enchant_desc.bane_of_arthropods");
+			case "binding_curse": return Lang.t("mods.enchant_desc.binding_curse");
+			case "blast_protection": return Lang.t("mods.enchant_desc.blast_protection");
+			case "breach": return Lang.t("mods.enchant_desc.breach");
+			case "channeling": return Lang.t("mods.enchant_desc.channeling");
+			case "density": return Lang.t("mods.enchant_desc.density");
+			case "depth_strider": return Lang.t("mods.enchant_desc.depth_strider");
+			case "efficiency": return Lang.t("mods.enchant_desc.efficiency");
+			case "feather_falling": return Lang.t("mods.enchant_desc.feather_falling");
+			case "fire_aspect": return Lang.t("mods.enchant_desc.fire_aspect");
+			case "fire_protection": return Lang.t("mods.enchant_desc.fire_protection");
+			case "flame": return Lang.t("mods.enchant_desc.flame");
+			case "fortune": return Lang.t("mods.enchant_desc.fortune");
+			case "frost_walker": return Lang.t("mods.enchant_desc.frost_walker");
+			case "impaling": return Lang.t("mods.enchant_desc.impaling");
+			case "infinity": return Lang.t("mods.enchant_desc.infinity");
+			case "knockback": return Lang.t("mods.enchant_desc.knockback");
+			case "looting": return Lang.t("mods.enchant_desc.looting");
+			case "loyalty": return Lang.t("mods.enchant_desc.loyalty");
+			case "luck_of_the_sea": return Lang.t("mods.enchant_desc.luck_of_the_sea");
+			case "lunge": return Lang.t("mods.enchant_desc.lunge");
+			case "lure": return Lang.t("mods.enchant_desc.lure");
+			case "mending": return Lang.t("mods.enchant_desc.mending");
+			case "multishot": return Lang.t("mods.enchant_desc.multishot");
+			case "piercing": return Lang.t("mods.enchant_desc.piercing");
+			case "power": return Lang.t("mods.enchant_desc.power");
+			case "projectile_protection": return Lang.t("mods.enchant_desc.projectile_protection");
+			case "protection": return Lang.t("mods.enchant_desc.protection");
+			case "punch": return Lang.t("mods.enchant_desc.punch");
+			case "quick_charge": return Lang.t("mods.enchant_desc.quick_charge");
+			case "respiration": return Lang.t("mods.enchant_desc.respiration");
+			case "riptide": return Lang.t("mods.enchant_desc.riptide");
+			case "sharpness": return Lang.t("mods.enchant_desc.sharpness");
+			case "silk_touch": return Lang.t("mods.enchant_desc.silk_touch");
+			case "smite": return Lang.t("mods.enchant_desc.smite");
+			case "soul_speed": return Lang.t("mods.enchant_desc.soul_speed");
+			case "sweeping_edge": return Lang.t("mods.enchant_desc.sweeping_edge");
+			case "swift_sneak": return Lang.t("mods.enchant_desc.swift_sneak");
+			case "thorns": return Lang.t("mods.enchant_desc.thorns");
+			case "unbreaking": return Lang.t("mods.enchant_desc.unbreaking");
+			case "vanishing_curse": return Lang.t("mods.enchant_desc.vanishing_curse");
+			case "wind_burst": return Lang.t("mods.enchant_desc.wind_burst");
 			default:
 				return null;
 		}
@@ -114,8 +113,8 @@ public final class EnchantDescriptions {
 			// The JSON-era equivalent uses distinct equipment predicates and binomial chances.
 			case "unbreaking":
 				double chance = 100.0 * level / (level + 1.0);
-				if (book) return Lang.t(key + "_book", number(chance), number(chance * 0.4));
-				if (armor) return Lang.t(key + "_armor", number(chance * 0.4));
+				if (book) return Lang.t("mods.enchant_value.unbreaking_book", number(chance), number(chance * 0.4));
+				if (armor) return Lang.t("mods.enchant_value.unbreaking_armor", number(chance * 0.4));
 				return Lang.t(key, number(chance));
 			case "mending":
 				return Lang.t(key);

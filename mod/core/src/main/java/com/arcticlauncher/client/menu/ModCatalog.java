@@ -692,7 +692,7 @@ final class ModCatalog {
 					f.toggle(Lang.t("mods.hide_leggings"), "", () -> c.hideLeggings, on -> c.hideLeggings = on);
 					f.toggle(Lang.t("mods.hide_boots"), "", () -> c.hideBoots, on -> c.hideBoots = on);
 					f.toggle(Lang.t("mods.show_armor_on_hit"), "", () -> c.showArmorWhenHit, on -> c.showArmorWhenHit = on);
-					f.slider(Lang.t("mods.armor_reveal_duration"), () -> c.showArmorSeconds, v -> c.showArmorSeconds = v,
+					f.slider(Lang.t("mods.duration"), () -> c.showArmorSeconds, v -> c.showArmorSeconds = v,
 							0.5, 5.0, 0.1, "%.1f s");
 				}));
 		if (p.tooltipScrollWorks()) {
