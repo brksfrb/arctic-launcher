@@ -1313,7 +1313,7 @@ mod tests {
                             events,
                             ..Default::default()
                         };
-                        let _ = ctx.run_ui(raw, |ui| {
+                        let mut output = ctx.run_ui(raw, |ui| {
                             let (card_rect, card) =
                                 ui.allocate_exact_size(size.into(), Sense::click());
                             card_clicked |= card.clicked();
@@ -1323,6 +1323,7 @@ mod tests {
                             });
                             rect = card_rect;
                         });
+                        output.textures_delta.clear();
                         rect
                     };
                     frame(vec![]);
