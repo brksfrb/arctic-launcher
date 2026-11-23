@@ -377,6 +377,17 @@ public final class ClientConfig {
 	public boolean fog;
 	/** Scrollable Tooltips: a tooltip taller than the screen moves with the mouse wheel. */
 	public boolean tooltipScroll;
+	public boolean enchantDescriptions;
+	public int enchantDescriptionStyle;
+	public boolean enchantDescriptionsShiftOnly;
+	public boolean enchantDescriptionsAllItems;
+	public boolean armorHider;
+	public boolean hideHelmet = true;
+	public boolean hideChestplate = true;
+	public boolean hideLeggings = true;
+	public boolean hideBoots = true;
+	public boolean showArmorWhenHit = true;
+	public double showArmorSeconds = 2.0;
 	/** Glint Colorizer: the enchant shimmer color (0 = the game's purple). */
 	public int glintColor;
 	public int glintColorOff;

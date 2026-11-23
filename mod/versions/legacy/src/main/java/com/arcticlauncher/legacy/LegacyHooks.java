@@ -240,11 +240,17 @@ public final class LegacyHooks {
 		syncHitboxes();
 		syncChunkBorders();
 		com.arcticlauncher.legacy.replay.LegacyReplayRecording.tick();
+		com.arcticlauncher.client.feature.ArmorHider.tick(MinecraftClient.getInstance().player,
+				MinecraftClient.getInstance().player == null ? 0 : MinecraftClient.getInstance().player.hurtTime);
 		ArcticClient.tick(screenOpen);
 		LegacyTextures.reapBadges();
 		// Features can reassert bindings (e.g. toggled sneak); release after those updates.
 		// Keep ticking in-world as well, so window events recover keys even without chat.
 		cursorGuard(screenOpen || MinecraftClient.getInstance().currentScreen != null, resized);
+	}
+
+	public static void drawArmorButtons(int x, int y, int mouseX, int mouseY) {
+		com.arcticlauncher.client.feature.ArmorHider.drawButtons(new LegacyGfx(), x, y, mouseX, mouseY);
 	}
 
 	/** Over the game, after Minecraft's own HUD. */
