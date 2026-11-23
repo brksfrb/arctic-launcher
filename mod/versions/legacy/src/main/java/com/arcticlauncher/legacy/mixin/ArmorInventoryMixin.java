@@ -30,7 +30,7 @@ abstract class ArmorInventoryMixin {
 			target = "Lnet/minecraft/client/gui/screen/ingame/HandledScreen;drawForeground(II)V"))
 	private void arctic$buttons(int mouseX, int mouseY, float delta, CallbackInfo ci) {
 		if ((Object) this instanceof SurvivalInventoryScreen) {
-			LegacyHooks.drawArmorCheckboxes(x, y, mouseX, mouseY);
+			LegacyHooks.drawArmorCheckboxes();
 		}
 	}
 
