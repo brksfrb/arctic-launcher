@@ -170,6 +170,11 @@ pub enum Event {
     HubBanner(String, Option<String>),
     /// Skin and capes of an account (account id, result).
     SkinAccount(String, Outcome<crate::skin_tasks::AccountSkin>),
+    MinecraftSkinSynced(
+        PathBuf,
+        String,
+        Outcome<crate::skin_tasks::SyncedMinecraftSkin>,
+    ),
     /// Another player's skin by name.
     PlayerSkin(String, Outcome<(Vec<u8>, arctic_core::skins::Variant)>),
     /// The Arctic look and catalog (account id, result).
@@ -193,7 +198,10 @@ pub enum Event {
     /// Gallery search results (request id, result).
     Gallery(u64, Outcome<crate::gallery_tasks::GalleryResult>),
     /// A gallery skin was downloaded: (name, PNG, model, wear it).
-    GalleryTaken(Outcome<(String, Vec<u8>, arctic_core::skins::Variant, bool)>),
+    GalleryTaken(
+        Option<uuid::Uuid>,
+        Outcome<(String, Vec<u8>, arctic_core::skins::Variant)>,
+    ),
     /// A gallery share or report finished (message).
     GalleryDone(Outcome<String>),
     /// A crash report was sent.

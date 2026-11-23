@@ -72,6 +72,10 @@ pub struct Settings {
     /// Ids of animated capes whose wearer turned "Animate" off: the still
     /// image is published instead. Capes not listed animate.
     pub capes_still: Vec<String>,
+    /// Also publish equipped Arctic skins to the active Microsoft account.
+    pub sync_minecraft_skin: bool,
+    /// Whether the first automatic Minecraft skin change has been explained.
+    pub minecraft_skin_sync_explained: bool,
     /// Short snowflake intro when the launcher opens.
     pub intro: bool,
     /// Open the launcher window maximized.
@@ -318,6 +322,8 @@ impl Default for Settings {
             reduce_cape_motion: false,
             lock_preview_rotation: false,
             capes_still: Vec::new(),
+            sync_minecraft_skin: true,
+            minecraft_skin_sync_explained: false,
             intro: true,
             start_maximized: false,
             theme: ThemeMode::Default,

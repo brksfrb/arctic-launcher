@@ -1306,6 +1306,7 @@ impl ArcticApp {
             Event::ShareImported(result) => self.on_share_imported(result, now),
             Event::ShareModsLookedUp(id, result) => self.on_share_mods_looked_up(&id, result),
             e @ (Event::SkinAccount(..)
+            | Event::MinecraftSkinSynced(..)
             | Event::PlayerSkin(..)
             | Event::SkinFile(..)
             | Event::ArcticLook(..)
@@ -1462,6 +1463,7 @@ impl eframe::App for ArcticApp {
         if std::mem::take(&mut self.maximize_pending) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
         }
+        self.tick_minecraft_skin_sync(ctx);
         self.window_and_tray(ctx, frame);
         if self.world_purge_at.elapsed() >= WORLD_PURGE_EVERY {
             self.purge_world_trash();

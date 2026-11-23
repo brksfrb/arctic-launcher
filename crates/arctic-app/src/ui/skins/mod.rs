@@ -12,6 +12,7 @@ mod gallery;
 mod gpu;
 mod model;
 mod panels;
+mod sync;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -133,6 +134,7 @@ pub struct SkinsUi {
     /// Account id → Minecraft skin state (Microsoft accounts).
     pub account: HashMap<String, Result<AccountSkin, String>>,
     pub busy: bool,
+    skin_sync: sync::SkinSync,
     /// Account id → Arctic look.
     pub arctic: HashMap<String, Result<ArcticState, String>>,
     pub arctic_busy: bool,
@@ -170,6 +172,12 @@ pub struct SkinsUi {
     pub zoom: f32,
     /// When the preview was last dragged (it turns by itself after a while).
     pub dragged_at: f64,
+}
+
+impl SkinsUi {
+    fn hover_skin(&mut self, key: &str, variant: Variant) {
+        self.hover = Some(Hover::Skin(key.to_owned(), variant));
+    }
 }
 
 impl ArcticApp {
@@ -372,6 +380,10 @@ impl ArcticApp {
         let Some(account) = self.accounts.active().cloned() else {
             return;
         };
+        if matches!(change, SkinChange::Upload(..) | SkinChange::Reset) {
+            self.skins.skin_sync.cancel();
+            self.skins.skin_sync.dismiss_notice();
+        }
         self.skins.busy = true;
         self.tasks.skin_account(account, change);
     }
@@ -465,15 +477,30 @@ impl ArcticApp {
             Ok(png) => {
                 let variant = entry.variant;
                 let key = format!("lib:{}", entry.id);
-                self.change_look(
-                    |l| l.skin = Some((Texture::Png(png), variant)),
-                    |t| t.skin = Some(Some((key, variant))),
-                );
+                self.wear_skin_png(key, png, variant);
             }
             Err(e) => self
                 .toasts
                 .push(Kind::Error, t!("skins.could_not_read_skin"), e.to_string()),
         }
+    }
+
+    fn wear_skin_png(&mut self, key: String, png: Vec<u8>, variant: Variant) {
+        self.skins.gallery.cancel_wear();
+        if self.arctic_state().is_none() {
+            return;
+        }
+        if self.settings.sync_minecraft_skin
+            && let Some(account) = self.accounts.active().filter(|a| a.is_microsoft())
+        {
+            self.skins
+                .skin_sync
+                .equip(&account.id, &png, variant, Instant::now());
+        }
+        self.change_look(
+            |l| l.skin = Some((Texture::Png(png), variant)),
+            |t| t.skin = Some(Some((key, variant))),
+        );
     }
 
     /// The game's skin picker chose a library skin (`None`: the Minecraft skin).
@@ -512,6 +539,8 @@ impl ArcticApp {
 
     /// Back to the Minecraft skin (for Arctic players too).
     fn stop_wearing_skin(&mut self) {
+        self.skins.gallery.cancel_wear();
+        self.skins.skin_sync.cancel();
         self.change_look(|l| l.skin = None, |t| t.skin = Some(None));
     }
 
@@ -946,7 +975,13 @@ impl ArcticApp {
                 }
                 self.on_look_finished(account_id, result, false);
             }
+            Event::MinecraftSkinSynced(root, account_id, result) => {
+                self.on_minecraft_skin_synced(root, account_id, result);
+            }
             Event::ArcticLookSaved(account_id, result) => {
+                self.skins
+                    .skin_sync
+                    .saved(&account_id, result.as_ref().ok().map(|s| &s.look));
                 self.on_look_finished(account_id, result, true);
             }
             Event::ArcticCatalog(result) => {

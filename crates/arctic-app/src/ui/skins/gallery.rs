@@ -40,11 +40,18 @@ pub struct GalleryUi {
     pub pngs: HashMap<String, Vec<u8>>,
     typed_at: Option<f64>,
     pub busy: bool,
+    wear_request: Option<(uuid::Uuid, String)>,
     /// A library skin about to be shared, and the name typed for it (asked first: no random file names).
     naming: Option<(arctic_core::skins::SkinEntry, String)>,
 }
 
 impl GalleryUi {
+    pub(super) fn cancel_wear(&mut self) {
+        if self.wear_request.take().is_some() {
+            self.busy = false;
+        }
+    }
+
     /// Let go of the downloaded skins: the next visit lists them again.
     pub fn release(&mut self) {
         self.pngs = HashMap::new();
@@ -137,7 +144,8 @@ impl ArcticApp {
             }
             Some(Ok(items)) => items.clone(),
         };
-        let can_wear = self.arctic_state().is_some() && !self.skins.gallery.busy;
+        let can_wear = self.arctic_state().is_some()
+            && (!self.skins.gallery.busy || self.skins.gallery.wear_request.is_some());
         let trying = match &self.skins.trying.skin {
             Some(Some((key, _))) => Some(key.clone()),
             _ => None,
@@ -184,12 +192,17 @@ impl ArcticApp {
             .small()
             .color(p.muted),
         );
-        if let Some(item) = wear {
+        if let Some(item) = wear
+            && let Some(account) = self.accounts.active()
+        {
             // Shown at once; worn for real once it's in the library.
             let key = format!("gal:{}", item.texture);
             self.skins.trying.skin = Some(Some((key, item.variant())));
             self.skins.gallery.busy = true;
-            self.tasks.gallery_take(item, true);
+            let request = uuid::Uuid::new_v4();
+            self.skins.gallery.wear_request = Some((request, account.id.clone()));
+            self.skins.skin_sync.cancel();
+            self.tasks.gallery_take(item, Some(request));
         }
         if blocked {
             self.explain_wear_blocked();
@@ -240,7 +253,7 @@ impl ArcticApp {
             .clicked()
         {
             self.skins.gallery.busy = true;
-            self.tasks.gallery_take(item.clone(), false);
+            self.tasks.gallery_take(item.clone(), None);
             ui.close();
         }
         if let Some(account) = self.accounts.active().cloned()
@@ -379,17 +392,34 @@ impl ArcticApp {
                     Err(e) => g.page = Some(Err(e)),
                 }
             }
-            Event::GalleryTaken(result) => {
+            Event::GalleryTaken(request, result) => {
+                let wear = if let Some(request) = request {
+                    if !g
+                        .wear_request
+                        .as_ref()
+                        .is_some_and(|(id, _)| *id == request)
+                    {
+                        return;
+                    }
+                    let current = g.wear_request.take();
+                    self.accounts
+                        .active()
+                        .is_some_and(|account| current.is_some_and(|(_, id)| id == account.id))
+                } else {
+                    false
+                };
                 g.busy = false;
                 match result {
-                    Ok((name, png, variant, wear)) => {
+                    Ok((name, png, variant)) => {
                         let entry = self.add_skin(&name, &png, Some(variant));
                         if wear && let Some(entry) = entry {
-                            self.wear_skin(&entry);
+                            self.wear_skin_png(format!("lib:{}", entry.id), png, variant);
                         }
                     }
                     Err(e) => {
-                        self.skins.trying.skin = None;
+                        if wear {
+                            self.skins.trying.skin = None;
+                        }
                         self.toasts
                             .push(Kind::Error, t!("skins.could_not_get_skin"), e);
                     }

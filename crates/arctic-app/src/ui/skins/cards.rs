@@ -334,7 +334,7 @@ impl ArcticApp {
                 },
             );
             if response.hovered() {
-                self.skins.hover = Some(Hover::Skin(key.to_owned(), variant));
+                self.skins.hover_skin(key, variant);
                 ctx.request_repaint();
             }
         }

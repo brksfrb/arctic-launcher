@@ -91,6 +91,13 @@ pub struct AccountSkin {
     pub capes: Vec<(String, Vec<u8>)>,
 }
 
+#[derive(Debug)]
+pub struct SyncedMinecraftSkin {
+    pub profile: Profile,
+    pub png: Vec<u8>,
+    pub undo: Option<SkinChange>,
+}
+
 /// What to change on Mojang's side before re-reading the profile.
 #[derive(Debug, Clone)]
 pub enum SkinChange {
@@ -120,6 +127,38 @@ impl Tasks {
                 .skin_account_blocking(account, change)
                 .map_err(|e| e.to_string());
             t.send(Event::SkinAccount(id, result));
+        });
+    }
+
+    pub fn sync_minecraft_skin(
+        &self,
+        account: Account,
+        variant: Variant,
+        png: Vec<u8>,
+        capture_previous: bool,
+    ) {
+        self.run(move |t| {
+            let id = account.id.clone();
+            let result = (|| -> CoreResult<_> {
+                let token = t.fresh_token(account)?;
+                let undo = if capture_previous {
+                    let profile = api::profile(&token)?;
+                    Some(match profile.active_skin() {
+                        Some(skin) => SkinChange::Upload(skin.variant(), api::texture(&skin.url)?),
+                        None => SkinChange::Reset,
+                    })
+                } else {
+                    None
+                };
+                let profile = api::upload_skin(&token, variant, &png)?;
+                Ok(SyncedMinecraftSkin { profile, png, undo })
+            })()
+            .map_err(|e| e.to_string());
+            t.send(Event::MinecraftSkinSynced(
+                t.dirs().profile_root().to_owned(),
+                id,
+                result,
+            ));
         });
     }
 

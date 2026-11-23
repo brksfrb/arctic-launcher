@@ -89,6 +89,7 @@ impl ArcticApp {
             },
         );
         self.account_notice(ui, p);
+        self.minecraft_skin_sync_controls(ui);
         if self.skins.cosmetic_catalog.error.is_some() {
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(t!("skins.couldnt_load_cosmetics")).color(p.muted));
