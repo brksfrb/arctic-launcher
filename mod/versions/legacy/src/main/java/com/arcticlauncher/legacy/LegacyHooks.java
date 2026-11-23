@@ -256,9 +256,13 @@ public final class LegacyHooks {
 		if (config == null || !config.armorHider) return;
 		boolean lighting = GL11.glIsEnabled(GL11.GL_LIGHTING);
 		GlStateManager.disableLighting();
+		GlStateManager.pushMatrix();
 		try {
-			ArmorHider.drawCheckboxes(new LegacyGfx(), x, y, mouseX, mouseY);
+			// The item renderer adds its own depth to both the slot and floating item offsets.
+			GlStateManager.translate(0, 0, 300);
+			ArmorHider.drawCheckboxes(new LegacyGfx(), 0, 0, mouseX - x, mouseY - y);
 		} finally {
+			GlStateManager.popMatrix();
 			if (lighting) GlStateManager.enableLighting();
 		}
 	}
