@@ -1410,11 +1410,9 @@ C2:  13971 9500       4       org.objectweb.asm.tree.AnnotationNode::accept (134
 
         let report = run.crash_report("oωo failed to change the game", Some(134));
         assert_eq!(report.title, diagnosis.title);
-        assert!(
-            report
-                .log
-                .starts_with("\n---- first error ----\n#  SIGILL (0x4)\n")
-        );
+        assert!(report.log.starts_with(
+            "\n---- first error ----\n#  SIGILL (0x4) in libSuperResolution+linux64+release.so\nJava frame: io.homo.superresolution.thirdparty.nanovg.NanoVGContext.nCreateContextEx\n"
+        ));
         assert!(report.log.contains("matched: #  SIGILL"));
     }
 
