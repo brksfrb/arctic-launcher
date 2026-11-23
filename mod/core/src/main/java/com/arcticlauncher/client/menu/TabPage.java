@@ -117,7 +117,7 @@ final class TabPage extends Page {
 		int x = contentX();
 		int w = contentW();
 		int textW = w - Form.KEY_W - 10;
-		add(new Label(Lang.t("mods.toggle_key"), Label.Kind.TEXT)).bounds(x + 4, top + 3, textW, 9);
+		add(new Label(Lang.t(m.toggleKeyLabel), Label.Kind.TEXT)).bounds(x + 4, top + 3, textW, 9);
 		final Label hint = add(new Label(Lang.t("mods.press_it_in_game_to_switch", m.name), Label.Kind.MUTED));
 		hint.bounds(x + 4, top + 13, textW, 9);
 		final Label warn = add(new Label("", Label.Kind.ACCENT));

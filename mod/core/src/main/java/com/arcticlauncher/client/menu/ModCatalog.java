@@ -683,7 +683,7 @@ final class ModCatalog {
 					f.cycle(Lang.t("mods.enchant_apply_to"), Lang.all("mods.enchant_books", "mods.enchant_all_items"),
 							() -> c.enchantDescriptionsAllItems ? 1 : 0, i -> c.enchantDescriptionsAllItems = i == 1);
 				}));
-		out.add(new Mod("armorhider", Lang.t("mods.armor_hider"), Lang.t("mods.armor_hider_help"),
+		Mod armorHider = new Mod("armorhider", Lang.t("mods.armor_hider"), Lang.t("mods.armor_hider_help"),
 				"items", Category.VISUAL, "armor hide helmet chestplate leggings boots")
 				.toggle(() -> c.armorHider, on -> c.armorHider = on)
 				.settings((host, f) -> {
@@ -694,7 +694,9 @@ final class ModCatalog {
 					f.toggle(Lang.t("mods.show_armor_on_hit"), "", () -> c.showArmorWhenHit, on -> c.showArmorWhenHit = on);
 					f.slider(Lang.t("mods.duration"), () -> c.showArmorSeconds, v -> c.showArmorSeconds = v,
 							0.5, 5.0, 0.1, "%.1f s");
-				}));
+				});
+		armorHider.toggleKeyLabel = "mods.toggle_armor_hider";
+		out.add(armorHider);
 		if (p.tooltipScrollWorks()) {
 			out.add(new Mod("tooltipscroll", Lang.t("mods.scrollable_tooltips"), Lang.t("mods.a_tooltip_too_tall_for_the_screen_long_item"), "tooltips",
 					Category.GAMEPLAY, "tooltip lore scroll long item wheel skyblock")

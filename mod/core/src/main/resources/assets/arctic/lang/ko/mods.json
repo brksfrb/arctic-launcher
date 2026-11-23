@@ -705,6 +705,7 @@
   "mods.enchant_apply_to": "적용 대상",
   "mods.enchant_books": "책만",
   "mods.enchant_all_items": "모든 마법 부여 아이템",
+  "mods.toggle_armor_hider": "갑옷 숨기기 전환",
   "mods.armor_hider": "갑옷 숨기기",
   "mods.armor_hider_help": "내 캐릭터 모델의 갑옷 표시를 조절합니다.",
   "mods.hide_helmet": "투구 숨기기",

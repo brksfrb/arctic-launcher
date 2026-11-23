@@ -705,6 +705,7 @@
   "mods.enchant_apply_to": "Применять к",
   "mods.enchant_books": "Только книги",
   "mods.enchant_all_items": "Все зачарованные предметы",
+  "mods.toggle_armor_hider": "Переключить скрытие брони",
   "mods.armor_hider": "Скрытие брони",
   "mods.armor_hider_help": "Настраивает видимость брони на вашей модели.",
   "mods.hide_helmet": "Скрыть шлем",

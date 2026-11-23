@@ -705,6 +705,7 @@
   "mods.enchant_apply_to": "適用対象",
   "mods.enchant_books": "本のみ",
   "mods.enchant_all_items": "すべてのエンチャント付きアイテム",
+  "mods.toggle_armor_hider": "防具の非表示を切り替え",
   "mods.armor_hider": "防具を隠す",
   "mods.armor_hider_help": "自分のモデルの防具表示を切り替えます。",
   "mods.hide_helmet": "ヘルメットを隠す",

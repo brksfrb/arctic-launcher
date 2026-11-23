@@ -1,12 +1,20 @@
 package com.arcticlauncher.client.feature;
 
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.Lang;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.gfx.Gfx;
 
 public final class ArmorHider {
 	public enum Piece {
-		HELMET, CHESTPLATE, LEGGINGS, BOOTS;
+		HELMET("mods.hide_helmet"), CHESTPLATE("mods.hide_chestplate"),
+		LEGGINGS("mods.hide_leggings"), BOOTS("mods.hide_boots");
+
+		private final String label;
+
+		Piece(String label) {
+			this.label = label;
+		}
 
 		boolean hidden(ClientConfig config) {
 			switch (this) {
@@ -29,6 +37,10 @@ public final class ArmorHider {
 	}
 
 	private static final Piece[] PIECES = Piece.values();
+	private static final int SLOT_X = 8;
+	private static final int FIRST_SLOT_Y = 8;
+	private static final int SLOT_STEP = 18;
+	private static final int BOX_SIZE = 6;
 	private static Object player;
 	private static int previousHurtTime;
 	private static long lastHit;
@@ -58,35 +70,57 @@ public final class ArmorHider {
 				|| System.nanoTime() - lastHit >= config.showArmorSeconds * 1_000_000_000.0;
 	}
 
-	public static void drawButtons(Gfx gfx, int left, int top, int mouseX, int mouseY) {
+	public static void drawCheckboxes(Gfx gfx, int left, int top, int mouseX, int mouseY) {
 		ClientConfig config = ArcticClient.config();
 		if (config == null || !config.armorHider) return;
-		int x = left + 1;
+		gfx.newLayer();
+		int x = left + SLOT_X;
+		Piece hovered = hoveredPiece(left, top, mouseX, mouseY);
 		for (int i = 0; i < PIECES.length; i++) {
-			int y = top + 11 + 18 * i;
-			boolean hovered = inside(mouseX, mouseY, x, y);
-			boolean hidden = PIECES[i].hidden(config);
-			gfx.fill(x, y, x + 6, y + 10, hovered ? 0xFFB9E9FF : 0xFF454D56);
-			gfx.fill(x + 1, y + 1, x + 5, y + 9, hidden ? 0xFF286887 : 0xFF252B30);
-			int markerY = hidden ? y + 2 : y + 6;
-			gfx.fill(x + 2, markerY, x + 4, markerY + 2, hidden ? 0xFF8DDCFF : 0xFFB4BFC8);
+			int y = top + FIRST_SLOT_Y + SLOT_STEP * i;
+			gfx.fill(x, y, x + BOX_SIZE, y + BOX_SIZE, 0xFF373737);
+			gfx.fill(x + 1, y + 1, x + 5, y + 5, PIECES[i] == hovered ? 0xFFFFFFFF : 0xFFC6C6C6);
+			if (PIECES[i].hidden(config)) {
+				int ink = 0xFF252525;
+				gfx.fill(x + 1, y + 3, x + 2, y + 4, ink);
+				gfx.fill(x + 2, y + 4, x + 3, y + 5, ink);
+				gfx.fill(x + 3, y + 3, x + 4, y + 4, ink);
+				gfx.fill(x + 4, y + 2, x + 5, y + 3, ink);
+			}
 		}
+	}
+
+	public static boolean drawTooltip(Gfx gfx, int left, int top, int mouseX, int mouseY) {
+		Piece piece = hoveredPiece(left, top, mouseX, mouseY);
+		if (piece == null) return false;
+		String label = Lang.t(piece.label);
+		int w = gfx.textWidth(label) + 8;
+		int x = Math.max(0, Math.min(mouseX + 8, gfx.width() - w));
+		int y = Math.max(0, Math.min(mouseY + 8, gfx.height() - 16));
+		gfx.newLayer();
+		gfx.fill(x, y, x + w, y + 16, 0xFF504060);
+		gfx.fill(x + 1, y + 1, x + w - 1, y + 15, 0xF0100010);
+		gfx.text(label, x + 4, y + 4, 0xFFFFFFFF, true);
+		return true;
 	}
 
 	public static boolean click(int left, int top, double mouseX, double mouseY, int button) {
-		ClientConfig config = ArcticClient.config();
-		if (button != 0 || config == null || !config.armorHider) return false;
-		for (int i = 0; i < PIECES.length; i++) {
-			if (inside(mouseX, mouseY, left + 1, top + 11 + 18 * i)) {
-				PIECES[i].flip(config);
-				ArcticClient.saveConfig();
-				return true;
-			}
-		}
-		return false;
+		if (button != 0) return false;
+		Piece piece = hoveredPiece(left, top, mouseX, mouseY);
+		if (piece == null) return false;
+		piece.flip(ArcticClient.config());
+		ArcticClient.saveConfig();
+		return true;
 	}
 
-	private static boolean inside(double mouseX, double mouseY, int x, int y) {
-		return mouseX >= x && mouseX < x + 6 && mouseY >= y && mouseY < y + 10;
+	public static Piece hoveredPiece(int left, int top, double mouseX, double mouseY) {
+		ClientConfig config = ArcticClient.config();
+		int x = left + SLOT_X;
+		if (config == null || !config.armorHider || mouseX < x || mouseX >= x + BOX_SIZE) return null;
+		for (int i = 0; i < PIECES.length; i++) {
+			int y = top + FIRST_SLOT_Y + SLOT_STEP * i;
+			if (mouseY >= y && mouseY < y + BOX_SIZE) return PIECES[i];
+		}
+		return null;
 	}
 }

@@ -705,6 +705,7 @@
   "mods.enchant_apply_to": "Uygulama alanı",
   "mods.enchant_books": "Yalnızca kitaplar",
   "mods.enchant_all_items": "Tüm büyülü eşyalar",
+  "mods.toggle_armor_hider": "Zırh gizlemeyi aç/kapat",
   "mods.armor_hider": "Zırh gizleyici",
   "mods.armor_hider_help": "Kendi modelinizde zırh görünümünü ayarlayın.",
   "mods.hide_helmet": "Kaskı gizle",

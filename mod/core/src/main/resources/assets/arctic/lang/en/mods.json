@@ -705,6 +705,7 @@
   "mods.enchant_apply_to": "Apply to",
   "mods.enchant_books": "Books only",
   "mods.enchant_all_items": "All enchanted items",
+  "mods.toggle_armor_hider": "Toggle armor hider",
   "mods.armor_hider": "Armor hider",
   "mods.armor_hider_help": "Control armor visibility on your own model.",
   "mods.hide_helmet": "Hide helmet",
