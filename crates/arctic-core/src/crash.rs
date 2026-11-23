@@ -61,6 +61,9 @@ impl Diagnosis {
 const BIG_PACK_MODS: usize = 80;
 /// …with less memory than this hardly gets through the loader reading its mods.
 const BIG_PACK_LEAST_MB: u32 = 3 * 1024;
+const CUSTOM_JAVA_FIX: &str =
+    "If you set custom Java, turn it off for this instance or in Settings to use Arctic's runtime.";
+const JAVA_8_MISMATCH_TITLE: &str = "This version needs Java 8, but is running on Java";
 
 /// The last `-Xmx` in how Java was started, in MiB.
 pub fn max_memory_mb(java: &str) -> Option<u32> {
@@ -1722,6 +1725,49 @@ fn diagnose_crash_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, St
     diagnose_rules(text, java, None, &[])
 }
 
+fn launchwrapper_java_mismatch(text: &str) -> Option<(Diagnosis, String)> {
+    const EXCEPTION: &str = "java.lang.ClassCastException: ";
+    const CAST: &str = "jdk.internal.loader.ClassLoaders$AppClassLoader cannot be cast to ";
+    const TARGET: &str = "java.net.URLClassLoader";
+    let mut lines = text.lines().peekable();
+    let error = loop {
+        let line = lines.next()?;
+        if let Some((prefix, message)) = line.split_once(EXCEPTION)
+            && let Some(target) = message
+                .trim_start_matches("class ")
+                .trim_start_matches("java.base/")
+                .strip_prefix(CAST)
+            && target
+                .trim_start_matches("class ")
+                .trim_start_matches("java.base/")
+                .split_whitespace()
+                .next()
+                == Some(TARGET)
+            && lines.peek().is_some_and(|frame| {
+                frame
+                    .trim_start()
+                    .starts_with("at net.minecraft.launchwrapper.Launch.")
+            })
+        {
+            break &line[prefix.len()..];
+        }
+    };
+    let major = text
+        .lines()
+        .rev()
+        .find_map(crate::launch::process::diagnosed_runtime_major)
+        .filter(|&major| major >= 9);
+    let version = major.map_or_else(|| "9 or newer".to_owned(), |major| major.to_string());
+    Some((
+        Diagnosis::new(
+            format!("{JAVA_8_MISMATCH_TITLE} {version}"),
+            CUSTOM_JAVA_FIX,
+            Vec::new(),
+        ),
+        head_of(error, 2048).to_owned(),
+    ))
+}
+
 fn diagnose_rules(
     text: &str,
     java: Option<&str>,
@@ -1736,6 +1782,9 @@ fn diagnose_rules(
     }
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
+    }
+    if let Some(mismatch) = launchwrapper_java_mismatch(tail_of(text, MAX_TEXT)) {
+        return Some(mismatch);
     }
     if let Some((diagnosis, error)) = crate::crash_suspect::diagnose_threading(text, mods_dir, mods)
     {
@@ -2538,8 +2587,13 @@ impl Report {
             .filter(|(d, _)| d.title == SODIUM_DRIVER_TITLE);
         let sodium_error =
             sodium_driver.map(|(_, frame)| format!("Error: {SODIUM_DRIVER_TITLE}\n{frame}"));
+        let wrong_java = diagnosis
+            .as_ref()
+            .filter(|(d, _)| d.title.starts_with(JAVA_8_MISMATCH_TITLE));
         let error = if let Some(error) = sodium_error.as_deref() {
             Some(error)
+        } else if let Some((_, matched)) = wrong_java {
+            Some(matched.as_str())
         } else if error.is_some_and(secondary_mod_failure)
             || crash_exception(&diagnosis_text).is_some_and(secondary_stack)
         {
@@ -2657,7 +2711,11 @@ impl Report {
         let title =
             if title.is_empty() || title == "unknown" || title.starts_with("Game exited with code")
             {
-                quilt_load_error(&diagnosis_text).map_or(title, |(d, _)| d.title)
+                if let Some((d, _)) = wrong_java {
+                    d.title.clone()
+                } else {
+                    quilt_load_error(&diagnosis_text).map_or(title, |(d, _)| d.title)
+                }
             } else {
                 title
             };
@@ -5115,6 +5173,48 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
     fn java_version() {
         let log = "java.lang.UnsupportedClassVersionError: x has been compiled by a more recent version of the Java Runtime (class file version 65.0), this version of the Java Runtime only recognizes class file versions up to 61.0";
         assert_eq!(title(log), "This needs Java 21");
+    }
+
+    #[test]
+    fn crash_505_explains_the_custom_java_mismatch() {
+        let log = include_str!("../tests/fixtures/crash-505-launchwrapper-java.log");
+        let generic = "Game exited with code 1 (0x00000001)";
+        let expected = "This version needs Java 8, but is running on Java 9 or newer";
+        let mods = tempfile::tempdir().unwrap();
+        let diagnosis = crate::crash_conflicts::diagnose_exit_in(log, 1, mods.path()).unwrap();
+        assert_eq!(diagnosis.title, expected);
+        assert_eq!(diagnosis.detail, CUSTOM_JAVA_FIX);
+        assert!(!diagnosis.repair);
+
+        let lines = log.lines().collect::<Vec<_>>();
+        let report = Report::build("1.8.9", "Forge", generic, &lines, &[], None, None);
+        assert_eq!(report.title, expected);
+        assert!(report.log.starts_with(
+            "\n---- first error ----\njava.lang.ClassCastException: class jdk.internal.loader.ClassLoaders$AppClassLoader cannot be cast to class java.net.URLClassLoader"
+        ));
+        assert!(
+            report
+                .log
+                .contains("matched: java.lang.ClassCastException:")
+        );
+
+        let known = log.replace("status=exit code: 0", "Java 25; status=exit code: 0");
+        assert_eq!(
+            title(&known),
+            "This version needs Java 8, but is running on Java 25"
+        );
+        let early_java = log
+            .replace("Exception: class ", "Exception: ")
+            .replace("cast to class ", "cast to ");
+        assert_eq!(title(&early_java), expected);
+        let module_qualified = early_java
+            .replace("Exception: jdk.", "Exception: java.base/jdk.")
+            .replace("cast to java.net.", "cast to java.base/java.net.");
+        assert_eq!(title(&module_qualified), expected);
+        let unrelated = log.replace("java.net.URLClassLoader", "java.lang.String");
+        assert!(diagnose(&unrelated).is_none());
+        let unrelated = log.replace("net.minecraft.launchwrapper.Launch", "com.example.Main");
+        assert!(diagnose(&unrelated).is_none());
     }
 
     #[test]
