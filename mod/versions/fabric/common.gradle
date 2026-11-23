@@ -313,6 +313,9 @@ processResources {
 			teamViewEntity: !atLeast('1.17') && atLeast('1.13'),
 			tooltipPositioner: atLeast('1.19.3'),
 			tooltipScreen: !atLeast('1.19.3') && atLeast('1.13'),
+			enchantComponents: atLeast('1.20.5'),
+			enchantLegacyBook: !atLeast('1.14'),
+			armorRenderState: atLeast('1.21.2'),
 			// 1.13 draws the crosshair inline in Gui.render and its buttons have no alpha.
 			crosshairHook: atLeast('1.14'),
 			widgetAlpha: atLeast('1.14'),

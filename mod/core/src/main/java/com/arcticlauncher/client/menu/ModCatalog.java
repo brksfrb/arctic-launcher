@@ -672,6 +672,29 @@ final class ModCatalog {
 						}
 					}));
 		}
+		out.add(new Mod("enchantdescriptions", Lang.t("mods.enchant_descriptions"),
+				Lang.t("mods.enchant_descriptions_help"), "tooltips", Category.GAMEPLAY, "enchant book tooltip")
+				.toggle(() -> c.enchantDescriptions, on -> c.enchantDescriptions = on)
+				.settings((host, f) -> {
+					f.cycle(Lang.t("mods.style"), Lang.all("mods.enchant_dark_gray", "mods.enchant_italic",
+							"mods.enchant_compact"), () -> c.enchantDescriptionStyle, i -> c.enchantDescriptionStyle = i);
+					f.cycle(Lang.t("mods.enchant_show"), Lang.all("mods.enchant_always", "mods.enchant_shift"),
+							() -> c.enchantDescriptionsShiftOnly ? 1 : 0, i -> c.enchantDescriptionsShiftOnly = i == 1);
+					f.cycle(Lang.t("mods.enchant_apply_to"), Lang.all("mods.enchant_books", "mods.enchant_all_items"),
+							() -> c.enchantDescriptionsAllItems ? 1 : 0, i -> c.enchantDescriptionsAllItems = i == 1);
+				}));
+		out.add(new Mod("armorhider", Lang.t("mods.armor_hider"), Lang.t("mods.armor_hider_help"),
+				"items", Category.VISUAL, "armor hide helmet chestplate leggings boots")
+				.toggle(() -> c.armorHider, on -> c.armorHider = on)
+				.settings((host, f) -> {
+					f.toggle(Lang.t("mods.hide_helmet"), "", () -> c.hideHelmet, on -> c.hideHelmet = on);
+					f.toggle(Lang.t("mods.hide_chestplate"), "", () -> c.hideChestplate, on -> c.hideChestplate = on);
+					f.toggle(Lang.t("mods.hide_leggings"), "", () -> c.hideLeggings, on -> c.hideLeggings = on);
+					f.toggle(Lang.t("mods.hide_boots"), "", () -> c.hideBoots, on -> c.hideBoots = on);
+					f.toggle(Lang.t("mods.show_armor_on_hit"), "", () -> c.showArmorWhenHit, on -> c.showArmorWhenHit = on);
+					f.slider(Lang.t("mods.duration"), () -> c.showArmorSeconds, v -> c.showArmorSeconds = v,
+							0.5, 5.0, 0.1, "%.1f s");
+				}));
 		if (p.tooltipScrollWorks()) {
 			out.add(new Mod("tooltipscroll", Lang.t("mods.scrollable_tooltips"), Lang.t("mods.a_tooltip_too_tall_for_the_screen_long_item"), "tooltips",
 					Category.GAMEPLAY, "tooltip lore scroll long item wheel skyblock")

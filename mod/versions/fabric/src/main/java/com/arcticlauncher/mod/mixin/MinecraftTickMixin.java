@@ -13,6 +13,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 abstract class MinecraftTickMixin {
 	@Inject(method = "tick", at = @At("HEAD"))
 	private void arctic$tick(CallbackInfo ci) {
+		com.arcticlauncher.client.feature.ArmorHider.tick(Minecraft.getInstance().player,
+				Minecraft.getInstance().player == null ? 0 : Minecraft.getInstance().player.hurtTime);
 		ArcticClient.tick(Compat.screen() != null);
 		com.arcticlauncher.mod.GlassCtm.tick();
 		com.arcticlauncher.mod.ServerMenus.tick();
