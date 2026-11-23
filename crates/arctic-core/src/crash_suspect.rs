@@ -800,7 +800,8 @@ pub fn suspect(text: &str, mods: &[Known]) -> Option<Suspect> {
             ours: is_arctic_id(&m.id),
         }
     };
-    let secondary_report = crate::crash::crash_exception(text).is_some_and(secondary_stack);
+    let report_stack = crate::crash::crash_exception(text);
+    let secondary_report = report_stack.is_some_and(secondary_stack);
     let by_game = if secondary_report {
         Vec::new()
     } else {
@@ -825,7 +826,15 @@ pub fn suspect(text: &str, mods: &[Known]) -> Option<Suspect> {
             return Some(s);
         }
     }
-    let chain = fatal_chain(text);
+    let captured = if report_stack.is_none() {
+        crate::crash::captured_vanilla_crash(text)
+    } else {
+        None
+    };
+    let chain = captured
+        .as_deref()
+        .and_then(fatal_chain)
+        .or_else(|| fatal_chain(text));
     let earlier = text
         .rsplit_once("---- Minecraft Crash Report ----")
         .filter(|_| secondary_report)
@@ -1134,6 +1143,71 @@ Details:\n\
         assert_eq!(named(&d), Some(("Enhanced Block Entities", false)));
         // The same text without an exit code reaches the same answer.
         assert_eq!(diagnose_in(EBE, dir.path()).unwrap(), d);
+    }
+
+    #[test]
+    fn crash_509_names_entityculling_over_a_startup_class_probe() {
+        let dir = tempfile::tempdir().unwrap();
+        jar(
+            dir.path(),
+            "entityculling-fabric-1.12.2-mc1.21.1.jar",
+            "entityculling",
+            "EntityCulling",
+            &["dev.tr7zw.entityculling"],
+            "",
+        );
+        let warning = "[23:29:47] [main/WARN]: Error loading class: me/jellysquid/mods/sodium/client/render/chunk/compile/pipeline/BlockRenderer (java.lang.ClassNotFoundException: me/jellysquid/mods/sodium/client/render/chunk/compile/pipeline/BlockRenderer)";
+        let stack = "java.lang.NullPointerException: Cannot invoke \"String.indexOf(int)\" because \"$$0\" is null\n\
+            \tat knot//net.minecraft.class_2960.method_12838(class_2960.java:77)\n\
+            \tat knot//dev.tr7zw.transition.mc.GeneralUtil.getResourceLocation(GeneralUtil.java:30)\n\
+            \tat knot//dev.tr7zw.entityculling.EntityCullingModBase.clientTick(EntityCullingModBase.java:96)\n\
+            \tat knot//net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.lambda$static$0(ClientTickEvents.java:34)";
+        let report = format!(
+            "---- Minecraft Crash Report ----\nDescription: Unexpected error\n\n{stack}\n\n"
+        );
+        let captured = stack
+            .lines()
+            .map(|line| format!("[Arctic diagnostics] vanilla crash trace {line}\n"))
+            .collect::<String>();
+        let log = format!(
+            "{warning}\n[23:30:17] [Render thread/INFO]: Reloading ResourceManager\n[Arctic diagnostics] vanilla crash: Unexpected error\n{captured}"
+        );
+        for text in [&log, &format!("{log}\n{report}{warning}")] {
+            let d = diagnose_exit_in(text, -1, dir.path()).unwrap();
+            assert_eq!(d.title, "EntityCulling crashed the game");
+            assert_eq!(d.mods, ["EntityCulling"]);
+            assert_eq!(diagnose_in(text, dir.path()), Some(d));
+        }
+        let upload = crate::crash::Report::build(
+            "1.21.1",
+            "Fabric",
+            "EntityCulling crashed the game",
+            &[&log],
+            &[warning],
+            Some(&report),
+            None,
+        );
+        assert_eq!(upload.title, "EntityCulling crashed the game");
+        assert!(
+            upload
+                .log
+                .contains("---- first error ----\njava.lang.NullPointerException")
+        );
+        assert!(!upload.log.contains("A mod is for a different version"));
+
+        for error in ["ClassNotFoundException", "NoClassDefFoundError"] {
+            let cause = format!("Caused by: java.lang.{error}: example.mod.ClientTickHook");
+            for text in [
+                format!("{log}[Arctic diagnostics] vanilla crash trace {cause}\n"),
+                format!("{log}\n{}\n{cause}", report.trim_end()),
+                format!(
+                    "{warning}\n[main/ERROR]: Uncaught exception in thread \"main\"\njava.lang.{error}: example.mod.ClientTickHook\n\tat example.OtherMod.onInitialize(OtherMod.java:31)"
+                ),
+            ] {
+                let d = diagnose_exit_in(&text, -1, dir.path()).unwrap();
+                assert_eq!(d.title, "A mod is for a different version", "{text}");
+            }
+        }
     }
 
     #[test]
