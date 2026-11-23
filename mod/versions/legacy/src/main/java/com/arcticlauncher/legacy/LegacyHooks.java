@@ -256,9 +256,13 @@ public final class LegacyHooks {
 		if (config == null || !config.armorHider) return;
 		boolean lighting = GL11.glIsEnabled(GL11.GL_LIGHTING);
 		GlStateManager.disableLighting();
+		GlStateManager.pushMatrix();
 		try {
-			ArmorHider.drawCheckboxes(new LegacyGfx(), x, y, mouseX, mouseY);
+			// Slot items use z=100, and the floating item starts at z=232.
+			GlStateManager.translate(0, 0, 200);
+			ArmorHider.drawCheckboxes(new LegacyGfx(), 0, 0, mouseX - x, mouseY - y);
 		} finally {
+			GlStateManager.popMatrix();
 			if (lighting) GlStateManager.enableLighting();
 		}
 	}

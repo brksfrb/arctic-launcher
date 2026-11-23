@@ -25,15 +25,23 @@ abstract class ArmorInventoryMixin {
 	//#endif
 	@Unique private boolean arctic$checkboxPressed;
 
-	@Inject(method = "render", at = @At("TAIL"))
+	// The slot loop has finished, and vanilla still has the slot-local matrix on the stack.
+	@Inject(method = "render", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/gui/screen/ingame/HandledScreen;drawForeground(II)V"))
 	private void arctic$buttons(int mouseX, int mouseY, float delta, CallbackInfo ci) {
 		if ((Object) this instanceof SurvivalInventoryScreen) {
 			LegacyHooks.drawArmorCheckboxes(x, y, mouseX, mouseY);
-			//#if MC < 1.12
-			LegacyHooks.drawArmorTooltip(x, y, mouseX, mouseY);
-			//#endif
 		}
 	}
+
+	//#if MC < 1.12
+	@Inject(method = "render", at = @At("TAIL"))
+	private void arctic$checkboxTooltip(int mouseX, int mouseY, float delta, CallbackInfo ci) {
+		if ((Object) this instanceof SurvivalInventoryScreen) {
+			LegacyHooks.drawArmorTooltip(x, y, mouseX, mouseY);
+		}
+	}
+	//#endif
 
 	//#if MC >= 1.12
 	@Inject(method = "renderTooltip(II)V", at = @At("HEAD"), cancellable = true)

@@ -6,7 +6,8 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 //#if MC >= 1.20
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-//#elif MC >= 1.16
+//#endif
+//#if MC < 1.21.6
 import com.mojang.blaze3d.vertex.PoseStack;
 //#endif
 //#if MC >= 1.21.9
@@ -29,27 +30,39 @@ abstract class ArmorInventoryMixin {
 	@Shadow protected abstract boolean isHovering(int x, int y, int width, int height, double mouseX, double mouseY);
 	@Unique private boolean arctic$checkboxPressed;
 
-	//#if MC >= 26.1
+	//#if MC >= 1.21.6
 	@Inject(method = "extractContents", at = @At("TAIL"))
-	//#else
-	@Inject(method = "extractRenderState", at = @At("TAIL"))
-	//#endif
-	//#if MC >= 1.20
 	private void arctic$buttons(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta, CallbackInfo ci) {
 		if ((Object) this instanceof InventoryScreen) {
 			ArmorHider.drawCheckboxes(new GfxImpl(graphics), leftPos, topPos, mouseX, mouseY);
 		}
 	}
-	//#elif MC >= 1.16
-	private void arctic$buttons(PoseStack pose, int mouseX, int mouseY, float delta, CallbackInfo ci) {
-		if ((Object) this instanceof InventoryScreen) {
-			ArmorHider.drawCheckboxes(GfxImpl.of(pose), leftPos, topPos, mouseX, mouseY);
-		}
-	}
 	//#else
+	// Before GUI strata, renderLabels follows the slot items and precedes the floating item.
+	@Inject(method = "extractRenderState", at = @At(value = "INVOKE",
+			//#if MC >= 1.20
+			target = "Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;renderLabels(Lnet/minecraft/client/gui/GuiGraphicsExtractor;II)V"))
+	private void arctic$buttons(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+		PoseStack pose = graphics.pose();
+		GfxImpl gfx = new GfxImpl(graphics);
+			//#elif MC >= 1.16
+			target = "Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;renderLabels(Lcom/mojang/blaze3d/vertex/PoseStack;II)V"))
+	private void arctic$buttons(PoseStack pose, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+		GfxImpl gfx = GfxImpl.of(pose);
+			//#else
+			target = "Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;renderLabels(II)V"))
 	private void arctic$buttons(int mouseX, int mouseY, float delta, CallbackInfo ci) {
+		PoseStack pose = new PoseStack();
+		GfxImpl gfx = GfxImpl.of(pose);
+			//#endif
 		if ((Object) this instanceof InventoryScreen) {
-			ArmorHider.drawCheckboxes(GfxImpl.of(new com.mojang.blaze3d.vertex.PoseStack()), leftPos, topPos, mouseX, mouseY);
+			pose.pushPose();
+			try {
+				pose.translate(0, 0, 200);
+				ArmorHider.drawCheckboxes(gfx, 0, 0, mouseX - leftPos, mouseY - topPos);
+			} finally {
+				pose.popPose();
+			}
 		}
 	}
 	//#endif
