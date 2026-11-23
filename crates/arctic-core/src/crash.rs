@@ -2,7 +2,7 @@
 //! game log and crash report: missing or wrong-version mods, broken mixins,
 //! the wrong Java, running out of memory, graphics drivers.
 
-use std::{path::Path, sync::OnceLock};
+use std::{borrow::Cow, path::Path, sync::OnceLock};
 
 use regex::Regex;
 use sha2::{Digest, Sha256};
@@ -2415,16 +2415,86 @@ const REPORT_JAVA_BYTES: usize = 5 * 1024;
 const REPORT_LAUNCHER_LINES: usize = 80;
 const REPORT_LAUNCHER_BYTES: usize = 6 * 1024;
 
+fn native_first_error(text: &str) -> Option<Cow<'_, str>> {
+    let (report, fatal) = if let Some(fatal) = java_fatal_error(text) {
+        (fatal.0, Some(fatal.1))
+    } else {
+        let fatal = text.lines().find(|line| {
+            line.trim_start_matches(['#', ' '])
+                .starts_with("EXCEPTION_ACCESS_VIOLATION")
+        });
+        (text, fatal)
+    };
+    let frame = crate::stability::problematic_frame(report);
+    let error = match fatal {
+        // The code is stable across runs. Fault addresses and process/thread IDs vary.
+        Some(fatal) => fatal.split_once(" at pc=").map_or(fatal, |(kind, _)| kind),
+        None => {
+            frame?;
+            "Error: Native crash"
+        }
+    };
+    let library = frame
+        .and_then(|frame| frame.strip_prefix("C "))
+        .and_then(|frame| frame.trim_start().strip_prefix('['))
+        .and_then(|frame| frame.split_once(']'))
+        .map(|(library, _)| library.split_once("+0x").map_or(library, |(name, _)| name))
+        .and_then(|library| library.rsplit(['/', '\\']).next());
+
+    // HotSpot lists Java methods in the mixed native stack and sometimes in a separate stack.
+    static JAVA_FRAME: OnceLock<Regex> = OnceLock::new();
+    let java_frame =
+        JAVA_FRAME.get_or_init(|| Regex::new(r"^(?:j\s+|J\s+\d+\s+\S+\s+)([\w.$/]+)\(").unwrap());
+    let caller = ["Native frames:", "Java frames:"]
+        .into_iter()
+        .flat_map(|header| {
+            report
+                .lines()
+                .skip_while(move |line| !line.starts_with(header))
+                .skip(1)
+                .take_while(|line| !line.trim().is_empty() && !exception_record_boundary(line))
+        })
+        .filter_map(|line| java_frame.captures(line))
+        .map(|captures| captures.get(1).unwrap().as_str())
+        .find(|method| {
+            ![
+                "java",
+                "javax",
+                "jdk",
+                "sun",
+                "org.lwjgl",
+                "org/lwjgl",
+                "net.minecraft",
+                "net/minecraft",
+                "com.mojang",
+                "com/mojang",
+            ]
+            .iter()
+            .any(|prefix| {
+                method
+                    .strip_prefix(prefix)
+                    .is_some_and(|rest| rest.starts_with(['.', '/']))
+            })
+        });
+
+    if library.is_none() && caller.is_none() {
+        return Some(error.into());
+    }
+    let mut summary = error.to_owned();
+    if let Some(library) = library {
+        summary.push_str(" in ");
+        summary.push_str(library);
+    }
+    if let Some(caller) = caller {
+        summary.push_str("\nJava frame: ");
+        summary.push_str(caller);
+    }
+    Some(summary.into())
+}
+
 /// Prefer the captured exception or a crash document. In ordinary logs, require an exception
 /// followed by a Java stack frame in the same log record.
-fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a str> {
-    if let Some((_, error)) = crash_report
-        .and_then(java_fatal_error)
-        .or_else(|| java_fatal_error(log))
-    {
-        // The code is stable across runs. Fault addresses and process/thread IDs vary.
-        return Some(error.split_once(" at pc=").map_or(error, |(kind, _)| kind));
-    }
+fn first_java_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a str> {
     if let Some(stack) = crash_report
         .and_then(crash_exception)
         .or_else(|| crash_exception(log))
@@ -2491,6 +2561,9 @@ fn first_error<'a>(log: &'a str, crash_report: Option<&'a str>) -> Option<&'a st
                             && line.contains(".RealmsClient.fetchFeatureFlags(")
                     })
             {
+                warning = true;
+            }
+            if services_key_failure(line) {
                 warning = true;
             }
             if warning || line.contains("pack.mcmeta") || line.contains("pack metadata") {
@@ -2581,7 +2654,7 @@ impl Report {
             priority.push_str(&format!("\nError: Watchdog freeze at exit [{signature}]\n"));
         }
         // A consequence message is kept in the original stack, while the summary uses the cause.
-        let error = first_error(&all, crash_report);
+        let java_error = first_java_error(&all, crash_report);
         let sodium_driver = diagnosis
             .as_ref()
             .filter(|(d, _)| d.title == SODIUM_DRIVER_TITLE);
@@ -2590,16 +2663,19 @@ impl Report {
         let wrong_java = diagnosis
             .as_ref()
             .filter(|(d, _)| d.title.starts_with(JAVA_8_MISMATCH_TITLE));
-        let error = if let Some(error) = sodium_error.as_deref() {
+        let native_error = crash_report
+            .and_then(native_first_error)
+            .or_else(|| native_first_error(&all));
+        let error = if let Some(error) = native_error.as_deref().or(sodium_error.as_deref()) {
             Some(error)
         } else if let Some((_, matched)) = wrong_java {
             Some(matched.as_str())
-        } else if error.is_some_and(secondary_mod_failure)
+        } else if java_error.is_some_and(secondary_mod_failure)
             || crash_exception(&diagnosis_text).is_some_and(secondary_stack)
         {
             diagnosis.as_ref().map(|(_, matched)| matched.as_str())
         } else {
-            error
+            java_error
         };
         if let Some(error) = error {
             priority.push_str(&format!(
@@ -3098,13 +3174,20 @@ fn exception_record_boundary(line: &str) -> bool {
     line.starts_with('[') || line.starts_with("Exception in thread \"") || line.starts_with("---- ")
 }
 
+fn services_key_failure(line: &str) -> bool {
+    line.contains("https://api.minecraftservices.com/publickeys")
+        && (line.contains("com.mojang.authlib.exceptions.") || line.contains("Failed to request"))
+}
+
 fn background_auth_record<'a>(header: &'a str, body: impl Iterator<Item = &'a str>) -> bool {
-    if header.rsplit_once(']').is_some_and(|(_, message)| {
-        matches!(
-            message.trim_start_matches([' ', ':']),
-            "Failed to fetch user properties" | "Failed to fetch Realms feature flags"
-        )
-    }) {
+    if services_key_failure(header)
+        || header.rsplit_once(']').is_some_and(|(_, message)| {
+            matches!(
+                message.trim_start_matches([' ', ':']),
+                "Failed to fetch user properties" | "Failed to fetch Realms feature flags"
+            )
+        })
+    {
         return true;
     }
     static THREAD: OnceLock<Regex> = OnceLock::new();
@@ -3113,7 +3196,7 @@ fn background_auth_record<'a>(header: &'a str, body: impl Iterator<Item = &'a st
         Regex::new(r#"(?i)^(?:(?:\[[^\]]*\]\s*)?\[(?:Download|Realms)[^\]]*/(?:ERROR|FATAL)\]|Exception in thread "(?:Download|Realms)[^"]*")"#).unwrap()
     });
     if !thread.is_match(header) {
-        return false;
+        return body.into_iter().any(services_key_failure);
     }
     let auth = AUTH.get_or_init(|| Regex::new(r"(?i)\b(?:401|authlib|InvalidCredentialsException|RealmsServiceException|Failed to fetch Realms feature flags|Couldn't connect to realms)\b").unwrap());
     std::iter::once(header)
@@ -3418,11 +3501,7 @@ mod tests {
             .unwrap();
         let driver_frame = "net.caffeinemc.mods.sodium.client.compatibility.checks.GraphicsDriverChecks.postContextInit";
         let hang_only = format!("{noise}[Arctic diagnostics] hang begin{hang}");
-        assert!(
-            first_error(SODIUM_490, None)
-                .unwrap()
-                .contains("publickeys")
-        );
+        assert!(first_java_error(SODIUM_490, None).is_none());
         let dir = tempfile::tempdir().unwrap();
         for log in [
             SODIUM_490.to_owned(),
@@ -3641,7 +3720,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         for log in [log, without_auth_header, &console_trace] {
-            assert_eq!(first_error(log, None), None);
+            assert_eq!(first_java_error(log, None), None);
             let report = Report::build(
                 "1.21.11",
                 "Fabric",
@@ -3706,7 +3785,7 @@ mod tests {
         let (_, clipped_realms) = log
             .split_once("Failed to fetch Realms feature flags\n")
             .unwrap();
-        assert_eq!(first_error(clipped_realms, None), None);
+        assert_eq!(first_java_error(clipped_realms, None), None);
 
         let (sampled, at_exit) = HANG_489.split_once("\nHang at exit:").unwrap();
         let (diagnosis, matched) = diagnose_match(sampled, None).unwrap();
@@ -3838,7 +3917,7 @@ mod tests {
             crate::crash_conflicts::diagnose_exit_in(VANILLA_EXIT_398, -2, mods.path()).unwrap();
         assert_eq!(d.title, SAVE_FAILED_TITLE);
         assert!(d.mods.is_empty());
-        assert!(first_error(VANILLA_EXIT_398, None).is_none());
+        assert!(first_java_error(VANILLA_EXIT_398, None).is_none());
         assert_eq!(diagnose(VANILLA_EXIT_398).unwrap().title, SAVE_FAILED_TITLE);
         assert_eq!(
             crate::crash_conflicts::diagnose_in(VANILLA_EXIT_398, mods.path())
@@ -3965,7 +4044,7 @@ mod tests {
         let log = include_str!("../tests/fixtures/crash-325-pack-warning.log");
         let report = include_str!("../tests/fixtures/crash-330-main-exception.log");
         let expected = "Caused by: java.lang.RuntimeException: underlying failure";
-        assert_eq!(first_error(log, Some(report)), Some(expected));
+        assert_eq!(first_java_error(log, Some(report)), Some(expected));
         let uploaded = Report::build("1.21", "fabric", "unknown", &[log], &[], Some(report), None);
         assert!(
             uploaded
@@ -3974,7 +4053,7 @@ mod tests {
         );
         assert!(uploaded.log.contains("pack.mcmeta"));
         assert_eq!(
-            first_error(
+            first_java_error(
                 &format!(
                     "{log}\n[Render thread/ERROR] Uncaught exception\njava.lang.IllegalStateException: Failed to initialize renderer\n\tat example.Game.render(Game.java:42)"
                 ),
@@ -3985,22 +4064,78 @@ mod tests {
         let earlier = format!(
             "[main/ERROR] java.lang.RuntimeException: handled\n\tat example.Optional.load(Optional.java:1)\n{log}"
         );
-        assert_eq!(first_error(&earlier, Some(report)), Some(expected));
-        assert_eq!(first_error("java.lang.Exception: no stack", None), None);
+        assert_eq!(first_java_error(&earlier, Some(report)), Some(expected));
         assert_eq!(
-            first_error(
+            first_java_error("java.lang.Exception: no stack", None),
+            None
+        );
+        assert_eq!(
+            first_java_error(
                 "java.lang.Error: fatal\n\tat example.Game.run(Game.java:1)",
                 None
             ),
             Some("java.lang.Error: fatal")
         );
-        assert_eq!(first_error(log, None), None);
+        assert_eq!(first_java_error(log, None), None);
         assert_eq!(
-            first_error(
+            first_java_error(
                 log,
                 Some("---- Minecraft Crash Report ----\nDescription: Unknown")
             ),
             None
+        );
+    }
+
+    #[test]
+    fn first_error_prefers_intel_vulkan_crash_over_public_keys_noise() {
+        let log = "[19:10:32] [Render thread/ERROR]: Failed to request https://api.minecraftservices.com/publickeys
+com.mojang.authlib.exceptions.MinecraftClientException: Failed to read from https://api.minecraftservices.com/publickeys due to Read timed out
+    at knot//com.mojang.authlib.yggdrasil.YggdrasilServicesKeyInfo.fetch(YggdrasilServicesKeyInfo.java:114)
+Caused by: java.net.SocketTimeoutException: Read timed out
+    at java.base/sun.nio.ch.NioSocketImpl.timedRead(NioSocketImpl.java:278)";
+        assert!(first_java_error(log, None).is_none());
+        let (_, clipped) = log.split_once('\n').unwrap();
+        assert!(first_java_error(clipped, None).is_none());
+        assert!(first_exceptions(log).is_empty());
+
+        let hs_err = "# A fatal error has been detected by the Java Runtime Environment:
+#
+#  EXCEPTION_ACCESS_VIOLATION (0xc0000005) at pc=0x00007ffb86ea5e87, pid=13344, tid=17184
+#
+# Problematic frame:
+# C  [igvk64.dll+0x2a5e87]
+#
+Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
+C  [igvk64.dll+0x2a5e87]
+j  org.lwjgl.vulkan.VK10.nvkCmdDrawIndexed(JIIIII)V+0
+J  7821 c2 net.vulkanmod.vulkan.Renderer.drawIndexed(I)V (74 bytes) @ 0x000001f9367b28c0
+";
+        let fatal = hs_err.lines().nth(2).unwrap();
+        let earlier_error = "[Render thread/ERROR]: An optional renderer failed\njava.lang.IllegalStateException: renderer failed\n    at example.Renderer.init(Renderer.java:42)";
+        for (lines, attachment) in [
+            ([log, earlier_error, fatal], Some(hs_err)),
+            ([log, earlier_error, hs_err], None),
+        ] {
+            let report = Report::build(
+                "1.21.11",
+                "fabric",
+                "unknown",
+                &lines,
+                &[],
+                attachment,
+                None,
+            );
+            assert!(report.log.starts_with(
+                "\n---- first error ----\n#  EXCEPTION_ACCESS_VIOLATION (0xc0000005) in igvk64.dll\nJava frame: net.vulkanmod.vulkan.Renderer.drawIndexed\n"
+            ));
+        }
+        assert_eq!(
+            native_first_error("# Problematic frame:\n# C  [igvk64.dll+0x2a5e87]").as_deref(),
+            Some("Error: Native crash in igvk64.dll")
+        );
+        assert_eq!(
+            native_first_error(fatal).as_deref(),
+            Some("#  EXCEPTION_ACCESS_VIOLATION (0xc0000005)")
         );
     }
 
@@ -4012,16 +4147,16 @@ mod tests {
             "{startup}[Realms Availability/ERROR] Request failed\n\
             java.io.IOException: HTTP status 401\n\tat example.Realms.request(Realms.java:1)"
         );
-        assert_eq!(first_error(&startup, None), None);
+        assert_eq!(first_java_error(&startup, None), None);
         assert!(first_exceptions(&startup).is_empty());
         let uncaught = "Exception in thread \"Download-3\" java.io.IOException: HTTP 401\n\tat example.Auth.fetch(Auth.java:1)";
-        assert_eq!(first_error(uncaught, None), None);
+        assert_eq!(first_java_error(uncaught, None), None);
 
         let fatal = "java.lang.IllegalStateException: renderer failed";
         let log = format!(
             "{startup}\nException in thread \"Render thread\" {fatal}\n\tat example.Game.render(Game.java:1)"
         );
-        assert_eq!(first_error(&log, None), Some(fatal));
+        assert_eq!(first_java_error(&log, None), Some(fatal));
 
         let cause = "Caused by: java.lang.IllegalArgumentException: invalid renderer state";
         let report = format!(
@@ -4031,14 +4166,17 @@ mod tests {
             {cause}\n\tat example.Game.init(Game.java:3)\n\
             \tSuppressed: java.lang.RuntimeException: cleanup failed\n\tCaused by: java.lang.IllegalStateException: cleanup\n"
         );
-        assert_eq!(first_error(&log, Some(&report)), Some(cause));
-        assert_eq!(first_error(&format!("{log}\n{report}"), None), Some(cause));
+        assert_eq!(first_java_error(&log, Some(&report)), Some(cause));
+        assert_eq!(
+            first_java_error(&format!("{log}\n{report}"), None),
+            Some(cause)
+        );
 
         let download = "java.io.IOException: disk full";
         let log = format!(
             "{startup}\n[Download-2/ERROR] Failed to save assets\n{download}\n\tat example.Assets.write(Assets.java:1)"
         );
-        assert_eq!(first_error(&log, None), Some(download));
+        assert_eq!(first_java_error(&log, None), Some(download));
     }
 
     use super::*;
