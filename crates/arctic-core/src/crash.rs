@@ -1732,10 +1732,14 @@ fn launchwrapper_java_mismatch(text: &str) -> Option<(Diagnosis, String)> {
     let mut lines = text.lines().peekable();
     let error = loop {
         let line = lines.next()?;
-        if let Some((_, message)) = line.split_once(EXCEPTION)
-            && let Some(target) = message.trim_start_matches("class ").strip_prefix(CAST)
+        if let Some((prefix, message)) = line.split_once(EXCEPTION)
+            && let Some(target) = message
+                .trim_start_matches("class ")
+                .trim_start_matches("java.base/")
+                .strip_prefix(CAST)
             && target
                 .trim_start_matches("class ")
+                .trim_start_matches("java.base/")
                 .split_whitespace()
                 .next()
                 == Some(TARGET)
@@ -1745,7 +1749,7 @@ fn launchwrapper_java_mismatch(text: &str) -> Option<(Diagnosis, String)> {
                     .starts_with("at net.minecraft.launchwrapper.Launch.")
             })
         {
-            break &line[line.find(EXCEPTION)?..];
+            break &line[prefix.len()..];
         }
     };
     let major = text
@@ -5203,6 +5207,10 @@ Fix: add [], remove [], replace [[sodium 0.6.13+mc1.21.1] -> add:sodium 0.8.12 (
             .replace("Exception: class ", "Exception: ")
             .replace("cast to class ", "cast to ");
         assert_eq!(title(&early_java), expected);
+        let module_qualified = early_java
+            .replace("Exception: jdk.", "Exception: java.base/jdk.")
+            .replace("cast to java.net.", "cast to java.base/java.net.");
+        assert_eq!(title(&module_qualified), expected);
         let unrelated = log.replace("java.net.URLClassLoader", "java.lang.String");
         assert!(diagnose(&unrelated).is_none());
         let unrelated = log.replace("net.minecraft.launchwrapper.Launch", "com.example.Main");
