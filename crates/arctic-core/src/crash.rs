@@ -1351,6 +1351,14 @@ pub(crate) fn registry_sync_diagnosis(text: &str) -> Option<(Diagnosis, String)>
 /// Restrict them to a crash document or an uncaught/fatal exception block with no later progress.
 fn fatal_linkage(text: &str, at: usize) -> bool {
     let before = &text[..at];
+    let line_prefix = before.rsplit('\n').next().unwrap_or(before);
+    // A Mixin class probe stays a warning even when logs are copied after a crash report.
+    if line_prefix.contains("/WARN]") && line_prefix.contains("Error loading class:") {
+        return false;
+    }
+    if line_prefix.starts_with(VANILLA_CRASH_TRACE) {
+        return true;
+    }
     if before.contains("---- Minecraft Crash Report ----")
         || before.contains("---- crash report ----\n")
         || before.contains("A fatal error has been detected by the Java Runtime Environment")
