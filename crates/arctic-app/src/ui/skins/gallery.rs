@@ -13,6 +13,8 @@ use crate::tasks::Event;
 use crate::toasts::Kind;
 use crate::widgets;
 use crate::{t, tf, tn};
+
+use super::cards::card_menu;
 const SEARCH_DELAY: f64 = 0.35;
 const COLLECTIONS: [(&str, &str); 9] = [
     ("", "skins.collection.all"),
@@ -175,7 +177,7 @@ impl ArcticApp {
                         blocked = true;
                     }
                 }
-                tile.context_menu(|ui| self.gallery_menu(ui, item));
+                card_menu(ui, p, &tile, |ui| self.gallery_menu(ui, item, &key));
             }
         });
         // More skins come in as the end scrolls into view.
@@ -249,7 +251,7 @@ impl ArcticApp {
     }
 
     /// A gallery skin's right-click menu.
-    fn gallery_menu(&mut self, ui: &mut egui::Ui, item: &GalleryItem) {
+    fn gallery_menu(&mut self, ui: &mut egui::Ui, item: &GalleryItem, key: &str) {
         let busy = self.skins.gallery.busy;
         if ui
             .add_enabled(!busy, egui::Button::new(t!("skins.add_to_library")))
@@ -259,6 +261,7 @@ impl ArcticApp {
             self.tasks.gallery_take(item.clone(), None);
             ui.close();
         }
+        self.skin_download_item(ui, key, &item.name);
         if let Some(account) = self.accounts.active().cloned()
             && ui.button(t!("skins.report_this_skin")).clicked()
         {

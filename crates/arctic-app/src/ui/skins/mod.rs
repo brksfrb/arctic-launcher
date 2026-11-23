@@ -1023,6 +1023,13 @@ impl ArcticApp {
                         .push(Kind::Error, t!("skins.could_not_get_skin"), e),
                 }
             }
+            Event::SkinPngSaved(result) => match result {
+                Ok(Some(())) => self.toasts.push(Kind::Success, t!("skins.png_saved"), ""),
+                Ok(None) => {}
+                Err(e) => self
+                    .toasts
+                    .push(Kind::Error, t!("skins.png_save_failed"), e),
+            },
             Event::SkinFile(result) => match result {
                 Ok(Some((name, bytes))) => {
                     let _ = self.add_skin(&name, &bytes, None);

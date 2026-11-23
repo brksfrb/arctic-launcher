@@ -189,6 +189,7 @@ pub enum Event {
     OptifineCape(String, Outcome<Option<Vec<u8>>>),
     /// A picked skin file (name, bytes), or `None` if cancelled.
     SkinFile(Outcome<Option<(String, Vec<u8>)>>),
+    SkinPngSaved(Outcome<Option<()>>),
     /// A world import, backup or other world job finished (instance id, message).
     WorldsDone(String, Outcome<String>),
     /// A modpack install or import finished (`None` = file dialog cancelled).
