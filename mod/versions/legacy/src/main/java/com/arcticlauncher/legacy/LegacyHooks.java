@@ -452,14 +452,9 @@ public final class LegacyHooks {
 		ClientConfig c = ArcticClient.config();
 		if (c.chatTimestamps) {
 			String shown = com.arcticlauncher.client.feature.ChatStamp.text(c, when);
-			net.minecraft.client.font.TextRenderer font = MinecraftClient.getInstance().textRenderer;
-			// The slot padding sits beside the tagged stamp, so the hover/click target is only the time.
-			Text pad = new LiteralText("§8" + com.arcticlauncher.client.feature.ChatStampWidth.padding(c, font, font::getStringWidth, shown));
 			Text stamp = LegacyChatCopy.tag(new LiteralText("§8" + (c.chatStampBold ? "§l" : "") + (c.chatStampItalic ? "§o" : "")
-					+ shown + "§r"), source, true);
-			out = com.arcticlauncher.client.feature.ChatStampWidth.right()
-					? new LiteralText("").append(pad).append(stamp).append(out)
-					: new LiteralText("").append(stamp).append(pad).append(out);
+					+ shown + "§r"), new com.arcticlauncher.client.feature.ChatCopy.Data(source, true, true));
+			out = new LiteralText("").append(stamp).append(out);
 		} else if (c.chatCopy) {
 			out = new LiteralText("").append(LegacyChatCopy.tag(new LiteralText("§8[Copy] §r"), source, true)).append(out);
 		}

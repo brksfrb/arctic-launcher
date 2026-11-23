@@ -1,6 +1,10 @@
 package com.arcticlauncher.legacy.mixin;
 
 import com.arcticlauncher.legacy.LegacySmoothFont;
+import com.arcticlauncher.legacy.LegacyStampedLine;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
 import java.util.List;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
@@ -68,6 +72,22 @@ abstract class ChatHitMixin {
 		return LegacySmoothFont.aligned() ? LegacySmoothFont.lineHeight() : font.fontHeight;
 	}
 
+	@WrapOperation(method = "render", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/font/TextRenderer;drawWithShadow(Ljava/lang/String;FFI)I"))
+	private int arctic$drawStamp(TextRenderer font, String text, float x, float y, int color,
+			Operation<Integer> draw, @Local ChatHudLine row) {
+		if (!(row.getText() instanceof LegacyStampedLine)) return draw.call(font, text, x, y, color);
+		LegacyStampedLine line = (LegacyStampedLine) row.getText();
+		if (line.stamp != null) draw.call(font, line.stamp.asFormattedString(), x, y, color);
+		return draw.call(font, line.body.asFormattedString(), x + line.slot, y, color);
+	}
+
+	@WrapOperation(method = "getTextAt", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/font/TextRenderer;getStringWidth(Ljava/lang/String;)I"))
+	private int arctic$stampHitWidth(TextRenderer font, String text, Operation<Integer> width, @Local Text part) {
+		return part instanceof LegacyStampedLine.Gap ? ((LegacyStampedLine.Gap) part).width : width.call(font, text);
+	}
+
 	@Inject(method = "getTextAt", at = @At("HEAD"), cancellable = true)
 	private void arctic$hit(int mouseX, int mouseY, CallbackInfoReturnable<Text> cir) {
 		if (!LegacySmoothFont.aligned()) {
@@ -103,7 +123,8 @@ abstract class ChatHitMixin {
 			if (!(part instanceof LiteralText)) {
 				continue;
 			}
-			pen += font.getStringWidth(Texts.getRenderChatMessage(((LiteralText) part).getRawString(), false));
+			pen += part instanceof LegacyStampedLine.Gap ? ((LegacyStampedLine.Gap) part).width
+					: font.getStringWidth(Texts.getRenderChatMessage(((LiteralText) part).getRawString(), false));
 			if (pen > x) {
 				cir.setReturnValue(part);
 				return;

@@ -14,19 +14,25 @@ public final class ChatCopy {
 	public static final class Data {
 		public final String text;
 		public final boolean target;
+		public final boolean stamp;
 
 		public Data(String text, boolean target) {
+			this(text, target, false);
+		}
+
+		public Data(String text, boolean target, boolean stamp) {
+			this.stamp = stamp;
 			this.text = text.replaceAll("§[0-9A-FK-ORa-fk-or]", "");
 			this.target = target;
 		}
 
 		@Override
 		public boolean equals(Object other) {
-			return other instanceof Data && target == ((Data) other).target && text.equals(((Data) other).text);
+			return other instanceof Data && target == ((Data) other).target && stamp == ((Data) other).stamp && text.equals(((Data) other).text);
 		}
 
 		@Override
-		public int hashCode() { return 31 * text.hashCode() + (target ? 1 : 0); }
+		public int hashCode() { return 31 * text.hashCode() + (target ? 1 : 0) + (stamp ? 2 : 0); }
 	}
 
 	private static long copiedNoticeAt;

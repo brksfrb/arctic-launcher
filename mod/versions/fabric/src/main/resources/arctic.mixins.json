@@ -96,7 +96,9 @@
 		"SmoothFontManagerMixin",<% } %><% if (glowText) { %>
 		"GlowTextMixin",<% } %><% if (scaledFont) { %>
 		"FontTextureMixin",
-		"ScaledGlyphMixin",<% } %><% if (badgeGuiFilter) { %>
+		"ScaledGlyphMixin",<% } %><% if (chatStampFont) { %>
+		"ChatStampGlyphMixin",<% } %><% if (chatStampFontSet) { %>
+		"ChatStampFontSetMixin",<% } %><% if (badgeGuiFilter) { %>
 		"BadgeGuiFilterMixin",<% } %><% if (!worldTextScale) { %>
 		"FontDrawScaleMixin",<% } %><% if (textProjection) { %>
 		"ScaledTextStateMixin",
