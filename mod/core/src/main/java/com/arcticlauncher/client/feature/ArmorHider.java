@@ -4,6 +4,7 @@ import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.Lang;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.gfx.Gfx;
+import com.arcticlauncher.client.style.Style;
 
 public final class ArmorHider {
 	public enum Piece {
@@ -78,16 +79,12 @@ public final class ArmorHider {
 		Piece hovered = hoveredPiece(left, top, mouseX, mouseY);
 		for (int i = 0; i < PIECES.length; i++) {
 			int y = top + FIRST_SLOT_Y + SLOT_STEP * i;
-			gfx.fill(x, y, x + BOX_SIZE, y + BOX_SIZE, 0xFF373737);
-			gfx.fill(x + 1, y + 1, x + BOX_SIZE - 1, y + BOX_SIZE - 1,
-					PIECES[i] == hovered ? 0xFFFFFFFF : 0xFFC6C6C6);
 			if (PIECES[i].hidden(config)) {
-				int ink = 0xFF252525;
-				gfx.fill(x + 1, y + 1, x + 2, y + 2, ink);
-				gfx.fill(x + 3, y + 1, x + 4, y + 2, ink);
-				gfx.fill(x + 2, y + 2, x + 3, y + 3, ink);
-				gfx.fill(x + 1, y + 3, x + 2, y + 4, ink);
-				gfx.fill(x + 3, y + 3, x + 4, y + 4, ink);
+				gfx.fill(x, y, x + BOX_SIZE, y + BOX_SIZE, Style.ARCTIC.accent);
+			} else {
+				gfx.fill(x, y, x + BOX_SIZE, y + BOX_SIZE, 0xFF373737);
+				gfx.fill(x + 1, y + 1, x + BOX_SIZE - 1, y + BOX_SIZE - 1,
+						PIECES[i] == hovered ? 0xFFFFFFFF : 0xFFC6C6C6);
 			}
 		}
 	}
