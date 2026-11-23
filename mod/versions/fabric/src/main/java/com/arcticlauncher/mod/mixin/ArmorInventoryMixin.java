@@ -34,7 +34,7 @@ abstract class ArmorInventoryMixin {
 	@Inject(method = "extractContents", at = @At("TAIL"))
 	private void arctic$buttons(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta, CallbackInfo ci) {
 		if ((Object) this instanceof InventoryScreen) {
-			ArmorHider.drawCheckboxes(new GfxImpl(graphics), leftPos, topPos, mouseX, mouseY);
+			ArmorHider.drawCheckboxes(new GfxImpl(graphics), leftPos, topPos);
 		}
 	}
 	//#else
@@ -64,7 +64,7 @@ abstract class ArmorInventoryMixin {
 				// Older item renderers add depth on top of the container's own slot offset.
 				pose.translate(0, 0, 300);
 				//#endif
-				ArmorHider.drawCheckboxes(gfx, 0, 0, mouseX - leftPos, mouseY - topPos);
+				ArmorHider.drawCheckboxes(gfx, 0, 0);
 			} finally {
 				pose.popPose();
 			}

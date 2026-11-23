@@ -251,7 +251,7 @@ public final class LegacyHooks {
 		cursorGuard(screenOpen || MinecraftClient.getInstance().currentScreen != null, resized);
 	}
 
-	public static void drawArmorCheckboxes(int x, int y, int mouseX, int mouseY) {
+	public static void drawArmorCheckboxes() {
 		ClientConfig config = ArcticClient.config();
 		if (config == null || !config.armorHider) return;
 		boolean lighting = GL11.glIsEnabled(GL11.GL_LIGHTING);
@@ -260,7 +260,7 @@ public final class LegacyHooks {
 		try {
 			// The item renderer adds its own depth to both the slot and floating item offsets.
 			GlStateManager.translate(0, 0, 300);
-			ArmorHider.drawCheckboxes(new LegacyGfx(), 0, 0, mouseX - x, mouseY - y);
+			ArmorHider.drawCheckboxes(new LegacyGfx(), 0, 0);
 		} finally {
 			GlStateManager.popMatrix();
 			if (lighting) GlStateManager.enableLighting();
