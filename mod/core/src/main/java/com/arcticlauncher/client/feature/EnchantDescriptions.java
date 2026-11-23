@@ -29,6 +29,8 @@ public final class EnchantDescriptions {
 			boolean book, boolean armor) {
 		if (style < 0 || level < 1 || id == null || !id.startsWith("minecraft:")) return null;
 		String name = id.substring("minecraft:".length());
+		// The legacy registry used this name through 1.20.4.
+		if (name.equals("sweeping")) name = "sweeping_edge";
 		if (style == COMPACT) {
 			String value = compact(name, level, oldCombat, book, armor);
 			if (value != null) return value;
