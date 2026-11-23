@@ -1200,6 +1200,10 @@ pub(crate) fn captured_vanilla_crash(text: &str) -> Option<String> {
         report.push_str(line);
         report.push('\n');
     }
+    if let Some((startup, _)) = fabric_loader_startup(text) {
+        report.push_str(startup);
+        report.push('\n');
+    }
     Some(report)
 }
 
@@ -1708,7 +1712,16 @@ fn fabric_wrong_game(text: &str) -> Option<(Diagnosis, String)> {
     ))
 }
 
+fn fabric_loader_startup(text: &str) -> Option<(&str, &str)> {
+    text.lines().rev().find_map(|line| {
+        let (_, loading) = line.split_once("Loading Minecraft ")?;
+        let (_, loader) = loading.split_once(" with Fabric Loader ")?;
+        Some((line, loader.split_whitespace().next()?))
+    })
+}
+
 fn old_fabric_mixinextras(text: &str) -> Option<(Diagnosis, String)> {
+    let (_, version) = fabric_loader_startup(text)?;
     // MixinExtras read a redirect's list of targets as a single annotation.
     // https://github.com/LlamaLad7/MixinExtras/commit/78b31b1f
     static CAST: OnceLock<Regex> = OnceLock::new();
@@ -1733,22 +1746,13 @@ fn old_fabric_mixinextras(text: &str) -> Option<(Diagnosis, String)> {
             })
             .then_some(exception)
     })?;
-    let version = text.lines().rev().find_map(|line| {
-        let (_, loading) = line.split_once("Loading Minecraft ")?;
-        let (_, loader) = loading.split_once(" with Fabric Loader ")?;
-        loader.split_whitespace().next()
-    });
-    let loader = version.map_or_else(
-        || "Fabric Loader".to_owned(),
-        |v| format!("Fabric Loader {v}"),
-    );
     Some((
         Diagnosis {
             fix: Some(Fix::UpdateLoader),
             ..Diagnosis::new(
-                "Fabric Loader is too old for your mods",
+                "MixinExtras crashed on Fabric",
                 format!(
-                    "{loader} has a bug in its built-in MixinExtras that some mods hit. Update Fabric Loader to the newest version."
+                    "MixinExtras hit an error with Fabric Loader {version}. Try updating Fabric Loader."
                 ),
                 Vec::new(),
             )
@@ -4066,17 +4070,22 @@ mod tests {
         );
         let mods = tempfile::tempdir().unwrap();
         let diagnosis = crate::crash_conflicts::diagnose_exit_in(&log, -1, mods.path()).unwrap();
-        assert_eq!(diagnosis.title, "Fabric Loader is too old for your mods");
+        assert_eq!(diagnosis.title, "MixinExtras crashed on Fabric");
         assert!(diagnosis.detail.contains("Fabric Loader 0.18.4"));
-        assert!(diagnosis.detail.contains("built-in MixinExtras"));
-        assert!(
-            diagnosis
-                .detail
-                .contains("Update Fabric Loader to the newest version")
-        );
+        assert!(diagnosis.detail.contains("Try updating Fabric Loader"));
         assert_eq!(diagnosis.fix, Some(Fix::UpdateLoader));
         let (_, matched) = diagnose_match(&log, None).unwrap();
         assert!(matched.starts_with("java.lang.ClassCastException: class java.util.ArrayList"));
+
+        let failed_save = format!(
+            "{log}\n[Arctic diagnostics] exit caller vanilla net.minecraft.client.Minecraft.crash(Minecraft.java:1)\n(exit code -2)"
+        );
+        let diagnosis =
+            crate::crash_conflicts::diagnose_exit_in(&failed_save, -2, mods.path()).unwrap();
+        assert_eq!(diagnosis.title, SAVE_FAILED_TITLE);
+        assert!(diagnosis.detail.contains("Fabric Loader 0.18.4"));
+        assert_eq!(diagnosis.fix, Some(Fix::UpdateLoader));
+        assert_eq!(diagnose_match(&failed_save, None).unwrap().1, matched);
     }
 
     // Trimmed from the captured startup trace. No local paths are included.
@@ -4089,7 +4098,7 @@ mod tests {
 [Arctic diagnostics] vanilla crash trace \t\tat knot//com.llamalad7.mixinextras.transformer.MixinTransformerExtension.preApply(MixinTransformerExtension.java:40)";
 
     #[test]
-    fn mixinextras_cast_accepts_other_game_versions_and_frames_without_a_loader_version() {
+    fn mixinextras_cast_accepts_a_plain_fabric_stack_on_another_game_version() {
         let trace = MIXINEXTRAS_CRASH_510
             .replace(
                 "net.minecraft.server.MinecraftServer",
@@ -4100,17 +4109,22 @@ mod tests {
             .filter(|line| !line.contains("FactoryRedirectWrapperMixinTransformer"))
             .collect::<Vec<_>>()
             .join("\n");
-        let diagnosis = diagnose(&trace).unwrap();
-        assert!(diagnosis.detail.starts_with("Fabric Loader has a bug"));
-        assert_eq!(diagnosis.fix, Some(Fix::UpdateLoader));
-
         let log = format!("[main/INFO]: Loading Minecraft 26.2 with Fabric Loader 0.19.4\n{trace}");
-        assert!(
-            diagnose(&log)
-                .unwrap()
-                .detail
-                .contains("Fabric Loader 0.19.4")
-        );
+        let diagnosis = diagnose(&log).unwrap();
+        assert!(diagnosis.detail.contains("Fabric Loader 0.19.4"));
+        assert_eq!(diagnosis.fix, Some(Fix::UpdateLoader));
+    }
+
+    #[test]
+    fn mixinextras_cast_requires_fabric_startup_evidence() {
+        for startup in [
+            "",
+            "Loading Minecraft 1.21 with Quilt Loader 0.28.1",
+            "ModLauncher running",
+        ] {
+            let log = format!("{startup}\n{MIXINEXTRAS_CRASH_510}");
+            assert_ne!(diagnose(&log).unwrap().fix, Some(Fix::UpdateLoader));
+        }
     }
 
     #[test]
@@ -4123,7 +4137,8 @@ mod tests {
             "[Arctic diagnostics] vanilla crash trace \t\tat knot//com.llamalad7.mixinextras.wrapper",
             "[Arctic diagnostics] vanilla crash trace \tCaused by: java.lang.IllegalStateException\n[Arctic diagnostics] vanilla crash trace \t\tat knot//com.llamalad7.mixinextras.wrapper",
         );
-        for log in [wrong_cast, unrelated_frames, split_stack] {
+        for trace in [wrong_cast, unrelated_frames, split_stack] {
+            let log = format!("Loading Minecraft 1.21 with Fabric Loader 0.18.4\n{trace}");
             let diagnosis = diagnose(&log).unwrap();
             assert_eq!(diagnosis.title, "A mod is for a different version");
             assert_eq!(diagnosis.fix, None);
