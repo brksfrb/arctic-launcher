@@ -326,6 +326,20 @@ impl Tasks {
         });
     }
 
+    /// Save the same bytes we received, including legacy 64×32 PNGs.
+    pub fn save_skin_png(&self, name: String, png: Option<Vec<u8>>, gallery_hash: Option<String>) {
+        self.run(move |t| {
+            let result = save_skin_png(&name, png, gallery_hash.as_deref(), |filename| {
+                rfd::FileDialog::new()
+                    .set_title(t!("skins.download_as_png"))
+                    .add_filter("PNG", &["png"])
+                    .set_file_name(filename)
+                    .save_file()
+            });
+            t.send(Event::SkinPngSaved(result));
+        });
+    }
+
     /// Look up the OptiFine cape of a player name.
     pub fn optifine_cape(&self, name: String) {
         self.run(move |t| {
@@ -411,6 +425,43 @@ fn pick_png(title: &str, filter: &str) -> Picked {
             .map(|bytes| Some((file_stem(&path), bytes)))
             .map_err(|e| tf!("tasks.could_not_read", path = path.display(), e = e)),
     }
+}
+
+fn save_skin_png(
+    name: &str,
+    png: Option<Vec<u8>>,
+    gallery_hash: Option<&str>,
+    choose_path: impl FnOnce(String) -> Option<std::path::PathBuf>,
+) -> Result<Option<()>, String> {
+    let png = match (png, gallery_hash) {
+        (Some(png), _) => png,
+        (None, Some(hash)) => {
+            cosmetics::texture(&cosmetics::base_url(), hash).map_err(|e| e.to_string())?
+        }
+        (None, None) => return Err(t!("skins.could_not_get_skin").to_owned()),
+    };
+    arctic_core::skins::decode(&png).map_err(|e| e.to_string())?;
+    let name: String = name
+        .chars()
+        .map(|c| {
+            if c.is_control() || "/\\:*?\"<>|".contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    let name = name.trim_matches([' ', '.']);
+    let name = if name.is_empty() {
+        t!("tasks.skin")
+    } else {
+        name
+    };
+    let Some(path) = choose_path(format!("{name}.png")) else {
+        return Ok(None);
+    };
+    std::fs::write(path, png).map_err(|e| e.to_string())?;
+    Ok(Some(()))
 }
 
 pub fn file_stem(path: &std::path::Path) -> String {
@@ -557,5 +608,40 @@ mod tests {
         assert!(empty.items.is_empty());
         assert!(empty.meshes.is_empty());
         assert!(empty.textures.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod save_tests {
+    use image::ImageEncoder;
+
+    use super::save_skin_png;
+
+    #[test]
+    fn save_preserves_modern_and_legacy_png_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        for height in [32, 64] {
+            let mut original = Vec::new();
+            image::codecs::png::PngEncoder::new_with_quality(
+                &mut original,
+                image::codecs::png::CompressionType::Fast,
+                image::codecs::png::FilterType::NoFilter,
+            )
+            .write_image(
+                &vec![0; 64 * height as usize * 4],
+                64,
+                height,
+                image::ExtendedColorType::Rgba8,
+            )
+            .unwrap();
+
+            let path = dir.path().join(format!("skin-{height}.png"));
+            let result = save_skin_png("Test Skin", Some(original.clone()), None, |filename| {
+                assert_eq!(filename, "Test Skin.png");
+                Some(path.clone())
+            });
+            assert_eq!(result, Ok(Some(())));
+            assert_eq!(std::fs::read(&path).unwrap(), original);
+        }
     }
 }

@@ -1309,6 +1309,7 @@ impl ArcticApp {
             | Event::MinecraftSkinSynced(..)
             | Event::PlayerSkin(..)
             | Event::SkinFile(..)
+            | Event::SkinPngSaved(..)
             | Event::ArcticLook(..)
             | Event::ArcticLookSaved(..)
             | Event::ArcticCatalog(..)
