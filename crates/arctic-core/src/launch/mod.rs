@@ -905,6 +905,18 @@ fn share_cosmetics_session(
     }
 }
 
+fn requires_java_8(version: &VersionJson) -> bool {
+    version
+        .java_version
+        .as_ref()
+        .is_some_and(|j| j.major_version == 8)
+        || version.main_class == "net.minecraft.launchwrapper.Launch"
+}
+
+fn incompatible_custom_java(version: &VersionJson, major: Option<u32>) -> Option<u32> {
+    major.filter(|&major| major >= 9 && requires_java_8(version))
+}
+
 /// Build the command line for `req` from a finished installation.
 pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
     let settings = req.settings;
@@ -989,10 +1001,25 @@ pub fn plan(req: &LaunchRequest, inst: &Installation) -> LaunchPlan {
     }
     let native_x86_64 =
         java::native_x86_64() && !crate::versions::rules::needs_rosetta(&inst.version);
+    let custom_java = req
+        .instance
+        .java_path
+        .as_ref()
+        .or(settings.java_override.as_ref());
+    let custom_java_exists = custom_java.is_some_and(|p| p.is_file());
+    let custom_major = custom_java
+        .filter(|_| native_x86_64 || (custom_java_exists && requires_java_8(&inst.version)))
+        .and_then(|_| process::runtime_major_version(&inst.java));
+    if custom_java_exists && let Some(major) = incompatible_custom_java(&inst.version, custom_major)
+    {
+        log::warn!(
+            "This version needs Java 8, but custom Java {major} is set. Turn off custom Java for this instance or in Settings to use Arctic's runtime."
+        );
+    }
     let java_major = if !native_x86_64 {
         None
-    } else if req.instance.java_path.is_some() || settings.java_override.is_some() {
-        process::runtime_major_version(&inst.java)
+    } else if custom_java.is_some() {
+        custom_major
     } else {
         inst.version.java_version.as_ref().map(|j| j.major_version)
     };
@@ -1191,6 +1218,33 @@ fn placeholders(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn newer_custom_java_conflicts_with_java_8_metadata_or_launchwrapper() {
+        for (main_class, major, expected) in [
+            ("net.minecraft.client.main.Main", Some(8), true),
+            ("net.minecraft.launchwrapper.Launch", None, true),
+            ("net.minecraft.client.main.Main", Some(21), false),
+            ("net.minecraft.client.main.Main", None, false),
+        ] {
+            let mut json = serde_json::json!({"id": "test", "mainClass": main_class});
+            if let Some(major) = major {
+                json["javaVersion"] =
+                    serde_json::json!({"component": "test-runtime", "majorVersion": major});
+            }
+            let version = serde_json::from_value(json).unwrap();
+            assert_eq!(
+                incompatible_custom_java(&version, Some(9)),
+                expected.then_some(9)
+            );
+            assert_eq!(
+                incompatible_custom_java(&version, Some(25)),
+                expected.then_some(25)
+            );
+            assert_eq!(incompatible_custom_java(&version, Some(8)), None);
+            assert_eq!(incompatible_custom_java(&version, None), None);
+        }
+    }
 
     #[test]
     fn quilt_client_fit_reads_the_selected_jar_and_removes_an_incompatible_client() {

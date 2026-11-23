@@ -404,16 +404,34 @@ fn runtime_probe(exe: &Path) -> io::Result<Option<(ExitStatus, String)>> {
     }
 }
 
+const RUNTIME_PROBE_PREFIX: &str = "[Arctic diagnostics] same-runtime java -version: ";
+
 fn runtime_probe_diagnostic(exe: &Path) -> String {
     let result = match runtime_probe(exe) {
-        Ok(Some((status, output))) => format!(
-            "status={status}; {}",
-            crate::crash::scrubbed_tail(&output, 2048).replace('\n', " | ")
-        ),
+        Ok(Some((status, output))) => {
+            // The scrubber can mistake a four-part Java version for an IP address.
+            let major = status
+                .success()
+                .then(|| parse_java_major_version(&output))
+                .flatten()
+                .map_or_else(String::new, |major| format!("Java {major}; "));
+            format!(
+                "{major}status={status}; {}",
+                crate::crash::scrubbed_tail(&output, 2048).replace('\n', " | ")
+            )
+        }
         Ok(None) => "timed out after 3 s".into(),
         Err(e) => format!("failed: {e}"),
     };
-    format!("[Arctic diagnostics] same-runtime java -version: {result}")
+    format!("{RUNTIME_PROBE_PREFIX}{result}")
+}
+
+pub(crate) fn diagnosed_runtime_major(line: &str) -> Option<u32> {
+    let (status, output) = line.strip_prefix(RUNTIME_PROBE_PREFIX)?.split_once("; ")?;
+    status
+        .strip_prefix("Java ")
+        .and_then(|major| major.parse().ok())
+        .or_else(|| output.split(" | ").find_map(parse_java_major_version))
 }
 
 pub(crate) fn runtime_major_version(exe: &Path) -> Option<u32> {
@@ -872,12 +890,17 @@ mod tests {
             std::fs::write(
                 &exe,
                 format!(
-                    "#!/bin/sh\nprintf '%s\\n' 'openjdk version \"21.0.7\"' >&2\nexit {exit}\n"
+                    "#!/bin/sh\nprintf '%s\\n' 'openjdk version \"21.0.7.1\"' >&2\nexit {exit}\n"
                 ),
             )
             .unwrap();
             std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
             assert_eq!(super::runtime_major_version(&exe), major);
+            if exit == 0 {
+                let diagnostic = super::runtime_probe_diagnostic(&exe);
+                assert!(diagnostic.contains("openjdk version \"<ip>\""));
+                assert_eq!(super::diagnosed_runtime_major(&diagnostic), major);
+            }
         }
     }
 
