@@ -705,6 +705,7 @@
   "mods.enchant_apply_to": "Zastosuj do",
   "mods.enchant_books": "Tylko książki",
   "mods.enchant_all_items": "Wszystkie zaklęte przedmioty",
+  "mods.toggle_armor_hider": "Przełącz ukrywanie zbroi",
   "mods.armor_hider": "Ukrywanie zbroi",
   "mods.armor_hider_help": "Steruje widocznością zbroi na twoim modelu.",
   "mods.hide_helmet": "Ukryj hełm",

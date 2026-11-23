@@ -705,6 +705,7 @@
   "mods.enchant_apply_to": "Aplicar a",
   "mods.enchant_books": "Só livros",
   "mods.enchant_all_items": "Todos os itens encantados",
+  "mods.toggle_armor_hider": "Alternar ocultação da armadura",
   "mods.armor_hider": "Ocultar armadura",
   "mods.armor_hider_help": "Controla a visibilidade da armadura no seu modelo.",
   "mods.hide_helmet": "Ocultar capacete",

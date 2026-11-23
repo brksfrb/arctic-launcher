@@ -705,6 +705,7 @@
   "mods.enchant_apply_to": "Applica a",
   "mods.enchant_books": "Solo libri",
   "mods.enchant_all_items": "Tutti gli oggetti incantati",
+  "mods.toggle_armor_hider": "Attiva o disattiva la modalità nascondi armatura",
   "mods.armor_hider": "Nascondi armatura",
   "mods.armor_hider_help": "Regola la visibilità dell’armatura sul tuo modello.",
   "mods.hide_helmet": "Nascondi elmo",

@@ -705,6 +705,7 @@
   "mods.enchant_apply_to": "应用于",
   "mods.enchant_books": "仅限书籍",
   "mods.enchant_all_items": "所有附魔物品",
+  "mods.toggle_armor_hider": "切换盔甲隐藏",
   "mods.armor_hider": "隐藏盔甲",
   "mods.armor_hider_help": "设置自己模型上的盔甲可见性。",
   "mods.hide_helmet": "隐藏头盔",

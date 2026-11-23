@@ -705,6 +705,7 @@
   "mods.enchant_apply_to": "Anwenden auf",
   "mods.enchant_books": "Nur Bücher",
   "mods.enchant_all_items": "Alle verzauberten Gegenstände",
+  "mods.toggle_armor_hider": "Rüstungsausblendung umschalten",
   "mods.armor_hider": "Rüstung ausblenden",
   "mods.armor_hider_help": "Steuert die Sichtbarkeit der Rüstung am eigenen Modell.",
   "mods.hide_helmet": "Helm ausblenden",

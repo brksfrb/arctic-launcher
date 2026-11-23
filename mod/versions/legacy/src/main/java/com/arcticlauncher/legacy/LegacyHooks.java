@@ -5,10 +5,12 @@ import java.util.Date;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
+import com.arcticlauncher.client.feature.ArmorHider;
 import com.arcticlauncher.client.feature.Badge;
 import com.arcticlauncher.client.feature.Features;
 import com.arcticlauncher.client.feature.Mentions;
 import com.arcticlauncher.client.feature.Streamer;
+import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.Tessellator;
@@ -249,8 +251,27 @@ public final class LegacyHooks {
 		cursorGuard(screenOpen || MinecraftClient.getInstance().currentScreen != null, resized);
 	}
 
-	public static void drawArmorButtons(int x, int y, int mouseX, int mouseY) {
-		com.arcticlauncher.client.feature.ArmorHider.drawButtons(new LegacyGfx(), x, y, mouseX, mouseY);
+	public static void drawArmorCheckboxes(int x, int y, int mouseX, int mouseY) {
+		ClientConfig config = ArcticClient.config();
+		if (config == null || !config.armorHider) return;
+		boolean lighting = GL11.glIsEnabled(GL11.GL_LIGHTING);
+		GlStateManager.disableLighting();
+		try {
+			ArmorHider.drawCheckboxes(new LegacyGfx(), x, y, mouseX, mouseY);
+		} finally {
+			if (lighting) GlStateManager.enableLighting();
+		}
+	}
+
+	public static boolean drawArmorTooltip(int x, int y, int mouseX, int mouseY) {
+		if (ArmorHider.hoveredPiece(x, y, mouseX, mouseY) == null) return false;
+		boolean lighting = GL11.glIsEnabled(GL11.GL_LIGHTING);
+		GlStateManager.disableLighting();
+		try {
+			return ArmorHider.drawTooltip(new LegacyGfx(), x, y, mouseX, mouseY);
+		} finally {
+			if (lighting) GlStateManager.enableLighting();
+		}
 	}
 
 	/** Over the game, after Minecraft's own HUD. */

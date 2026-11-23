@@ -705,6 +705,7 @@
   "mods.enchant_apply_to": "Toepassen op",
   "mods.enchant_books": "Alleen boeken",
   "mods.enchant_all_items": "Alle betoverde voorwerpen",
+  "mods.toggle_armor_hider": "Pantser verbergen omschakelen",
   "mods.armor_hider": "Harnas verbergen",
   "mods.armor_hider_help": "Bepaal welk harnas op je eigen model zichtbaar is.",
   "mods.hide_helmet": "Helm verbergen",

@@ -705,6 +705,7 @@
   "mods.enchant_apply_to": "Застосувати до",
   "mods.enchant_books": "Лише книги",
   "mods.enchant_all_items": "Усі зачаровані предмети",
+  "mods.toggle_armor_hider": "Перемкнути приховування обладунків",
   "mods.armor_hider": "Приховування обладунків",
   "mods.armor_hider_help": "Керує видимістю обладунків на вашій моделі.",
   "mods.hide_helmet": "Приховати шолом",
