@@ -1,6 +1,7 @@
 package com.arcticlauncher.legacy.mixin;
 
 import com.arcticlauncher.legacy.LegacyHooks;
+import com.arcticlauncher.legacy.LegacyStampedLine;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.feature.ChatCopy;
 import com.arcticlauncher.client.feature.ChatStampWidth;
@@ -147,17 +148,10 @@ abstract class ChatHudMixin implements PersistentChat.Hud {
 		for (int i = 1; i < parts.size(); i++) body.append(parts.get(i).copy());
 		List<Text> wrapped = wrap.call(com.arcticlauncher.legacy.LegacyEmotes.layout(body), width - slot, font, trimSpace, colors);
 		List<Text> lines = new ArrayList<Text>(wrapped.size());
-		String indent = ChatStampWidth.spacer(slot);
-		String gap = ChatStampWidth.spacer(slot - stampWidth);
+		Text displayedStamp = new LiteralText(Texts.getRenderChatMessage(((LiteralText) stamp).getRawString(), colors))
+				.setStyle(stamp.getStyle().deepCopy());
 		for (int i = 0; i < wrapped.size(); i++) {
-			Text line = new LiteralText("");
-			if (i == 0) {
-				line.append(new LiteralText(Texts.getRenderChatMessage(((LiteralText) stamp).getRawString(), colors))
-						.setStyle(stamp.getStyle().deepCopy()));
-			}
-			line.append(new LiteralText(i == 0 ? gap : indent));
-			line.append(wrapped.get(i));
-			lines.add(line);
+			lines.add(new LegacyStampedLine(i == 0 ? displayedStamp : null, wrapped.get(i), slot, i == 0 ? stampWidth : 0));
 		}
 		return lines;
 	}

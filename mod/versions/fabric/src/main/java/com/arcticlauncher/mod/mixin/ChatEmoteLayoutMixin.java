@@ -12,10 +12,14 @@ import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.network.chat.Style;
 //#if MC >= 1.16
+import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.util.FormattedCharSequence;
+//#else
+import com.arcticlauncher.mod.ChatStampLegacyLine;
+import com.llamalad7.mixinextras.sugar.Local;
+import net.minecraft.client.GuiMessage;
 //#endif
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -53,14 +57,12 @@ abstract class ChatEmoteLayoutMixin {
 
 		List<FormattedCharSequence> wrapped = wrap.call(EmoteComponents.layout(arctic$body((Component) message)), width - slot, font);
 		List<FormattedCharSequence> lines = new ArrayList<>(wrapped.size());
-		Style spacerStyle = Style.EMPTY;
-		//#if MC >= 1.21.9
-		spacerStyle = spacerStyle.withFont(com.arcticlauncher.mod.ChatStampFont.ID);
-		//#endif
+		Style spacerStyle = Style.EMPTY.withFont(com.arcticlauncher.mod.ChatStampFont.ID);
 		FormattedCharSequence indent = FormattedCharSequence.forward(ChatStampWidth.spacer(slot), spacerStyle);
 		FormattedCharSequence gap = FormattedCharSequence.forward(ChatStampWidth.spacer(slot - stampWidth), spacerStyle);
 		FormattedCharSequence prefix = FormattedCharSequence.composite(time, gap);
-		// Vanilla marks a soft wrap with an unstyled space. Count it as part of our indent.
+		// Vanilla prepends an unstyled space to soft wraps. The body is tagged even with
+		// copying disabled, so its own leading spaces carry a different style.
 		float spaceWidth = font.getSplitter().stringWidth(" ");
 		FormattedCharSequence softIndent = FormattedCharSequence.forward(ChatStampWidth.spacer(slot - spaceWidth), spacerStyle);
 		for (int i = 0; i < wrapped.size(); i++) {
@@ -74,7 +76,7 @@ abstract class ChatEmoteLayoutMixin {
 	private static boolean arctic$softWrapped(FormattedCharSequence line) {
 		boolean[] soft = {false};
 		line.accept((index, style, codepoint) -> {
-			soft[0] = style == Style.EMPTY && codepoint == ' ';
+			soft[0] = index == 0 && style == Style.EMPTY && codepoint == ' ';
 			return false;
 		});
 		return soft[0];
@@ -95,15 +97,28 @@ abstract class ChatEmoteLayoutMixin {
 
 		List<Component> wrapped = wrap.call(EmoteComponents.layout(arctic$body(message)), width - slot, font, trimSpace, colors);
 		List<Component> lines = new ArrayList<>(wrapped.size());
-		String indent = ChatStampWidth.spacer(slot);
-		String gap = ChatStampWidth.spacer(slot - stampWidth);
+		Component displayedStamp = Compat.literal(stampText).setStyle(stamp.getStyle().copy());
+		int stampHitWidth = font.width(stampText);
 		for (int i = 0; i < wrapped.size(); i++) {
-			MutableComponent line = Compat.empty();
-			if (i == 0) line.append(Compat.literal(stampText).setStyle(stamp.getStyle().copy()));
-			line.append(Compat.literal(i == 0 ? gap : indent)).append(wrapped.get(i));
-			lines.add(line);
+			lines.add(new ChatStampLegacyLine(i == 0 ? displayedStamp : null, wrapped.get(i), slot, i == 0 ? stampHitWidth : 0));
 		}
 		return lines;
+	}
+
+	@WrapOperation(method = "render", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/gui/Font;drawShadow(Ljava/lang/String;FFI)I"))
+	private int arctic$drawStamp(Font font, String text, float x, float y, int color,
+			Operation<Integer> draw, @Local GuiMessage row) {
+		if (!(row.getMessage() instanceof ChatStampLegacyLine)) return draw.call(font, text, x, y, color);
+		ChatStampLegacyLine line = (ChatStampLegacyLine) row.getMessage();
+		if (line.stamp != null) draw.call(font, line.stamp.getColoredString(), x, y, color);
+		return draw.call(font, line.body.getColoredString(), x + line.slot, y, color);
+	}
+
+	@WrapOperation(method = "getClickedComponentAt", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/gui/Font;width(Ljava/lang/String;)I"))
+	private int arctic$stampHitWidth(Font font, String text, Operation<Integer> width, @Local Component part) {
+		return part instanceof ChatStampLegacyLine.Gap ? ((ChatStampLegacyLine.Gap) part).width : width.call(font, text);
 	}
 
 	@Unique

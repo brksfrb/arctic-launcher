@@ -69,7 +69,13 @@ final class StampWidthTest {
 			cal.set(Calendar.MINUTE, TIMES[i][1]);
 			cal.set(Calendar.SECOND, TIMES[i][2]);
 			ChatStamp.proofNow = cal.getTime();
-			chat.addMessage(Compat.literal("§a| §r<" + who[i] + "> message number " + i + (i == 2 ? " which is long enough to wrap onto a second chat line so the continuation can be checked" : "")));
+			net.minecraft.network.chat.Component message = Compat.literal("§a| §r<" + who[i] + "> message number " + i
+					+ (i == 2 ? " which is long enough to wrap onto a second chat line so the continuation can be checked" : ""));
+			//#if MC >= 26.1
+			chat.addClientSystemMessage(message);
+			//#else
+			chat.addMessage(message);
+			//#endif
 		}
 		ChatStamp.proofNow = null;
 		later(3, () -> {
