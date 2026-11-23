@@ -40,25 +40,30 @@ abstract class ArmorInventoryMixin {
 	//#else
 	// Before GUI strata, renderLabels follows the slot items and precedes the floating item.
 	@Inject(method = "extractRenderState", at = @At(value = "INVOKE",
-			//#if MC >= 1.20
+	//#if MC >= 1.20
 			target = "Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;renderLabels(Lnet/minecraft/client/gui/GuiGraphicsExtractor;II)V"))
 	private void arctic$buttons(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta, CallbackInfo ci) {
 		PoseStack pose = graphics.pose();
 		GfxImpl gfx = new GfxImpl(graphics);
-			//#elif MC >= 1.16
+	//#elif MC >= 1.16
 			target = "Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;renderLabels(Lcom/mojang/blaze3d/vertex/PoseStack;II)V"))
 	private void arctic$buttons(PoseStack pose, int mouseX, int mouseY, float delta, CallbackInfo ci) {
 		GfxImpl gfx = GfxImpl.of(pose);
-			//#else
+	//#else
 			target = "Lnet/minecraft/client/gui/screens/inventory/AbstractContainerScreen;renderLabels(II)V"))
 	private void arctic$buttons(int mouseX, int mouseY, float delta, CallbackInfo ci) {
 		PoseStack pose = new PoseStack();
 		GfxImpl gfx = GfxImpl.of(pose);
-			//#endif
+	//#endif
 		if ((Object) this instanceof InventoryScreen) {
 			pose.pushPose();
 			try {
+				//#if MC >= 1.20
 				pose.translate(0, 0, 200);
+				//#else
+				// Older item renderers add depth on top of the container's own slot offset.
+				pose.translate(0, 0, 300);
+				//#endif
 				ArmorHider.drawCheckboxes(gfx, 0, 0, mouseX - leftPos, mouseY - topPos);
 			} finally {
 				pose.popPose();

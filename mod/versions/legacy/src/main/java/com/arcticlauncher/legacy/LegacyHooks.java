@@ -258,8 +258,8 @@ public final class LegacyHooks {
 		GlStateManager.disableLighting();
 		GlStateManager.pushMatrix();
 		try {
-			// Slot items use z=100, and the floating item starts at z=232.
-			GlStateManager.translate(0, 0, 200);
+			// The item renderer adds its own depth to both the slot and floating item offsets.
+			GlStateManager.translate(0, 0, 300);
 			ArmorHider.drawCheckboxes(new LegacyGfx(), 0, 0, mouseX - x, mouseY - y);
 		} finally {
 			GlStateManager.popMatrix();
