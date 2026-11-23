@@ -1720,7 +1720,7 @@ fn fabric_loader_startup(text: &str) -> Option<(&str, &str)> {
     })
 }
 
-fn old_fabric_mixinextras(text: &str) -> Option<(Diagnosis, String)> {
+fn fabric_mixinextras_cast(text: &str) -> Option<(Diagnosis, String)> {
     let (_, version) = fabric_loader_startup(text)?;
     // MixinExtras read a redirect's list of targets as a single annotation.
     // https://github.com/LlamaLad7/MixinExtras/commit/78b31b1f
@@ -1752,7 +1752,7 @@ fn old_fabric_mixinextras(text: &str) -> Option<(Diagnosis, String)> {
             ..Diagnosis::new(
                 "MixinExtras crashed on Fabric",
                 format!(
-                    "MixinExtras hit an error with Fabric Loader {version}. Try updating Fabric Loader."
+                    "Try updating Fabric Loader {version}. If the crash continues, check for mod updates too."
                 ),
                 Vec::new(),
             )
@@ -1859,7 +1859,7 @@ fn diagnose_rules(
     if let Some(driver) = sodium_driver_diagnosis(text) {
         return Some(driver);
     }
-    if let Some(mixinextras) = old_fabric_mixinextras(text) {
+    if let Some(mixinextras) = fabric_mixinextras_cast(text) {
         return Some(mixinextras);
     }
     let text = tail_of(text, MAX_TEXT);
