@@ -1708,6 +1708,55 @@ fn fabric_wrong_game(text: &str) -> Option<(Diagnosis, String)> {
     ))
 }
 
+fn old_fabric_mixinextras(text: &str) -> Option<(Diagnosis, String)> {
+    // MixinExtras read a redirect's list of targets as a single annotation.
+    // https://github.com/LlamaLad7/MixinExtras/commit/78b31b1f
+    static CAST: OnceLock<Regex> = OnceLock::new();
+    let cast = CAST.get_or_init(|| {
+        Regex::new(r"java\.lang\.ClassCastException: (?:class )?java\.util\.ArrayList cannot be cast to (?:class )?org\.objectweb\.asm\.tree\.AnnotationNode(?:[\s(]|$)").unwrap()
+    });
+    let tail = tail_of(text, MAX_TEXT);
+    let exception = cast.find_iter(tail).find_map(|matched| {
+        let mut lines = tail[matched.start()..].lines();
+        let exception = lines.next()?;
+        lines
+            .map(|line| {
+                line.strip_prefix(VANILLA_CRASH_TRACE)
+                    .unwrap_or(line)
+                    .trim_start()
+            })
+            .map_while(|line| line.strip_prefix("at "))
+            .filter_map(|frame| frame.split_once('('))
+            .any(|(method, _)| {
+                let method = method.rsplit_once('/').map_or(method, |(_, name)| name);
+                method.starts_with("com.llamalad7.mixinextras.")
+            })
+            .then_some(exception)
+    })?;
+    let version = text.lines().rev().find_map(|line| {
+        let (_, loading) = line.split_once("Loading Minecraft ")?;
+        let (_, loader) = loading.split_once(" with Fabric Loader ")?;
+        loader.split_whitespace().next()
+    });
+    let loader = version.map_or_else(
+        || "Fabric Loader".to_owned(),
+        |v| format!("Fabric Loader {v}"),
+    );
+    Some((
+        Diagnosis {
+            fix: Some(Fix::UpdateLoader),
+            ..Diagnosis::new(
+                "Fabric Loader is too old for your mods",
+                format!(
+                    "{loader} has a bug in its built-in MixinExtras that some mods hit. Update Fabric Loader to the newest version."
+                ),
+                Vec::new(),
+            )
+        },
+        head_of(exception, 2048).to_owned(),
+    ))
+}
+
 fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
     diagnose_crash_match(text, java).or_else(|| hang_diagnosis(text, None))
 }
@@ -1805,6 +1854,9 @@ fn diagnose_rules(
     }
     if let Some(driver) = sodium_driver_diagnosis(text) {
         return Some(driver);
+    }
+    if let Some(mixinextras) = old_fabric_mixinextras(text) {
+        return Some(mixinextras);
     }
     let text = tail_of(text, MAX_TEXT);
 
@@ -4005,6 +4057,77 @@ mod tests {
                 .contains("save trace java.nio.file.AccessDeniedException: <home>")
         );
         assert!(report.log.len() < 48 * 1024);
+    }
+
+    #[test]
+    fn crash_510_recommends_updating_fabric_loader_before_the_linkage_diagnosis() {
+        let log = format!(
+            "[18:14:53] [main/INFO] Loading Minecraft 1.21 with Fabric Loader 0.18.4\n{MIXINEXTRAS_CRASH_510}"
+        );
+        let mods = tempfile::tempdir().unwrap();
+        let diagnosis = crate::crash_conflicts::diagnose_exit_in(&log, -1, mods.path()).unwrap();
+        assert_eq!(diagnosis.title, "Fabric Loader is too old for your mods");
+        assert!(diagnosis.detail.contains("Fabric Loader 0.18.4"));
+        assert!(diagnosis.detail.contains("built-in MixinExtras"));
+        assert!(
+            diagnosis
+                .detail
+                .contains("Update Fabric Loader to the newest version")
+        );
+        assert_eq!(diagnosis.fix, Some(Fix::UpdateLoader));
+        let (_, matched) = diagnose_match(&log, None).unwrap();
+        assert!(matched.starts_with("java.lang.ClassCastException: class java.util.ArrayList"));
+    }
+
+    // Trimmed from the captured startup trace. No local paths are included.
+    const MIXINEXTRAS_CRASH_510: &str = "[Arctic diagnostics] vanilla crash: Initializing game
+[Arctic diagnostics] vanilla crash trace \tSuppressed: java.lang.NoClassDefFoundError: Could not initialize class net.fabricmc.fabric.api.networking.v1.ServerConfigurationConnectionEvents
+[Arctic diagnostics] vanilla crash trace \tCaused by: java.lang.RuntimeException: Mixin transformation of net.minecraft.server.MinecraftServer failed
+[Arctic diagnostics] vanilla crash trace \t\tat net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray$arctic(KnotClassDelegate.java:440)
+[Arctic diagnostics] vanilla crash trace \tCaused by: java.lang.ClassCastException: class java.util.ArrayList cannot be cast to class org.objectweb.asm.tree.AnnotationNode (java.util.ArrayList is in module java.base of loader 'bootstrap'; org.objectweb.asm.tree.AnnotationNode is in unnamed module of loader 'app')
+[Arctic diagnostics] vanilla crash trace \t\tat knot//com.llamalad7.mixinextras.wrapper.factory.FactoryRedirectWrapperMixinTransformer.transform(FactoryRedirectWrapperMixinTransformer.java:18)
+[Arctic diagnostics] vanilla crash trace \t\tat knot//com.llamalad7.mixinextras.transformer.MixinTransformerExtension.preApply(MixinTransformerExtension.java:40)";
+
+    #[test]
+    fn mixinextras_cast_accepts_other_game_versions_and_frames_without_a_loader_version() {
+        let trace = MIXINEXTRAS_CRASH_510
+            .replace(
+                "net.minecraft.server.MinecraftServer",
+                "net.minecraft.client.gui.MapRenderer",
+            )
+            .lines()
+            .filter_map(|line| line.strip_prefix(VANILLA_CRASH_TRACE))
+            .filter(|line| !line.contains("FactoryRedirectWrapperMixinTransformer"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let diagnosis = diagnose(&trace).unwrap();
+        assert!(diagnosis.detail.starts_with("Fabric Loader has a bug"));
+        assert_eq!(diagnosis.fix, Some(Fix::UpdateLoader));
+
+        let log = format!("[main/INFO]: Loading Minecraft 26.2 with Fabric Loader 0.19.4\n{trace}");
+        assert!(
+            diagnose(&log)
+                .unwrap()
+                .detail
+                .contains("Fabric Loader 0.19.4")
+        );
+    }
+
+    #[test]
+    fn mixinextras_cast_requires_the_cast_and_a_frame_in_the_same_stack() {
+        let wrong_cast =
+            MIXINEXTRAS_CRASH_510.replace("asm.tree.AnnotationNode", "asm.tree.ClassNode");
+        let unrelated_frames =
+            MIXINEXTRAS_CRASH_510.replace("com.llamalad7.mixinextras", "example.mod");
+        let split_stack = MIXINEXTRAS_CRASH_510.replace(
+            "[Arctic diagnostics] vanilla crash trace \t\tat knot//com.llamalad7.mixinextras.wrapper",
+            "[Arctic diagnostics] vanilla crash trace \tCaused by: java.lang.IllegalStateException\n[Arctic diagnostics] vanilla crash trace \t\tat knot//com.llamalad7.mixinextras.wrapper",
+        );
+        for log in [wrong_cast, unrelated_frames, split_stack] {
+            let diagnosis = diagnose(&log).unwrap();
+            assert_eq!(diagnosis.title, "A mod is for a different version");
+            assert_eq!(diagnosis.fix, None);
+        }
     }
 
     #[test]
