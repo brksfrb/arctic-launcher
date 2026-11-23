@@ -27,6 +27,12 @@ public final class ChatStampLegacyLine extends TextComponent {
 			super("");
 			this.width = width;
 		}
+
+		@Override
+		public Gap copy() {
+			// Vanilla flattens copied components before testing their click widths.
+			return new Gap(width);
+		}
 	}
 }
 //#endif
