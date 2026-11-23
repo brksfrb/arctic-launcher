@@ -40,7 +40,7 @@ public final class ArmorHider {
 	private static final int SLOT_X = 8;
 	private static final int FIRST_SLOT_Y = 8;
 	private static final int SLOT_STEP = 18;
-	private static final int BOX_SIZE = 5;
+	private static final int BOX_SIZE = 3;
 	private static final int SLOT_SHADOW = 0xFF373737;
 	private static final int UNCHECKED_FILL = 0xFFB4B4B4;
 	private static final int CHECKED_FILL = 0xFF303030;
