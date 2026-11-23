@@ -74,16 +74,22 @@ class PersistentChatTest {
 
 	private java.io.File[] logs() { return dir.resolve("chat-history").toFile().listFiles(); }
 
-	@Test void hudLimitSaturatesAndLeavesRoomForMoreChatHistory() {
-		int moreChatHistoryOffset = 16_384 - 100;
-		int duringReplay = PersistentChat.historyLimit(true, 10_000, 300);
+	@Test void hudLimitSaturatesWithTheVanillaBase() {
+		int duringReplay = PersistentChat.historyLimit(100, true, 10_000, 300);
 		assertEquals(PersistentChat.MAX_HUD_LINES, duringReplay);
-		assertTrue(duringReplay + moreChatHistoryOffset > 0);
-		int overflow = PersistentChat.historyLimit(false, Integer.MAX_VALUE, Integer.MAX_VALUE);
+		int overflow = PersistentChat.historyLimit(100, false, Integer.MAX_VALUE, Integer.MAX_VALUE);
 		assertEquals(PersistentChat.MAX_HUD_LINES, overflow);
-		assertTrue(overflow + moreChatHistoryOffset > 0);
-		assertEquals(1, PersistentChat.historyLimit(false, Integer.MIN_VALUE, -1));
-		assertEquals(10_300, PersistentChat.historyLimit(false, 10_000, 300));
+		assertEquals(1, PersistentChat.historyLimit(100, false, Integer.MIN_VALUE, -1));
+		assertEquals(10_300, PersistentChat.historyLimit(100, false, 10_000, 300));
+	}
+
+	@Test void hudLimitUsesTheOtherModsBaseAndReservesRoomForPaging() {
+		assertEquals(16_384, PersistentChat.historyLimit(16_384, false, 200, 0));
+		assertEquals(16_684, PersistentChat.historyLimit(16_384, false, 200, 300));
+		assertEquals(PersistentChat.MAX_HUD_LINES, PersistentChat.historyLimit(16_384, true, 200, 300));
+
+		assertEquals(65_836, PersistentChat.historyLimit(65_536, false, 200, 300));
+		assertEquals(Integer.MAX_VALUE, PersistentChat.historyLimit(Integer.MAX_VALUE, true, 200, 300));
 	}
 
 	@Test void hudFailureStopsRestoreWithoutRetryingOrDisablingArchiving() {

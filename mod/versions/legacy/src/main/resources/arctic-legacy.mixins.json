@@ -28,6 +28,7 @@
 		"KeyBindingMixin",
 		"InGameHudMixin",
 		"ChatHudMixin",
+		"ChatHistoryLimitMixin",
 		"ChatSentHistoryMixin",
 		"ChatCopyStyleMixin",
 		"ChatHitMixin",

@@ -32,6 +32,8 @@ public final class LegacySmoothFont {
 	private static final float SIZE = 8.5f;
 	/** Where the baseline sits below the top of a line, in GUI pixels (Minecraft's font: 7). */
 	private static final float BASELINE = 7f;
+	private static final float BITMAP_CAP_HEIGHT = 7f;
+	private static final float UNICODE_CAP_HEIGHT = 5f;
 	/** Inter's space is narrow for Minecraft text; the newer versions use this too. */
 	private static final float SPACE = 2.5f;
 	private static final int PAD = 1;
@@ -245,6 +247,15 @@ public final class LegacySmoothFont {
 			return null;
 		}
 		return c < glyphs.length ? glyphs[c] : null;
+	}
+
+	static float tabCapCenter(boolean unicode) {
+		// PlayerListHud passes the row's top to TextRenderer. The 9-pixel row
+		// pitch includes a gap, and the 8-pixel bitmap cell includes blank rows.
+		// Both vanilla atlases put the bottom edge of a capital at y + 7.
+		if (unicode) return BASELINE - UNICODE_CAP_HEIGHT / 2f;
+		Glyph cap = glyph('H');
+		return cap == null ? BASELINE - BITMAP_CAP_HEIGHT / 2f : BASELINE - cap.top + cap.height / 2f;
 	}
 
 	public static float advance(char c) {

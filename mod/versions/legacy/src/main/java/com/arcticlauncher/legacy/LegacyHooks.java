@@ -326,12 +326,13 @@ public final class LegacyHooks {
 	}
 
 	/** Draw the Arctic badge at the top left of the text line, using the text opacity. */
-	public static void drawBadge(float x, float y, int argb, boolean shadow, int style, int role, boolean tab) {
-		y -= tab ? 1 : 0;
+	public static void drawBadge(float x, float y, int argb, boolean shadow, int style, int role, boolean tab, boolean unicode) {
+		float capCenter = tab ? LegacySmoothFont.tabCapCenter(unicode) : 0f;
 		float pixelsPerUnit = LegacySmoothFont.badgePixels(x, y);
 		if (pixelsPerUnit <= 0) return;
 		int resolution = Badge.rasterSize(tab, pixelsPerUnit);
 		float side = Badge.quadSide(tab, pixelsPerUnit);
+		if (tab) y += capCenter - side / 2f;
 		if (LegacySmoothFont.snapOrigin(x, y, BADGE_SNAP)) {
 			x = BADGE_SNAP[0];
 			y = BADGE_SNAP[1];
