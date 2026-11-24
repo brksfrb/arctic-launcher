@@ -2189,6 +2189,9 @@ fn diagnose_rules(
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
     }
+    if let Some(driver) = graphics_driver_crash_diagnosis(text) {
+        return Some(driver);
+    }
     if let Some(dependency) = forge_dependency_diagnosis(text) {
         return Some(dependency);
     }
@@ -2593,6 +2596,47 @@ fn jei_recipe_loading_frame<'a>(text: &'a str, snapshot: &'a str) -> Option<&'a 
 
 const GRAPHICS_DRIVER_HANG_TITLE: &str = "The graphics driver stopped responding";
 
+fn graphics_driver_crash_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    const EXCEPTION: &str = "java.lang.IllegalStateException: ";
+    const FRAME_WAIT: &str = "Failed to wait for frame completion";
+    if !text.contains(EXCEPTION) || !text.contains("com.mojang.blaze3d.opengl.") {
+        return None;
+    }
+    let captured = if crash_exception(text).is_none() {
+        captured_vanilla_crash(text)
+    } else {
+        None
+    };
+    let chain = crate::crash_suspect::fatal_chain(captured.as_deref().unwrap_or(text))?;
+    let mut lines = chain.first()?.iter().map(|line| line.trim());
+    let error = lines.next()?;
+    let (prefix, message) = error.split_once(EXCEPTION)?;
+    if !(prefix.is_empty()
+        || prefix == "Caused by: "
+        || (prefix.starts_with("Exception in thread \"") && prefix.ends_with("\" ")))
+    {
+        return None;
+    }
+    let frame = lines.find(|line| !line.is_empty())?.strip_prefix("at ")?;
+    let call = freeze_frame(frame)?;
+    let wait_frame = call == "com.mojang.blaze3d.opengl.GlCommandEncoder.submit"
+        || (call.starts_with("com.mojang.blaze3d.opengl.") && graphics_wait(frame));
+    let wait_error = matches!(
+        message,
+        FRAME_WAIT | "Failed to wait for fence" | "Failed to wait for sync"
+    ) || message.contains("GL_WAIT_FAILED");
+    (wait_frame && wait_error).then(|| {
+        (
+            Diagnosis::new(
+                GRAPHICS_DRIVER_HANG_TITLE,
+                graphics_driver_hang_detail(text),
+                Vec::new(),
+            ),
+            head_of(error, 2048).to_owned(),
+        )
+    })
+}
+
 fn graphics_wait(frame: &str) -> bool {
     let Some((class, method)) = freeze_frame(frame).and_then(|call| call.rsplit_once('.')) else {
         return false;
@@ -2691,7 +2735,7 @@ fn graphics_driver_hang_detail(text: &str) -> String {
     }
     detail.push_str(" Update your graphics driver.");
     if old_drivers {
-        detail.push_str(" Newer Minecraft versions may run poorly on this hardware. Try an older Minecraft version or close other GPU-heavy apps before playing.");
+        detail.push_str(" Newer Minecraft versions may run poorly on this hardware. Try an older Minecraft version, use fewer graphics-heavy mods, turn off shaders, or close other GPU-heavy apps before playing.");
     }
     detail
 }
@@ -4425,6 +4469,64 @@ mod tests {
             95%  mezz.jei.startup.JeiStarter.start(JeiStarter.java:42)";
         assert_eq!(diagnose(sample).unwrap().title, JEI_RECIPE_LOADING_TITLE);
         assert!(diagnose(&sample.replace(" (still frozen when written)", "")).is_none());
+    }
+
+    #[test]
+    fn report_s978w2_explains_the_gl_frame_wait_crash() {
+        let log = include_str!("../tests/fixtures/crash-S978W2-gl-frame-wait.log");
+        let (console, report_body) = log.split_once("---- Minecraft Crash Report ----").unwrap();
+        let report = format!("{log}\nSuspected Mods: Polarium (polarium)\n");
+        let captured: String = report_body
+            .lines()
+            .skip_while(|line| !line.starts_with("java.lang.IllegalStateException:"))
+            .take_while(|line| !line.starts_with("A detailed walkthrough"))
+            .map(|line| format!("{VANILLA_CRASH_TRACE}{line}\n"))
+            .collect();
+        let captured = format!("{}\n{captured}", log.lines().next().unwrap());
+        let mods = tempfile::tempdir().unwrap();
+        for text in [&report, console, &captured] {
+            let diagnosis =
+                crate::crash_conflicts::diagnose_exit_in(text, -1, mods.path()).unwrap();
+            assert_eq!(diagnosis.title, GRAPHICS_DRIVER_HANG_TITLE);
+            assert!(diagnosis.mods.is_empty());
+            assert!(!diagnosis.detail.contains("Polarium"));
+            assert!(
+                diagnosis
+                    .detail
+                    .contains("AMD Radeon HD 5450 (driver from 2015-11-04)")
+            );
+            assert_eq!(diagnosis.detail.matches("AMD Radeon HD 5450").count(), 1);
+            for advice in [
+                "Update your graphics driver",
+                "older Minecraft version",
+                "fewer graphics-heavy mods",
+                "turn off shaders",
+            ] {
+                assert!(diagnosis.detail.contains(advice));
+            }
+        }
+        let fence = log
+            .replace("Failed to wait for frame completion", "GL_WAIT_FAILED")
+            .replace(
+                "GlCommandEncoder.submit(GlCommandEncoder.java:94)",
+                "GlFence.awaitCompletion(GlFence.java:27)",
+            );
+        assert_eq!(diagnose(&fence).unwrap().title, GRAPHICS_DRIVER_HANG_TITLE);
+        let mod_throw = log.replace(
+            "\tat knot//com.mojang.blaze3d.opengl.GlCommandEncoder.submit",
+            "\tat knot//example.mod.OpenGlHook.submit(OpenGlHook.java:1)\n\tat knot//com.mojang.blaze3d.opengl.GlCommandEncoder.submit",
+        );
+        let unrelated = log.replace(
+            "Failed to wait for frame completion",
+            "Encoder already closed",
+        );
+        let warning = "[Render thread/WARN] Caught and recovered\njava.lang.IllegalStateException: Failed to wait for frame completion\n\tat knot//com.mojang.blaze3d.opengl.GlCommandEncoder.submit(GlCommandEncoder.java:94)";
+        for text in [&mod_throw, &unrelated, warning] {
+            assert!(
+                diagnose(text)
+                    .is_none_or(|diagnosis| diagnosis.title != GRAPHICS_DRIVER_HANG_TITLE)
+            );
+        }
     }
 
     #[test]
