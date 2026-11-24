@@ -19,6 +19,7 @@ struct Shared {
     voice: Option<crate::voice::VoiceHub>,
     /// What the game asked play together to do (the app picks it up).
     together_request: Option<TogetherRequest>,
+    replay_request: Option<(u64, String)>,
     /// Play together's state, for the game (set by the app every frame).
     together_status: String,
     /// An account sign-in started from the game, for the game to follow.
@@ -401,6 +402,22 @@ impl bridge::Accounts for AppAccounts {
         game.join.take()
     }
 
+    fn watch_replay(&self, launch: &str, file: &str) -> arctic_core::Result<()> {
+        use std::path::Path;
+        if file.contains(['/', '\\', ':', '\0'])
+            || Path::new(file).extension().is_none_or(|ext| ext != "mcpr")
+        {
+            return Err(arctic_core::Error::Other("invalid replay file name".into()));
+        }
+        let mut shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let game = shared
+            .games
+            .get(launch)
+            .ok_or_else(|| arctic_core::Error::Other("game session is no longer active".into()))?;
+        shared.replay_request = Some((game.run, file.to_owned()));
+        Ok(())
+    }
+
     fn together(&self, request: &[u8]) -> arctic_core::Result<String> {
         let body: TogetherBody = serde_json::from_slice(request)
             .map_err(|_| arctic_core::Error::Other("bad request".into()))?; // i18n-ignore
@@ -430,6 +447,7 @@ impl BridgeHost {
             tasks: tasks.clone(),
             voice: None,
             together_request: None,
+            replay_request: None,
             together_status: r#"{"state":"idle"}"#.into(),
             login_status: r#"{"state":"idle"}"#.into(),
             ffmpeg: FfmpegJob::default(),
@@ -533,6 +551,14 @@ impl BridgeHost {
     }
 
     /// A play-together request from the game, once.
+    pub fn take_replay_request(&self) -> Option<(u64, String)> {
+        self.shared
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .replay_request
+            .take()
+    }
+
     pub fn take_together_request(&self) -> Option<TogetherRequest> {
         self.shared
             .lock()

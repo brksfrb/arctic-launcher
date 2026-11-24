@@ -3,8 +3,6 @@ package com.arcticlauncher.client.replay;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.notice.Notices;
 import java.io.File;
-import java.nio.ByteBuffer;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.arcticlauncher.client.Lang;
 /** Capture only the game's finished framebuffer. Encoding never owns the world or camera. */
@@ -19,10 +17,11 @@ public final class LiveVideo {
 	private Thread prepare;
 	private Thread shutdown;
 	private Recorder.Take lastTake;
+	private Recorder.Take pendingManual;
 	private boolean stoppedForTake;
 	private long nextFrame;
 	private long captureCost;
-	private final AtomicBoolean capturing = new AtomicBoolean();
+	private long captureEpoch;
 	private final java.util.Map<Integer, AudioEvent> sounds = new java.util.LinkedHashMap<Integer, AudioEvent>();
 	private final java.util.concurrent.ExecutorService saves = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
 		Thread t = new Thread(r, "arctic-video-save"); t.setDaemon(true); t.setPriority(Thread.MIN_PRIORITY); return t;
@@ -91,9 +90,17 @@ public final class LiveVideo {
 	/** Game thread, after the HUD has been drawn. Never waits for a pipe, encoder, or file. */
 	void frame(Recorder.Take take, ReplayBackend backend, boolean playing, boolean enabled, int height, int fps, int seconds) {
 		if (!playing || !enabled || take == null || backend == null || backend.exportBlocked() != null) {
+			if (!enabled && playing && session != null) session.discardRecording();
+			pendingManual = null;
 			stop(); return;
 		}
-		if (take != lastTake) { stop(); lastTake = take; stoppedForTake = false; captureFailure = null; }
+		if (take != lastTake) {
+			stop();
+			backend.resetLiveCapture();
+			lastTake = take;
+			stoppedForTake = false;
+			captureFailure = null;
+		}
 		LiveVideoSession active = session;
 		if (active != null) active.retain(seconds);
 		if (active != null && active.error() != null) { stoppedForTake = true; return; }
@@ -101,33 +108,38 @@ public final class LiveVideo {
 		final int captureFps = active == null ? fps : active.fps();
 		final int captureHeight = active == null ? height : active.height();
 		long now = System.nanoTime();
-		if (now < nextFrame || (active != null && !active.hasRoom()) || !capturing.compareAndSet(false, true)) return;
+		if (now < nextFrame || (active != null && !active.hasRoom())) return;
 		// Back off the readback rate on slow GPUs instead of blocking gameplay for video.
 		nextFrame = now + Math.max(1_000_000_000L / captureFps, captureCost * 12);
 		final Recorder.Take owner = take;
+		final long epoch = captureEpoch;
 		final long before = System.nanoTime();
 		try {
 			backend.captureLive((w, h, rgba, bottomUp) -> {
 				long copied = System.nanoTime();
 				try {
-					if (owner != lastTake) return;
+					if (owner != lastTake || epoch != captureEpoch) return;
 					LiveVideoSession current = session;
 					if (current == null) {
 						int[] size = size(w, h, captureHeight);
 						current = new LiveVideoSession(root, videos, encoder, ready, codec, backend, size[0], size[1], captureFps, saves, LiveVideo::notice);
 						session = current;
 						current.retain(seconds);
+						if (pendingManual == owner) {
+							pendingManual = null;
+							current.startRecording();
+						}
 						synchronized (sounds) { for (AudioEvent e : sounds.values()) current.audio(e.at(owner.time(), 0)); }
 					}
 					current.offer(w, h, rgba, bottomUp);
 				} catch (RuntimeException error) {
 					captureFailed(owner, error);
-				} finally { captureCost = (captureCost * 3 + System.nanoTime() - copied) / 4; capturing.set(false); }
+				} finally { captureCost = (captureCost * 3 + System.nanoTime() - copied) / 4; }
 			}, captureHeight);
 			long call = System.nanoTime() - before;
 			captureCost = active == null ? Math.min(call, 2_000_000L) : (captureCost * 7 + call) / 8;
 		} catch (RuntimeException error) {
-			capturing.set(false); captureFailed(owner, error);
+			captureFailed(owner, error);
 		}
 	}
 	private void captureFailed(Recorder.Take owner, RuntimeException error) {
@@ -149,10 +161,23 @@ public final class LiveVideo {
 		if (s == null || s.error() != null) { notice("Video buffer isn't ready yet. " + status()); return false; }
 		s.clip(seconds); return true;
 	}
-	public void startRecording() { LiveVideoSession s = session; if (s != null && s.error() == null) s.startRecording(); else notice("Video buffer isn't ready yet. " + status()); }
-	public void stopRecording() { LiveVideoSession s = session; if (s != null) s.stopRecording(); }
+	public void startRecording() {
+		LiveVideoSession active = session;
+		if (active != null && active.error() == null) active.startRecording();
+		else if (Replays.recorder() != null) pendingManual = Replays.recorder().current();
+	}
+
+	public void stopRecording() {
+		pendingManual = null;
+		LiveVideoSession active = session;
+		if (active != null) active.stopRecording();
+	}
 	private void stop() {
-		LiveVideoSession old = session; session = null; lastTake = null; nextFrame = 0;
+		LiveVideoSession old = session;
+		if (lastTake != null) captureEpoch++;
+		session = null;
+		lastTake = null;
+		nextFrame = 0;
 		if (old != null) old.finish();
 	}
 }

@@ -66,12 +66,11 @@ class ReplayViewerFailureTest {
 		void assertStopped(int expectedAttempts, int expectedFailureLogs) {
 			assertEquals(expectedAttempts, attempts);
 			assertNotNull(viewer.failure());
-			assertNotNull(viewer.takeProblem());
-			assertNull(viewer.takeProblem());
+			assertEquals(viewer.failure(), viewer.problem());
 			assertNull(viewer.status());
 			assertTrue(viewer.paused());
 			viewer.frame(); viewer.afterFrame(); viewer.seek(10000); viewer.frame();
-			assertEquals(expectedAttempts, attempts, "Dismissing the problem or seeking must not resume packet feeding");
+			assertEquals(expectedAttempts, attempts, "Seeking must not resume packet feeding after a terminal failure");
 			assertEquals(expectedFailureLogs, logs.stream().filter(s -> s.contains("failed:")).count());
 			assertTrue(logs.stream().anyMatch(s -> s.contains("phase=") && s.contains("packetId=")));
 			// The evidence a crash report needs to tell a bad recording from a missed phase switch.

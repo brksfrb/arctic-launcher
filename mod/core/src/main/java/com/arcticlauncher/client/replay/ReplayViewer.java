@@ -18,8 +18,8 @@ public final class ReplayViewer {
 	private static final int NORMAL_SPEED = 2;
 	/** Longest real frame time counted (a hitch doesn't skip a chunk of the replay). */
 	private static final double MAX_FRAME_MS = 250;
-	/** While joining: packets handed over per frame at most. */
-	private static final int JOIN_BATCH = 4000;
+	private static final long PACKET_BUDGET_NS = 8_000_000L;
+	private static final int ASYNC_PLAN_THRESHOLD = 4096;
 	/** An export waits this long (real ms) on the terrain screen before recorded packets are let through. */
 	private static final double LOADING_GRACE_MS = 1000;
 	static final int MAX_PACKET_FAILURES = 16;
@@ -52,7 +52,9 @@ public final class ReplayViewer {
 	private final ReplayBackend backend;
 	private final Platform platform;
 	private final UUID selfUuid;
-	private final List<Keyframe> keyframes;
+	private final List<Keyframe> keyframes = new ArrayList<Keyframe>();
+	private final List<Keyframe> timeKeys = new ArrayList<Keyframe>();
+	private Keyframe selectedKey;
 	private final Runnable onKeyframesChanged;
 	private final FreeCamera free = new FreeCamera();
 	private int consecutivePacketFailures;
@@ -66,6 +68,7 @@ public final class ReplayViewer {
 	private int followId = -1;
 	private String followName;
 	private CameraPath path;
+	private double pathTime;
 	private long lastFrame = -1;
 	private int lastSelf = -1;
 	/** A jump asked for, done at the start of the next frame (so "Jumping…" shows first). */
@@ -74,8 +77,37 @@ public final class ReplayViewer {
 	private double loadingClock = -1;
 	/** Real time an export has spent behind the terrain screen (ms). */
 	private double loadingWait;
-	/** Some game versions render recursively from a packet handler. Never advance half a seek. */
-	private boolean seeking;
+	private SeekWork seekWork;
+	/** Some game versions render recursively from a packet handler. */
+	private boolean feeding;
+
+	private static final class SeekWork {
+		final double target;
+		final int from;
+		final int to;
+		final float[] look;
+		final boolean bootstrap;
+		final java.util.concurrent.CompletableFuture<int[]> plan;
+		int applied;
+
+		SeekWork(double target, int from, int to, float[] look, boolean bootstrap, ReplayData data) {
+			this.target = target;
+			this.from = from;
+			this.to = to;
+			this.look = look;
+			this.bootstrap = bootstrap;
+			java.util.function.Supplier<int[]> build = () -> {
+				// Bootstrap planning sees the whole state, even the packets sent before login completed.
+				int[] planned = SeekPlan.plan(data.category, data.key, bootstrap ? 0 : from, to, data.removals, data.bulks);
+				if (!bootstrap) return planned;
+				int start = java.util.Arrays.binarySearch(planned, from);
+				return java.util.Arrays.copyOfRange(planned, start < 0 ? -start - 1 : start, planned.length);
+			};
+			plan = !data.classified() ? null : to - (bootstrap ? 0 : from) > ASYNC_PLAN_THRESHOLD
+					? java.util.concurrent.CompletableFuture.supplyAsync(build)
+					: java.util.concurrent.CompletableFuture.completedFuture(build.get());
+		}
+	}
 	private String status;
 	private boolean joined;
 	private boolean screenOpen;
@@ -93,7 +125,11 @@ public final class ReplayViewer {
 		this.data = data;
 		this.backend = backend;
 		this.platform = platform;
-		this.keyframes = new ArrayList<Keyframe>(keyframes);
+		for (Keyframe key : keyframes) {
+			if (key.replayTime == null) this.keyframes.add(key);
+			else timeKeys.add(key);
+		}
+		sortTimeKeys();
 		this.onKeyframesChanged = onKeyframesChanged;
 		UUID uuid = null;
 		try {
@@ -128,6 +164,7 @@ public final class ReplayViewer {
 	}
 
 	void end() {
+		finishSeekGuard();
 		if (export != null) {
 			export.cancel();
 			export = null;
@@ -147,74 +184,82 @@ public final class ReplayViewer {
 
 	/** Before a frame is drawn (game thread). */
 	void frame() {
-		if (seeking || failure != null) return;
+		if (feeding || failure != null) return;
+		feeding = true;
+		try {
+			advanceFrame();
+		} finally {
+			feeding = false;
+		}
+	}
+
+	private void advanceFrame() {
 		if (export != null) {
-			// Pace rendering as well as encoding: never spin the GPU at an uncapped frame rate.
-			long wait = exportFrameAt + 1_000_000_000L / 30 - System.nanoTime();
+			long wait = exportFrameAt + Math.round(export.frameMillis() * 1_000_000) - System.nanoTime();
 			if (wait > 0) java.util.concurrent.locks.LockSupport.parkNanos(wait);
 			exportFrameAt = System.nanoTime();
 		}
 		long now = System.nanoTime();
 		double realMs = lastFrame < 0 ? 0 : Math.min(MAX_FRAME_MS, (now - lastFrame) / 1e6);
 		lastFrame = now;
+		long deadline = now + PACKET_BUDGET_NS;
 		if (!joined) {
-			join();
+			ReplayClock.advance(realMs);
+			join(deadline);
 			return;
 		}
-		if (pendingSeek >= 0) {
-			// A jump asked for before the world showed (an export started together with the replay) was
-			// clamped to a timeline start nobody knew yet. Before the first packet there is nothing to
-			// rebuild the world from: the restart left the login unapplied and the terrain screen up.
+		if (seekWork == null && pendingSeek >= 0) {
 			double target = Math.max(start, pendingSeek);
 			pendingSeek = -1;
-			seekNow(target);
-			if (failure != null) return;
-			// Rebuilding the world is not elapsed playback or free-camera movement.
-			realMs = 0;
+			beginSeek(target);
+		}
+		if (seekWork != null) {
+			runSeek(deadline);
 			lastFrame = System.nanoTime();
+			return;
 		}
-		if (export != null) {
-			time = export.frameTime();
-		} else if (!paused) {
-			time = Math.min(data.duration(), time + realMs * SPEEDS[speed]);
-			if (time >= data.duration()) {
-				paused = true;
-			}
-		}
-		// Paused stops the ticks, except while the world is still loading
-		// (paused at the end, then a jump back: the loading screen would wait forever).
+		if (failure != null) return;
 		if (backend.loading()) {
-			ReplayClock.scale(1);
+			waitForTerrain(realMs, deadline);
 		} else {
-			ReplayClock.scale(paused && export == null ? 0 : SPEEDS[speed]);
+			loadingWait = 0;
+			loadingClock = -1;
+			double elapsed = paused ? 0 : realMs * SPEEDS[speed];
+			if (mode == Mode.PATH) {
+				pathTime = export == null ? Math.min(path.end(), pathTime + elapsed) : export.frameTime();
+			}
+			double target = mode == Mode.PATH ? recordedTime(pathTime)
+					: export != null ? Math.max(time, export.frameTime())
+					: Math.min(data.duration(), time + elapsed);
+			if (target < time) {
+				beginSeek(target);
+				if (seekWork != null) runSeek(deadline);
+				return;
+			}
+			feed(target, deadline);
+			if (failure != null) return;
+			double appliedTime = cursor < data.count() && data.time(cursor) <= target
+					? Math.max(time, data.time(cursor - 1)) : target;
+			ReplayClock.advance(appliedTime - time);
+			time = appliedTime;
+			if (time >= data.duration() && export == null && mode != Mode.PATH) paused = true;
 		}
-		feed(time, false);
-		feedWhileLoading(realMs);
 		if (failure != null) return;
 		self();
 		camera(realMs / 1000.0);
 	}
 
-	/**
-	 * The terrain screen can depend on recorded packets: the first position after a login or respawn
-	 * arrives a moment after it and is what closes the screen. An export holds the clock at its frame
-	 * until the world is ready, so it never reached that packet and the screen stayed up forever. Once
-	 * the screen has outlasted {@link #LOADING_GRACE_MS} (it normally closes by itself well within that),
-	 * packets arrive at their recorded pace until it closes; the export clock catches up with them.
-	 */
-	private void feedWhileLoading(double realMs) {
-		if (export == null || !backend.loading()) {
-			loadingWait = 0;
-			loadingClock = -1;
-			return;
-		}
+	/** Let the game tick and deliver terrain packets even during a pause or export. */
+	private void waitForTerrain(double realMs, long deadline) {
+		ReplayClock.advance(realMs);
 		loadingWait += realMs;
-		if (loadingWait < LOADING_GRACE_MS) return;
-		if (loadingClock < 0) {
-			loadingClock = cursor > 0 ? Math.max(time, data.time(cursor - 1)) : time;
-		}
+		if (export != null && loadingWait < LOADING_GRACE_MS) return;
+		if (loadingClock < 0) loadingClock = cursor > 0 ? Math.max(time, data.time(cursor - 1)) : time;
 		loadingClock += realMs;
-		feed(loadingClock, false);
+		while (failure == null && backend.loading() && cursor < data.count() && data.time(cursor) <= loadingClock) {
+			apply(cursor++, false);
+			if (System.nanoTime() >= deadline) break;
+		}
 	}
 
 	/** After the frame is on screen: exporting grabs it. */
@@ -223,7 +268,7 @@ public final class ReplayViewer {
 		// seek and camera change must be applied before we capture frame zero.
 		// Seeking can rebuild the world: don't encode the terrain-loading screen
 		// or advance the export timeline while that world is still joining.
-		if (export == null || seeking || failure != null || pendingSeek >= 0 || !ready()) {
+		if (export == null || feeding || seekWork != null || failure != null || pendingSeek >= 0 || !ready()) {
 			return;
 		}
 		if (export.failed() != null) {
@@ -231,7 +276,8 @@ public final class ReplayViewer {
 			stopExport();
 			return;
 		}
-		if (!export.readyForFrame()) return;
+		double target = mode == Mode.PATH ? recordedTime(pathTime) : Math.max(time, export.frameTime());
+		if (!export.readyForFrame() || (cursor < data.count() && data.time(cursor) <= target)) return;
 		VideoExport job = export;
 		backend.capture(job);
 		if (!job.advance()) {
@@ -239,54 +285,31 @@ public final class ReplayViewer {
 		}
 	}
 
-	/** Log in and configure as fast as the game takes it; the clock starts once in the world. */
-	private void join() {
-		int n = 0;
-		while (failure == null && !backend.ready() && cursor < data.count() && n++ < JOIN_BATCH) {
+	/** Log in and configure in chunks so a long opening cannot stall the render loop. */
+	private void join(long deadline) {
+		while (failure == null && !backend.ready() && cursor < data.count()) {
 			apply(cursor++, false);
+			if (System.nanoTime() >= deadline) break;
 		}
 		if (failure != null) return;
 		if (backend.ready()) {
 			joined = true;
-			status = null;
 			time = cursor > 0 ? data.time(cursor - 1) : 0;
 			start = (int) time;
-			skipBootstrap();
-		} else if (failure == null && cursor >= data.count()) {
-			problem = Lang.t("replay.this_replay_never_reaches_the_world");
-			joined = true;
+			int to = data.indexAfter(time);
+			if (cursor < to) {
+				seekWork = new SeekWork(time, cursor, to, null, true, data);
+				runSeek(deadline);
+			} else status = null;
+		} else if (cursor >= data.count()) {
+			stopPacketFeeding(Lang.t("replay.this_replay_never_reaches_the_world"));
 		}
 	}
 
-	/**
-	 * The world as it was when the recording started arrives all at once (time 0). Older clips
-	 * carry far more of it than they need (on 1.8, every chunk the server sent since joining):
-	 * apply only what's still there at the start, like a jump.
-	 */
-	private void skipBootstrap() {
-		int to = data.indexAfter(time);
-		byte[] cats = data.category;
-		if (cats == null || to - cursor < 2) {
-			return;
-		}
-		long began = System.nanoTime();
-		// Planned from the very start (an empty world), applying what's left after the login.
-		int[] plan = SeekPlan.plan(cats, data.key, 0, to, data.removals, data.bulks);
-		int applied = 0;
-		for (int i : plan) {
-			if (i >= cursor) {
-				apply(i, true);
-				applied++;
-			}
-		}
-		platform.log(false, "replay: started with " + applied + " of " + (to - cursor) + " opening packets in "
-				+ (System.nanoTime() - began) / 1_000_000 + " ms");
-		cursor = to;
-	}
-
-	private void feed(double until, boolean jumping) {
+	private void feed(double until, long deadline) {
 		while (failure == null && cursor < data.count() && data.time(cursor) <= until) {
-			apply(cursor++, jumping);
+			apply(cursor++, false);
+			if (System.nanoTime() >= deadline) break;
 		}
 	}
 
@@ -333,7 +356,6 @@ public final class ReplayViewer {
 		status = null;
 		problem = failure = message;
 		if (export != null) cancelExport();
-		ReplayClock.scale(0);
 	}
 
 	private void self() {
@@ -365,9 +387,9 @@ public final class ReplayViewer {
 		}
 		switch (mode) {
 			case PATH:
-				double[] p = path.at(time);
+				double[] p = path.at(pathTime);
 				backend.camera(p[0], p[1], p[2], (float) p[3], (float) p[4], (float) p[5], false);
-				if (time >= path.end() && export == null) {
+				if (pathTime >= path.end() && export == null) {
 					free.placeAt(p[0], p[1], p[2]);
 					mode = Mode.FREE;
 				}
@@ -379,6 +401,11 @@ public final class ReplayViewer {
 				}
 				break;
 			case FOLLOW:
+				if (backend.following()) break;
+				double[] camera = platform.camera();
+				if (camera != null) free.placeAt(camera[0], camera[1], camera[2]);
+				setMode(Mode.FREE);
+				backend.camera(free.x, free.y, free.z, Float.NaN, Float.NaN, 0, false);
 				break;
 			default:
 				moveFree(seconds);
@@ -447,60 +474,69 @@ public final class ReplayViewer {
 		return screenOpen;
 	}
 
-	private void seekNow(double target) {
-		seeking = true;
+	private void beginSeek(double target) {
+		int to = data.indexAfter(target);
+		float[] look = backend.look();
+		backend.beginSeek(export != null);
+		boolean started = false;
 		try {
-			backend.beginSeek(export != null);
-			seekWorld(target);
+			if (to < cursor) {
+				String error = backend.restart(data);
+				if (error != null) {
+					problem = error;
+					status = null;
+					return;
+				}
+				cursor = 0;
+				lastSelf = -1;
+			}
+			seekWork = new SeekWork(target, cursor, to, look, false, data);
+			started = true;
 		} finally {
-			try { backend.endSeek(); }
-			finally { seeking = false; }
+			if (!started) backend.endSeek();
 		}
 	}
 
-	private void seekWorld(double target) {
-		long start = System.nanoTime();
-		int to = data.indexAfter(target);
-		byte[] cats = data.category;
-		long[] keys = data.key;
-		boolean backwards = to < cursor;
-		float[] look = backend.look();
-		if (backwards) {
-			String error = backend.restart(data);
-			if (error != null) {
-				problem = error;
-				status = null;
+	private void runSeek(long deadline) {
+		SeekWork work = seekWork;
+		if (work.plan != null && !work.plan.isDone()) return;
+		try {
+			int[] plan = work.plan == null ? null : work.plan.join();
+			int total = plan == null ? work.to - work.from : plan.length;
+			while (failure == null && work.applied < total && System.nanoTime() < deadline) {
+				apply(plan == null ? work.from + work.applied : plan[work.applied], true);
+				work.applied++;
+			}
+			if (failure != null) {
+				finishSeekGuard();
 				return;
 			}
-			cursor = 0;
-			lastSelf = -1;
-			// The world is rebuilt from scratch: the login and configuration come first.
-			while (failure == null && !backend.ready() && cursor < to) {
-				apply(cursor++, true);
+			if (work.applied < total) {
+				status = Lang.t(work.bootstrap ? "replay.joining" : "replay.jumping")
+						+ " " + (100L * work.applied / total) + "%";
+				return;
 			}
-		}
-		if (cats != null) {
-			int[] plan = SeekPlan.plan(cats, keys, cursor, to, data.removals, data.bulks);
-			for (int i : plan) {
-				if (failure != null) break;
-				apply(i, true);
+			cursor = work.to;
+			time = work.target;
+			lastSelf = data.selfIndexAt(time) - 1;
+			self();
+			if (!work.bootstrap && mode == Mode.FREE && placed && work.look != null) {
+				backend.camera(free.x, free.y, free.z, work.look[0], work.look[1], 0, false);
 			}
-			platform.log(false, "replay: jumped " + (to - cursor) + " packets using " + plan.length + " in "
-					+ (System.nanoTime() - start) / 1_000_000 + " ms");
-			cursor = to;
-		} else {
-			feed(target, true);
+			if (mode == Mode.FOLLOW) backend.follow(followId);
+			camera(0);
+			status = null;
+			finishSeekGuard();
+		} catch (RuntimeException e) {
+			finishSeekGuard();
+			throw e;
 		}
-		if (failure != null) return;
-		time = target;
-		lastSelf = data.selfIndexAt(target) - 1;
-		self();
-		if (mode == Mode.FREE && placed) {
-			backend.camera(free.x, free.y, free.z, look[0], look[1], 0, false);
-		}
-		camera(0);
-		if (mode == Mode.FOLLOW) backend.follow(followId);
-		status = null;
+	}
+
+	private void finishSeekGuard() {
+		SeekWork work = seekWork;
+		seekWork = null;
+		if (work != null && !work.bootstrap) backend.endSeek();
 	}
 
 	// ---- Controls ------------------------------------------------------------
@@ -571,12 +607,20 @@ public final class ReplayViewer {
 		for (int i = keyframes.size() - 1; i >= 0; i--) {
 			if (keyframes.get(i).time == (int) time) keyframes.remove(i);
 		}
-		keyframes.add(new Keyframe((int) time, at));
+		selectedKey = new Keyframe((int) time, at);
+		keyframes.add(selectedKey);
 		keyframesChanged();
 	}
 
-	/** Remove the keyframe nearest the current time. */
+	/** Remove the selected keyframe or the camera key nearest the current time. */
 	public void removeKeyframe() {
+		if (selectedKey != null) {
+			keyframes.remove(selectedKey);
+			timeKeys.remove(selectedKey);
+			selectedKey = null;
+			keyframesChanged();
+			return;
+		}
 		Keyframe nearest = null;
 		for (Keyframe k : keyframes) {
 			if (nearest == null || Math.abs(k.time - time) < Math.abs(nearest.time - time)) {
@@ -591,10 +635,69 @@ public final class ReplayViewer {
 
 	public void clearKeyframes() {
 		keyframes.clear();
+		timeKeys.clear();
+		selectedKey = null;
 		keyframesChanged();
 	}
 
+	public void addTimeKey() {
+		if (!ready() || export != null || mode == Mode.PATH) return;
+		int at = (int) time;
+		timeKeys.removeIf(key -> key.time == at);
+		Keyframe key = new Keyframe();
+		key.time = at;
+		key.replayTime = at;
+		timeKeys.add(key);
+		selectedKey = key;
+		keyframesChanged();
+	}
+
+	void selectKey(double at, double tolerance) {
+		selectedKey = null;
+		for (Keyframe key : savedKeyframes()) {
+			if (Math.abs(key.time - at) <= tolerance) {
+				selectedKey = key;
+				tolerance = Math.abs(key.time - at);
+			}
+		}
+	}
+
+	boolean hasSelectedKey() { return selectedKey != null; }
+	boolean selected(Keyframe key) { return key == selectedKey; }
+
+	void moveSelectedKey(double to, boolean finished) {
+		if (selectedKey == null) return;
+		int at = (int) Math.max(start, Math.min(duration(), to));
+		List<Keyframe> track = selectedKey.replayTime == null ? keyframes : timeKeys;
+		if (track.stream().noneMatch(key -> key != selectedKey && key.time == at)) selectedKey.time = at;
+		if (finished) keyframesChanged();
+	}
+
+	List<Keyframe> savedKeyframes() {
+		List<Keyframe> keys = new ArrayList<Keyframe>(keyframes);
+		keys.addAll(timeKeys);
+		return keys;
+	}
+
+	private void sortTimeKeys() { timeKeys.sort(java.util.Comparator.comparingInt(key -> key.time)); }
+
+	private double recordedTime(double at) {
+		if (timeKeys.isEmpty()) return at;
+		Keyframe before = timeKeys.get(0);
+		if (at <= before.time) return before.replayTime;
+		for (int i = 1; i < timeKeys.size(); i++) {
+			Keyframe after = timeKeys.get(i);
+			if (at <= after.time) {
+				double f = (at - before.time) / Math.max(1, after.time - before.time);
+				return before.replayTime + f * (after.replayTime - before.replayTime);
+			}
+			before = after;
+		}
+		return before.replayTime;
+	}
+
 	private void keyframesChanged() {
+		sortTimeKeys();
 		if (mode == Mode.PATH && export == null) {
 			CameraPath updated = new CameraPath(keyframes);
 			if (updated.usable()) path = updated;
@@ -603,6 +706,8 @@ public final class ReplayViewer {
 		touched();
 		onKeyframesChanged.run();
 	}
+
+	boolean hasTimeKeys() { return !timeKeys.isEmpty(); }
 
 	public boolean canPlayPath() { return new CameraPath(keyframes).usable(); }
 
@@ -618,7 +723,8 @@ public final class ReplayViewer {
 		}
 		path = p;
 		mode = Mode.PATH;
-		seek(p.start());
+		pathTime = p.start();
+		seek(recordedTime(pathTime));
 		paused = false;
 	}
 
@@ -653,13 +759,13 @@ public final class ReplayViewer {
 		}
 		setMode(camera == Mode.PATH ? Mode.FREE : camera);
 		mode = camera;
-		job.audio(data.file, backend);
+		pathTime = job.from();
+		if (camera != Mode.PATH || timeKeys.isEmpty()) job.audio(data.file, backend);
 		export = job;
 		backend.cleanView(camera == Mode.PATH);
 		paused = false;
 		speed = NORMAL_SPEED;
-		ReplayClock.step(job.frameMillis());
-		seek(job.from());
+		seek(camera == Mode.PATH ? recordedTime(pathTime) : job.from());
 	}
 
 	public void cancelExport() {
@@ -673,7 +779,6 @@ public final class ReplayViewer {
 		VideoExport done = export;
 		export = null;
 		backend.cleanView(false);
-		ReplayClock.step(0);
 		paused = true;
 		if (mode == Mode.PATH) {
 			mode = Mode.FREE;
@@ -701,6 +806,9 @@ public final class ReplayViewer {
 		return SPEEDS[speed];
 	}
 
+	int speedStep() { return speed; }
+	void speedStep(int step) { speed = Math.max(0, Math.min(SPEEDS.length - 1, step)); }
+
 	public Mode mode() {
 		return mode;
 	}
@@ -712,6 +820,8 @@ public final class ReplayViewer {
 	public List<Keyframe> keyframes() {
 		return new ArrayList<Keyframe>(keyframes);
 	}
+
+	public List<Integer> markers() { return data.extras.markers; }
 
 	public List<Integer> moments() {
 		return data.extras.moments;
@@ -736,12 +846,7 @@ public final class ReplayViewer {
 		return failure;
 	}
 
-	/** Something went wrong the player should know about (then cleared), or null. */
-	public String takeProblem() {
-		String p = problem;
-		problem = null;
-		return p;
-	}
+	public String problem() { return problem; }
 
 	public VideoExport exporting() {
 		return export;
@@ -751,7 +856,7 @@ public final class ReplayViewer {
 		return data.classified();
 	}
 
-	public boolean ready() { return joined && backend.ready() && !backend.loading(); }
+	public boolean ready() { return joined && seekWork == null && backend.ready() && !backend.loading(); }
 
 	public double cameraSpeed() {
 		return free.speed();

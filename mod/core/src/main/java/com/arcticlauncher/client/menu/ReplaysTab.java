@@ -8,6 +8,10 @@ import com.arcticlauncher.client.replay.ReplayMenu;
 import com.arcticlauncher.client.replay.Replays;
 import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.Label;
+import com.arcticlauncher.client.ui.TextField;
+import com.arcticlauncher.client.ui.Widget;
+import com.arcticlauncher.client.gfx.Gfx;
+import com.arcticlauncher.client.style.Style;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -17,7 +21,8 @@ import com.arcticlauncher.client.Lang;
  * Instant clips, manual recording controls, queued videos and saved replays.
  */
 final class ReplaysTab implements MenuTab {
-	private static final int ROW_H = 30;
+	private static final int ROW_H = 38;
+	private static final int THUMB_W = 48;
 	private static final int BTN_H = 16;
 	private static final int WATCH_W = 48;
 	private static final int CLIP_W = 44;
@@ -26,6 +31,10 @@ final class ReplaysTab implements MenuTab {
 	private static final int MIN_CLIP = 10;
 	private static final int MAX_CLIP = 120;
 	private static final int CLIP_STEP = 5;
+	private final TextField search = new TextField(Lang.t("replay.search_saved"), 80, TextField.ANY);
+	private Replays.Info renaming;
+	private String renameError;
+	private boolean bindings;
 
 	@Override
 	public String title() {
@@ -40,7 +49,7 @@ final class ReplaysTab implements MenuTab {
 	@Override
 	public String state() {
 		ClientConfig c = ArcticClient.config();
-		return Replays.list().size() + ":" + Replays.recording() + ":" + Replays.queuedVideos()
+		return Replays.list().hashCode() + ":" + Replays.recorder().state() + ":" + Replays.openProblem() + ":" + c.replayEnabled + ":" + Replays.queuedVideos()
 				+ ":" + (Replays.liveVideo() == null ? "" : Replays.liveVideo().status())
 				+ ":" + Replays.ffmpeg().state() + ":" + c.replayKey + ":" + c.replayRecordKey + ":" + Replays.pendingSaves();
 	}
@@ -49,7 +58,7 @@ final class ReplaysTab implements MenuTab {
 	public void build(final Host host, int x, int top, int w, int bottom) {
 		final ClientConfig c = ArcticClient.config();
 		Form f = new Form(host, x, top, w, bottom);
-		f.toggle(Lang.t("replay.replay"), Lang.t("replay.instant_clips_recordings_and_gameplay_video"), () -> c.replayEnabled, on -> { c.replayEnabled = on; host.rebuild(); });
+		f.toggle(Lang.t("replay.replay"), Lang.t("replay.replay_saving_description"), () -> c.replayEnabled, on -> { c.replayEnabled = on; Replays.recorder().enabled(on); host.rebuild(); });
 		if (!c.replayEnabled) {
 			f.note(Lang.t("replay.replay_is_off_saved_replays_below_still_play"));
 		}
@@ -59,6 +68,14 @@ final class ReplaysTab implements MenuTab {
 		if (c.replayKey.equals(c.replayRecordKey)) f.note(Lang.t("replay.choose_different_keys_for_the_two_actions"));
 		f.stepper(Lang.t("replay.clip_length"), () -> c.clipSeconds, v -> c.clipSeconds = (int) v, MIN_CLIP, MAX_CLIP, CLIP_STEP, "%.0fs");
 		f.note(Replays.recordingStatus());
+		f.key(Lang.t("replay.mark_recording"), Lang.t("replay.add_marker_at_playhead"), Form.key(() -> c.replayMarkerKey, key -> c.replayMarkerKey = key));
+		f.put(new Button(Lang.t("replay.timeline_controls"), () -> { bindings = !bindings; host.rebuild(); }),
+				f.x, f.row(23), 150, 18);
+		if (bindings) {
+			for (Replays.ViewerAction action : Replays.ViewerAction.values()) {
+				f.key(Lang.t(action.label), "", Form.key(action::binding, action::bind));
+			}
+		}
 		if (ArcticClient.platform().inWorld()) {
 			int row = f.row(24);
 			f.put(new Button(Replays.recording() ? Lang.t("replay.stop_and_save_recording") : Lang.t("replay.start_recording"), () -> { Replays.toggleRecording(); host.rebuild(); }), f.x, row, 160, 18);
@@ -81,32 +98,61 @@ final class ReplaysTab implements MenuTab {
 
 		List<Replays.Info> replays = Replays.list();
 		f.section(Lang.t("replay.saved") + replays.size() + ")");
-		if (replays.isEmpty()) {
-			f.note(Lang.t("replay.press_the_replay_key_while_playing_to_keep"));
-		}
+		if (Replays.openProblem() != null) f.note(Replays.openProblem());
+		if (renameError != null) f.note(renameError);
+		search.onChange(host::rebuild);
+		f.put(search, f.x, f.row(23), f.w, 18);
+		if (replays.isEmpty()) f.note(Lang.t("replay.press_the_replay_key_while_playing_to_keep"));
 		boolean inWorld = ArcticClient.platform().inWorld();
+		String query = search.text().trim().toLowerCase(Locale.ROOT);
 		for (final Replays.Info info : replays) {
+			if (!query.isEmpty() && !info.name.toLowerCase(Locale.ROOT).contains(query)
+					&& !details(info).toLowerCase(Locale.ROOT).contains(query)) continue;
 			int row = f.row(ROW_H);
-			int textW = f.w - WATCH_W - CLIP_W - DELETE_W - GAP * 4;
-			f.put(new Label(info.name, Label.Kind.TEXT), f.x + 4, row + 4, textW, 9);
-			f.put(new Label(details(info), Label.Kind.MUTED), f.x + 4, row + 15, textW, 9);
+			int tx = f.x + THUMB_W + GAP * 2;
 			int bx = f.x + f.w - DELETE_W - CLIP_W - WATCH_W - GAP * 2;
-			int by = row + (ROW_H - BTN_H) / 2;
+			f.put(new Widget() {
+				@Override protected void draw(Gfx g, Style style, int mx, int my, float dt) {
+					g.fill(x, y, x + w, y + h, style.border);
+					if (info.thumbnail != null && ArcticClient.looks().isReady(info.thumbnail)) {
+						g.texture("look:" + info.thumbnail, x, y, w, h, 0, 0,
+								info.thumbnailWidth, info.thumbnailHeight, info.thumbnailWidth, info.thumbnailHeight);
+					}
+				}
+			}, f.x + GAP, row + 2, THUMB_W, 27);
+			f.put(new Label(info.name, Label.Kind.TEXT), tx, row + 2, Math.max(16, bx - tx - GAP), 9);
+			f.put(new Label(details(info), Label.Kind.MUTED), tx, row + 14, Math.max(16, bx - tx - GAP), 9);
+			int by = row + 1;
+			boolean compatible = Replays.compatible(info);
 			Button watch = new Button(Lang.t("replay.watch"), () -> Replays.watch(info.file)).primary();
-			if (inWorld) {
-				watch.confirm(Lang.t("replay.leave"));
-			}
-			f.put(watch.enabled(Replays.canWatch()), bx, by, WATCH_W, BTN_H);
-			bx += WATCH_W + GAP;
+			if (inWorld) watch.confirm(Lang.t("replay.leave"));
+			if (compatible) f.put(watch, bx, by, WATCH_W, BTN_H);
+			else f.put(new Button(Lang.t("replay.watch_in_launcher"), () -> Replays.openInLauncher(info))
+					.enabled(Replays.canOpenInLauncher()), bx, by, WATCH_W + CLIP_W + GAP, BTN_H);
 			final int moment = info.extras.moments.isEmpty() ? -1 : info.extras.moments.get(info.extras.moments.size() - 1);
 			Button clip = new Button(Lang.t("replay.render"), () -> Replays.watch(info.file, v -> ReplayMenu.exportClip(v, moment)));
 			if (inWorld) clip.confirm(Lang.t("replay.leave"));
-			f.put(clip.enabled(Replays.canWatch() && moment >= 0), bx, by, CLIP_W, BTN_H);
-			bx += CLIP_W + GAP;
+			if (compatible) f.put(clip.enabled(moment >= 0), bx + WATCH_W + GAP, by, CLIP_W, BTN_H);
 			f.put(new Button(Lang.t("replay.delete"), () -> {
-				Replays.delete(info);
+				if (!Replays.delete(info)) renameError = Lang.t("replay.replay_delete_failed");
 				host.rebuild();
-			}).confirm(Lang.t("replay.sure")), bx, by, DELETE_W, BTN_H);
+			}).confirm(Lang.t("replay.sure")), bx + WATCH_W + CLIP_W + GAP * 2, by, DELETE_W, BTN_H);
+			f.put(new Button(Lang.t("replay.rename_replay"), () -> {
+				renaming = info;
+				renameError = null;
+				host.rebuild();
+			}), bx, by + BTN_H + 2, WATCH_W + CLIP_W + GAP, BTN_H);
+			if (renaming == info) {
+				int fieldRow = f.row(24);
+				TextField name = new TextField(Lang.t("replay.rename_replay"), 100, TextField.ANY).text(info.name);
+				Runnable rename = () -> {
+					renameError = Replays.rename(info, name.text());
+					if (renameError == null) renaming = null;
+					host.rebuild();
+				};
+				f.put(name.onEnter(rename), tx, fieldRow, Math.max(16, f.x + f.w - tx - WATCH_W - GAP), 18);
+				f.put(new Button(Lang.t("replay.rename_replay"), rename).primary(), f.x + f.w - WATCH_W, fieldRow, WATCH_W, 18);
+			}
 		}
 		f.done();
 	}
@@ -114,7 +160,7 @@ final class ReplaysTab implements MenuTab {
 	private static String details(Replays.Info info) {
 		String when = LocalClock.formatter("MMM d, HH:mm", Locale.ENGLISH).format(new Date(info.meta.date));
 		int clips = info.extras.moments.size();
-		String size = String.format(Locale.ROOT, "%.0f MB", info.file.length() / (1024.0 * 1024.0));
+		String size = String.format(Locale.ROOT, "%.0f MB", info.size / (1024.0 * 1024.0));
 		return when + " · " + Replays.clock(info.meta.duration) + " · " + (clips == 1 ? "1 clip" : clips + " clips")
 				+ " · " + info.meta.mcversion + " · " + size;
 	}

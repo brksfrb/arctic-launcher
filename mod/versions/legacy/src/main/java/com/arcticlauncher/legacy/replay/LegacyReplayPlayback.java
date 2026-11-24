@@ -28,9 +28,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.network.ClientConnection;
 import net.minecraft.network.NetworkSide;
 import net.minecraft.network.NetworkState;
-import net.minecraft.network.OffThreadException;
 import net.minecraft.network.Packet;
-import net.minecraft.network.listener.PacketListener;
 import net.minecraft.network.packet.s2c.login.LoginSuccessS2CPacket;
 import net.minecraft.network.packet.s2c.play.GameJoinS2CPacket;
 import net.minecraft.network.packet.s2c.play.GameStateChangeS2CPacket;
@@ -75,6 +73,9 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 	private ByteBuffer pixels;
 	private boolean seeking;
 	private boolean exportSeek;
+	private boolean jumpingPacket;
+	private boolean keepFirstPlacementScreen;
+	private boolean applyingFirstPlacement;
 	private net.minecraft.client.gui.screen.Screen seekScreen;
 
 	@Override
@@ -118,7 +119,7 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 	public boolean seeking() { return seeking; }
 
 	public boolean suppressSeekScreen(net.minecraft.client.gui.screen.Screen screen) {
-		return seeking && !exportSeek && (screen == null || screen instanceof net.minecraft.client.gui.screen.DownloadingTerrainScreen);
+		return (seeking && !exportSeek || applyingFirstPlacement) && (screen == null || screen instanceof net.minecraft.client.gui.screen.DownloadingTerrainScreen);
 	}
 
 	@Override
@@ -135,6 +136,7 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 			MinecraftClient mc = MinecraftClient.getInstance();
 			selfId = -1;
 			placed = false;
+			keepFirstPlacementScreen = seeking && !exportSeek;
 			body = null;
 			bodyTime = Integer.MIN_VALUE;
 			following = null;
@@ -143,6 +145,20 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 			((LegacyReplayConnection) conn).arctic$markReplay();
 			// Named "packet_handler" like a real connection: Forge adds its handshake handler before that name.
 			channel = com.arcticlauncher.client.replay.ReplayChannel.open(conn);
+			channel.pipeline().addFirst("arctic:replay_filter", new io.netty.channel.ChannelInboundHandlerAdapter() {
+				@Override
+				public void channelRead(io.netty.channel.ChannelHandlerContext ctx, Object message) {
+					if (!(message instanceof Packet)) {
+						ctx.fireChannelRead(message);
+						return;
+					}
+					Packet<?> packet = (Packet<?>) message;
+					String name = LegacyReplayCodec.name(packet);
+					if (PacketSorter.dropped(name) || (jumpingPacket && PacketSorter.category(name) == Category.TRANSIENT)) return;
+					Packet<?> rewritten = rewrite(packet, name);
+					if (rewritten != null) ctx.fireChannelRead(rewritten);
+				}
+			});
 			connection = conn;
 			conn.setState(NetworkState.LOGIN);
 			conn.setPacketListener(new ClientLoginNetworkHandler(conn, mc, new TitleScreen()));
@@ -157,59 +173,47 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 			((LegacyReplayConnection) connection).arctic$retire();
 		}
 		if (channel != null) {
-			channel.close();
+			channel.finish();
+			drainOutgoing();
 		}
 	}
 
 	@Override
-	@SuppressWarnings({"rawtypes", "unchecked"})
 	public void apply(ByteBuffer bytes, boolean jumping) {
 		if (connection == null || channel == null) {
 			return;
 		}
-		while (channel.readOutbound() != null) {
-			// Whatever the game "sent": nobody's listening.
-		}
+		drainOutgoing();
 		NetworkState state = channel.attr(ClientConnection.ATTR_KEY_PROTOCOL).get();
 		if (state == null) {
 			return;
 		}
-		Packet packet;
+		Packet<?> packet;
 		try {
 			packet = LegacyReplayCodec.decode(state, bytes);
 		} catch (IOException e) {
 			throw new IllegalStateException(e);
 		}
 		String name = LegacyReplayCodec.name(packet);
-		if (PacketSorter.dropped(name) || (jumping && PacketSorter.category(name) == Category.TRANSIENT)) {
-			return;
-		}
-		packet = rewrite(packet, name);
-		if (packet == null) {
-			return;
-		}
-		PacketListener listener = connection.getPacketListener();
-		if (listener == null) {
-			return;
-		}
+		jumpingPacket = jumping;
 		try {
-			packet.apply(listener);
-		} catch (OffThreadException ignored) {
-			// Queued for the game thread by the game itself.
-		} catch (RuntimeException e) {
-			// Still at the login handler after a failure: every later packet would fail too.
-			if (connection.getPacketListener() instanceof ClientLoginNetworkHandler) {
-				throw new Unusable("The game didn't leave the login step (" + e + ").");
-			}
-			throw e;
+			channel.writeInbound(packet);
+		} finally {
+			applyingFirstPlacement = false;
 		}
+		if (!channel.isOpen()) throw new Unusable("The replay connection closed.");
+
 		if ("game_profile".equals(name) && connection.getPacketListener() instanceof ClientLoginNetworkHandler) {
 			throw new Unusable("The game didn't accept the replay's login.");
 		}
 	}
 
-	@SuppressWarnings("rawtypes")
-	private Packet rewrite(Packet packet, String name) {
+	private void drainOutgoing() {
+		Object packet;
+		while ((packet = channel.readOutbound()) != null) io.netty.util.ReferenceCountUtil.release(packet);
+	}
+
+	private Packet<?> rewrite(Packet<?> packet, String name) {
 		switch (name) {
 			case "game_profile":
 				return new LoginSuccessS2CPacket(CAMERA);
@@ -235,6 +239,8 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 					return null;
 				}
 				placed = true;
+				applyingFirstPlacement = keepFirstPlacementScreen;
+				keepFirstPlacementScreen = false;
 				return packet;
 			case "game_event": {
 				int reason = ((GameStateChangeS2CPacket) packet).getChangeType();
@@ -426,6 +432,11 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 	}
 
 	@Override
+	public boolean following() {
+		return following != null && !following.removed && following.world == MinecraftClient.getInstance().world;
+	}
+
+	@Override
 	public List<Object[]> followable() {
 		MinecraftClient mc = MinecraftClient.getInstance();
 		List<Object[]> out = new ArrayList<Object[]>();
@@ -471,4 +482,7 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 		MinecraftClient mc = MinecraftClient.getInstance();
 		if (!LiveFrames.capture(mc.width, mc.height, height, sink)) capture(sink);
 	}
+	@Override
+	public void resetLiveCapture() { LiveFrames.reset(); }
+
 }

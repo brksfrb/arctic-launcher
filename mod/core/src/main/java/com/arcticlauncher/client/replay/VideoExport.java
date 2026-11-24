@@ -28,6 +28,8 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 	private final int from;
 	private final int to;
 	private final int fps;
+	private final int maxHeight;
+	private final int bitrate;
 	private final BlockingQueue<ByteBuffer> frames = new ArrayBlockingQueue<ByteBuffer>(QUEUE);
 	private final BlockingQueue<ByteBuffer> spare = new ArrayBlockingQueue<ByteBuffer>(QUEUE + 2);
 	private final Runnable onDone;
@@ -55,7 +57,13 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 
 	/** {@code [from, to]} of the replay (ms) at {@code fps}; {@code onDone} runs when the file is complete. */
 	public VideoExport(File ffmpeg, File output, int from, int to, int fps, Runnable onDone) {
+		this(ffmpeg, output, from, to, fps, 720, 0, onDone);
+	}
+
+	VideoExport(File ffmpeg, File output, int from, int to, int fps, int maxHeight, int bitrate, Runnable onDone) {
 		this.ffmpeg = ffmpeg;
+		this.maxHeight = maxHeight;
+		this.bitrate = bitrate;
 		this.output = output;
 		this.from = from;
 		this.to = Math.max(from + 1, to);
@@ -103,8 +111,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 
 	/** At most 720p, preserving aspect ratio and even encoder dimensions; never upscale. */
 	static int[] outputSize(int w, int h) {
-		double scale = Math.min(1, Math.min(1280.0 / w, 720.0 / h));
-		return new int[] {Math.max(2, ((int) (w * scale)) & ~1), Math.max(2, ((int) (h * scale)) & ~1)};
+		return LiveVideo.size(w, h, 720);
 	}
 
 	/** A grabbed frame (render thread): copied, then queued for FFmpeg. */
@@ -116,7 +123,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 		}
 		try {
 			if (process == null) {
-				int[] size = outputSize(w, h);
+				int[] size = LiveVideo.size(w, h, maxHeight);
 				startFfmpeg(size[0], size[1]);
 			}
 			ByteBuffer copy = spare.poll();
@@ -166,6 +173,11 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 				"-movflags", "+faststart", output.getAbsolutePath(),
 		};
 		for (String a : args) cmd.add(a);
+		if (bitrate > 0 && cmd.contains("-crf")) {
+			int quality = cmd.indexOf("-crf");
+			cmd.set(quality, "-b:v");
+			cmd.set(quality + 1, bitrate + "M");
+		}
 		if (interleavedAudio) cmd.add("--audio");
 		else if (audioServer != null) {
 			int inputEnd = cmd.indexOf("-vf");

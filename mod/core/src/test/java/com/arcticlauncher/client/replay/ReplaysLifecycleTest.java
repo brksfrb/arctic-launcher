@@ -8,6 +8,8 @@ import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -17,6 +19,65 @@ import org.junit.jupiter.api.io.TempDir;
 
 class ReplaysLifecycleTest {
 	@TempDir Path dir;
+	@Test void replayDefaultsOffAndKeepsItsExistingSettingKey() throws Exception {
+		assertFalse(ClientConfig.load(dir.toFile()).replayEnabled);
+		Path file = dir.resolve("arctic.json");
+		Files.write(file, "{\"replayEnabled\":true}".getBytes(StandardCharsets.UTF_8));
+		ClientConfig config = ClientConfig.load(dir.toFile());
+		assertTrue(config.replayEnabled);
+		config.replayEnabled = false;
+		assertNull(config.save());
+		assertFalse(new com.google.gson.JsonParser().parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8))
+				.getAsJsonObject().get("replayEnabled").getAsBoolean());
+	}
+
+	@Test void offStateCanBePromotedInPlaceAndOnlyTheEnabledWindowIsSaved() throws Exception {
+		java.util.concurrent.atomic.AtomicLong clock = new java.util.concurrent.atomic.AtomicLong();
+		Recorder recorder = new Recorder(dir.toFile(), () -> 30, ignored -> {}, () -> (packet, key) ->
+				packet.get(0) == 2 ? Category.TRANSIENT : Category.ALWAYS,
+				1L << 20, 0, 10_000, clock::get);
+		Field config = field(ArcticClient.class, "config");
+		Object old = config.get(null);
+		Recorder.Take take = null;
+		try {
+			config.set(null, new ClientConfig());
+			take = recorder.begin("test", true, 340, "1.12.2");
+			assertEquals(Recorder.TakeState.STATE_ONLY, recorder.state());
+			take.packet(new byte[] {1});
+			clock.set(1_000_000_000L);
+			take.packet(new byte[] {2});
+			assertFalse(recorder.saveMoment(null));
+			assertFalse(recorder.startRecording(null));
+
+			clock.set(2_000_000_000L);
+			recorder.enabled(true);
+			assertSame(take, recorder.current());
+			assertEquals(Recorder.TakeState.BUFFERING, recorder.state());
+			take.packet(new byte[] {3});
+			clock.set(3_000_000_000L);
+			AtomicReference<File> saved = new AtomicReference<>();
+			assertTrue(recorder.saveMoment(saved::set));
+			CountDownLatch done = new CountDownLatch(1);
+			recorder.afterWrites(done::countDown);
+			assertTrue(done.await(10, TimeUnit.SECONDS));
+			assertNotNull(saved.get());
+			try (ReplayData data = ReplayData.open(saved.get(), dir.resolve("cache").toFile())) {
+				assertEquals(1000, data.duration());
+				assertEquals(2, data.count());
+				assertEquals(1, data.packet(0).get());
+				assertEquals(3, data.packet(1).get());
+			}
+		} finally {
+			config.set(null, old);
+			if (take != null) take.end();
+			CountDownLatch done = new CountDownLatch(1);
+			recorder.afterWrites(done::countDown);
+			assertTrue(done.await(10, TimeUnit.SECONDS));
+		}
+		assertEquals(Recorder.TakeState.OFF, recorder.state());
+		assertEquals(0, recorder.tempDir().listFiles().length);
+	}
+
 	@Test void reachingTitleFinalizesRecordingEvenWithoutConnectionCallback() throws Exception {
 		AtomicBoolean atTitle = new AtomicBoolean();
 		AtomicBoolean inWorld = new AtomicBoolean();

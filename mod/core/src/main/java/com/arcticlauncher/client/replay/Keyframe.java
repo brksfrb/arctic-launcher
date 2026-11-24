@@ -4,6 +4,8 @@ package com.arcticlauncher.client.replay;
 public final class Keyframe {
 	/** Replay time (ms). */
 	public int time;
+	/** A time key maps this path position to a recorded instant. Null for camera keys. */
+	public Integer replayTime;
 	public double x;
 	public double y;
 	public double z;
@@ -26,6 +28,7 @@ public final class Keyframe {
 	public Keyframe copy() {
 		Keyframe k = new Keyframe();
 		k.time = time;
+		k.replayTime = replayTime;
 		k.x = x;
 		k.y = y;
 		k.z = z;

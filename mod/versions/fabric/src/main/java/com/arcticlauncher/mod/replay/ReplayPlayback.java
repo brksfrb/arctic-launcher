@@ -23,7 +23,6 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.player.RemotePlayer;
 import net.minecraft.network.Connection;
-import net.minecraft.network.PacketListener;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
@@ -34,7 +33,6 @@ import net.minecraft.network.protocol.game.ClientboundLoginPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 //#endif
 import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
-import net.minecraft.server.RunningOnDifferentThreadException;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 //#if MC >= 1.14
@@ -70,7 +68,9 @@ public final class ReplayPlayback implements ReplayBackend {
 	/** Packets handed to the game on this connection, and the last phase switch among them. */
 	private int applied;
 	private String lastSwitch = "none";
-	/** The last successfully installed playback protocol, independent of a failed listener handover. */
+	private boolean jumpingPacket;
+	private String packetName;
+	/** The last successfully installed playback protocol. */
 	private Object phase;
 	/** The recording player's entity id in this login (-1 until the login). */
 	private int selfId = -1;
@@ -150,7 +150,7 @@ public final class ReplayPlayback implements ReplayBackend {
 			ReplayView.fov = 0;
 			Connection conn = new Connection(PacketFlow.CLIENTBOUND);
 			((ReplayConnection) conn).arctic$markReplay();
-			channel = ReplayTransport.open(conn);
+			channel = ReplayTransport.open(conn, this::filter);
 			connection = conn;
 			ClientHandshakePacketListenerImpl login = ReplayCompat.loginListener(conn);
 			phase = ReplayCodec.loginProtocol();
@@ -174,52 +174,64 @@ public final class ReplayPlayback implements ReplayBackend {
 	}
 
 	@Override
-	@SuppressWarnings({"unchecked", "rawtypes"})
 	public void apply(ByteBuffer bytes, boolean jumping) {
-		if (connection == null) {
-			return;
-		}
+		if (connection == null) return;
 		drainOutgoing();
 		Object protocol = phase;
-		Packet<?> packet;
+		packetName = null;
+		jumpingPacket = jumping;
 		try {
-			packet = ReplayCodec.decode(protocol, bytes);
-		} catch (RuntimeException e) {
-			throw new IllegalStateException("replay decode " + ReplayCodec.context(protocol, bytes), e);
-		}
-		String name = ReplayCodec.name(packet);
-		try {
-			ReplayCodec.beforeHandle(channel, packet);
-		} catch (RuntimeException e) {
-			throw new ReplayBackend.ProtocolFailure("Replay protocol barrier failed (" + ReplayCodec.context(protocol, bytes) + ")", e); // i18n-ignore: internal log/exception text, never shown
-		}
-		if (PacketSorter.dropped(name) || (jumping && PacketSorter.category(name) == Category.TRANSIENT)) {
-			return;
-		}
-		packet = rewrite(packet, name);
-		if (packet == null) {
-			return;
-		}
-		PacketListener listener = connection.getPacketListener();
-		if (listener == null) {
-			throw new ReplayBackend.ProtocolFailure("Replay has no packet listener (" + ReplayCodec.context(protocol, bytes) + ")", null); // i18n-ignore: internal log/exception text, never shown
-		}
-		try {
-			((Packet) packet).handle(listener);
-			phase = ReplayCodec.afterHandle(protocol, packet, ((ReplayConnection) connection).arctic$inbound());
+			//#if MC >= 1.19.4
+			ReplayTransport.receive(channel, bytes);
+			//#else
+			Packet<?> packet = ReplayCodec.decode(protocol, bytes);
+			channel.writeInbound(packet);
+			phase = ReplayCodec.next(protocol, packet);
+			//#endif
+			if (!channel.isOpen()) throw new ReplayBackend.ProtocolFailure("Replay connection closed", null); // i18n-ignore
+			//#if MC >= 1.20.5
+			phase = ReplayCodec.installedProtocol(protocol, packetName, ((ReplayConnection) connection).arctic$inbound());
+			//#elif MC >= 1.20.2
+			phase = channel.attr(Connection.ATTRIBUTE_CLIENTBOUND_PROTOCOL).get().protocol();
+			//#elif MC >= 1.19.4
+			phase = channel.attr(Connection.ATTRIBUTE_PROTOCOL).get();
+			//#endif
 			applied++;
-			if (ReplayCodec.changesPhase(name)) lastSwitch = name + " after " + applied + " packets, now " + ReplayCodec.phaseName(phase);
-		} catch (RunningOnDifferentThreadException e) {
-			// Queued for the game thread by the game itself, except a handover: feeding the
-			// next phase before that handler runs would lose it.
-			if (!ReplayCodec.changesPhase(name)) return;
-			throw new ReplayBackend.ProtocolFailure("Replay packet handler left the game thread (" + ReplayCodec.context(protocol, bytes) + ")", e); // i18n-ignore: internal log/exception text, never shown
+			if (ReplayCodec.changesPhase(packetName)) lastSwitch = packetName + " after " + applied + " packets, now " + ReplayCodec.phaseName(phase);
+		} catch (ReplayBackend.ProtocolFailure e) {
+			throw e;
 		} catch (RuntimeException e) {
-			if (ReplayCodec.changesPhase(name)) {
-				throw new ReplayBackend.ProtocolFailure("Replay protocol handover failed (" + ReplayCodec.context(protocol, bytes) + "): " + e, e); // i18n-ignore: internal log/exception text, never shown
+			String context = ReplayCodec.context(protocol, bytes);
+			if (ReplayCodec.changesPhase(packetName)) {
+				throw new ReplayBackend.ProtocolFailure("Replay protocol handover failed (" + context + "): " + e, e); // i18n-ignore
 			}
-			throw new IllegalStateException("replay handler " + ReplayCodec.context(protocol, bytes) + " " + name, e);
+			throw new IllegalStateException("replay pipeline " + context, e);
 		}
+	}
+
+	private Packet<?> filter(Packet<?> packet) {
+		packetName = ReplayCodec.name(packet);
+		//#if MC >= 1.19.4
+		if (packet instanceof net.minecraft.network.protocol.game.ClientboundBundlePacket bundle) {
+			List<Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener>> rewritten = new ArrayList<>();
+			for (Packet<?> child : bundle.subPackets()) {
+				Packet<?> updated = filterOne(child, ReplayCodec.name(child));
+				if (updated != null) {
+					@SuppressWarnings("unchecked")
+					Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener> gamePacket =
+							(Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener>) updated;
+					rewritten.add(gamePacket);
+				}
+			}
+			return new net.minecraft.network.protocol.game.ClientboundBundlePacket(rewritten);
+		}
+		//#endif
+		return filterOne(packet, packetName);
+	}
+
+	private Packet<?> filterOne(Packet<?> packet, String name) {
+		if (PacketSorter.dropped(name) || (jumpingPacket && PacketSorter.category(name) == Category.TRANSIENT)) return null;
+		return rewrite(packet, name);
 	}
 
 	@Override
@@ -471,6 +483,11 @@ public final class ReplayPlayback implements ReplayBackend {
 	}
 
 	@Override
+	public boolean following() {
+		return following != null && !com.arcticlauncher.mod.Compat.removed(following) && ReplayCompat.level(following) == Minecraft.getInstance().level;
+	}
+
+	@Override
 	public List<Object[]> followable() {
 		Minecraft mc = Minecraft.getInstance();
 		List<Object[]> out = new ArrayList<Object[]>();
@@ -507,9 +524,17 @@ public final class ReplayPlayback implements ReplayBackend {
 	public void captureLive(FrameSink sink, int height) {
 		//#if MC < 1.21.5
 		com.mojang.blaze3d.pipeline.RenderTarget target = ReplayCompat.mainTarget();
-		if (LiveFrames.capture(target.width, target.height, height, sink)) return;
+		if (!LiveFrames.capture(target.width, target.height, height, sink)) ReplayFrames.capture(sink);
+		//#else
+		GpuLiveFrames.capture(height, sink);
 		//#endif
-		ReplayFrames.capture(sink);
+	}
+
+	@Override
+	public void resetLiveCapture() {
+		//#if MC < 1.21.5
+		LiveFrames.reset();
+		//#endif
 	}
 
 	@Override

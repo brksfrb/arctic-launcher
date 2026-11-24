@@ -91,21 +91,25 @@ public final class ReplayTest {
 		log("mid: recording=" + Replays.recording());
 		if (!Replays.recording()) { fail("recording did not start in an existing world"); return; }
 		command("time set noon");
+		after(1, () -> shot("mid recording"));
 		after(8, () -> {
 			Replays.toggleRecording();
 			when("mid recording saved", () -> Replays.recorder().pendingSaves() == 0 && Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr")) != null
 					&& Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr")).length > 0, () -> {
 				final File f = Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr"))[0];
 				log("mid: saved " + f.getName() + " " + f.length() / 1024 + " KB");
-				com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
-				when("left the world", () -> Minecraft.getInstance().level == null, () -> after(3, () -> {
-					Replays.watch(f);
-					when("mid replay opened", () -> Replays.viewer() != null && (Replays.viewer().ready() || Replays.viewer().status() != null), () -> {
-						ReplayViewer v = Replays.viewer();
-						log("mid: opened ready=" + v.ready() + " status=" + v.status() + " duration=" + v.duration());
-						after(4, () -> { shot("mid replay playing"); log(v.ready() && v.duration() > 3000 ? "PASSED" : "FAILED mid replay unusable"); Minecraft.getInstance().stop(); });
-					});
-				}));
+				after(1, () -> {
+					shot("mid recording saved");
+					com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
+					when("left the world", () -> Minecraft.getInstance().level == null, () -> after(3, () -> {
+						Replays.watch(f);
+						when("mid replay opened", () -> Replays.viewer() != null && Replays.viewer().ready(), () -> {
+							ReplayViewer v = Replays.viewer();
+							log("mid: opened ready=" + v.ready() + " status=" + v.status() + " duration=" + v.duration());
+							after(4, () -> { shot("mid replay playing"); log(v.ready() && v.duration() > 3000 ? "PASSED" : "FAILED mid replay unusable"); Minecraft.getInstance().stop(); });
+						});
+					}));
+				});
 			});
 		});
 	}

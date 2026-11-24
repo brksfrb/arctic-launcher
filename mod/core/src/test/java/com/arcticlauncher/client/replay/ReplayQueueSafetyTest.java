@@ -75,7 +75,7 @@ class ReplayQueueSafetyTest {
 				}
 				return m.getReturnType() == boolean.class ? false : null;
 			});
-			Replays.init(platform, 0, null);
+			Replays.init(platform, 0, null, null);
 			Replays.backend((ReplayBackend) Proxy.newProxyInstance(ReplayBackend.class.getClassLoader(), new Class<?>[]{ReplayBackend.class}, (p, m, a) -> {
 				if (m.getName().equals("start")) starts++;
 				return m.getReturnType() == boolean.class ? false : m.getReturnType() == int.class ? 0 : null;

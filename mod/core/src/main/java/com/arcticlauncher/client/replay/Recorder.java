@@ -45,14 +45,14 @@ public final class Recorder {
 	private final java.util.concurrent.ExecutorService compactions = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
 		Thread t = new Thread(r, "arctic-replay-compact"); t.setDaemon(true); t.setPriority(Thread.MIN_PRIORITY); return t;
 	});
-	private volatile Take current;
+	private final java.util.concurrent.atomic.AtomicReference<Take> current = new java.util.concurrent.atomic.AtomicReference<Take>();
 	private final java.util.concurrent.atomic.AtomicInteger pendingSaves = new java.util.concurrent.atomic.AtomicInteger();
 	private final java.util.concurrent.ExecutorService saves = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
 		Thread t = new Thread(r, "arctic-replay-save"); t.setDaemon(true); t.setPriority(Thread.MIN_PRIORITY); return t;
 	});
 
 	public Recorder(File gameDir, IntSupplier clipSeconds, Consumer<String> log, Supplier<ReplayBackend.Classifier> sorter) {
-		this(gameDir, clipSeconds, log, sorter, MAX_RECORDING_BYTES, MIN_FREE_BYTES, COMPACT_INTERVAL_MS);
+		this(gameDir, clipSeconds, log, sorter, MAX_RECORDING_BYTES, MIN_FREE_BYTES, 0);
 	}
 
 	Recorder(File gameDir, IntSupplier clipSeconds, Consumer<String> log, Supplier<ReplayBackend.Classifier> sorter,
@@ -97,42 +97,51 @@ public final class Recorder {
 	File tempDir() { return tempDir; }
 	void afterPackets(Runnable r) { tasks.add(r); }
 	void afterWrites(Runnable r) { tasks.add(() -> compactions.execute(() -> tasks.add(() -> saves.execute(r)))); }
-	public Take current() { return current; }
-	public boolean recording() { Take t = current; return t != null && t.recording; }
-	public boolean bufferReady() { Take t = current; return t != null && !t.failed && !t.ended; }
+	public enum TakeState { OFF, STATE_ONLY, BUFFERING, RECORDING, STOPPED }
+
+	public Take current() { return current.get(); }
+	public TakeState state() { Take t = current(); return t == null ? TakeState.OFF : t.state; }
+	public String stopReason() { Take t = current(); return t == null ? null : t.stopReason; }
+	public void enabled(boolean enabled) { Take t = current(); if (t != null) t.enabled(enabled); }
+	public boolean recording() { Take t = current(); return t != null && t.state == TakeState.RECORDING; }
+	public boolean bufferReady() { TakeState state = state(); return state == TakeState.BUFFERING || state == TakeState.RECORDING; }
 	/** Files being written or waiting for the save worker, including manual recordings. */
 	public int pendingSaves() { return pendingSaves.get(); }
-	public long recordingBytes() { Take t = current; return t == null ? 0 : t.manualDiskBytes; }
-	public int recordingMillis() { Take t = current; return recording() ? Math.max(0, t.time() - t.manualFrom) : 0; }
+	public long recordingBytes() { Take t = current(); return t == null ? 0 : t.manualDiskBytes; }
+	public int recordingMillis() { Take t = current(); return t != null && t.state == TakeState.RECORDING ? Math.max(0, t.time() - t.manualFrom) : 0; }
 
 	/** Always retain the login/bootstrap, so F9 and F10 can be used without reconnecting. */
 	public synchronized Take begin(String server, boolean singleplayer, int protocol, String mcVersion) {
-		if (current != null) current.end();
-		if (com.arcticlauncher.client.ArcticClient.config() != null && !com.arcticlauncher.client.ArcticClient.config().replayEnabled) {
-			current = null;
-			return null;
-		}
-		Take take = new Take(server, singleplayer, protocol, mcVersion);
-		current = take;
+		Take previous = current();
+		if (previous != null) previous.end();
+		boolean enabled = com.arcticlauncher.client.ArcticClient.config() == null
+				|| com.arcticlauncher.client.ArcticClient.config().replayEnabled;
+		Take take = new Take(server, singleplayer, protocol, mcVersion, enabled);
 		tasks.add(() -> {
 			try { take.ring = new Ring(); } catch (IOException e) { take.fail(e.toString()); }
 		});
+		current.set(take);
 		return take;
 	}
 
 	public boolean saveMoment(Consumer<File> done) { return saveMoment(null, done); }
 	public boolean saveMoment(byte[] thumbnail, Consumer<File> done) {
-		Take t = current;
+		Take t = current();
 		return t != null && t.clip(thumbnail, done);
 	}
 
 	/** The callback receives the completed manual recording, including when leaving the world. */
 	public boolean startRecording(Consumer<File> done) {
-		Take t = current;
+		Take t = current();
 		return t != null && t.startRecording(done);
 	}
+	public boolean mark() {
+		Take t = current();
+		return t != null && t.mark();
+	}
+
 	public boolean stopRecording() {
-		Take t = current;
+		Take t = current();
 		return t != null && t.stopRecording();
 	}
 
@@ -146,8 +155,12 @@ public final class Recorder {
 		private long pausedNanos;
 		private long pausedAt = -1;
 		private volatile boolean ended;
-		private volatile boolean failed;
-		private volatile boolean recording;
+		private volatile TakeState state;
+		private volatile String stopReason;
+		/** Writer-side copy of the rolling-window setting, ordered with incoming packets. */
+		private boolean buffering;
+		private int windowStart;
+		private int enabledAt;
 		private volatile int manualFrom;
 		private volatile int latest;
 		private volatile int selfId = -1;
@@ -157,6 +170,7 @@ public final class Recorder {
 		private Ring ring;
 		private boolean compacting;
 		private Stream manual;
+		private final java.util.List<Integer> manualMarkers = new java.util.ArrayList<Integer>();
 		private Consumer<File> manualDone;
 		private int manualBase;
 		private int compactedAt;
@@ -164,12 +178,36 @@ public final class Recorder {
 		private volatile long manualDiskBytes;
 		private long pending;
 
-		Take(String server, boolean singleplayer, int protocol, String mcVersion) {
+		Take(String server, boolean singleplayer, int protocol, String mcVersion, boolean enabled) {
+			buffering = enabled;
+			state = enabled ? TakeState.BUFFERING : TakeState.STATE_ONLY;
 			this.server = server == null ? Lang.t("replay.unknown") : server;
 			this.singleplayer = singleplayer;
 			this.protocol = protocol;
 			this.mcVersion = mcVersion;
 		}
+		private synchronized void enabled(boolean enabled) {
+			if (ended || state == TakeState.STOPPED || enabled == (state != TakeState.STATE_ONLY)) return;
+			int at = time();
+			enabledAt = at;
+			state = enabled ? TakeState.BUFFERING : TakeState.STATE_ONLY;
+			tasks.add(() -> {
+				buffering = enabled;
+				windowStart = at;
+				// Turning Replay off discards the unsaved manual take.
+				if (!enabled && manual != null) {
+					manual.delete();
+					manual = null;
+					manualDone = null;
+				}
+			});
+		}
+
+		public synchronized boolean accepting(String packet) {
+			return !ended && state != TakeState.STOPPED
+					&& (state != TakeState.STATE_ONLY || PacketSorter.category(packet) != Category.TRANSIENT);
+		}
+
 		public synchronized int time() {
 			long now = pausedAt >= 0 ? pausedAt : nanoTime.getAsLong();
 			return (int) ((now - startNanos - pausedNanos) / 1_000_000L);
@@ -183,17 +221,16 @@ public final class Recorder {
 
 		/** Taking the same lock for enqueueing controls and packets makes start/stop boundaries exact. */
 		public synchronized void packet(final byte[] data) {
-			if (ended || failed || data == null) return;
+			if (ended || state == TakeState.STOPPED || data == null) return;
 			if (pending + data.length > MAX_PENDING_BYTES) {
-				failed = true;
-				tasks.add(() -> fail(Lang.t("replay.replay_data_arrived_faster_than_it_could_be")));
+				stop(Lang.t("replay.replay_data_arrived_faster_than_it_could_be"));
 				return;
 			}
 			final int t = time();
 			pending += data.length;
 			tasks.add(() -> {
 				synchronized (Take.this) { pending -= data.length; Take.this.notifyAll(); }
-				if (ring == null || failed) return;
+				if (ring == null || state == TakeState.STOPPED) return;
 				try {
 					ring.active().packet(t, data);
 					latest = t;
@@ -212,7 +249,7 @@ public final class Recorder {
 			if (data == null) return;
 			synchronized (this) {
 				long deadline = System.nanoTime() + BULK_WAIT_NANOS;
-				while (!ended && !failed && pending > 0 && pending + data.length > MAX_PENDING_BYTES / 2) {
+				while (!ended && state != TakeState.STOPPED && pending > 0 && pending + data.length > MAX_PENDING_BYTES / 2) {
 					long left = deadline - System.nanoTime();
 					if (left <= 0) break;
 					try {
@@ -227,10 +264,10 @@ public final class Recorder {
 		}
 
 		public synchronized void sample(final SelfSample sample) {
-			if (ended || failed) return;
+			if (ended || state == TakeState.STOPPED) return;
 			sample.time = time();
 			tasks.add(() -> {
-				if (ring == null || failed) return;
+				if (ring == null || state == TakeState.STOPPED) return;
 				try {
 					ring.active().sample(sample);
 					latest = sample.time;
@@ -246,9 +283,10 @@ public final class Recorder {
 		}
 
 		public synchronized void audio(final AudioEvent event) {
-			if (ended || failed) return;
+			if (ended || state == TakeState.STOPPED) return;
 			tasks.add(() -> {
-				if (ring == null || failed) return;
+				if (ring == null || state == TakeState.STOPPED) return;
+				if (!buffering) return;
 				try {
 					ring.active().audio(event);
 					if (manual != null) manual.audio(event.at(event.time, manualBase));
@@ -257,13 +295,15 @@ public final class Recorder {
 		}
 
 		private void maintain(int t) throws IOException {
-			if (!compacting && t - compactedAt >= compactInterval && t > clipSeconds.getAsInt() * 1000) {
+			int window = buffering ? clipSeconds.getAsInt() * 1000 : 0;
+			int from = Math.max(windowStart, t - window);
+			int interval = compactInterval > 0 ? compactInterval : buffering ? window : COMPACT_INTERVAL_MS;
+			if (!compacting && t - compactedAt >= interval && from > 0) {
 				ReplayBackend.Classifier classifier = sorter.get();
 				if (classifier != null) {
 					final Ring buffer = ring;
 					final Snapshot source = buffer.view();
 					final java.util.List<Stream> prefix = new java.util.ArrayList<Stream>(buffer.streams);
-					final int from = Math.max(0, t - clipSeconds.getAsInt() * 1000);
 					// Freeze the old segments; incoming packets immediately go to a fresh one.
 					buffer.streams.add(new Stream());
 					for (Stream stream : prefix) stream.retain();
@@ -285,7 +325,7 @@ public final class Recorder {
 							});
 						} catch (IOException | RuntimeException e) {
 							if (next != null) next.delete();
-							tasks.add(() -> { compacting = false; if (!ended && !failed) fail("buffer cleanup failed: " + e); }); // i18n-ignore
+							tasks.add(() -> { compacting = false; if (!ended && state != TakeState.STOPPED) fail("buffer cleanup failed: " + e); }); // i18n-ignore
 						} finally { for (Stream stream : prefix) stream.release(); }
 					});
 				}
@@ -301,19 +341,20 @@ public final class Recorder {
 		}
 
 		private synchronized boolean clip(byte[] thumbnail, Consumer<File> done) {
-			if (ended) return false;
-			final int at = failed ? latest : time();
-			final int from = Math.max(0, at - clipSeconds.getAsInt() * 1000);
+			if (ended || state == TakeState.STATE_ONLY) return false;
+			final int at = state == TakeState.STOPPED ? latest : time();
+			final int from = Math.max(enabledAt, at - clipSeconds.getAsInt() * 1000);
 			tasks.add(() -> saveLater(ring, from, at, Lang.t("replay.clip"), thumbnail, done));
 			return true;
 		}
 		private synchronized boolean startRecording(Consumer<File> done) {
-			if (ended || failed || recording) return false;
+			if (ended || state != TakeState.BUFFERING) return false;
 			final int at = time();
-			recording = true;
+			state = TakeState.RECORDING;
 			manualFrom = at;
 			tasks.add(() -> {
 				manualBase = at;
+				manualMarkers.clear();
 				manualDone = done;
 				try {
 					manual = new Stream();
@@ -323,9 +364,16 @@ public final class Recorder {
 			});
 			return true;
 		}
+		private synchronized boolean mark() {
+			if (state != TakeState.RECORDING || ended) return false;
+			int mark = time() - manualFrom;
+			tasks.add(() -> { if (manual != null) manualMarkers.add(mark); });
+			return true;
+		}
+
 		private synchronized boolean stopRecording() {
-			if (!recording) return false;
-			recording = false;
+			if (ended || state != TakeState.RECORDING) return false;
+			state = TakeState.BUFFERING;
 			final int at = time();
 			tasks.add(() -> finishManual(at));
 			return true;
@@ -335,42 +383,48 @@ public final class Recorder {
 			Consumer<File> done = manualDone;
 			manual = null;
 			manualDone = null;
-			saveLater(stream, 0, Math.max(0, at - manualBase), Lang.t("replay.recording"), null, done);
+			saveLater(stream == null ? java.util.Collections.emptyList() : java.util.Collections.singletonList(stream),
+					0, Math.max(0, at - manualBase), Lang.t("replay.recording"), null, done,
+					new java.util.ArrayList<Integer>(manualMarkers));
 			if (stream != null) stream.delete();
 		}
 		public synchronized void end() {
 			if (ended) return;
 			ended = true;
-			recording = false;
 			final int at = time();
-			if (current == this) current = null;
+			current.compareAndSet(this, null);
 			tasks.add(() -> {
 				if (manual != null) finishManual(at);
 				if (ring != null) ring.delete();
 				ring = null;
 			});
 		}
+		public synchronized void stop(String why) {
+			if (ended || state == TakeState.STOPPED) return;
+			stopReason = why;
+			state = TakeState.STOPPED;
+			tasks.add(() -> fail(why));
+		}
+
 		private void fail(String why) {
-			failed = true;
-			recording = false;
+			stopReason = why;
+			state = TakeState.STOPPED;
 			log.accept("replay: stopped: " + why); // i18n-ignore
 			notice(Lang.t("replay.replay_buffer_stopped"), why + Lang.t("replay.saved_clips_are_safe"));
 			if (manual != null) finishManual(time());
 		}
-		private void saveLater(Stream stream, int from, int to, String kind, byte[] thumbnail, Consumer<File> done) {
-			saveLater(stream == null ? java.util.Collections.emptyList() : java.util.Collections.singletonList(stream), from, to, kind, thumbnail, done);
-		}
 		private void saveLater(Ring buffer, int from, int to, String kind, byte[] thumbnail, Consumer<File> done) {
-			saveLater(buffer == null ? java.util.Collections.emptyList() : new java.util.ArrayList<Stream>(buffer.streams), from, to, kind, thumbnail, done);
+			saveLater(buffer == null ? java.util.Collections.emptyList() : new java.util.ArrayList<Stream>(buffer.streams), from, to, kind, thumbnail, done, java.util.Collections.emptyList());
 		}
-		private void saveLater(java.util.List<Stream> streams, int from, int to, String kind, byte[] thumbnail, Consumer<File> done) {
+		private void saveLater(java.util.List<Stream> streams, int from, int to, String kind, byte[] thumbnail, Consumer<File> done,
+				java.util.List<Integer> markers) {
 			if (streams.isEmpty()) { if (done != null) done.accept(null); return; }
 			try {
 				Snapshot view = snapshot(streams);
 				for (Stream stream : streams) stream.retain();
 				pendingSaves.incrementAndGet();
 				saves.execute(() -> {
-					try { File file = save(view, from, to, kind, thumbnail); if (done != null) done.accept(file); }
+					try { File file = save(view, from, to, kind, thumbnail, markers); if (done != null) done.accept(file); }
 					finally {
 						pendingSaves.decrementAndGet();
 						for (Stream stream : streams) stream.release();
@@ -378,7 +432,7 @@ public final class Recorder {
 				});
 			} catch (IOException e) { log.accept("replay: snapshot failed: " + e); if (done != null) done.accept(null); } // i18n-ignore
 		}
-		private File save(Snapshot stream, int from, int to, String kind, byte[] thumbnail) {
+		private File save(Snapshot stream, int from, int to, String kind, byte[] thumbnail, java.util.List<Integer> markers) {
 			if (stream == null || stream.packetBytes == 0) return null;
 			String where = server.replaceAll("[^A-Za-z0-9 ._-]", "_").trim();
 			if (where.length() > 40) where = where.substring(0, 40).trim();
@@ -393,6 +447,7 @@ public final class Recorder {
 				ReplayMeta.Extras extras = new ReplayMeta.Extras();
 				extras.selfName = selfName; extras.selfUuid = selfUuid == null ? null : selfUuid.toString();
 				extras.clipSeconds = clipSeconds.getAsInt(); extras.moments.add(to - from);
+				extras.markers = markers;
 				try (ZipOutputStream zip = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(part), BUFFER))) {
 					zip.setLevel(6);
 					// Batch packet headers, entity updates and track fields before ZIP compression.

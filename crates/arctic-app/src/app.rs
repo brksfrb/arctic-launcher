@@ -814,6 +814,55 @@ impl ArcticApp {
         self.launch_selected_as(Some(target));
     }
 
+    fn replay_bridge(&mut self) {
+        let Some((run_id, name)) = self.bridge.take_replay_request() else {
+            return;
+        };
+        let replay = self.runs.get(run_id).and_then(|run| {
+            let game = run.game_dir.canonicalize().ok()?;
+            let folder = game.join(arctic_core::replays::FOLDER);
+            let path = folder.join(name).canonicalize().ok()?;
+            if path.parent() != Some(folder.as_path()) {
+                return None;
+            }
+            arctic_core::replays::read(&path).ok()
+        });
+        let Some(replay) = replay else {
+            self.toasts.push(
+                Kind::Error,
+                t!("instances.replay_open_failed"),
+                t!("instances.replay_unavailable"),
+            );
+            return;
+        };
+        let version = replay.mc_version;
+        if !matches!(&self.manifest, ManifestState::Ready(manifest) if manifest.find(&version).is_some())
+        {
+            self.toasts.push(
+                Kind::Error,
+                t!("instances.replay_open_failed"),
+                t!("instances.replay_version_unavailable"),
+            );
+            return;
+        }
+        if let Some(instance) = self.custom_instances.iter().find(|instance| {
+            instance.arctic_mod && instance.version.as_deref() == Some(version.as_str())
+        }) {
+            self.settings.last_instance = Some(instance.id.clone());
+        } else if self.instance.arctic_mod {
+            self.settings.last_instance = None;
+            self.settings.last_version = Some(version);
+        } else {
+            self.toasts.push(
+                Kind::Error,
+                t!("instances.replay_open_failed"),
+                t!("instances.replay_enable_client"),
+            );
+            return;
+        }
+        self.launch_into(arctic_core::launch::QuickPlay::Replay(replay.path));
+    }
+
     fn launch_selected_as(&mut self, quick_play: Option<arctic_core::launch::QuickPlay>) {
         // Mods that would stop the game while loading: offer the fixes first.
         let instance = self.selected_instance().clone();
@@ -1509,9 +1558,6 @@ impl eframe::App for ArcticApp {
         // Server changes arrive on the bridge while this window is in the
         // background. A slow tick is enough to notice them; Discord is only
         // told when the text changes.
-        if playing && self.settings.discord_presence && self.settings.discord_show_server {
-            ctx.request_repaint_after(Duration::from_secs(1));
-        }
         if let Some(muted) = self.voice.take_muted() {
             self.settings.voice.muted = muted;
             self.persist_settings();
@@ -1520,6 +1566,11 @@ impl eframe::App for ArcticApp {
             .update(&self.dirs, &self.settings.voice, self.accounts.active());
         self.voice.tick();
         self.together_bridge();
+        self.replay_bridge();
+        // A running game can send replay and presence updates through the bridge.
+        if playing {
+            ctx.request_repaint_after(Duration::from_secs(1));
+        }
         self.forget_idle_images();
         // Hidden in the tray nothing draws, so nothing asks for the next pass either: a slow tick
         // keeps the work that goes by the clock (auto-update, the open-time count) going.

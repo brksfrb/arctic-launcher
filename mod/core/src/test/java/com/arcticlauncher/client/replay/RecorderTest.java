@@ -264,11 +264,11 @@ class RecorderTest {
 		at(50_000); t.packet(new byte[] {3, 1, 8}); await(r);
 		File saved = clip(r);
 		try (ReplayData data = ReplayData.open(saved, dir.resolve("entities").toFile())) {
-			assertEquals(6, data.count()); // Login + old removal + every packet inside the clip.
+			assertEquals(5, data.count()); // Login plus every packet inside the clip.
 			assertEquals(30_000, data.duration());
-			assertEquals(20_000, data.time(2)); assertEquals(25_000, data.time(3));
-			assertEquals(1, data.packet(3).get(2)); assertEquals(2, data.packet(4).get(2));
-			assertEquals(3, data.packet(5).get(0));
+			assertEquals(20_000, data.time(1)); assertEquals(25_000, data.time(2));
+			assertEquals(1, data.packet(2).get(2)); assertEquals(2, data.packet(3).get(2));
+			assertEquals(3, data.packet(4).get(0));
 		}
 		assertTrue(r.stopRecording()); await(r);
 		try (ReplayData data = ReplayData.open(manual.get(), dir.resolve("entity-manual").toFile())) {

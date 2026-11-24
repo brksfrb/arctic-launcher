@@ -58,6 +58,7 @@ class ReplayViewerSeekTest {
 						if (!Float.isNaN((Float) args[3])) { yaw = (Float) args[3]; pitch = (Float) args[4]; }
 						if (seeking) events.add("camera"); break;
 					case "showSelf": if (seeking) events.add("body"); break;
+					case "following": return followed >= 0;
 					case "follow": followed = (Integer) args[0]; if (seeking) events.add("follow"); break;
 				}
 				return method.getReturnType() == boolean.class ? false : null;
@@ -120,7 +121,7 @@ class ReplayViewerSeekTest {
 		try (World world = new World(true)) {
 			world.viewer.seek(10000); world.viewer.frame();
 			world.viewer.seek(7000); world.viewer.frame();
-			assertEquals(java.util.Arrays.asList(1, 3), world.packets);
+			assertEquals(java.util.Collections.singletonList(1), world.packets);
 			assertEquals(1, world.resets); assertTrue(world.viewer.ready());
 		}
 	}

@@ -68,9 +68,16 @@ final class LegacyPacketNames {
 		put(PlayerAbilitiesS2CPacket.class, "player_abilities");
 		put(PlayerPositionLookS2CPacket.class, "player_position");
 		put(GameStateChangeS2CPacket.class, "game_event");
+		put(WorldTimeUpdateS2CPacket.class, "set_time");
+		put(ExperienceBarUpdateS2CPacket.class, "set_experience");
+		put(HeldItemChangeS2CPacket.class, "set_carried_item");
+		put(PlayerListHeaderS2CPacket.class, "tab_list");
+		put(WorldBorderS2CPacket.class, "world_border");
+		put(ScoreboardPlayerUpdateS2CPacket.class, "set_score");
 		put(PlaySoundIdS2CPacket.class, "sound");
 		//#if MC >= 1.9
 		put(ChunkUnloadS2CPacket.class, "forget_level_chunk");
+		put(BossBarS2CPacket.class, "boss_event");
 		put(PlaySoundNameS2CPacket.class, "custom_sound");
 		put(SetPassengersS2CPacket.class, "set_passengers");
 		put(VehicleMoveS2CPacket.class, "move_vehicle");

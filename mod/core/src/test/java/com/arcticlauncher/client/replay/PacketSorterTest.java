@@ -80,8 +80,8 @@ class PacketSorterTest {
 		long chunkPos = (3 & 0xFFFFFFFFL) | ((long) -4 << 32);
 		assertEquals(Category.UNLOAD, s.classify(packet(2, chunkPos), key));
 		assertEquals(Category.chunk(3, -4), key[0]);
-		assertEquals(Category.BLOCK, s.classify(packet(3, blockPos(50, 70, -70)), key));
-		assertEquals(Category.chunk(3, -5), key[0]);
+		assertEquals(Category.BLOCK_UPDATE, s.classify(packet(3, blockPos(50, 70, -70)), key));
+		assertEquals(blockPos(50, 70, -70), key[0]);
 		assertEquals(Category.ENTITY_MOVE, s.classify(packet(4, "300"), key));
 		assertEquals(300, key[0]);
 		long section = ((long) (3 & 0x3FFFFF) << 42) | ((long) (-4 & 0x3FFFFF) << 20) | 4;
@@ -122,8 +122,8 @@ class PacketSorterTest {
 		long[] key = new long[1];
 		s.classify(packet(0), key);
 		long old = ((long) (50 & 0x3FFFFFF) << 38) | ((long) (70 & 0xFFF) << 26) | (-70 & 0x3FFFFFF);
-		assertEquals(Category.BLOCK, s.classify(packet(3, old), key));
-		assertEquals(Category.chunk(3, -5), key[0]);
+		assertEquals(Category.BLOCK_UPDATE, s.classify(packet(3, old), key));
+		assertEquals(blockPos(50, 70, -70), key[0]);
 	}
 
 	@Test

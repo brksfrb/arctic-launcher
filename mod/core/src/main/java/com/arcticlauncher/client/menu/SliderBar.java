@@ -9,7 +9,7 @@ import java.util.function.DoubleConsumer;
 import java.util.function.DoubleSupplier;
 
 /** A number on a track: click or drag to set it (in steps), let go to keep it. */
-final class SliderBar extends Widget {
+public final class SliderBar extends Widget {
 	private static final int KNOB_W = 6;
 	private static final int KNOB_H = 12;
 	private static final int TRACK_H = 4;
@@ -25,7 +25,7 @@ final class SliderBar extends Widget {
 	private final Runnable finished;
 	private boolean dragging;
 
-	SliderBar(DoubleSupplier get, DoubleConsumer set, double min, double max, double step, Runnable changed, Runnable finished) {
+	public SliderBar(DoubleSupplier get, DoubleConsumer set, double min, double max, double step, Runnable changed, Runnable finished) {
 		this.get = get;
 		this.set = set;
 		this.min = min;

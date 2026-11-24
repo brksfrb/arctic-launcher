@@ -107,7 +107,7 @@ public final class ArcticClient {
 				com.arcticlauncher.client.packs.PackBrowser.Kind.SHADER, shaders);
 		packIcons = new com.arcticlauncher.client.packs.PackIcons(p, session.bridgePort, session.bridgeSecret);
 		screenshotCopy = new com.arcticlauncher.client.feature.ScreenshotCopy(session.bridgePort, session.bridgeSecret);
-		com.arcticlauncher.client.replay.Replays.init(p, session.bridgePort, session.bridgeSecret);
+		com.arcticlauncher.client.replay.Replays.init(p, session.bridgePort, session.bridgeSecret, session.launchToken);
 		com.arcticlauncher.client.together.TogetherLink together =
 				new com.arcticlauncher.client.together.TogetherLink(session.bridgePort, session.bridgeSecret);
 		launcherJoin = new com.arcticlauncher.client.servers.LauncherJoin(session.bridgePort, session.bridgeSecret, session.launchToken);
@@ -260,9 +260,10 @@ public final class ArcticClient {
 				features.combatFx().render(g, config, platform);
 			}
 			hud.render(g, style(), false);
-			if (com.arcticlauncher.client.replay.Replays.recording()) {
-				String recording = Lang.t("mods.rec") + com.arcticlauncher.client.replay.Replays.recordingStatus();
-				g.text(recording, 6, 6, 0xFFFF6767, true);
+			if (config.replayEnabled) {
+				boolean recording = com.arcticlauncher.client.replay.Replays.recording();
+				String status = com.arcticlauncher.client.replay.Replays.recordingStatus();
+				g.text((recording ? Lang.t("mods.rec") : "") + status, 6, 6, recording ? 0xFFFF6767 : 0xFFE0E0E0, true);
 			}
 		}
 		if (platform.inWorld()) {
@@ -507,12 +508,12 @@ public final class ArcticClient {
 	}
 
 	/** A key went down with no screen open; true if Arctic used it. */
-	public static boolean keyPressed(int key) {
+	public static boolean keyPressed(int key, int nativeKey) {
 		if (com.arcticlauncher.client.replay.Replays.watching()) {
 			if (key == Keys.RIGHT_SHIFT) {
 				return com.arcticlauncher.client.replay.Replays.key(Keys.ESCAPE);
 			}
-			return com.arcticlauncher.client.replay.Replays.key(key);
+			return com.arcticlauncher.client.replay.Replays.key(key, nativeKey);
 		}
 		if (key == Keys.RIGHT_SHIFT && platform.inWorld()) {
 			platform.openPage(Menus.home());

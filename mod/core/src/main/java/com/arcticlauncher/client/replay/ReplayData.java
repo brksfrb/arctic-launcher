@@ -30,6 +30,9 @@ import java.util.zip.ZipFile;
 public final class ReplayData implements Closeable {
 	private static final Gson GSON = new Gson();
 	private static final int HEADER = 8;
+	private static final int PACKET_PAGE = 64 << 20;
+	private static final boolean WINDOWS = System.getProperty("os.name", "")
+			.toLowerCase(java.util.Locale.ROOT).contains("windows");
 
 	public final File file;
 	public final ReplayMeta meta;
@@ -37,12 +40,15 @@ public final class ReplayData implements Closeable {
 	private final RandomAccessFile raf;
 	private final FileChannel channel;
 	private final File cacheFile;
+	private final ByteBuffer[] pages;
+	private final long lastPacketEnd;
+	private ByteBuffer readAhead;
+	private long readAheadStart = -1;
 	/** Packet count, and per packet: arrival (ms), where its bytes start, their length. */
 	final int count;
 	final int[] time;
 	final long[] offset;
-	final int[] length;
-	/** The recording player, once a tick. */
+		/** The recording player, once a tick. */
 	final SelfSample[] self;
 	/** Filled in by {@link #classify} (null until then). */
 	volatile byte[] category;
@@ -53,7 +59,7 @@ public final class ReplayData implements Closeable {
 	java.util.Map<Integer, long[]> bulks = java.util.Collections.emptyMap();
 
 	private ReplayData(File file, ReplayMeta meta, ReplayMeta.Extras extras, RandomAccessFile raf, File cacheFile,
-			int count, int[] time, long[] offset, int[] length, SelfSample[] self) {
+			int count, int[] time, long[] offset, long lastPacketEnd, SelfSample[] self) throws IOException {
 		this.file = file;
 		this.meta = meta;
 		this.extras = extras;
@@ -63,8 +69,17 @@ public final class ReplayData implements Closeable {
 		this.count = count;
 		this.time = time;
 		this.offset = offset;
-		this.length = length;
+		this.lastPacketEnd = lastPacketEnd;
 		this.self = self;
+		// A mapped file cannot be unlinked while its buffers are live on Windows.
+		long size = channel.size();
+		pages = WINDOWS ? null : new ByteBuffer[(int) ((size + PACKET_PAGE - 1) / PACKET_PAGE)];
+		if (pages != null) {
+			for (int i = 0; i < pages.length; i++) {
+				long at = (long) i * PACKET_PAGE;
+				pages[i] = channel.map(FileChannel.MapMode.READ_ONLY, at, Math.min(PACKET_PAGE, size - at));
+			}
+		}
 	}
 
 	/** Open {@code mcpr}, unpacking its packets into {@code cacheDir} (reused while unchanged). */
@@ -80,6 +95,7 @@ public final class ReplayData implements Closeable {
 			}
 			String extrasJson = text(zip, Recorder.EXTRAS_ENTRY);
 			extras = extrasJson == null ? new ReplayMeta.Extras() : GSON.fromJson(extrasJson, ReplayMeta.Extras.class);
+			if (extras == null) extras = new ReplayMeta.Extras();
 			extras.fillDefaults();
 			self = readSelf(zip);
 			if (!packets.isFile()) {
@@ -129,7 +145,6 @@ public final class ReplayData implements Closeable {
 		int cap = 1 << 16;
 		int[] time = new int[cap];
 		long[] offset = new long[cap];
-		int[] length = new int[cap];
 		int n = 0;
 		long limit = raf.length();
 		long at = 0;
@@ -145,13 +160,11 @@ public final class ReplayData implements Closeable {
 					cap *= 2;
 					time = Arrays.copyOf(time, cap);
 					offset = Arrays.copyOf(offset, cap);
-					length = Arrays.copyOf(length, cap);
 				}
 				time[n] = t;
 				offset[n] = at + HEADER;
-				length[n] = len;
 				n++;
-				at += HEADER + len;
+				at += HEADER + (long) len;
 				int skipped = 0;
 				while (skipped < len) {
 					int k = in.skipBytes(len - skipped);
@@ -165,7 +178,7 @@ public final class ReplayData implements Closeable {
 		if (n > 0 && meta.duration < time[n - 1]) {
 			meta.duration = time[n - 1];
 		}
-		return new ReplayData(mcpr, meta, extras, raf, cacheFile, n, time, offset, length, self);
+		return new ReplayData(mcpr, meta, extras, raf, cacheFile, n, Arrays.copyOf(time, n), Arrays.copyOf(offset, n), at, self);
 	}
 
 	private static SelfSample[] readSelf(ZipFile zip) throws IOException {
@@ -209,20 +222,44 @@ public final class ReplayData implements Closeable {
 		return time[i];
 	}
 
-	/** Packet {@code i}'s bytes (its id, then its body), freshly read (the game may keep them). */
+	/** Independent packet view (the decoder may keep it). */
 	public ByteBuffer packet(int i) {
-		ByteBuffer b = ByteBuffer.allocate(length[i]);
+		if (!channel.isOpen()) throw new java.io.UncheckedIOException(new java.nio.channels.ClosedChannelException());
+		long at = offset[i];
+		int bytes = (int) ((i + 1 < count ? offset[i + 1] - HEADER : lastPacketEnd) - at);
+		if (pages != null && bytes != 0) {
+			int within = (int) (at % PACKET_PAGE);
+			ByteBuffer page = pages[(int) (at / PACKET_PAGE)];
+			if (bytes <= page.capacity() - within) return slice(page, within, bytes);
+		}
 		try {
-			while (b.hasRemaining()) {
-				if (channel.read(b, offset[i] + b.position()) < 0) {
-					break;
+			if (pages == null && bytes <= (1 << 20)) {
+				if (readAhead == null || at < readAheadStart || at + bytes > readAheadStart + readAhead.limit()) {
+					readAheadStart = at;
+					readAhead = read(at, (int) Math.min(1 << 20, channel.size() - at));
 				}
+				return slice(readAhead, (int) (at - readAheadStart), bytes);
 			}
+			return read(at, bytes);
 		} catch (IOException e) {
 			throw new java.io.UncheckedIOException(e);
 		}
-		b.flip();
-		return b;
+	}
+
+	private ByteBuffer read(long at, int bytes) throws IOException {
+		ByteBuffer buffer = ByteBuffer.allocate(bytes);
+		while (buffer.hasRemaining()) {
+			if (channel.read(buffer, at + buffer.position()) < 0) throw new EOFException("replay packet ended early");
+		}
+		buffer.flip();
+		return buffer;
+	}
+
+	private static ByteBuffer slice(ByteBuffer source, int at, int bytes) {
+		ByteBuffer view = source.duplicate();
+		view.position(at);
+		view.limit(at + bytes);
+		return view.slice();
 	}
 
 	/** The first packet that arrives after {@code ms}. */

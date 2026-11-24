@@ -75,7 +75,7 @@ class ReplayInWorldTest {
 
 	@Test void startsAnInWorldBufferWhenNoneExists() throws Exception { run(true, true, true, true, null); }
 	@Test void saysRejoinWhenTheVersionCannotSnapshot() throws Exception {
-		run(true, false, true, false, "replay.this_version_cant_record_a_world_you_were");
+		run(true, false, true, false, "replay.rejoin_to_restore_replay");
 	}
 	@Test void saysReplayIsOffWhenDisabled() throws Exception {
 		run(true, true, false, false, "replay.replay_is_off_turn_it_on_in_the_replays_tab");

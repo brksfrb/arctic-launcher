@@ -23,7 +23,7 @@ abstract class KeyBindingMixin {
 			ArcticClient.mousePressed(LegacyKeys.coreMouse(code - MOUSE_OFFSET));
 			return;
 		}
-		if (MinecraftClient.getInstance().currentScreen == null && ArcticClient.keyPressed(LegacyKeys.core(code))) {
+		if (MinecraftClient.getInstance().currentScreen == null && ArcticClient.keyPressed(LegacyKeys.core(code), code)) {
 			LegacyKeys.used(code, org.lwjgl.input.Keyboard.getEventNanoseconds());
 			ci.cancel();
 		}

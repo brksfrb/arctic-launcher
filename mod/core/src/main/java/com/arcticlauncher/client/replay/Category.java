@@ -40,6 +40,16 @@ public final class Category {
 	 * the classifier). Without its list it is kept like {@link #ALWAYS}.
 	 */
 	public static final byte CHUNK_BULK = 14;
+	/** One block changes (key: packed block position). */
+	public static final byte BLOCK_UPDATE = 15;
+	/** Replaces a previous value with the same key, such as the selected hotbar slot. */
+	public static final byte STATE = 16;
+	/** Entity metadata fields (key: entity id in the top 32 bits, field mask in the low 32). */
+	public static final byte ENTITY_DATA = 17;
+
+	static long blockChunk(long pos) {
+		return chunk((int) (pos >> 38) >> 4, (int) (pos << 26 >> 38) >> 4);
+	}
 
 	private Category() {}
 

@@ -30,6 +30,7 @@ public final class ReplayMeta {
 		public String selfUuid;
 		/** Moments marked while playing (ms), each the end of a 2D clip. */
 		public List<Integer> moments = new ArrayList<Integer>();
+		public List<Integer> markers = new ArrayList<Integer>();
 		/** How far back a moment reaches (seconds). */
 		public int clipSeconds = 30;
 		/** Camera path keyframes. */
@@ -39,6 +40,7 @@ public final class ReplayMeta {
 			if (moments == null) {
 				moments = new ArrayList<Integer>();
 			}
+			if (markers == null) markers = new ArrayList<Integer>();
 			if (keyframes == null) {
 				keyframes = new ArrayList<Keyframe>();
 			}

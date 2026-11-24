@@ -29,8 +29,8 @@ final class LiveVideoSession {
 	private final long started = System.nanoTime();
 	private final ExecutorService saves;
 	private final Consumer<String> notice;
-	private final BlockingQueue<byte[]> available = new ArrayBlockingQueue<byte[]>(3);
-	private final BlockingQueue<byte[]> frames = new ArrayBlockingQueue<byte[]>(2);
+	private final BlockingQueue<Frame> available = new ArrayBlockingQueue<Frame>(3);
+	private final BlockingQueue<Frame> frames = new ArrayBlockingQueue<Frame>(2);
 	private final BlockingQueue<AudioEvent> audioEvents = new ArrayBlockingQueue<AudioEvent>(2048);
 	private final List<Job> jobs = new ArrayList<Job>();
 	private volatile boolean finishing, finished;
@@ -52,7 +52,7 @@ final class LiveVideoSession {
 		this.dir = new File(root, UUID.randomUUID().toString()); this.videos = videos;
 		this.encoder = encoder; this.tool = tool; this.codec = codec; this.backend = backend;
 		this.width = width; this.height = height; this.fps = fps; this.saves = saves; this.notice = notice;
-		for (int i = 0; i < 3; i++) available.add(new byte[width * height * 3]);
+		for (int i = 0; i < 3; i++) available.add(new Frame());
 		Thread writer = new Thread(this::write, "arctic-gameplay-video");
 		writer.setDaemon(true); writer.setPriority(Thread.MIN_PRIORITY); writer.start();
 	}
@@ -65,24 +65,50 @@ final class LiveVideoSession {
 	boolean hasRoom() { return !available.isEmpty() && frames.remainingCapacity() > 0 && !finishing; }
 	private double seconds() { return (System.nanoTime() - started) / 1_000_000_000.0; }
 
-	/** CPU copy is bounded by output resolution. Resize changes letterbox into the original video size. */
+	private static final class Frame {
+		byte[] rgba = new byte[0];
+		int width;
+		int height;
+		boolean bottomUp;
+	}
+
+	/** Copy the mapped bytes while they are valid. The encoder thread handles pixel conversion. */
 	void offer(int w, int h, ByteBuffer rgba, boolean bottomUp) {
-		byte[] rgb = available.poll();
-		if (rgb == null || finishing) { if (rgb != null) available.offer(rgb); return; }
+		Frame next = available.poll();
+		if (next == null) return;
+		boolean queued = false;
+		try {
+			if (finishing) return;
+			int bytes = Math.multiplyExact(Math.multiplyExact(w, h), 4);
+			if (next.rgba.length < bytes) next.rgba = new byte[bytes];
+			rgba.duplicate().get(next.rgba, 0, bytes);
+			next.width = w;
+			next.height = h;
+			next.bottomUp = bottomUp;
+			queued = frames.offer(next);
+		} finally {
+			if (!queued) available.offer(next);
+		}
+	}
+
+	private void convert(Frame frame, byte[] rgb) {
+		int w = frame.width, h = frame.height;
 		double scale = Math.min((double) width / w, (double) height / h);
 		int dw = Math.max(1, (int) (w * scale)), dh = Math.max(1, (int) (h * scale));
-		int left = (width - dw) / 2, top = (height - dh) / 2, base = rgba.position();
-		Arrays.fill(rgb, (byte) 0);
+		int left = (width - dw) / 2, top = (height - dh) / 2;
+		if (dw != width || dh != height) Arrays.fill(rgb, (byte) 0);
 		for (int y = 0; y < dh; y++) {
-			int sy = y * h / dh, row = base + (bottomUp ? h - 1 - sy : sy) * w * 4;
+			int sy = y * h / dh, row = (frame.bottomUp ? h - 1 - sy : sy) * w * 4;
 			int out = ((top + y) * width + left) * 3;
 			for (int x = 0; x < dw; x++) {
 				int at = row + x * w / dw * 4;
-				rgb[out++] = rgba.get(at); rgb[out++] = rgba.get(at + 1); rgb[out++] = rgba.get(at + 2);
+				rgb[out++] = frame.rgba[at];
+				rgb[out++] = frame.rgba[at + 1];
+				rgb[out++] = frame.rgba[at + 2];
 			}
 		}
-		if (!frames.offer(rgb)) available.offer(rgb);
 	}
+
 	void audio(AudioEvent event) {
 		if (finishing) return;
 		AudioEvent copy = event.at(event.time, 0); copy.time = (int) (seconds() * 1000);
@@ -94,6 +120,12 @@ final class LiveVideoSession {
 		manual = new Job(seconds(), -1, output(Lang.t("replay.recording")));
 		Job begun = manual;
 		saves.execute(() -> { try { persist(begun); } catch (IOException e) { fail(e.getMessage()); } });
+	}
+	synchronized void discardRecording() {
+		if (manual == null) return;
+		Job discarded = manual;
+		manual = null;
+		saves.execute(() -> jobFile(discarded).delete());
 	}
 	synchronized void stopRecording() {
 		if (manual == null) return;
@@ -159,15 +191,24 @@ final class LiveVideoSession {
 					try { Thread.sleep(1000); } catch (InterruptedException e) { return; }
 				}
 			}, "arctic-capture-watch"); watchdog.setDaemon(true); watchdog.start();
-			byte[] last = null;
+			byte[] rgb = new byte[width * height * 3];
+			boolean haveFrame = false;
 			long index = 0, check = 0;
 			try (OutputStream out = new BufferedOutputStream(process.getOutputStream(), 64 * 1024)) {
 				while (failure == null) {
-					byte[] newest;
-					while ((newest = frames.poll()) != null) { if (last != null) available.offer(last); last = newest; }
+					Frame newest = frames.poll();
+					if (newest != null) {
+						for (Frame later; (later = frames.poll()) != null; ) {
+							available.offer(newest);
+							newest = later;
+						}
+						convert(newest, rgb);
+						available.offer(newest);
+						haveFrame = true;
+					}
 					if (finishing && index >= Math.max(1, Math.ceil(finishAt * fps))) break;
-					if (last == null || index > seconds() * fps) { Thread.sleep(2); continue; }
-					out.write(last); out.flush();
+					if (!haveFrame || index > seconds() * fps) { Thread.sleep(2); continue; }
+					out.write(rgb); out.flush();
 					encodedTo = (double) ++index / fps; writeAt = System.nanoTime();
 					if (index - check >= fps * 2) { check = index; prune(); if (dir.getUsableSpace() < MIN_FREE) throw new IOException("Not enough free disk space for video capture"); }
 				}

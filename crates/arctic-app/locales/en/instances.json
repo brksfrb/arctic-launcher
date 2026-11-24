@@ -1,4 +1,8 @@
 {
+  "replay_open_failed": "Couldn't open replay",
+  "replay_unavailable": "The recording is unavailable.",
+  "replay_version_unavailable": "The recording's Minecraft version is unavailable.",
+  "replay_enable_client": "Enable Arctic Client in an instance for this Minecraft version.",
   "instances.a_copy_with_its_own_folder_the_same_mods": "A copy with its own folder: the same mods, packs, settings and configs. Handy for trying other mods without touching this one.",
   "instances.a_new_random_order_every_time_nobody_pays": "A new random order every time. Nobody pays for a spot.",
   "instances.a_partner_of_arctic_launcher": "A partner of Arctic Launcher",

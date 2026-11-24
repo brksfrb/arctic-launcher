@@ -2,6 +2,7 @@ package com.arcticlauncher.client.replay;
 
 import static org.junit.jupiter.api.Assertions.*;
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.Platform;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.notice.Notices;
 import java.lang.reflect.Field;
@@ -29,13 +30,17 @@ class ReplaySaveFeedbackTest {
 		Recorder recorder = new Recorder(dir.toFile(), () -> 30, message -> {}, () -> (p, k) -> Category.ALWAYS,
 				1L << 20, 0, 10_000);
 		Field r = field(Replays.class, "recorder"), b = field(Replays.class, "backend"),
-				e = field(Replays.class, "exports"), c = field(ArcticClient.class, "config");
-		Object oldR = r.get(null), oldB = b.get(null), oldE = e.get(null), oldC = c.get(null);
+				e = field(Replays.class, "exports"), p = field(Replays.class, "platform"), c = field(ArcticClient.class, "config");
+		Object oldR = r.get(null), oldB = b.get(null), oldE = e.get(null), oldC = c.get(null), oldP = p.get(null);
 		@SuppressWarnings("unchecked") List<Object> notices = (List<Object>) field(Notices.class, "QUEUE").get(null);
 		List<Object> oldNotices = new ArrayList<>(notices);
 		Recorder.Take take = recorder.begin("test", true, 1, "test"); take.packet(new byte[] {1});
 		try {
-			r.set(null, recorder); b.set(null, backend); e.set(null, new ExportQueue(dir.toFile())); c.set(null, new ClientConfig());
+			r.set(null, recorder); b.set(null, backend); e.set(null, new ExportQueue(dir.toFile())); ClientConfig config = new ClientConfig();
+			config.replayEnabled = true;
+			c.set(null, config);
+			p.set(null, Proxy.newProxyInstance(Platform.class.getClassLoader(), new Class<?>[] {Platform.class},
+					(proxy, method, args) -> method.getName().equals("inWorld")));
 			notices.clear(); Replays.saveMoment();
 			assertNotNull(capture.get());
 			assertEquals("Saving clip", title(notices.get(notices.size() - 1)), "F9 must acknowledge before GPU readback or saving finishes");
@@ -52,7 +57,7 @@ class ReplaySaveFeedbackTest {
 			take.end();
 			CountDownLatch ended = new CountDownLatch(1); recorder.afterWrites(ended::countDown);
 			assertTrue(ended.await(10, TimeUnit.SECONDS));
-			r.set(null, oldR); b.set(null, oldB); e.set(null, oldE); c.set(null, oldC);
+			r.set(null, oldR); b.set(null, oldB); e.set(null, oldE); c.set(null, oldC); p.set(null, oldP);
 			notices.clear(); notices.addAll(oldNotices);
 		}
 	}

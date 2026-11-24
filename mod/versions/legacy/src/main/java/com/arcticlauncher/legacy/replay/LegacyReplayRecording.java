@@ -19,7 +19,7 @@ public final class LegacyReplayRecording {
 
 	private LegacyReplayRecording() {}
 
-	/** A client connection is logging in: start a recording (null when off). */
+	/** A client connection is logging in: start collecting world state. */
 	public static Recorder.Take begin(ClientConnection connection) {
 		Recorder recorder = Replays.recorder();
 		if (recorder == null) {
@@ -49,9 +49,7 @@ public final class LegacyReplayRecording {
 		if (recorder == null || mc.world == null || mc.player == null || mc.getNetworkHandler() == null || Replays.watching()) {
 			return false;
 		}
-		if (recorder.current() != null) {
-			return true;
-		}
+		if (recorder.bufferReady()) return true;
 		if (!LegacyReplaySnapshot.supported()) {
 			return false;
 		}
@@ -82,6 +80,7 @@ public final class LegacyReplayRecording {
 
 	/** A packet arrived (network thread). */
 	public static void record(Recorder.Take take, Packet<?> packet) {
+		if (!take.accepting(LegacyReplayCodec.name(packet))) return;
 		byte[] bytes = LegacyReplayCodec.encode(packet);
 		if (bytes != null) {
 			SNAPSHOT.live(take, bytes, take::packet);

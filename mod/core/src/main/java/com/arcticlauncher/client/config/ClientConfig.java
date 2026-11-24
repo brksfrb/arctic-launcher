@@ -404,15 +404,18 @@ public final class ClientConfig {
 	public boolean waypointsInWorld = true;
 	/** Legacy setting, retained when reading old configs; never starts playback anymore. */
 	public boolean replayAutoExport;
-	/** Encode the game framebuffer while playing, alongside the independent 3D recording. */
-	/** The whole replay system: instant clips, recordings and gameplay video. Applies from the next world join. */
+	/** Allow saving instant clips and recordings. The current world state is available as soon as this is enabled. */
 	public boolean replayEnabled;
+	/** Encode the game framebuffer while playing, alongside the independent 3D recording. */
 	public boolean replayVideoEnabled;
 	public int replayVideoHeight = 720;
 	public int replayVideoFps = 30;
 	/** Saves only the recent rolling window, independently of manual recording. */
 	public String replayKey = "key.keyboard.f9";
 	public String replayRecordKey = "key.keyboard.f10";
+	public String replayMarkerKey = "key.keyboard.m";
+	/** Overrides for viewer controls, using the same key names as other Arctic bindings. */
+	public java.util.Map<String, String> replayViewerKeys = new java.util.HashMap<String, String>();
 	/** How far back instant 3D and video clips reach (seconds). */
 	public int clipSeconds = 30;
 	/** Chat lines the game keeps to scroll back through (the game's own is 100). */

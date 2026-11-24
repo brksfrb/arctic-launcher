@@ -134,6 +134,13 @@ pub trait Accounts: Send + Sync + 'static {
         None
     }
 
+    /// Ask the launcher to open a recording belonging to this game run.
+    fn watch_replay(&self, _launch: &str, _file: &str) -> Result<()> {
+        Err(crate::Error::Other(
+            "opening replays requires Arctic Launcher".into(),
+        ))
+    }
+
     /// Play together from the game: `{"action": "host" | "join" | "stop" |
     /// "status", "code": …}`; the answer is the current state.
     fn together(&self, _request: &[u8]) -> Result<String> {
@@ -343,6 +350,18 @@ fn respond(request: &Request, accounts: &dyn Accounts) -> (&'static str, String)
                 None => serde_json::json!({}),
             };
             ("200 OK", body.to_string())
+        }
+        ("POST", path) if path.starts_with("/v1/replay/") => {
+            let launch = path.trim_start_matches("/v1/replay/");
+            let body =
+                serde_json::from_slice::<serde_json::Value>(&request.body).unwrap_or_default();
+            match body.get("file").and_then(|name| name.as_str()) {
+                Some(file) => match accounts.watch_replay(launch, file) {
+                    Ok(()) => ("200 OK", "{}".to_owned()),
+                    Err(e) => error("400 Bad Request", &e.to_string()),
+                },
+                None => error("400 Bad Request", "no replay file"),
+            }
         }
         ("POST", "/v1/together") => match accounts.together(&request.body) {
             Ok(reply) => ("200 OK", reply),

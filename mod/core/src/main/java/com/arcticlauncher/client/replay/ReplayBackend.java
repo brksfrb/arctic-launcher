@@ -107,6 +107,9 @@ public interface ReplayBackend {
 	/** Watch through this entity's eyes (-1: back to the free camera). */
 	void follow(int entityId);
 
+	/** Whether the selected entity still exists in the current world. */
+	default boolean following() { return true; }
+
 	/** Players you can follow: {entity id (Integer), name, x, y, z}. */
 	List<Object[]> followable();
 
@@ -118,6 +121,9 @@ public interface ReplayBackend {
 
 	/** Live capture may downscale on the GPU before readback; it must not advance replay playback. */
 	default void captureLive(FrameSink done, int height) { capture(done); }
+
+	/** Discard any pixels still waiting when a new world starts gameplay capture. */
+	default void resetLiveCapture() {}
 
 	/** Open a resolved sound from the same resource packs used by the game. Export worker only. */
 	default java.io.InputStream audioResource(String resource) throws java.io.IOException {

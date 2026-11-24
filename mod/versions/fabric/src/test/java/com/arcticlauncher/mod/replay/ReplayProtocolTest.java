@@ -61,7 +61,7 @@ class ReplayProtocolTest {
 
 	private static final class Session implements AutoCloseable {
 		final Connection connection = new Connection(PacketFlow.CLIENTBOUND);
-		final EmbeddedChannel channel = ReplayTransport.open(connection);
+		final EmbeddedChannel channel = ReplayTransport.open(connection, packet -> packet);
 		final List<String> handled = new ArrayList<>();
 		Object inbound;
 		Object protocol;
@@ -74,10 +74,14 @@ class ReplayProtocolTest {
 			connection.initiateServerboundPlayConnection("replay.arctic", 25565, login);
 			//#endif
 			protocol = inbound = ReplayCodec.loginProtocol();
+			//#if MC >= 1.20.5
+			installMerger();
+			//#endif
 		}
 
 		PacketListener listener(ConnectionProtocol phase, Class<?> type) {
 			return (PacketListener) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, (p, method, args) -> {
+				if (method.getName().equals("shouldHandleMessage")) return true;
 				if (method.getName().equals("flow")) return PacketFlow.CLIENTBOUND;
 				if (method.getName().equals("protocol")) return phase;
 				if (args != null && args.length == 1 && args[0] instanceof Packet) {
@@ -148,6 +152,7 @@ class ReplayProtocolTest {
 			}
 			// Configuration tasks must execute, not accumulate among discarded outgoing packets.
 			assertNotNull(channel.pipeline().get("decoder"));
+			installMerger();
 			assertFalse(channel.outboundMessages().stream().anyMatch(m -> m instanceof net.minecraft.network.UnconfiguredPipelineHandler.InboundConfigurationTask));
 			//#else
 			inbound = phase;
@@ -155,13 +160,26 @@ class ReplayProtocolTest {
 			//#endif
 		}
 
-		@SuppressWarnings({"rawtypes", "unchecked"})
+		//#if MC >= 1.20.5
+		/** Fabric's merger is replaced every phase and retires only when it receives the terminal packet. */
+		void installMerger() {
+			channel.pipeline().addAfter("decoder", "test:merger", new io.netty.channel.ChannelInboundHandlerAdapter() {
+				@Override
+				public void channelRead(io.netty.channel.ChannelHandlerContext ctx, Object message) {
+					if (message instanceof Packet<?> packet && packet.isTerminal()) ctx.pipeline().remove(this);
+					ctx.fireChannelRead(message);
+				}
+			});
+		}
+		//#endif
+
 		void apply(byte[] bytes) {
-			Packet<?> packet = ReplayCodec.decode(protocol, ByteBuffer.wrap(bytes));
-			ReplayCodec.beforeHandle(channel, packet);
-			((Packet) packet).handle(connection.getPacketListener());
-			protocol = ReplayCodec.afterHandle(protocol, packet, inbound);
-			channel.checkException();
+			ReplayTransport.receive(channel, ByteBuffer.wrap(bytes));
+			//#if MC >= 1.20.5
+			protocol = ReplayCodec.installedProtocol(protocol, handled.get(handled.size() - 1), inbound);
+			//#else
+			protocol = channel.attr(Connection.ATTRIBUTE_CLIENTBOUND_PROTOCOL).get().protocol();
+			//#endif
 			channel.releaseOutbound();
 		}
 
@@ -252,7 +270,8 @@ class ReplayProtocolTest {
 		//#endif
 		ReplayRecording.record(take, wrongProtocol, start);
 		assertFalse(recorder.bufferReady());
-		assertNull(recorder.current());
+		assertEquals(com.arcticlauncher.client.replay.Recorder.TakeState.STOPPED, recorder.state());
+		take.end();
 	}
 
 	//#if MC >= 1.20.5
@@ -267,8 +286,8 @@ class ReplayProtocolTest {
 	}
 
 	@Test void incompleteHandoverIsReportedBeforeReadingPlayBytesAsConfiguration() {
-		assertThrows(IllegalStateException.class, () -> ReplayCodec.afterHandle(
-				ConfigurationProtocols.CLIENTBOUND, ClientboundFinishConfigurationPacket.INSTANCE, ConfigurationProtocols.CLIENTBOUND));
+		assertThrows(IllegalStateException.class, () -> ReplayCodec.installedProtocol(
+				ConfigurationProtocols.CLIENTBOUND, "finish_configuration", ConfigurationProtocols.CLIENTBOUND));
 	}
 	//#endif
 }

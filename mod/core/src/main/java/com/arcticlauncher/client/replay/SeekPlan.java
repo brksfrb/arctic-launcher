@@ -36,6 +36,10 @@ public final class SeekPlan {
 		LongSet chunksLater = new LongSet();
 		LongSet placedLater = new LongSet();
 		LongSet retiredLater = new LongSet();
+		LongSet blocksLater = new LongSet();
+		LongSet stateLater = new LongSet();
+		java.util.Map<Integer, Integer> metadataLater = new java.util.HashMap<Integer, Integer>();
+		boolean[] knownRemovals = from == 0 ? knownRemovals(category, key, to, removals) : null;
 		LongSet headLater = new LongSet();
 		LongSet motionLater = new LongSet();
 		boolean respawnLater = false;
@@ -74,6 +78,20 @@ public final class SeekPlan {
 				case Category.BLOCK:
 					keep = !respawnLater && !chunksLater.contains(k);
 					break;
+				case Category.BLOCK_UPDATE:
+					keep = !respawnLater && !chunksLater.contains(Category.blockChunk(k)) && blocksLater.add(k);
+					break;
+				case Category.STATE:
+					keep = stateLater.add(k);
+					break;
+				case Category.ENTITY_DATA: {
+					int entity = (int) (k >> 32);
+					int fields = (int) k;
+					int newer = metadataLater.getOrDefault(entity, 0);
+					keep = !respawnLater && !retiredLater.contains(entity) && (fields & ~newer) != 0;
+					if (keep) metadataLater.put(entity, newer | fields);
+					break;
+				}
 				case Category.ENTITY_ADD:
 					keep = !respawnLater && !retiredLater.contains(k);
 					// Moves before it were for an earlier entity with this id.
@@ -96,7 +114,7 @@ public final class SeekPlan {
 					keep = !respawnLater && !retiredLater.contains(k) && motionLater.add(k);
 					break;
 				case Category.ENTITY_REMOVE:
-					keep = !respawnLater;
+					keep = !respawnLater && (knownRemovals == null || !knownRemovals[i]);
 					int[] ids = removals.get(i);
 					if (ids != null) for (int id : ids) retiredLater.add(id);
 					break;
@@ -117,6 +135,27 @@ public final class SeekPlan {
 			ordered[i] = out[n - 1 - i];
 		}
 		return ordered;
+	}
+
+	/** An entity we omit spawning from an empty world does not have to be destroyed either. */
+	private static boolean[] knownRemovals(byte[] category, long[] key, int to, java.util.Map<Integer, int[]> removals) {
+		boolean[] known = null;
+		java.util.Set<Long> spawned = new java.util.HashSet<Long>();
+		for (int i = 0; i < to; i++) {
+			if (category[i] == Category.RESPAWN) spawned.clear();
+			else if (category[i] == Category.ENTITY_ADD) spawned.add(key[i]);
+			else if (category[i] == Category.ENTITY_REMOVE) {
+				int[] ids = removals.get(i);
+				if (ids == null) continue;
+				boolean all = true;
+				for (int id : ids) all &= spawned.remove((long) id);
+				if (all) {
+					if (known == null) known = new boolean[to];
+					known[i] = true;
+				}
+			}
+		}
+		return known;
 	}
 
 	/** Unloads in {@code [0, to)} of chunks not loaded since the start or the last respawn. */

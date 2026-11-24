@@ -91,7 +91,7 @@ abstract class KeyboardHandlerMixin {
 		}
 		Screen screen = Compat.screen();
 		if (screen == null) {
-			return ArcticClient.keyPressed(Input.key(key));
+			return ArcticClient.keyPressed(Input.key(key), key);
 		}
 		if (screen instanceof PageScreen || typing(screen)) {
 			return false;

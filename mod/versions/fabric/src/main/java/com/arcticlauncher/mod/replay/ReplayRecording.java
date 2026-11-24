@@ -26,7 +26,7 @@ public final class ReplayRecording {
 
 	private ReplayRecording() {}
 
-	/** A client connection is logging in: start a recording (null when off). */
+	/** A client connection is logging in: start collecting world state. */
 	public static Recorder.Take begin(Connection connection) {
 		Recorder recorder = Replays.recorder();
 		if (recorder == null) {
@@ -51,6 +51,7 @@ public final class ReplayRecording {
 
 	/** A packet arrived (network thread): write it down. */
 	public static void record(Recorder.Take take, Object protocol, Packet<?> packet) {
+		if (!take.accepting(ReplayCodec.name(packet))) return;
 		// Left out of replays anyway; and writing some (a plugin message, on older
 		// versions) empties them for the game.
 		if (com.arcticlauncher.client.replay.PacketSorter.dropped(ReplayCodec.name(packet))) {
@@ -62,8 +63,7 @@ public final class ReplayRecording {
 			// End at the last valid packet instead of silently saving a corrupt stream.
 			com.arcticlauncher.mod.ArcticMod.LOG.warn("replay: could not encode handover {} in phase {}; recording stopped",
 					ReplayCodec.name(packet), ReplayCodec.phaseName(protocol));
-			take.end();
-			com.arcticlauncher.client.notice.Notices.post(com.arcticlauncher.client.Lang.t("replay.replay"), com.arcticlauncher.client.Lang.t("replay.recording_stopped_because_a_protocol_handover_could_not_be_saved"));
+			take.stop(Lang.t("replay.recording_stopped_because_a_protocol_handover_could_not_be_saved"));
 			return;
 		}
 		for (byte[] bytes : encoded) {

@@ -6,7 +6,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import com.arcticlauncher.client.Lang;
 /**
  * Sorts recorded packets by their protocol names ("level_chunk_with_light",
  * "move_entity_pos"...), which stay the same across Minecraft versions: each
@@ -21,6 +20,7 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 
 	private static final Map<String, Byte> CATEGORY = new HashMap<String, Byte>();
 	/** Never handed to the game in a replay: they'd pop up screens, kill the camera or talk back. */
+	private static final Map<String, Integer> STATE = new HashMap<String, Integer>();
 	private static final Set<String> DROPPED = new HashSet<String>();
 
 	static {
@@ -42,6 +42,12 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 		CATEGORY.put("forget_level_chunk", Category.UNLOAD);
 		for (String n : new String[] {"block_update", "section_blocks_update", "chunk_blocks_update", "block_entity_data", "light_update"}) {
 			CATEGORY.put(n, Category.BLOCK);
+		}
+		CATEGORY.put("block_update", Category.BLOCK_UPDATE);
+		for (String name : new String[] {"set_time", "set_experience", "set_carried_item", "tab_list",
+				"set_border_center", "set_border_warning_delay", "set_border_warning_distance"}) {
+			STATE.put(name, STATE.size() + 1);
+			CATEGORY.put(name, Category.STATE);
 		}
 		CATEGORY.put("respawn", Category.RESPAWN);
 		for (String n : new String[] {"add_entity", "add_player", "add_mob", "add_painting", "add_experience_orb"}) {
@@ -83,6 +89,9 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 	private int phase = LOGIN;
 	/** 1.8 layout: chunks come in bulk, and a level_chunk with no sections unloads one. */
 	private final boolean bulkChunks;
+	private final int protocol;
+	private final Map<java.util.List<String>, Long> scores = new HashMap<java.util.List<String>, Long>();
+	private final Map<java.util.List<Long>, Long> bosses = new HashMap<java.util.List<Long>, Long>();
 
 	/**
 	 * {@code names[phase][id]} is the packet's name ({@link #LOGIN},
@@ -96,7 +105,12 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 
 	/** {@code oldBlockPos}: block positions pack y in the middle (1.13 and older). */
 	public PacketSorter(String[][] names, boolean hasConfiguration, boolean longChunkPos, boolean oldBlockPos) {
+		this(names, hasConfiguration, longChunkPos, oldBlockPos, 0);
+	}
+
+	public PacketSorter(String[][] names, boolean hasConfiguration, boolean longChunkPos, boolean oldBlockPos, int protocol) {
 		this.names = names;
+		this.protocol = protocol;
 		this.hasConfiguration = hasConfiguration;
 		this.longChunkPos = longChunkPos;
 		this.oldBlockPos = oldBlockPos;
@@ -127,10 +141,10 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 			simple = simple.substring(0, dollar);
 		}
 		if (simple.startsWith("Clientbound")) {
-			simple = simple.substring(Lang.t("replay.clientbound").length());
+			simple = simple.substring("Clientbound".length());
 		}
 		if (simple.endsWith("Packet")) {
-			simple = simple.substring(0, simple.length() - Lang.t("replay.packet").length());
+			simple = simple.substring(0, simple.length() - "Packet".length());
 		}
 		String name = snake(simple);
 		return inner.isEmpty() ? name : name + "_" + snake(inner);
@@ -187,6 +201,44 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 		}
 		byte c = category(name);
 		try {
+			if ("set_entity_data".equals(name)) {
+				int entity = readVarInt(b);
+				int mask = bulkChunks ? legacyMetadataFields(b) : metadataFields(b);
+				if (mask == 0) {
+					key[0] = entity;
+					return Category.ENTITY_OTHER;
+				}
+				key[0] = ((long) entity << 32) | (mask & 0xFFFFFFFFL);
+				return Category.ENTITY_DATA;
+			}
+			if ("game_event".equals(name)) {
+				int event = b.get() & 255;
+				if (event == 1 || event == 2) key[0] = 16; // Start and stop rain set the same flag.
+				else if (event == 7 || event == 8) key[0] = 16 + event;
+				else return c;
+				return Category.STATE;
+			}
+			if ("boss_event".equals(name)) {
+				long most = b.getLong();
+				long least = b.getLong();
+				int action = readVarInt(b);
+				if (action < 2 || action > 5) return c;
+				key[0] = 0x100000000L + bosses.computeIfAbsent(java.util.Arrays.asList(most, least, (long) action), k -> (long) bosses.size());
+				return Category.STATE;
+			}
+			if ("world_border".equals(name) && protocol > 0 && protocol < 755) {
+				int action = readVarInt(b);
+				if (action != 2 && action != 4 && action != 5) return c;
+				key[0] = 32 + action;
+				return Category.STATE;
+			}
+			if ("set_score".equals(name) && protocol > 0) {
+				String owner = readString(b);
+				if (protocol < 765 && readVarInt(b) != 0) return c;
+				String objective = readString(b);
+				key[0] = 0x200000000L + scores.computeIfAbsent(java.util.Arrays.asList(owner, objective), k -> (long) scores.size());
+				return Category.STATE;
+			}
 			key[0] = key(c, name, b);
 			if (c == Category.CHUNK && bulkChunks && b.remaining() >= 3 && b.get() != 0 && b.getShort() == 0) {
 				// Full chunk, no sections: 1.8's way of unloading it.
@@ -273,6 +325,12 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 				return Category.chunk(b.getInt(), b.getInt());
 			case Category.BLOCK:
 				return blockKey(name, b);
+			case Category.BLOCK_UPDATE: {
+				long pos = b.getLong();
+				return oldBlockPos ? (pos & 0xffffffc000000000L) | ((pos & 0x3ffffffL) << 12) | ((pos >>> 26) & 0xfff) : pos;
+			}
+			case Category.STATE:
+				return STATE.get(name);
 			case Category.ENTITY_ADD:
 			case Category.ENTITY_POS:
 			case Category.ENTITY_MOVE:
@@ -304,6 +362,66 @@ public final class PacketSorter implements ReplayBackend.Classifier {
 		// BlockPos: x 26 bits, then z 26 and y 12 (1.14+), or y 12 and z 26 (older).
 		int z = oldBlockPos ? (int) (pos << 38 >> 38) : (int) (pos << 26 >> 38);
 		return Category.chunk(x >> 4, z >> 4);
+	}
+
+	private static String readString(ByteBuffer b) {
+		int size = readVarInt(b);
+		if (size < 0 || size > b.remaining() || size > 32767 * 3) throw new IllegalArgumentException("invalid packet string");
+		byte[] text = new byte[size];
+		b.get(text);
+		return new String(text, java.nio.charset.StandardCharsets.UTF_8);
+	}
+
+	/** 1.8's packed type/index and 0x7f terminator. Preserve packets carrying complex item tags. */
+	private static int legacyMetadataFields(ByteBuffer b) {
+		int mask = 0;
+		while (b.hasRemaining()) {
+			int header = b.get() & 255;
+			if (header == 127) return b.hasRemaining() ? 0 : mask;
+			int bytes;
+			switch (header >>> 5) {
+				case 0: bytes = 1; break;
+				case 1: bytes = 2; break;
+				case 2:
+				case 3: bytes = 4; break;
+				case 4: bytes = readVarInt(b); break;
+				case 5:
+					if (b.getShort() < 0) bytes = 0;
+					else {
+						b.get(); b.getShort();
+						if (b.get() != 0) return 0;
+						bytes = 0;
+					}
+					break;
+				case 6:
+				case 7: bytes = 12; break;
+				default: return 0;
+			}
+			if (bytes < 0 || bytes > b.remaining()) return 0;
+			b.position(b.position() + bytes);
+			mask |= 1 << (header & 31);
+		}
+		return 0;
+	}
+
+	/** Shared primitive serializers. Registry-dependent and unfamiliar values stay intact. */
+	private int metadataFields(ByteBuffer b) {
+		if (protocol == 0) return 0;
+		int mask = 0;
+		while (b.hasRemaining()) {
+			int index = b.get() & 255;
+			if (index == 255) return b.hasRemaining() ? 0 : mask;
+			if (index >= 32) return 0;
+			int type = readVarInt(b);
+			if (type == 0) b.get();
+			else if (type == 1 || (type == 2 && protocol >= 761)) {
+				int max = type == 1 ? 5 : 10;
+				while (b.get() < 0) if (--max == 0) return 0;
+			} else if (type == (protocol >= 761 ? 3 : 2)) b.getFloat();
+			else return 0;
+			mask |= 1 << index;
+		}
+		return 0;
 	}
 
 	static int readVarInt(ByteBuffer b) {

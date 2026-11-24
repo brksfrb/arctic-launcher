@@ -4,7 +4,6 @@ import com.arcticlauncher.client.gfx.Draw;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.client.style.Style;
-import java.util.List;
 
 import com.arcticlauncher.client.Lang;
 /**
@@ -18,9 +17,6 @@ public final class ReplayHud {
 	static final int TRACK_H = 4;
 	static final int MOMENT = 0xFFFBBF24;
 	static final int KEYFRAME = 0xFF60A5FA;
-	/** While playing, the bar hides after this long without touching the controls. */
-	private static final double SHOW_SECONDS = 3;
-	private static final String HINT = "replay.hud.hint";
 
 	private ReplayHud() {}
 
@@ -29,22 +25,15 @@ public final class ReplayHud {
 		if (v.exporting() != null) {
 			return;
 		}
-		String problem = v.takeProblem();
-		if (problem != null) {
-			com.arcticlauncher.client.notice.Notices.post(Lang.t("replay.replay"), problem);
-		}
 		String status = v.status();
-		if (status != null) {
-			centerLabel(g, s, status);
-		}
-		if (hidden || v.screenOpen() || (!v.paused() && v.idleSeconds() > SHOW_SECONDS)) {
-			return;
-		}
+		if (status != null) centerLabel(g, s, status);
+		if (v.problem() != null) centerLabel(g, s, v.problem(), 0xFFF87171);
+		if (hidden || v.screenOpen()) return;
 		int x0 = MARGIN;
 		int x1 = g.width() - MARGIN;
 		int y1 = g.height() - MARGIN;
 		bar(g, s, v, x0, y1 - BAR_H, x1, y1, -1);
-		String hint = Lang.t(HINT);
+		String hint = Lang.t("replay.timeline_hint", com.arcticlauncher.client.ArcticClient.platform().keyLabel(Replays.ViewerAction.CONTROLS.binding()));
 		int hw = g.textWidth(hint) / 2 + 6;
 		int cx = g.width() / 2;
 		int hy = y1 - BAR_H - 16;
@@ -89,10 +78,15 @@ public final class ReplayHud {
 			int x = xAt(v, m, tx0, tx1);
 			g.fill(x - 1, ty - 3, x + 1, ty + TRACK_H + 3, MOMENT);
 		}
-		List<Keyframe> keys = v.keyframes();
-		for (Keyframe k : keys) {
-			int x = xAt(v, k.time, tx0, tx1);
-			g.fill(x - 2, ty - 2, x + 2, ty + TRACK_H + 2, KEYFRAME);
+		for (int marker : v.markers()) {
+			int x = xAt(v, marker, tx0, tx1);
+			g.fill(x - 1, ty - 5, x + 2, ty + TRACK_H + 3, MOMENT);
+		}
+		for (Keyframe key : v.savedKeyframes()) {
+			int x = xAt(v, key.time, tx0, tx1);
+			int y = key.replayTime == null ? ty - 3 : ty + 3;
+			int color = v.selected(key) ? 0xFFFFFFFF : key.replayTime == null ? KEYFRAME : 0xFFB79BFF;
+			g.fill(x - 2, y, x + 2, y + 5, color);
 		}
 		Draw.round(g, played - 3, ty - 3, played + 3, ty + TRACK_H + 3, 3, 0xFFFFFFFF);
 		if (hoverMs >= 0) {
@@ -122,10 +116,15 @@ public final class ReplayHud {
 	}
 
 	private static void centerLabel(Gfx g, Style s, String text) {
-		int w = g.textWidth(text) + 16;
-		int x = (g.width() - w) / 2;
+		centerLabel(g, s, text, s.text);
+	}
+
+	private static void centerLabel(Gfx g, Style s, String text, int color) {
 		int y = g.height() / 2 - 30;
+		String shown = Draw.fit(g, text, g.width() - 32, 16, y);
+		int w = g.textWidth(shown) + 16;
+		int x = (g.width() - w) / 2;
 		Skin.panel(g, s, x, y, x + w, y + 18);
-		Draw.centered(g, text, g.width() / 2, y + 5, s.text, false);
+		Draw.centered(g, shown, g.width() / 2, y + 5, color, false);
 	}
 }

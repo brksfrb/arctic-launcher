@@ -182,6 +182,7 @@ final class LegacyReplayTest {
 				LegacyWorldTest.command("setblock ~ ~-1 ~2 minecraft:gold_block");
 			});
 		}
+		after(1, () -> LegacyWorldTest.shot("mid recording"));
 		after(8, () -> {
 			Replays.toggleRecording();
 			when("mid recording saved", () -> Replays.recorder().pendingSaves() == 0 && Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr")) != null
@@ -189,15 +190,18 @@ final class LegacyReplayTest {
 				File[] files = Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr"));
 				final File f = files[0];
 				log("mid: saved " + f.getName() + " " + f.length() / 1024 + " KB");
-				com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
-				when("left the world", () -> MinecraftClient.getInstance().world == null, () -> after(3, () -> {
-					Replays.watch(f);
-					when("mid replay opened", () -> Replays.viewer() != null && (Replays.viewer().ready() || Replays.viewer().status() != null), () -> {
-						ReplayViewer v = Replays.viewer();
-						log("mid: opened ready=" + v.ready() + " status=" + v.status() + " duration=" + v.duration());
-						after(4, () -> { LegacyWorldTest.shot("mid replay playing"); log(v.ready() && v.duration() > 3000 ? "PASSED" : "FAILED mid replay unusable"); MinecraftClient.getInstance().scheduleStop(); });
-					});
-				}));
+				after(1, () -> {
+					LegacyWorldTest.shot("mid recording saved");
+					com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
+					when("left the world", () -> MinecraftClient.getInstance().world == null, () -> after(3, () -> {
+						Replays.watch(f);
+						when("mid replay opened", () -> Replays.viewer() != null && Replays.viewer().ready(), () -> {
+							ReplayViewer v = Replays.viewer();
+							log("mid: opened ready=" + v.ready() + " status=" + v.status() + " duration=" + v.duration());
+							after(4, () -> { LegacyWorldTest.shot("mid replay playing"); log(v.ready() && v.duration() > 3000 ? "PASSED" : "FAILED mid replay unusable"); MinecraftClient.getInstance().scheduleStop(); });
+						});
+					}));
+				});
 			});
 		});
 	}

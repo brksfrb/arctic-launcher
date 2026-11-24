@@ -47,6 +47,51 @@ class ReplayStorageBenchmarkTest {
 		}
 		assertTrue(saved.get().length() < 128L << 20, "unexpected storage regression");
 	}
+	@Test void crowdedLegacyWorldOpeningStaysTheSameSize() throws Exception {
+		AtomicLong nanos = new AtomicLong();
+		String[][] names = {{"game_profile"}, {}, {"add_mob", "set_entity_data", "map_chunk_bulk"}};
+		Recorder recorder = new Recorder(dir.toFile(), () -> 30, System.out::println,
+				() -> new PacketSorter(names, false, false, true, 47), 512L << 20, 0, 10_000, nanos::get);
+		Recorder.Take take = recorder.begin("Crowded legacy world", false, 47, "1.8.9");
+		take.packet(new byte[] {0}); // Login success.
+		for (int id = 1; id <= 300; id++) take.packet(entity(0, id, 0));
+		int early = 0;
+		try {
+			for (int second = 1; second <= 1800; second++) {
+				nanos.set(second * 1_000_000_000L);
+				for (int id = 1; id <= 300; id++) take.packet(entity(1, id, second));
+				if (second % 10 == 0) drain(recorder);
+				if (second == 180) early = opening(recorder);
+			}
+			int late = opening(recorder);
+			System.out.println("LEGACY_OPENING 300 entities, packets at 3 minutes=" + early + ", at 30 minutes=" + late);
+			assertTrue(early >= 601);
+			assertTrue(Math.abs(early - late) <= early * 0.1);
+		} finally {
+			take.end();
+			drain(recorder);
+		}
+	}
+
+	private static byte[] entity(int packet, int id, int value) {
+		ByteBuffer bytes = ByteBuffer.allocate(6);
+		bytes.put((byte) packet);
+		if (id < 128) bytes.put((byte) id);
+		else bytes.put((byte) ((id & 127) | 128)).put((byte) (id >>> 7));
+		if (packet == 1) bytes.put((byte) 0).put((byte) value).put((byte) 127);
+		return java.util.Arrays.copyOf(bytes.array(), bytes.position());
+	}
+
+	private int opening(Recorder recorder) throws Exception {
+		AtomicReference<File> clip = new AtomicReference<File>();
+		assertTrue(recorder.saveMoment(clip::set));
+		drain(recorder);
+		assertNotNull(clip.get());
+		try (ReplayData data = ReplayData.open(clip.get(), dir.resolve("cache").toFile())) {
+			return data.indexAfter(0);
+		}
+	}
+
 	private static void drain(Recorder r) throws Exception {
 		CountDownLatch done = new CountDownLatch(1); r.afterWrites(done::countDown); assertTrue(done.await(60, TimeUnit.SECONDS));
 	}

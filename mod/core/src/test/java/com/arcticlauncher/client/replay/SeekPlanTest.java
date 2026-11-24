@@ -123,8 +123,19 @@ class SeekPlanTest {
 		byte[] cats = {Category.ENTITY_ADD, Category.ENTITY_OTHER, Category.ENTITY_REMOVE,
 				Category.ENTITY_ADD, Category.ENTITY_OTHER, Category.ENTITY_MOVE};
 		long[] keys = {7, 7, 0, 7, 7, 7};
-		assertArrayEquals(new int[] {2, 3, 4, 5}, SeekPlan.plan(cats, keys, 0, cats.length,
+		assertArrayEquals(new int[] {3, 4, 5}, SeekPlan.plan(cats, keys, 0, cats.length,
 				java.util.Collections.singletonMap(2, new int[] {7})));
+	}
+
+	@Test
+	void updatesAreRetainedUntilEveryFieldOrTheSameBlockIsOverwritten() {
+		long entity = 12L << 32;
+		long firstBlock = 4L << 12;
+		long secondBlock = firstBlock | 1;
+		byte[] cats = {Category.ENTITY_ADD, Category.ENTITY_DATA, Category.ENTITY_DATA, Category.ENTITY_DATA,
+				Category.ENTITY_DATA, Category.BLOCK_UPDATE, Category.BLOCK_UPDATE, Category.BLOCK_UPDATE};
+		long[] keys = {12, entity | 3, entity | 6, entity | 1, entity | 2, firstBlock, secondBlock, firstBlock};
+		assertArrayEquals(new int[] {0, 2, 3, 4, 6, 7}, plan(cats, keys));
 	}
 
 	@Test

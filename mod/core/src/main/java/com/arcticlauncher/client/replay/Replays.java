@@ -37,6 +37,44 @@ public final class Replays {
 	static final int KEY_DOWN = com.arcticlauncher.client.Keys.DOWN;
 	static final int KEY_UP = com.arcticlauncher.client.Keys.UP;
 
+	public enum ViewerAction {
+		CONTROLS("replay.timeline_controls", "tab", com.arcticlauncher.client.Keys.TAB),
+		PAUSE("replay.play_pause", "p", KEY_P),
+		BACK("replay.jump_back", "left", KEY_LEFT),
+		FORWARD("replay.jump_forward", "right", KEY_RIGHT),
+		FASTER("replay.faster", "up", KEY_UP),
+		SLOWER("replay.slower", "down", KEY_DOWN),
+		CAMERA_KEY("replay.keyframe", "k", KEY_K),
+		TIME_KEY("replay.time_keyframe", "o", com.arcticlauncher.client.Keys.O),
+		CAMERA("replay.switch_camera", "v", KEY_V);
+
+		public final String label;
+		private final String defaultKey;
+		private final int defaultCode;
+
+		ViewerAction(String label, String key, int defaultCode) {
+			this.label = label;
+			this.defaultKey = "key.keyboard." + key;
+			this.defaultCode = defaultCode;
+		}
+
+		public String binding() {
+			com.arcticlauncher.client.config.ClientConfig c = ArcticClient.config();
+			return c == null || c.replayViewerKeys == null ? defaultKey : c.replayViewerKeys.getOrDefault(name(), defaultKey);
+		}
+
+		public void bind(String key) {
+			com.arcticlauncher.client.config.ClientConfig c = ArcticClient.config();
+			if (c.replayViewerKeys == null) c.replayViewerKeys = new HashMap<String, String>();
+			c.replayViewerKeys.put(name(), key);
+		}
+
+		boolean pressed(int code, String nativeName) {
+			String key = binding();
+			return key.equals(nativeName) || (defaultKey.equals(key) && code == defaultCode);
+		}
+	}
+
 	private static Platform platform;
 	private static Recorder recorder;
 	/** The live connection that has actually reached a world. Older games show the title while logging in. */
@@ -44,12 +82,16 @@ public final class Replays {
 	/** Inside {@link #frame()}. */
 	private static boolean inFrame;
 	private static Ffmpeg ffmpeg;
+	private static String launcherReplayUrl;
+	private static String launcherSecret;
 	private static ReplayBackend backend;
 	private static ReplayViewer viewer;
 	private static File gameDir;
 	private static boolean opening;
 	private static boolean saveKeyWasDown;
 	private static boolean recordKeyWasDown;
+	private static boolean markerKeyWasDown;
+	private static String openProblem;
 	private static ExportQueue exports;
 	private static LiveVideo liveVideo;
 	/** A replay to open once the title screen is up (asked for by the launcher). */
@@ -58,10 +100,15 @@ public final class Replays {
 	/** Ticks at the title screen before opening it (the game settles first). */
 	private static final int OPEN_AFTER_TICKS = 40;
 	private static final Map<String, Info> INFO_CACHE = new HashMap<String, Info>();
+	private static final java.util.concurrent.ExecutorService library = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+		Thread thread = new Thread(r, "arctic-replay-library");
+		thread.setDaemon(true);
+		return thread;
+	});
 
 	private Replays() {}
 
-	public static void init(Platform p, int bridgePort, String bridgeSecret) {
+	public static void init(Platform p, int bridgePort, String bridgeSecret, String launchToken) {
 		platform = p;
 		File config = p.configDir();
 		gameDir = config.getAbsoluteFile().getParentFile();
@@ -72,6 +119,9 @@ public final class Replays {
 		// Old replay-render queues stay intact, but can never open a world automatically.
 		liveVideo = new LiveVideo(gameDir, bridgePort, bridgeSecret);
 		ffmpeg = new Ffmpeg(bridgePort, bridgeSecret);
+		launcherReplayUrl = bridgePort > 0 && bridgeSecret != null && launchToken != null
+				? "http://127.0.0.1:" + bridgePort + "/v1/replay/" + launchToken : null;
+		launcherSecret = bridgeSecret;
 		// Ask early, so export buttons know right away.
 		ffmpeg.get();
 	}
@@ -121,29 +171,34 @@ public final class Replays {
 	/** Keys never retrigger merely because a screen opened or closed while held. */
 	public static void tick(boolean screenOpen) {
 		boolean atTitle = platform.atTitleScreen();
-		// Switching Replay on while already in a world starts its buffer from that moment.
-		boolean enabled = ArcticClient.config().replayEnabled;
-		if (enabled && !enabledSeen && viewer == null && platform.inWorld()) bufferInWorld();
-		enabledSeen = enabled;
+		if (viewer == null && platform.inWorld()) {
+			if (recorder != null) recorder.enabled(ArcticClient.config().replayEnabled);
+		}
 		if (viewer == null && platform.inWorld()) worldTake = recorder == null ? null : recorder.current();
 		// Minecraft can discard a connection without ticking handleDisconnection again.
 		// Only a return from a world ends it: 1.8.9 also shows the title during login.
 		if (atTitle && worldTake != null && recorder.current() == worldTake) endRecording();
 		boolean save = platform.isKeyDown(ArcticClient.config().replayKey);
 		boolean record = platform.isKeyDown(ArcticClient.config().replayRecordKey);
+		String markerKey = ArcticClient.config().replayMarkerKey;
+		boolean marker = markerKey != null && platform.isKeyDown(markerKey);
 		if (viewer != null) {
 			viewer.screenOpen(screenOpen);
 		} else {
-			if (!screenOpen && platform.inWorld() && ArcticClient.config().replayEnabled) {
+			if (!screenOpen && platform.inWorld()) {
 				if (save && !saveKeyWasDown) saveMoment();
 				// A duplicate binding performs one predictable action, never both.
+				if (marker && !markerKeyWasDown && !markerKey.equals(ArcticClient.config().replayKey)
+						&& !markerKey.equals(ArcticClient.config().replayRecordKey) && recorder != null && recorder.mark()) {
+					Notices.post(Lang.t("replay.marker_added"), clock(recorder.recordingMillis()));
+				}
 				if (record && !recordKeyWasDown && !ArcticClient.config().replayRecordKey.equals(ArcticClient.config().replayKey)) toggleRecording();
 			}
 			if (pending != null && backend != null && atTitle && ++titleTicks > OPEN_AFTER_TICKS) {
 				File file = pending; pending = null; watch(file);
 			}
 		}
-		saveKeyWasDown = save; recordKeyWasDown = record;
+		saveKeyWasDown = save; recordKeyWasDown = record; markerKeyWasDown = marker;
 	}
 	private static void endRecording() {
 		Recorder.Take take = recorder == null ? null : recorder.current();
@@ -151,7 +206,6 @@ public final class Replays {
 		worldTake = null;
 	}
 
-	private static boolean enabledSeen = true;
 	public static boolean recording() { return recorder != null && recorder.recording(); }
 	public static int pendingSaves() { return recorder == null ? 0 : recorder.pendingSaves(); }
 	public static String recordingStatus() {
@@ -160,14 +214,19 @@ public final class Replays {
 	}
 	private static String bufferStatus() {
 		if (recording()) return Lang.t("replay.recording_2") + clock(recorder.recordingMillis()) + String.format(java.util.Locale.ROOT, " · %.1f MB", recorder.recordingBytes() / (1024.0 * 1024.0));
-		if (recorder == null || recorder.current() == null) return Lang.t("replay.join_a_world_to_buffer_instant_clips");
-		return recorder.bufferReady() ? Lang.t("replay.instant_clips_ready") : Lang.t("replay.replay_buffer_stopped");
+		if (ArcticClient.config() != null && !ArcticClient.config().replayEnabled) return Lang.t("replay.replay_is_off_turn_it_on_in_the_replays_tab");
+		if (recorder == null || recorder.state() == Recorder.TakeState.OFF) {
+			return platform != null && platform.inWorld() ? Lang.t("replay.rejoin_to_restore_replay")
+					: Lang.t("replay.join_a_world_to_buffer_instant_clips");
+		}
+		if (recorder.state() == Recorder.TakeState.STOPPED) return Lang.t("replay.replay_buffer_stopped") + " · " + recorder.stopReason();
+		return Lang.t("replay.instant_clips_ready");
 	}
 	/** In a world with nothing buffering it (Replay was off at the join, or switched on since): start the buffer now. */
 	private static boolean bufferInWorld() {
-		if (recorder == null) return false;
-		if (recorder.current() != null) return true;
-		if (platform == null || viewer != null || !platform.inWorld() || !ArcticClient.config().replayEnabled) return false;
+		if (recorder == null || platform == null || viewer != null || !platform.inWorld() || !ArcticClient.config().replayEnabled) return false;
+		recorder.enabled(true);
+		if (recorder.bufferReady()) return true;
 		boolean started = platform.beginReplayInWorld();
 		if (started) worldTake = recorder.current();
 		return started;
@@ -175,18 +234,18 @@ public final class Replays {
 
 	public static void toggleRecording() {
 		if (recorder == null) return;
-		bufferInWorld();
-		if (recorder.stopRecording()) {
+		boolean ready = bufferInWorld();
+		if (ready && recorder.stopRecording()) {
 			if (liveVideo != null) liveVideo.stopRecording();
 			Notices.post(Lang.t("replay.saving_recording"), Lang.t("replay.instant_clips_are_still_available")); return;
 		}
-		if (recorder.startRecording(file -> Notices.post(file == null ? Lang.t("replay.recording_not_saved") : Lang.t("replay.recording_saved"),
+		if (ready && recorder.startRecording(file -> Notices.post(file == null ? Lang.t("replay.recording_not_saved") : Lang.t("replay.recording_saved"),
 				file == null ? Lang.t("replay.couldnt_write_the_file") : file.getName()))) {
 			if (liveVideo != null && ArcticClient.config().replayVideoEnabled) liveVideo.startRecording();
 			Notices.post(Lang.t("replay.recording_started"), Lang.t("replay.press_to_stop", platform.keyLabel(ArcticClient.config().replayRecordKey)));
 		} else Notices.post(Lang.t("replay.cannot_start_recording"), !platform.inWorld() ? Lang.t("replay.join_a_world_first")
 				: !ArcticClient.config().replayEnabled ? Lang.t("replay.replay_is_off_turn_it_on_in_the_replays_tab")
-				: Lang.t("replay.this_version_cant_record_a_world_you_were"));
+				: bufferStatus());
 	}
 
 	public static int queuedVideos() { return liveVideo == null ? 0 : liveVideo.pending(); }
@@ -200,9 +259,8 @@ public final class Replays {
 
 	/** Save the recent window with a thumbnail; never alter an active manual recording. */
 	public static void saveMoment() {
-		bufferInWorld();
-		if (recorder == null || recorder.current() == null) {
-			Notices.post(Lang.t("replay.nothing_to_save_yet"), Lang.t("replay.join_a_world_to_start_the_instant_replay"));
+		if (!bufferInWorld()) {
+			Notices.post(Lang.t("replay.nothing_to_save_yet"), bufferStatus());
 			return;
 		}
 		// A crowded-world save can take seconds. Acknowledge the key before even capturing its thumbnail.
@@ -212,19 +270,20 @@ public final class Replays {
 				? moment + Lang.t("replay.is_saving_you_can_keep_playing")
 				: moment + Lang.t("replay.queued_behind") + ahead + (ahead == 1 ? " replay." : " replays."));
 		if (liveVideo != null && ArcticClient.config().replayVideoEnabled) liveVideo.clip(ArcticClient.config().clipSeconds);
-		if (backend != null && recorder.current() != null) {
+		Recorder.Take owner = recorder.current();
+		if (backend != null) {
 			try {
-				backend.capture((w, h, rgba, bottomUp) -> keep(Thumbnail.png(w, h, rgba, bottomUp)));
+				backend.capture((w, h, rgba, bottomUp) -> keep(owner, Thumbnail.png(w, h, rgba, bottomUp)));
 				return;
 			} catch (RuntimeException e) {
 				platform.log(true, "replay: no thumbnail: " + e);
 			}
 		}
-		keep(null);
+		keep(owner, null);
 	}
 
-	private static void keep(byte[] thumbnail) {
-		boolean saving = recorder.saveMoment(thumbnail, file -> {
+	private static void keep(Recorder.Take owner, byte[] thumbnail) {
+		boolean saving = owner == recorder.current() && recorder.bufferReady() && recorder.saveMoment(thumbnail, file -> {
 			if (file != null) {
 				Notices.post(Lang.t("replay.3d_clip_saved"), file.getName() + (recorder.recording() ? Lang.t("replay.your_recording_continues") : ""));
 			} else Notices.post(Lang.t("replay.clip_not_saved"), Lang.t("replay.no_replay_data_is_available_or_the_file"));
@@ -245,6 +304,7 @@ public final class Replays {
 			return;
 		}
 		opening = true;
+		openProblem = null;
 		Notices.post(Lang.t("replay.opening_replay"), file.getName().replace(".mcpr", ""));
 		Thread t = new Thread(() -> {
 			try {
@@ -278,6 +338,7 @@ public final class Replays {
 
 	private static void openFailed(String message) {
 		opening = false;
+		openProblem = message;
 		Notices.post(Lang.t("replay.cant_open_this_replay"), message);
 	}
 
@@ -294,7 +355,7 @@ public final class Replays {
 		if (error != null) {
 			viewer = null;
 			try { data.close(); } catch (IOException ignored) { /* the cache is cleared next time */ }
-			Notices.post(Lang.t("replay.cant_open_this_replay"), error);
+			openFailed(error);
 			return;
 		}
 		if (then != null) {
@@ -313,14 +374,11 @@ public final class Replays {
 
 	/** The adapter's replay connection closed by itself (like an error): tidy up. */
 	public static void connectionClosed() {
-		ReplayViewer v = viewer;
-		viewer = null;
-		if (v != null) {
-			ReplayClock.stop();
-			backend.cleanView(false);
-			// Release the unpacked file (Windows can't delete or replace it while open).
-			try { v.data.close(); } catch (IOException ignored) { /* cleared on the next open */ }
-		}
+		// A disconnect callback may run from inside the connection's own tick.
+		ReplayViewer closed = viewer;
+		if (closed != null) platform.runOnGameThread(() -> {
+			if (viewer == closed) stopWatching();
+		});
 	}
 
 	/** Before each frame is drawn. */
@@ -340,7 +398,7 @@ public final class Replays {
 			viewer.frame();
 			String failure = viewer.failure();
 			if (failure != null) {
-				Notices.post(Lang.t("replay.cant_open_this_replay"), failure);
+				openFailed(failure);
 				stopWatching();
 			}
 		} finally {
@@ -362,7 +420,11 @@ public final class Replays {
 	}
 
 	/** A key with no screen open; true if the replay used it. */
-	public static boolean key(int key) {
+	public static String openProblem() { return openProblem; }
+
+	public static boolean key(int key) { return key(key, -1); }
+
+	public static boolean key(int key, int nativeKey) {
 		ReplayViewer v = viewer;
 		if (v == null) {
 			return false;
@@ -373,36 +435,30 @@ public final class Replays {
 			}
 			return true;
 		}
-		boolean ctrl = platform.controlDown();
-		v.touched();
-		switch (key) {
-			case com.arcticlauncher.client.Keys.ESCAPE:
-				platform.openPage(new ReplayMenu());
-				return true;
-			case KEY_P:
-				v.togglePause();
-				return true;
-			case KEY_LEFT:
-				v.jump(-(ctrl ? ReplayViewer.LONG_JUMP : ReplayViewer.SHORT_JUMP));
-				return true;
-			case KEY_RIGHT:
-				v.jump(ctrl ? ReplayViewer.LONG_JUMP : ReplayViewer.SHORT_JUMP);
-				return true;
-			case KEY_UP:
-				v.faster();
-				return true;
-			case KEY_DOWN:
-				v.slower();
-				return true;
-			case KEY_K:
-				v.addKeyframe();
-				return true;
-			case KEY_V:
-				v.setMode(v.mode() == ReplayViewer.Mode.FIRST_PERSON ? ReplayViewer.Mode.FREE : ReplayViewer.Mode.FIRST_PERSON);
-				return true;
-			default:
-				return false;
+		String nativeName = nativeKey < 0 ? null : platform.keyName(nativeKey);
+		if (key == com.arcticlauncher.client.Keys.ESCAPE || ViewerAction.CONTROLS.pressed(key, nativeName)) {
+			platform.openPage(new ReplayMenu());
+			return true;
 		}
+		for (ViewerAction action : ViewerAction.values()) {
+			if (action == ViewerAction.CONTROLS || !action.pressed(key, nativeName)) continue;
+			int jump = platform.controlDown() ? ReplayViewer.LONG_JUMP : ReplayViewer.SHORT_JUMP;
+			switch (action) {
+				case PAUSE: v.togglePause(); break;
+				case BACK: v.jump(-jump); break;
+				case FORWARD: v.jump(jump); break;
+				case FASTER: v.faster(); break;
+				case SLOWER: v.slower(); break;
+				case CAMERA_KEY: v.addKeyframe(); break;
+				case TIME_KEY: v.addTimeKey(); break;
+				case CAMERA:
+					v.setMode(v.mode() == ReplayViewer.Mode.FIRST_PERSON ? ReplayViewer.Mode.FREE : ReplayViewer.Mode.FIRST_PERSON);
+					break;
+				default: break;
+			}
+			return true;
+		}
+		return false;
 	}
 
 	/** Mouse wheel with no screen open; true if the replay used it (camera speed). */
@@ -422,43 +478,70 @@ public final class Replays {
 		public final String name;
 		public final ReplayMeta meta;
 		public final ReplayMeta.Extras extras;
+		public final long size;
+		public final String thumbnail;
+		public final int thumbnailWidth;
+		public final int thumbnailHeight;
 
-		Info(File file, ReplayMeta meta, ReplayMeta.Extras extras) {
+		Info(File file, ReplayMeta meta, ReplayMeta.Extras extras, String thumbnail, int width, int height) {
 			this.file = file;
 			String n = file.getName();
 			this.name = n.endsWith(".mcpr") ? n.substring(0, n.length() - 5) : n;
 			this.meta = meta;
 			this.extras = extras;
+			this.size = file.length();
+			this.thumbnail = thumbnail;
+			this.thumbnailWidth = width;
+			this.thumbnailHeight = height;
 		}
 	}
 
 	/** The last scan: menus ask every tick, and on Windows each file's details cost a system call or two. */
-	private static List<Info> listed;
+	private static List<Info> listed = Collections.emptyList();
 	private static long listedAt;
+	private static boolean listing;
+	private static int listRevision;
 	private static final long LIST_REFRESH_NANOS = 1_000_000_000L;
 
 	/** Saved replays, newest first (rescanned at most once a second). */
 	public static synchronized List<Info> list() {
 		long now = System.nanoTime();
-		if (listed == null || now - listedAt >= LIST_REFRESH_NANOS) {
-			listed = Collections.unmodifiableList(scan());
-			listedAt = now;
+		if (!listing && (listedAt == 0 || now - listedAt >= LIST_REFRESH_NANOS)) {
+			listing = true;
+			int revision = listRevision;
+			library.execute(() -> {
+				try {
+					List<Info> found = scan();
+					synchronized (Replays.class) {
+						if (revision == listRevision) {
+							listed = Collections.unmodifiableList(found);
+							listedAt = System.nanoTime();
+						}
+					}
+				} finally {
+					synchronized (Replays.class) { listing = false; }
+				}
+			});
 		}
 		return listed;
 	}
 
 	private static List<Info> scan() {
 		File[] files = folder().listFiles((dir, name) -> name.endsWith(".mcpr"));
+		java.util.Set<String> scanned = new java.util.HashSet<String>();
 		List<Info> out = new ArrayList<Info>();
 		if (files == null) {
 			return out;
 		}
 		for (File f : files) {
-			Info info = info(f);
+			String key = f.getAbsolutePath() + "|" + f.lastModified() + "|" + f.length();
+			scanned.add(key);
+			Info info = info(f, key);
 			if (info != null) {
 				out.add(info);
 			}
 		}
+		INFO_CACHE.keySet().retainAll(scanned);
 		Collections.sort(out, new Comparator<Info>() {
 			@Override
 			public int compare(Info a, Info b) {
@@ -468,30 +551,41 @@ public final class Replays {
 		return out;
 	}
 
-	private static Info info(File f) {
-		String key = f.getAbsolutePath() + "|" + f.lastModified() + "|" + f.length();
-		synchronized (INFO_CACHE) {
-			Info cached = INFO_CACHE.get(key);
-			if (cached != null) {
-				return cached;
-			}
-		}
+	private static Info info(File f, String key) {
+		Info cached = INFO_CACHE.get(key);
+		if (cached != null) return cached;
 		try (ZipFile zip = new ZipFile(f)) {
 			ReplayMeta meta = GSON.fromJson(entry(zip, Recorder.META_ENTRY), ReplayMeta.class);
-			if (meta == null) {
-				return null;
-			}
+			if (meta == null) return null;
 			String extrasJson = entry(zip, Recorder.EXTRAS_ENTRY);
 			ReplayMeta.Extras extras = extrasJson == null ? new ReplayMeta.Extras() : GSON.fromJson(extrasJson, ReplayMeta.Extras.class);
+			if (extras == null) extras = new ReplayMeta.Extras();
 			extras.fillDefaults();
-			Info info = new Info(f, meta, extras);
-			synchronized (INFO_CACHE) {
-				INFO_CACHE.put(key, info);
-			}
-			return info;
+			Info item = withThumbnail(f, meta, extras, zip);
+			INFO_CACHE.put(key, item);
+			return item;
 		} catch (IOException | RuntimeException e) {
 			return null;
 		}
+	}
+
+	private static Info withThumbnail(File f, ReplayMeta meta, ReplayMeta.Extras extras, ZipFile zip) {
+		ZipEntry image = zip.getEntry(Recorder.THUMB_ENTRY);
+		if (image != null && image.getSize() >= 24 && image.getSize() <= 512 * 1024 && platform != null) {
+			try (InputStream in = zip.getInputStream(image)) {
+				byte[] png = new byte[(int) image.getSize()];
+				new java.io.DataInputStream(in).readFully(png);
+				java.nio.ByteBuffer header = java.nio.ByteBuffer.wrap(png);
+				int width = header.getInt(16);
+				int height = header.getInt(20);
+				if (header.getLong(0) == 0x89504E470D0A1A0AL && width > 0 && width <= 1024 && height > 0 && height <= 1024) {
+					String hash = com.google.common.hash.Hashing.sha256().hashBytes(png).toString();
+					platform.registerTexture(hash, png, false);
+					return new Info(f, meta, extras, hash, width, height);
+				}
+			} catch (IOException | RuntimeException ignored) { /* The replay itself is still available. */ }
+		}
+		return new Info(f, meta, extras, null, 0, 0);
 	}
 
 	private static String entry(ZipFile zip, String name) throws IOException {
@@ -510,10 +604,63 @@ public final class Replays {
 		removeExport(info.file);
 		new File(gameDir, ".arctic/replay-paths/" + info.file.getName() + ".json").delete();
 		boolean deleted = info.file.delete();
-		synchronized (Replays.class) {
-			listed = null;
-		}
+		refreshList();
 		return deleted;
+	}
+
+	public static boolean canOpenInLauncher() { return launcherReplayUrl != null; }
+
+	public static void openInLauncher(Info info) {
+		if (!canOpenInLauncher()) return;
+		openProblem = null;
+		library.execute(() -> {
+			try {
+				com.google.gson.JsonObject request = new com.google.gson.JsonObject();
+				request.addProperty("file", info.file.getName());
+				com.arcticlauncher.client.looks.Http.send("POST", launcherReplayUrl, launcherSecret, GSON.toJson(request));
+			} catch (Exception e) {
+				platform.runOnGameThread(() -> openFailed(Lang.t("replay.launcher_could_not_open_replay")));
+			}
+		});
+	}
+
+	public static boolean compatible(Info info) {
+		return backend != null && (info.meta.protocol == 0 || backend.protocol() == 0 || info.meta.protocol == backend.protocol());
+	}
+
+	public static String rename(Info info, String value) {
+		String name = value.trim();
+		if (name.equals(info.name)) return null;
+		if (name.isEmpty() || name.startsWith(".") || name.endsWith(".")
+				|| name.matches("(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?")
+				|| !name.matches("[\\p{L}\\p{N} ._()'()-]{1,100}")) {
+			return Lang.t("replay.invalid_replay_name");
+		}
+		File target = new File(info.file.getParentFile(), name + ".mcpr");
+		File sourcePath = keyframeFile(info.file);
+		File targetPath = keyframeFile(target);
+		try {
+			if (target.exists() || targetPath.exists()) return Lang.t("replay.replay_name_exists");
+			Files.move(info.file.toPath(), target.toPath());
+			try {
+				if (sourcePath.exists()) Files.move(sourcePath.toPath(), targetPath.toPath());
+			} catch (IOException e) {
+				try { Files.move(target.toPath(), info.file.toPath()); }
+				catch (IOException rollback) { e.addSuppressed(rollback); }
+				throw e;
+			}
+			return null;
+		} catch (IOException e) {
+			platform.log(true, "replay: rename failed: " + e);
+			return Lang.t("replay.replay_rename_failed");
+		} finally {
+			refreshList();
+		}
+	}
+
+	private static synchronized void refreshList() {
+		listRevision++;
+		listedAt = 0;
 	}
 
 	// ---- Camera paths (kept beside the replay, per file) ---------------------------------
@@ -537,7 +684,7 @@ public final class Replays {
 	private static void saveKeyframes(File f, ReplayViewer v) {
 		try {
 			f.getParentFile().mkdirs();
-			Files.write(f.toPath(), GSON.toJson(v.keyframes().toArray(new Keyframe[0])).getBytes(StandardCharsets.UTF_8));
+			Files.write(f.toPath(), GSON.toJson(v.savedKeyframes().toArray(new Keyframe[0])).getBytes(StandardCharsets.UTF_8));
 		} catch (IOException e) {
 			platform.log(true, "replay: couldn't keep the camera path: " + e);
 		}

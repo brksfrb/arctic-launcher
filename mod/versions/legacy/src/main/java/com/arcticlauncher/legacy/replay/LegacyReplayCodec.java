@@ -38,7 +38,7 @@ public final class LegacyReplayCodec {
 	}
 
 	public static PacketSorter sorter() {
-		return new PacketSorter(names(), false, false, true);
+		return new PacketSorter(names(), false, false, true, protocolVersion());
 	}
 
 	/** Packet names by id: login, (no configuration), play. */
