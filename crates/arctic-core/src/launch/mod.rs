@@ -237,6 +237,36 @@ pub struct Installation {
     asset_index: String,
     /// (log config path, JVM argument template)
     logging: Option<(PathBuf, String)>,
+    /// Music and other languages, still to fetch: started when this is dropped.
+    later: Option<LaterAssets>,
+}
+
+/// The assets the game can start without (music, music discs, other languages), fetched on a
+/// thread of their own while it runs. The download starts when this is dropped, so whoever
+/// prepares a launch decides when: after the downloads the start itself waits for, which it
+/// would otherwise take bandwidth from, and once for both of a launch's installation passes
+/// (two downloads of the same files at once write over each other).
+struct LaterAssets {
+    waiting: Option<(DataDirs, String, Vec<DownloadJob>)>,
+}
+
+impl LaterAssets {
+    fn index_name(&self) -> Option<&str> {
+        self.waiting.as_ref().map(|(_, name, _)| name.as_str())
+    }
+
+    /// Another [`LaterAssets`] of the same asset index fetches these.
+    fn cancel(mut self) {
+        self.waiting = None;
+    }
+}
+
+impl Drop for LaterAssets {
+    fn drop(&mut self) {
+        if let Some((dirs, index_name, later)) = self.waiting.take() {
+            finish_assets_later(&dirs, index_name, later);
+        }
+    }
 }
 
 /// Download (or verify) everything `entry` needs into the shared folders.
@@ -253,17 +283,30 @@ pub fn install(
     progress: Progress,
 ) -> Result<Installation> {
     let repair = files::LibraryRepair::new(dirs)?;
-    let installed = install_with_repair(
+    let mut installed = install_with_repair(
         dirs,
         version,
         game_dir,
         java_override,
         progress,
         &repair,
-        None,
+        EarlierPass::default(),
     )?;
     repair.finish();
+    // Nothing else of this installation is waited for: the rest of the assets right away.
+    installed.later = None;
     Ok(installed)
+}
+
+/// What a launch's installation of the loader's profile takes over from the vanilla
+/// installation it did just before.
+#[derive(Clone, Copy, Default)]
+struct EarlierPass<'a> {
+    /// Fabric and Quilt use the vanilla client jar when their profile declares the same one.
+    vanilla_client: Option<&'a crate::net::DownloadJob>,
+    /// The asset index that pass has been through: its thousands of files are not looked at
+    /// a second time.
+    assets_checked: Option<&'a str>,
 }
 
 fn install_with_repair(
@@ -273,8 +316,12 @@ fn install_with_repair(
     java_override: Option<PathBuf>,
     progress: Progress,
     repair: &files::LibraryRepair,
-    vanilla_client: Option<&crate::net::DownloadJob>,
+    earlier: EarlierPass,
 ) -> Result<Installation> {
+    let EarlierPass {
+        vanilla_client,
+        assets_checked,
+    } = earlier;
     let clock = std::time::Instant::now();
     fs::create_dir_all(game_dir).at(game_dir)?;
     // 1.8.9 lists this folder when a server sends a resource pack and crashes if it isn't there
@@ -338,7 +385,8 @@ fn install_with_repair(
     let replacements = runtime
         .as_mut()
         .map_or_else(Vec::new, |r| std::mem::take(&mut r.jobs));
-    let assets_fresh = files::assets_verified_recently(dirs, &assets.index_name);
+    let assets_fresh = assets_checked == Some(assets.index_name.as_str())
+        || files::assets_verified_recently(dirs, &assets.index_name);
     if !assets_fresh {
         jobs.extend(assets.jobs.iter().cloned());
     }
@@ -349,9 +397,14 @@ fn install_with_repair(
         progress,
     )?;
     files::verify_main_class(libs.main_class.as_ref())?;
-    if !assets_fresh {
-        finish_assets_later(dirs, assets.index_name.clone(), assets.later.clone());
-    }
+    // From here an error still lets the rest of the assets come in, as before.
+    let later = (!assets_fresh).then(|| LaterAssets {
+        waiting: Some((
+            dirs.clone(),
+            assets.index_name.clone(),
+            assets.later.clone(),
+        )),
+    });
     log::info!(
         "install: files checked at {} ms",
         clock.elapsed().as_millis()
@@ -381,6 +434,7 @@ fn install_with_repair(
         asset_index: assets.index_name.clone(),
         logging: logging.map(|(job, template)| (job.dest, template)),
         version,
+        later,
     })
 }
 
@@ -521,7 +575,7 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
     timer.step("read version");
     let launcher_owned_vanilla =
         req.instance.loader.kind().is_none() && req.instance.game_folder.is_none();
-    let side = LoaderSide {
+    let side = &LoaderSide {
         req,
         game_dir,
         vanilla: &vanilla,
@@ -535,7 +589,7 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
             java_override.clone(),
             progress,
             &repair,
-            None,
+            EarlierPass::default(),
         );
         timer.step("vanilla files");
         base
@@ -556,9 +610,23 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
                 let loader = side.pick_loader()?;
                 timer.step("pick loader");
                 let done = match &loader {
-                    Some((kind, version)) if loaders::profile_needs_no_game_files(*kind) => Some(
-                        side.fabric_like(*kind, version, None, &|p| held.report(p), &mut timer)?,
-                    ),
+                    Some((kind, version)) if loaders::profile_needs_no_game_files(*kind) => {
+                        // The loader's own libraries (a few MB) come in meanwhile too. Quietly:
+                        // the installation pass after this one finds them there and reports
+                        // that, like at every later start.
+                        let prefetch = |profile: &VersionJson| {
+                            let profile = profile.clone();
+                            scope.spawn(move || side.prefetch_libraries(&profile));
+                        };
+                        Some(side.fabric_like(
+                            *kind,
+                            version,
+                            None,
+                            &|p| held.report(p),
+                            &mut timer,
+                            prefetch,
+                        )?)
+                    }
                     _ => None,
                 };
                 Ok::<_, Error>((loader, done, timer.steps))
@@ -575,7 +643,11 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
             Ok::<_, Error>((Ok(base), loader, done))
         })?
     };
-    let base = base?;
+    let mut base = base?;
+    // Music and other languages start downloading when the launch's own downloads are through
+    // (or it failed): when this goes out of scope.
+    let mut background = Vec::from_iter(base.later.take());
+    let assets_checked = base.asset_index.clone();
     let mut vanilla_client = None;
     let mut share_session = false;
     // The vanilla installation is the whole game when there is no loader.
@@ -595,6 +667,7 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
                         Some(&base.java),
                         progress,
                         &mut timer,
+                        |_| {},
                     )?,
                 };
                 vanilla_client = Some(done.vanilla_client);
@@ -656,9 +729,20 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
             java_override,
             progress,
             &repair,
-            vanilla_client.as_ref(),
+            EarlierPass {
+                vanilla_client: vanilla_client.as_ref(),
+                assets_checked: Some(&assets_checked),
+            },
         )?,
     };
+    if let Some(later) = installation.later.take() {
+        let index = later.index_name();
+        if background.iter().any(|b| b.index_name() == index) {
+            later.cancel();
+        } else {
+            background.push(later);
+        }
+    }
     if share_session && matches!(loader, Some((loaders::LoaderKind::Forge, _))) {
         // Make Arctic's Mixin available before Forge discovers mods that embed an
         // older version. Forge still discovers the mod at the same path.
@@ -716,6 +800,27 @@ impl LoaderSide<'_> {
         Ok(loader)
     }
 
+    /// Fetch the libraries `profile` adds to the vanilla ones (which the vanilla installation is
+    /// fetching at this moment: never the same file from two places). Best effort and silent:
+    /// the profile's installation pass checks every file again and reports what it still needs.
+    fn prefetch_libraries(&self, profile: &VersionJson) {
+        let dirs = self.req.dirs;
+        let libraries = |version: &VersionJson| {
+            files::resolve_libraries(dirs, version, &RuleEnv::for_version(version)).jobs
+        };
+        let vanilla: std::collections::HashSet<PathBuf> = libraries(self.vanilla)
+            .into_iter()
+            .map(|job| job.dest)
+            .collect();
+        let jobs: Vec<DownloadJob> = libraries(profile)
+            .into_iter()
+            .filter(|job| !vanilla.contains(&job.dest))
+            .collect();
+        if let Err(e) = download_all("Loader libraries", jobs, &|_| {}) {
+            log::info!("loader libraries not fetched ahead: {e}");
+        }
+    }
+
     /// `java` is only needed by loaders whose profile is made by an installer
     /// ([`loaders::profile_needs_no_game_files`] tells).
     fn fabric_like(
@@ -725,6 +830,7 @@ impl LoaderSide<'_> {
         java: Option<&Path>,
         progress: Progress,
         timer: &mut StepTimer,
+        on_profile: impl FnOnce(&VersionJson),
     ) -> Result<FabricLike> {
         let (req, game_dir, vanilla) = (self.req, self.game_dir, self.vanilla);
         let dirs = req.dirs;
@@ -739,6 +845,7 @@ impl LoaderSide<'_> {
             progress,
         )?;
         timer.step("loader profile");
+        on_profile(&profile);
         let vanilla_client = files::client_job(dirs, vanilla)?;
         // Quilt provides its own Fabric compatibility version, not its loader version.
         let fits = arctic_mod_fits(dirs, &vanilla.id, kind, loader_version, &profile, progress)?;
@@ -1630,6 +1737,7 @@ mod tests {
             game_assets: temp.path().into(),
             asset_index: String::new(),
             logging: None,
+            later: None,
         };
         let plan = plan(
             &LaunchRequest {
