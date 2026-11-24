@@ -349,23 +349,27 @@ pub fn at_least(a: &str, b: &str) -> bool {
 /// How long a looked-up Fabric Loader version is used before asking again.
 const LOADER_RECHECK: std::time::Duration = std::time::Duration::from_secs(6 * 60 * 60);
 
-/// Fabric loader version for running the Arctic Client on `game`: the
-/// newest stable build, remembered so launches also work offline.
-pub fn client_loader(dirs: &crate::storage::DataDirs, game: &str) -> Option<String> {
-    let cache = dirs.meta().join("arctic-client-loader.json");
-    let mut known: std::collections::HashMap<String, String> = crate::storage::load_json(&cache)
+fn loader_cache(dirs: &crate::storage::DataDirs) -> std::path::PathBuf {
+    dirs.meta().join("arctic-client-loader.json")
+}
+
+/// The loader versions found so far (by game version), and whether they were asked for recently.
+fn known_loaders(dirs: &crate::storage::DataDirs) -> (HashMap<String, String>, bool) {
+    let cache = loader_cache(dirs);
+    let known = crate::storage::load_json(&cache)
         .ok()
         .flatten()
         .unwrap_or_default();
-    // Asked recently: don't hold up the launch with another round trip.
     let recent = std::fs::metadata(&cache)
         .and_then(|m| m.modified())
         .ok()
         .and_then(|t| t.elapsed().ok())
         .is_some_and(|age| age < LOADER_RECHECK);
-    if recent && let Some(version) = known.get(game) {
-        return Some(version.clone());
-    }
+    (known, recent)
+}
+
+/// Ask Fabric for the newest stable loader for `game` and remember it.
+fn ask_loader(dirs: &crate::storage::DataDirs, game: &str) -> Option<String> {
     let fresh = crate::loaders::loader_versions(crate::loaders::LoaderKind::Fabric, game)
         .ok()
         .and_then(|versions| {
@@ -375,14 +379,50 @@ pub fn client_loader(dirs: &crate::storage::DataDirs, game: &str) -> Option<Stri
                 .or(versions.first())
                 .map(|v| v.id.clone())
         });
+    // Read again: another start may have added a game version meanwhile.
+    let (mut known, _) = known_loaders(dirs);
     match fresh {
         Some(version) => {
             known.insert(game.to_owned(), version.clone());
             // Saved every time: the file's age says when we last asked.
-            let _ = crate::storage::save_json(&cache, &known);
+            let _ = crate::storage::save_json(&loader_cache(dirs), &known);
             Some(version)
         }
         None => known.get(game).cloned(),
+    }
+}
+
+/// Fabric loader version for running the Arctic Client on `game`: the
+/// newest stable build, remembered so launches also work offline.
+pub fn client_loader(dirs: &crate::storage::DataDirs, game: &str) -> Option<String> {
+    let (known, recent) = known_loaders(dirs);
+    // Asked recently: don't hold up the launch with another round trip.
+    if recent && let Some(version) = known.get(game) {
+        return Some(version.clone());
+    }
+    ask_loader(dirs, game)
+}
+
+/// [`client_loader`] for a start: a version known from an earlier one is used at once, however
+/// long ago that was, and Fabric is asked on another thread when it is due (a newer loader is
+/// then used from the next start). Asking first held every such start back by the round trip,
+/// up to most of a second. `usable` says whether a known version will do (the Arctic Client
+/// needs a minimum): one that won't is asked about before the start, as before.
+pub fn client_loader_for_start(
+    dirs: &crate::storage::DataDirs,
+    game: &str,
+    usable: impl Fn(&str) -> bool,
+) -> Option<String> {
+    let (known, recent) = known_loaders(dirs);
+    match known.get(game) {
+        Some(version) if usable(version) => {
+            if !recent {
+                let (dirs, game) = (dirs.clone(), game.to_owned());
+                std::thread::spawn(move || ask_loader(&dirs, &game));
+            }
+            Some(version.clone())
+        }
+        _ => ask_loader(dirs, game),
     }
 }
 
@@ -450,6 +490,24 @@ mod tests {
         rewrite(&mods, "26.3").unwrap();
         assert!(jar_usable(&path));
         assert!(!mods.join(format!("{FILE_NAME}.part")).exists());
+    }
+
+    #[test]
+    fn a_start_uses_the_loader_it_knows_without_asking() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = crate::storage::DataDirs::new(dir.path());
+        let known = HashMap::from([("1.8.9".to_owned(), "0.16.9".to_owned())]);
+        crate::storage::save_json(&loader_cache(&dirs), &known).unwrap();
+        // Asked a moment ago: the answer is used, and nobody is asked (there is no network here
+        // to ask: a round trip would fail and still give this answer, only later).
+        assert_eq!(
+            client_loader_for_start(&dirs, "1.8.9", |_| true).as_deref(),
+            Some("0.16.9")
+        );
+        assert_eq!(client_loader(&dirs, "1.8.9").as_deref(), Some("0.16.9"));
+        let (again, recent) = known_loaders(&dirs);
+        assert!(recent);
+        assert_eq!(again, known);
     }
 
     #[test]

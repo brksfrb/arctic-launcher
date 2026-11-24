@@ -755,7 +755,11 @@ fn effective_loader(
     }
     let client = instance.arctic_mod && arctic_mod::supports(game);
     let fabric = (client || instance.performance || instance.shaders)
-        .then(|| arctic_mod::client_loader(dirs, game))
+        .then(|| {
+            arctic_mod::client_loader_for_start(dirs, game, |version| {
+                !client || arctic_mod::loader_fits(game, version)
+            })
+        })
         .flatten();
     if fabric.is_none() {
         // Pure vanilla: make sure earlier Fabric runs left nothing behind.
