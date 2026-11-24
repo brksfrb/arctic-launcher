@@ -710,7 +710,7 @@ impl ArcticApp {
                     progress.stage.clone(),
                     format!(
                         "{} of {}",
-                        format_bytes(progress.bytes_done),
+                        format_bytes(progress.bytes_done.min(progress.bytes_total)),
                         format_bytes(progress.bytes_total)
                     ),
                     tf!("play.files", done = progress.done, total = progress.total),
@@ -723,11 +723,15 @@ impl ArcticApp {
                 }
                 parts.join("  ·  ")
             }
+            Some(RunState::Preparing { progress, .. }) if progress.total > 0 => {
+                let files = tf!("play.files", done = progress.done, total = progress.total);
+                format!("{}  ·  {files}", progress.stage)
+            }
             Some(RunState::Preparing { progress, .. }) => format!("{}…", progress.stage),
             Some(RunState::Starting { stage, since, .. }) => {
                 format!("{}…  ·  {} s", stage.label(), since.elapsed().as_secs())
             }
-            Some(RunState::Running { .. }) => "Minecraft is running. Have fun!".into(),
+            Some(RunState::Running { .. }) => t!("play.minecraft_is_running").into(),
             _ => match self.blocked_reason() {
                 Some(reason) => reason.into(),
                 None if self.selected_installed() => t!("play.ready_to_play").into(),
