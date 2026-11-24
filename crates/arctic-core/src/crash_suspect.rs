@@ -284,7 +284,7 @@ fn mixin_owner(method: &str) -> Option<&str> {
 
 /// The stack of the exception that ended the game, split into its chain, deepest cause first.
 /// `None` unless the text shows the exception was fatal (not just logged).
-fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
+pub(crate) fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
     let region = if let Some(stack) = crate::crash::crash_exception(text) {
         stack
     } else {
@@ -298,17 +298,28 @@ fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
         let head = HEAD.get_or_init(|| {
             Regex::new(r#"^(?:Exception in thread "[^"]*" )?[\w$]+(?:\.[\w$]+)+(?::.*)?$"#).unwrap()
         });
-        // The last unindented exception line that is followed by stack frames.
+        // Prefer the stack introduced by the fatal marker (Fabric can indent the whole trace).
+        // Otherwise use the last exception head followed by stack frames.
         let mut start = None;
         let mut pos = 0;
+        let mut after_reported = false;
         let mut lines = text.split_inclusive('\n').peekable();
         while let Some(line) = lines.next() {
             let next_is_frame = lines
                 .peek()
                 .is_some_and(|n| n.trim_start().starts_with("at "));
-            if next_is_frame && head.is_match(line.trim_end()) && !secondary_mod_failure(line) {
+            let header = if after_reported {
+                line.trim()
+            } else {
+                line.trim_end()
+            };
+            if next_is_frame && head.is_match(header) && !secondary_mod_failure(line) {
                 start = Some(pos);
+                if after_reported {
+                    break;
+                }
             }
+            after_reported = line.trim_end().ends_with("Reported exception thrown!");
             pos += line.len();
         }
         let start = start?;
@@ -331,11 +342,13 @@ fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
         &rest[..end]
     };
     let secondary = secondary_stack(region);
+    let indent = |line: &str| line.len() - line.trim_start().len();
+    let root_indent = indent(region.lines().next()?);
     let mut chain: Vec<Vec<&str>> = vec![Vec::new()];
     for (i, line) in region.lines().enumerate() {
         if i > 0
             && line.trim_start().starts_with("Caused by:")
-            && (!line.starts_with(char::is_whitespace) || secondary)
+            && (indent(line) <= root_indent || secondary)
         {
             chain.push(Vec::new());
         }
@@ -839,12 +852,21 @@ pub fn suspect(text: &str, mods: &[Known]) -> Option<Suspect> {
         .rsplit_once("---- Minecraft Crash Report ----")
         .filter(|_| secondary_report)
         .and_then(|(earlier, _)| fatal_chain(earlier));
-    for block in chain.iter().chain(&earlier).flatten() {
-        for line in block {
-            let Some(f) = frame(line) else {
-                continue;
-            };
+    for (depth, block) in chain
+        .iter()
+        .chain(&earlier)
+        .flat_map(|chain| chain.iter().enumerate())
+    {
+        for (position, f) in block.iter().filter_map(|line| frame(line)).enumerate() {
             if let Some(owner) = mixin_owner(&f.method) {
+                // Wrappers can relay exceptions from the original call. Attribute them only
+                // when the wrapper itself is the throwing frame of the deepest cause.
+                if (depth != 0 || position != 0)
+                    && (f.method.starts_with("wrapOperation$")
+                        || f.method.starts_with("wrapMethod$"))
+                {
+                    continue;
+                }
                 if is_arctic_id(owner) {
                     return Some(arctic(owner));
                 }
@@ -1262,6 +1284,48 @@ Details:\n\
         // Unknown or library owners are not blamed.
         let lib = text.replace("sodium", "fabric-rendering-v1");
         assert!(diagnose_exit_in(&lib, 1, dir.path()).is_none_or(|d| d.mods.is_empty()));
+    }
+
+    #[test]
+    fn report_s978w2_attributes_only_wrappers_that_throw() {
+        let log = include_str!("../tests/fixtures/crash-S978W2-gl-frame-wait.log");
+        let (console, report) = log.split_once("---- Minecraft Crash Report ----").unwrap();
+        let dir = pack();
+        let mods = scan(dir.path());
+        assert!(suspect(log, &mods).is_none());
+        assert!(suspect(console, &mods).is_none());
+
+        let header = "---- Minecraft Crash Report ----\n\njava.lang.IllegalStateException: boom\n";
+        let vanilla = report
+            .lines()
+            .find(|line| line.contains("GlCommandEncoder.submit"))
+            .unwrap();
+        let polarium = report
+            .lines()
+            .find(|line| line.contains("polarium$submit"))
+            .unwrap();
+        let lithium = report
+            .lines()
+            .find(|line| line.contains("wrapMethod$"))
+            .unwrap()
+            .replace("dynamic_fps_common", "lithium");
+        for (wrapper, owner) in [(polarium, "polarium"), (&lithium, "lithium")] {
+            assert_eq!(
+                suspect(&format!("{header}{wrapper}\n{vanilla}"), &mods)
+                    .unwrap()
+                    .id,
+                owner
+            );
+            assert!(suspect(&format!("{header}{vanilla}\n{wrapper}"), &mods).is_none());
+            let handler =
+                "\tat net.minecraft.class_761.handler$zbh000$sodium$onRender(class_761.java:12)";
+            assert_eq!(
+                suspect(&format!("{header}{handler}\n{wrapper}"), &mods)
+                    .unwrap()
+                    .id,
+                "sodium"
+            );
+        }
     }
 
     #[test]
