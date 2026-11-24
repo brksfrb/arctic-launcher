@@ -412,6 +412,10 @@ mod tests {
     fn an_unchanged_mirror_is_checked_without_opening_its_files() {
         let temp = tempfile::tempdir().unwrap();
         let (runtime, java, _) = runtime(temp.path());
+        // Where files can't have two names the mirror is made of copies, compared by content.
+        if fs::hard_link(&java, temp.path().join("probe")).is_err() {
+            return;
+        }
         fs::create_dir_all(runtime.join("lib/security")).unwrap();
         for i in 0..40 {
             fs::write(runtime.join(format!("lib/file{i}.jar")), b"lib").unwrap();

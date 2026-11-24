@@ -273,10 +273,12 @@ fn keep(dir: &Path, id: u64, build: &str, jar: &[u8]) {
     let sum = path.with_extension("sha1");
     let write = || -> std::io::Result<()> {
         fs::create_dir_all(dir)?;
-        // Jars of an earlier pack (an older launcher) are never used again.
+        // Jars of an earlier pack (an older launcher) are never used again, nor is what a
+        // launcher that was stopped while writing left behind.
         let current = format!("{id:016x}-");
         for entry in fs::read_dir(dir)?.flatten() {
-            if !entry.file_name().to_string_lossy().starts_with(&current) {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !name.starts_with(&current) || name.ends_with(".part") {
                 let _ = fs::remove_file(entry.path());
             }
         }

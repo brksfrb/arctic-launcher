@@ -429,6 +429,17 @@ fn stash(game_dir: &Path, state: &State) -> Result<()> {
     }
     let to = stash_dir(game_dir, &state.game_version, state.shaders, &state.extras);
     if !index.exists() {
+        // The folder is named after what the state file says: nothing is removed unless that
+        // is one plain name inside the stash folder (a state file can come with a pack).
+        let stashes = game_dir.join(".arctic").join("performance");
+        let plain = to.parent() == Some(stashes.as_path())
+            && to
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(plain_name);
+        if !plain {
+            return Ok(());
+        }
         // Nothing was installed: only that Modrinth was asked. A set left here from before
         // (too old to be used again, or incomplete) must not pass for this one's.
         if to.exists() {
@@ -451,6 +462,16 @@ fn stash(game_dir: &Path, state: &State) -> Result<()> {
     }
     save_json(&to.join("arctic-performance-state.json"), state)?;
     fs::rename(&index, to.join("arctic-performance.json")).at(&index)
+}
+
+/// One folder name and nothing that leads elsewhere.
+fn plain_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('.')
+        && !name.contains("..")
+        && !name
+            .chars()
+            .any(|c| matches!(c, '/' | '\\' | ':' | '\0') || c.is_control())
 }
 
 /// Bring back a stashed set for this version if it's complete and recent;
@@ -597,12 +618,13 @@ pub(crate) fn prepare_for_launch(
         }
     };
     let synced = started.elapsed();
-    if let Err(e) =
-        super::polarium::sync(&game_dir.join("mods"), game_version, instance.performance)
-    {
+    let mods_dir = game_dir.join("mods");
+    if let Err(e) = super::polarium::sync(&mods_dir, game_version, instance.performance) {
         log::warn!("polarium: {e}");
         complete = false;
     }
+    // A copy that could not be put aside this time is tried again at the next start.
+    complete &= !super::polarium::unusable_left(&mods_dir, game_version);
     let polarium = started.elapsed();
     // Vanilla instances (nothing in the folder but the launcher's own mods): load only
     // the Fabric API modules those use, which starts the game noticeably faster.
@@ -1699,6 +1721,21 @@ mod tests {
         assert!(!stale.join("old-sodium.jar").exists());
         assert!(!run("1.8.9", false, must_not_ask).unwrap());
         assert!(!game.join("mods/old-sodium.jar").exists());
+
+        // A state file naming a folder outside the stash never gets anything removed.
+        let precious = game.join("saves");
+        fs::create_dir_all(&precious).unwrap();
+        fs::write(precious.join("world"), b"keep").unwrap();
+        for version in ["../../saves", "..", "a/../../../saves", ".hidden"] {
+            let odd = State {
+                game_version: version.into(),
+                none_for: "x".into(),
+                ..State::default()
+            };
+            stash(game, &odd).unwrap();
+        }
+        assert!(precious.join("world").is_file());
+        assert!(plain_name("1.8.9-shaders-kYuIpRLv") && !plain_name("a\\b") && !plain_name(""));
 
         // Another set of mods (Iris too) was never asked about.
         let asked = std::cell::Cell::new(false);
