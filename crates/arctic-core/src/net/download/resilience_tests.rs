@@ -298,7 +298,10 @@ fn segmented_retry_fetches_only_unfinished_ranges() {
                 "unfinished first range should be retried, got {hits}"
             );
         } else {
-            assert_eq!(hits, 1, "finished range {start} should not be fetched again");
+            assert_eq!(
+                hits, 1,
+                "finished range {start} should not be fetched again"
+            );
         }
     }
     assert_eq!(fs::read(&job.dest).unwrap(), data);
