@@ -79,7 +79,7 @@ abstract class ChatHudMixin implements PersistentChat.Hud {
 	@Inject(method = "scroll", at = @At("RETURN"))
 	private void arctic$older(int amount, CallbackInfo ci) {
 		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
-		if (history == null || arctic$loading || history.restoring() || !history.hasOlder()
+		if (amount <= 0 || history == null || arctic$loading || history.restoring() || !history.hasOlder()
 				|| visibleMessages.size() - scrolledLines > getVisibleLineCount() * 3) {
 			return;
 		}
@@ -197,10 +197,15 @@ abstract class ChatHudMixin implements PersistentChat.Hud {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
 		if (c != null && c.chatKeep) {
 			ci.cancel();
-		} else if (ArcticClient.persistentChat() != null) {
-			// The lines are gone for good: the log is not scrolled back into an emptied chat.
-			arctic$loadedLines = 0;
-			ArcticClient.persistentChat().stopPaging();
+		}
+	}
+
+	@Inject(method = {"clear()V", "clear(Z)V"}, at = @At("RETURN"), require = 1)
+	private void arctic$resetHistoryAfterClear(CallbackInfo ci) {
+		arctic$loadedLines = 0;
+		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
+		if (history != null) {
+			history.resetAfterGameClear();
 		}
 	}
 

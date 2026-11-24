@@ -318,7 +318,36 @@ class PersistentChatTest {
 		assertEquals(java.util.Arrays.asList("/old"), v.sent);
 	}
 
-	@Test void dateLinesSeparateDaysAndStopPagingDropsDisk() throws Exception {
+	@Test void gameClearPagesFromNewestSavedChatAndSentHistory() throws Exception {
+		Path logDir = Files.createDirectories(dir.resolve("chat-history"));
+		Path previous = logDir.resolve("chat-2023-11.jsonl");
+		Files.write(previous, ("{\"t\":1700000000000,\"m\":\"older\"}\n"
+				+ "{\"t\":1700000001000,\"m\":\"newer\"}\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+		PersistentChat h = open();
+		h.restore(new View());
+		assertFalse(h.hasOlder());
+		h.message("first this session");
+		h.message("second this session");
+		h.sent("/this-session");
+
+		h.resetAfterGameClear();
+
+		assertTrue(Files.exists(previous));
+		assertEquals(3, logs().length);
+		assertTrue(h.hasOlder());
+		assertEquals(java.util.Arrays.asList("first this session", "second this session"), texts(h.olderMessages(2)));
+		assertTrue(h.hasOlder());
+		assertEquals(java.util.Arrays.asList("older", "newer"), texts(h.olderMessages(2)));
+		assertFalse(h.hasOlder());
+		assertTrue(h.hasOlderSent());
+		assertEquals(java.util.Collections.singletonList("/this-session"), h.olderSent(1));
+		assertEquals(3, h.clear());
+		assertFalse(h.hasSaved());
+		assertFalse(h.hasOlder());
+		assertFalse(h.hasOlderSent());
+	}
+
+	@Test void dateLinesSeparateDaysAcrossPagesAfterGameClear() throws Exception {
 		Files.createDirectories(dir.resolve("chat-history"));
 		StringBuilder out = new StringBuilder();
 		long day = 24L * 3600 * 1000;
@@ -332,8 +361,17 @@ class PersistentChatTest {
 		for (String m : v.messages) if (m.startsWith("§8────") && m.matches("§8──── \\d{4}-\\d\\d-\\d\\d ────")) dates++;
 		assertEquals(6, dates);
 		assertEquals(0, h.olderMessages(10).size());
-		h.stopPaging();
+		h.resetAfterGameClear();
+		assertTrue(h.hasOlder());
+		List<PersistentChat.Entry> latest = h.olderMessages(2);
+		assertEquals(java.util.Arrays.asList("d4", "d5"), texts(latest));
+		List<PersistentChat.Entry> earlier = h.olderMessages(4);
+		assertEquals(java.util.Arrays.asList("d0", "d1", "d2", "d3"), texts(earlier));
 		assertFalse(h.hasOlder());
+		View paged = new View();
+		h.replay(earlier, paged);
+		h.replay(latest, paged);
+		assertEquals(v.messages.subList(0, v.messages.size() - 1), paged.messages);
 	}
 
 	@Test void millionLineLogStartsFastAndPagesToTheOldestLine() throws Exception {

@@ -161,7 +161,7 @@ final class LegacyChatHistoryProof {
 		MinecraftClient.getInstance().inGameHud.getChatHud().scroll(5);
 	}
 
-	/** "Keep chat when leaving": the game's disconnect calls clear; kept it stays, otherwise the log is not replayed into it. */
+	/** Check that keeping chat cancels the clear and that an emptied chat can page saved lines back in. */
 	private static void keep() {
 		MinecraftClient.getInstance().setScreen(null);
 		com.arcticlauncher.client.config.ClientConfig config = ArcticClient.config();
@@ -172,9 +172,9 @@ final class LegacyChatHistoryProof {
 		config.chatKeep = false;
 		clearChat();
 		check(chatTexts().isEmpty(), "keep chat when leaving OFF: chat is emptied like vanilla");
+		check(ArcticClient.persistentChat().hasOlder(), "saved history is available after the clear");
 		scrollOnce();
-		check(chatTexts().isEmpty(), "and scrolling does not pull the saved log back in");
-		check(!ArcticClient.persistentChat().hasOlder(), "paging stopped after the clear");
+		check(chatTexts().stream().anyMatch(l -> l.contains("S2 message live")), "scrolling reloads a line from this session");
 		open("");
 		later(2, () -> {
 			request("KEY:Up:1");
