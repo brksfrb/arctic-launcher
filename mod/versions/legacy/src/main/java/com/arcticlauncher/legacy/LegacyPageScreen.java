@@ -7,6 +7,7 @@ import org.lwjgl.input.Mouse;
 
 /** Shows a core {@link Page} as an old-Minecraft screen and forwards input. */
 public final class LegacyPageScreen extends Screen {
+	private final LegacyGfx gfx = new LegacyGfx();
 	private final Page page;
 	private final Screen parent;
 
@@ -27,20 +28,25 @@ public final class LegacyPageScreen extends Screen {
 	@Override
 	public void init() {
 		Keyboard.enableRepeatEvents(true);
+		gfx.init();
 		page.init(width, height);
 	}
 
 	@Override
 	public void tick() {
+		if (page.finishedClosing()) {
+			close();
+			return;
+		}
 		page.tick();
 	}
 
 	@Override
 	public void render(int mouseX, int mouseY, float delta) {
-		if (!page.ownBackground() && page.dimWorld()) {
+		if (!page.ownBackground() && page.dimWorld() && !page.arcticMenu()) {
 			renderBackground();
 		}
-		page.render(new LegacyGfx(), mouseX, mouseY);
+		page.render(gfx, mouseX, mouseY);
 	}
 
 	@Override

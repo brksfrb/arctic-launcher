@@ -532,6 +532,24 @@ public final class LegacyHooks {
 		return new LegacyGfx();
 	}
 
+	private static LegacyGfx menuGfx;
+	private static net.minecraft.client.gui.screen.Screen menuScreen;
+	private static int menuWidth, menuHeight, menuScale;
+
+	/** Menu controls share one renderer for this window and GUI scale. */
+	public static com.arcticlauncher.client.gfx.Gfx menuGfx() {
+		MinecraftClient mc = MinecraftClient.getInstance();
+		if (menuGfx == null || menuScreen != mc.currentScreen || menuWidth != mc.width
+				|| menuHeight != mc.height || menuScale != mc.options.guiScale) {
+			menuGfx = new LegacyGfx();
+			menuScreen = mc.currentScreen;
+			menuWidth = mc.width;
+			menuHeight = mc.height;
+			menuScale = mc.options.guiScale;
+		}
+		return menuGfx;
+	}
+
 	/** The leave button that asked "click again" (null: none). */
 	private static net.minecraft.client.gui.widget.ButtonWidget armedLeave;
 	private static String leaveLabel;

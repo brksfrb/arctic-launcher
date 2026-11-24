@@ -14,6 +14,9 @@ public final class Draw {
 	/** Fancy style on: smooth, rounder shapes. Set each frame from the config. */
 	public static boolean fancy;
 
+	/** Process-local test override for menu text and edges. */
+	public static final boolean TEST_MENU_FANCY = Boolean.getBoolean("arctic.d4.fancy");
+
 	private Draw() {}
 
 	private static float fancyRadius(int radius, int w, int h) {
@@ -118,17 +121,38 @@ public final class Draw {
 		g.pop();
 	}
 
+	/** Last fitted widths for strings that do not fit on each render. Render thread only. */
+	private static final java.util.Map<String, Fit> FITTED = new java.util.HashMap<>();
+
+	private static final class Fit {
+		final int width, limit, dots;
+		final String result;
+
+		Fit(int width, int limit, int dots, String result) {
+			this.width = width;
+			this.limit = limit;
+			this.dots = dots;
+			this.result = result;
+		}
+	}
+
 	/** Shorten text with "…" to fit {@code maxWidth}. */
 	public static String fit(Gfx g, String text, int maxWidth) {
-		if (g.textWidth(text) <= maxWidth) {
-			return text;
-		}
+		int width = g.textWidth(text);
+		if (width <= maxWidth) return text;
 		String dots = "...";
-		int end = text.length();
-		while (end > 0 && g.textWidth(text.substring(0, end) + dots) > maxWidth) {
-			end--;
+		int dotWidth = g.textWidth(dots);
+		if (dotWidth > maxWidth) return "";
+		Fit cached = FITTED.get(text);
+		if (cached != null && cached.width == width && cached.limit == maxWidth && cached.dots == dotWidth) {
+			return cached.result;
 		}
-		return text.substring(0, end) + dots;
+		int end = text.length();
+		while (end > 0 && g.textWidth(text.substring(0, end) + dots) > maxWidth) end--;
+		String result = text.substring(0, end) + dots;
+		if (FITTED.size() >= 256) FITTED.clear();
+		FITTED.put(text, new Fit(width, maxWidth, dotWidth, result));
+		return result;
 	}
 
 	/**

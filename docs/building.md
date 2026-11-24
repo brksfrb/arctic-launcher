@@ -75,6 +75,19 @@ client and the launcher at a local cosmetics server. Adding
 `-Darctic.selftest=true` to the instance's JVM arguments makes the client screenshot each
 of its screens and quit, which is handy after changing an adapter.
 
+### D4 menu test switch
+
+In the test launcher, open the Minecraft instance's settings and add
+`-Darctic.d4.fancy=true` to **Extra JVM arguments**. Start the instance with the Arctic
+menu style selected. The switch enables Inter and smooth edges for Arctic menu
+chrome for that run. It leaves the saved Fancy settings and the in-world HUD,
+chat, and hotbar font alone.
+
+In a world, press Right Shift to open the HUD editor, then select Mods. Click a
+card to select it, its ON/OFF bar to toggle it, or its gear to open full settings.
+The detail panel sits beside the grid at wider GUI sizes. Escape opens the
+vanilla pause menu from the world.
+
 ## Checks
 
 ```sh

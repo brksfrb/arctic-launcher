@@ -26,6 +26,7 @@ import org.lwjgl.opengl.GL11;
 final class LegacyTextures {
 	private static final String NAMESPACE = "arctic";
 	private static final Identifier ICON = new Identifier(NAMESPACE, "icon");
+	private static final Map<String, Identifier> ASSET_KEYS = new HashMap<>();
 	private static final Map<String, Identifier> ASSETS = new HashMap<String, Identifier>();
 	/** Look textures uploaded so far. */
 	private static final java.util.Set<Identifier> LOADED = java.util.Collections.synchronizedSet(new java.util.HashSet<Identifier>());
@@ -49,7 +50,11 @@ final class LegacyTextures {
 			return LOADED.contains(id) ? id : null;
 		}
 		if (key.startsWith("asset:")) {
-			return asset(key.substring(6));
+			Identifier cached = ASSET_KEYS.get(key);
+			if (cached != null || ASSET_KEYS.containsKey(key)) return cached;
+			Identifier made = asset(key.substring(6));
+			ASSET_KEYS.put(key, made);
+			return made;
 		}
 		if (key.startsWith("dyn:")) {
 			String name = key.substring(4);

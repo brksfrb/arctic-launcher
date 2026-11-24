@@ -3,7 +3,6 @@ package com.arcticlauncher.client.menu;
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.gfx.Draw;
 import com.arcticlauncher.client.gfx.Gfx;
-import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.KeyButton;
@@ -19,13 +18,8 @@ import com.arcticlauncher.client.Lang;
  * arrow, the icon and title (and the mod's switch), and the tab's content.
  */
 final class TabPage extends Page {
-	static final int MAX_W = 520;
-	static final int MAX_H = 320;
-	static final int MARGIN = 12;
-	static final int PAD = 12;
-	static final int HEADER = 40;
+	@Override protected boolean arcticMenuChrome() { return true; }
 	private static final int ICON = 16;
-	private static final int BACK = 18;
 	private static final int SWITCH_W = 44;
 
 	private final MenuTab tab;
@@ -35,6 +29,8 @@ final class TabPage extends Page {
 	private final Page back;
 	private final java.util.List<KeyButton> keyButtons = new java.util.ArrayList<KeyButton>();
 	private Scroll scroll;
+	private MenuFrame frame;
+	private int bodyTop;
 	/** Where the tab's scroll box was, kept across rebuilds. */
 	private int scrollOffset;
 	private String shownState;
@@ -60,26 +56,36 @@ final class TabPage extends Page {
 
 	@Override
 	protected void build() {
-		pw = Math.min(MAX_W, width - MARGIN * 2);
-		ph = Math.min(MAX_H, height - MARGIN * 2);
-		px = (width - pw) / 2;
-		py = (height - ph) / 2;
+		frame = new MenuFrame(width, height);
+		px = frame.x;
+		py = frame.y;
+		pw = frame.right - px;
+		ph = frame.bottom - py;
 		keyButtons.clear();
-		if (scroll != null) {
-			scrollOffset = scroll.offset();
-		}
+		if (scroll != null) scrollOffset = scroll.offset();
 		scroll = null;
+		int rows = frame.navigation(new Host() {
+			@Override public Widget add(Widget widget) { return TabPage.this.add(widget); }
+			@Override public void rebuild() { TabPage.this.rebuild(); }
+		}, ModsScreen.category(), next -> {
+			ModsScreen catalog = back instanceof ModsScreen ? (ModsScreen) back : new ModsScreen();
+			catalog.selectCategory(next);
+			ArcticClient.platform().openPage(catalog);
+		}, () -> {
+			if (mod == null || !"account".equals(mod.id)) Menus.open("account", this);
+		});
+		bodyTop = rows + 3;
 		add(new Button("<", () -> ArcticClient.platform().openPage(back != null ? back : new ModsScreen())))
-				.bounds(px + PAD, py + (HEADER - BACK) / 2, BACK, BACK);
+				.bounds(frame.content, frame.top, 16, 16);
 		if (mod != null && mod.hasSwitch()) {
 			add(new Toggle("", null, Form.binding(mod::on, mod::setOn)))
-					.bounds(px + pw - PAD - SWITCH_W, py + (HEADER - 16) / 2, SWITCH_W, 16);
+					.bounds(frame.end() - SWITCH_W, frame.top, SWITCH_W, 16);
 		}
 		shownState = tab.state();
 		int top = contentTop();
 		if (hasToggleKey()) {
 			buildToggleKey(top);
-			top += Form.ROW + 4;
+			top += Form.ROW + 8;
 		}
 		tab.build(new Host() {
 			@Override
@@ -103,7 +109,7 @@ final class TabPage extends Page {
 				TabPage.this.add(scroll.bar());
 				return scroll;
 			}
-		}, contentX(), top, contentW(), py + ph - PAD);
+		}, contentX(), top, contentW(), frame.bottom - 8);
 	}
 
 	/** Every feature with a switch gets a key that flips it (the ones with a key of their own already show it). */
@@ -116,12 +122,13 @@ final class TabPage extends Page {
 		final Mod m = mod;
 		int x = contentX();
 		int w = contentW();
-		int textW = w - Form.KEY_W - 10;
-		add(new Label(Lang.t(m.toggleKeyLabel), Label.Kind.TEXT)).bounds(x + 4, top + 3, textW, 9);
+		int keyWidth = 36;
+		int textW = w - keyWidth - 8;
+		add(new Label(Lang.t(m.toggleKeyLabel), Label.Kind.TEXT)).bounds(x, top + 3, textW, 9);
 		final Label hint = add(new Label(Lang.t("mods.press_it_in_game_to_switch", m.name), Label.Kind.MUTED));
-		hint.bounds(x + 4, top + 13, textW, 9);
+		hint.bounds(x, top + 14, textW, 9);
 		final Label warn = add(new Label("", Label.Kind.ACCENT));
-		warn.bounds(x + 4, top + 13, textW, 9);
+		warn.bounds(x, top + 14, textW, 9);
 		final Runnable note = () -> {
 			String other = ToggleKeys.usedBy(m, ToggleKeys.get(m));
 			warn.text(other == null ? "" : Lang.t("mods.also_used_by") + other + Lang.t("mods.it_still_works"));
@@ -141,37 +148,37 @@ final class TabPage extends Page {
 				note.run();
 			}
 		});
-		add(button).bounds(x + w - Form.KEY_W, top + 3, Form.KEY_W, Form.ROW - 6);
+		add(button).bounds(x + w - keyWidth, top + 3, keyWidth, 16);
 		keyButtons.add(button);
 	}
 
 	int contentX() {
-		return px + PAD;
+		return frame.content;
 	}
 
 	int contentW() {
-		return pw - PAD * 2;
+		return frame.end() - frame.content;
 	}
 
 	int contentTop() {
-		return py + HEADER + 4;
+		return bodyTop;
 	}
 
 	@Override
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
-		Skin.panel(g, s, px, py, px + pw, py + ph);
-		int tx = px + PAD + BACK + 8;
+		frame.draw(g, s);
+		int tx = frame.content + 23;
 		String icon = mod != null ? mod.iconKey() : null;
 		if (icon != null) {
-			g.texture(icon, tx, py + (HEADER - ICON) / 2, ICON, ICON, 0, 0, 32, 32, 32, 32);
-			tx += ICON + 6;
+			g.texture(icon, tx, frame.top + 1, ICON, ICON, 0, 0, 32, 32, 32, 32);
+			tx += ICON + 3;
 		}
-		int room = pw - (tx - px) - PAD - (mod != null && mod.hasSwitch() ? SWITCH_W + 8 : 0);
-		g.text("§l" + Draw.fit(g, tab.title(), room), tx, py + 10, s.text, false);
+		int room = frame.end() - tx - (mod != null && mod.hasSwitch() ? SWITCH_W + 8 : 0);
+		g.text(Draw.fit(g, tab.title(), room), tx, frame.top + 1, s.text, false);
 		String status = tab.status();
 		String hint = status != null ? status : tab.hint();
-		g.text(Draw.fit(g, hint, room), tx, py + 22, status != null ? s.accent : s.muted, false);
-		g.fill(px + PAD, py + HEADER, px + pw - PAD, py + HEADER + 1, s.border);
+		g.text(Draw.fit(g, hint, room), tx, frame.top + 12, status != null ? s.accent : s.muted, false);
+		g.fill(frame.content, frame.top + 22, frame.end(), frame.top + 23, s.border);
 		tab.draw(g, s, mx, my);
 	}
 

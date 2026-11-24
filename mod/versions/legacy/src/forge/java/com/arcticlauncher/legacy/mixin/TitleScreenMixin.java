@@ -8,6 +8,7 @@ import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
 import org.spongepowered.asm.mixin.Mixin;
+import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
@@ -25,6 +26,12 @@ abstract class TitleScreenMixin extends Screen {
 		if (ArcticClient.restyles()) {
 			Backdrop.render(LegacyHooks.gfx(), ArcticClient.style()); ci.cancel();
 		}
+	}
+
+	@WrapWithCondition(method = "render", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/gui/screen/TitleScreen;fillGradient(IIIIII)V"))
+	private boolean arctic$panoramaTint(TitleScreen screen, int x0, int y0, int x1, int y1, int top, int bottom) {
+		return ArcticClient.style() != com.arcticlauncher.client.style.Style.ARCTIC;
 	}
 
 	@Inject(method = "render", at = @At("TAIL"))

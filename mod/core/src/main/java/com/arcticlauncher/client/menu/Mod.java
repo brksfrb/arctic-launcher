@@ -52,6 +52,7 @@ final class Mod {
 	final String description;
 	/** Icon file in assets/arctic/icons (without .png). */
 	final String icon;
+	private final String iconKey;
 	Category category;
 	/** For HUD widgets: which group of the HUD list it is in (see ModCatalog.HUD_GROUPS). */
 	String group = "mods.hud_group.info";
@@ -60,6 +61,8 @@ final class Mod {
 	private BooleanSupplier on;
 	private Consumer<Boolean> set;
 	Settings settings;
+	boolean inlineSettings;
+	String detailHint;
 	/** A whole tab of its own instead of a settings form. */
 	Supplier<MenuTab> page;
 	/** It has a key of its own that switches it (so its page doesn't get the generic Toggle key row). */
@@ -75,6 +78,7 @@ final class Mod {
 		this.name = name;
 		this.description = description;
 		this.icon = icon;
+		this.iconKey = "asset:icons/" + icon;
 		this.category = category;
 		this.keywords = keywords == null ? "" : keywords;
 	}
@@ -88,6 +92,11 @@ final class Mod {
 
 	Mod ownToggleKey() {
 		this.ownToggleKey = true;
+		return this;
+	}
+
+	Mod inlineSettings() {
+		inlineSettings = true;
 		return this;
 	}
 
@@ -131,6 +140,6 @@ final class Mod {
 
 	/** The icon's texture key for {@code Gfx.texture}. */
 	String iconKey() {
-		return "asset:icons/" + icon;
+		return iconKey;
 	}
 }

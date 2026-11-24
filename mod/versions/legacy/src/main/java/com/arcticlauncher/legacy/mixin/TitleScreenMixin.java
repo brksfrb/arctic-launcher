@@ -24,6 +24,12 @@ abstract class TitleScreenMixin extends Screen {
 		}
 	}
 
+	@WrapWithCondition(method = "render", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/gui/screen/TitleScreen;fillGradient(IIIIII)V"))
+	private boolean arctic$panoramaTint(TitleScreen screen, int x0, int y0, int x1, int y1, int top, int bottom) {
+		return ArcticClient.style() != com.arcticlauncher.client.style.Style.ARCTIC;
+	}
+
 	@Inject(method = "render", at = @At("TAIL"))
 	private void arctic$branding(int mx, int my, float delta, CallbackInfo ci) {
 		if (ArcticClient.restyles()) TitleBranding.draw(LegacyHooks.gfx(), width, height);

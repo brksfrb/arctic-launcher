@@ -14,6 +14,7 @@ final class ModSettingsTab implements MenuTab {
 
 	private final Mod mod;
 	private int[] preview;
+	private final int[] widgetRect = new int[4];
 
 	ModSettingsTab(Mod mod) {
 		this.mod = mod;
@@ -63,16 +64,24 @@ final class ModSettingsTab implements MenuTab {
 		Draw.outline(g, x0, y0, x1, y1, 1, s.border);
 		Hud hud = ArcticClient.hud();
 		hud.inCard(true);
+		boolean menuText = g.menuText(false);
+		boolean previousEdges = Draw.fancy;
+		Draw.fancy = ArcticClient.config().fancy;
 		try {
 			float scale = hud.slot(mod.widget).scale;
 			int ww = Math.round(mod.widget.width(g) * scale);
 			int hh = Math.round(mod.widget.height() * scale);
-			int[] rect = {(x0 + x1 - ww) / 2, (y0 + y1 - hh) / 2, ww, hh};
+			widgetRect[0] = (x0 + x1 - ww) / 2;
+			widgetRect[1] = (y0 + y1 - hh) / 2;
+			widgetRect[2] = ww;
+			widgetRect[3] = hh;
 			g.scissor(x0, y0, x1, y1);
-			hud.draw(g, s, mod.widget, rect, true);
+			hud.draw(g, s, mod.widget, widgetRect, true);
 			g.endScissor();
 		} finally {
 			hud.inCard(false);
+			g.menuText(menuText);
+			Draw.fancy = previousEdges;
 		}
 		Draw.centered(g, Lang.t("mods.preview"), (x0 + x1) / 2, y1 + 4, s.muted, false);
 	}

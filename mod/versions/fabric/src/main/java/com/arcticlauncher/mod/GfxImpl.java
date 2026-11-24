@@ -2,6 +2,8 @@ package com.arcticlauncher.mod;
 
 import com.arcticlauncher.client.gfx.BrandMark;
 import com.arcticlauncher.client.gfx.Gfx;
+import com.arcticlauncher.client.gfx.Draw;
+import com.arcticlauncher.client.gfx.MenuFont;
 import com.mojang.blaze3d.platform.NativeImage;
 import java.io.InputStream;
 import net.minecraft.client.Minecraft;
@@ -17,16 +19,28 @@ import net.minecraft.resources.Identifier;
 
 import com.arcticlauncher.client.Lang;
 /** The core's drawing primitives on 26.3's GUI renderer. */
-public final class GfxImpl implements Gfx {
+public final class GfxImpl implements Gfx, MenuFont.DrawGlyph {
 	private static final Identifier ICON = Compat.id(ArcticMod.ID, "icon");
 	private static boolean iconLoaded;
 
-	private final GuiGraphicsExtractor g;
-	private final Font font;
+	private GuiGraphicsExtractor g;
+	private Font font;
+	private float opacity = 1f;
+	private boolean useMenuText;
+	private MenuFont menuFont;
+	private Identifier menuAtlas;
+	private static final Identifier[] MENU_ATLASES = new Identifier[4];
 
 	public GfxImpl(GuiGraphicsExtractor g) {
-		this.g = g;
-		this.font = Minecraft.getInstance().font;
+		bind(g);
+	}
+
+	public GfxImpl bind(GuiGraphicsExtractor graphics) {
+		g = graphics;
+		font = Minecraft.getInstance().font;
+		useMenuText = false;
+		opacity = 1f;
+		return this;
 	}
 
 	//#if MC < 1.20
@@ -58,6 +72,7 @@ public final class GfxImpl implements Gfx {
 		return ICON;
 	}
 
+	private static final java.util.Map<String, Identifier> ASSET_KEYS = new java.util.HashMap<>();
 	private static final java.util.Map<String, Identifier> ASSETS = new java.util.HashMap<String, Identifier>();
 
 	/** A PNG from the jar's {@code assets/arctic/}, registered on first use. */
@@ -79,6 +94,14 @@ public final class GfxImpl implements Gfx {
 		}
 		ASSETS.put(name, id);
 		return id;
+	}
+
+	private static Identifier assetKey(String key) {
+		Identifier cached = ASSET_KEYS.get(key);
+		if (cached != null || ASSET_KEYS.containsKey(key)) return cached;
+		Identifier made = asset(key.substring(6));
+		ASSET_KEYS.put(key, made);
+		return made;
 	}
 
 	private static final java.util.Map<String, Identifier> BRANDS = new java.util.HashMap<String, Identifier>();
@@ -107,6 +130,57 @@ public final class GfxImpl implements Gfx {
 	}
 
 	@Override
+	public boolean menuText(boolean on) {
+		boolean before = useMenuText;
+		useMenuText = on;
+		return before;
+	}
+
+	@Override
+	public float opacity(float value) {
+		float before = opacity;
+		opacity = value;
+		return before;
+	}
+
+	private int tinted(int color) {
+		return opacity == 1f ? color : Draw.alpha(color, opacity);
+	}
+
+	private MenuFont menuFont() {
+		MenuFont ready = MenuFont.at(pixelScale());
+		if (ready == null || menuFont == ready) return menuFont;
+		int index = ready.scale() - 1;
+		Identifier id = MENU_ATLASES[index];
+		if (id == null) {
+			java.awt.image.BufferedImage source = ready.image();
+			NativeImage image = new NativeImage(source.getWidth(), source.getHeight(), false);
+			for (int y = 0; y < source.getHeight(); y++) {
+				for (int x = 0; x < source.getWidth(); x++) {
+					int pixel = source.getRGB(x, y);
+					//#if MC >= 1.21.2
+					image.setPixel(x, y, pixel);
+					//#else
+					// The atlas is white, so ARGB and ABGR contain identical channels.
+					image.setPixelRGBA(x, y, pixel);
+					//#endif
+				}
+			}
+			id = Compat.id(ArcticMod.ID, "menu_font/" + ready.scale());
+			Minecraft.getInstance().getTextureManager().register(id, Compat.smoothTexture("Arctic Menu", image));
+			MENU_ATLASES[index] = id;
+		}
+		menuAtlas = id;
+		menuFont = ready;
+		return ready;
+	}
+
+	@Override
+	public void glyph(int x, int y, int w, int h, int u, int v, int scale, int imageW, int imageH, int color) {
+		blitTinted(menuAtlas, x, y, w, h, u, v, w * scale, h * scale, imageW, imageH, color);
+	}
+
+	@Override
 	public float pixelScale() {
 		return (float) Minecraft.getInstance().getWindow().getGuiScale();
 	}
@@ -123,7 +197,7 @@ public final class GfxImpl implements Gfx {
 
 	@Override
 	public void fill(int x0, int y0, int x1, int y1, int color) {
-		g.fill(x0, y0, x1, y1, color);
+		g.fill(x0, y0, x1, y1, tinted(color));
 	}
 
 	//#if MC >= 1.21.6
@@ -153,6 +227,7 @@ public final class GfxImpl implements Gfx {
 	//#if MC >= 26.1
 	@Override
 	public boolean roundedFill(int x0, int y0, int x1, int y1, int r, int color) {
+		color = tinted(color);
 		if (RoundedPanel.add(g, x0, y0, x1, y1, r, color)) {
 			return true;
 		}
@@ -176,14 +251,20 @@ public final class GfxImpl implements Gfx {
 
 	@Override
 	public void gradient(int x0, int y0, int x1, int y1, int top, int bottom) {
-		g.fillGradient(x0, y0, x1, y1, top, bottom);
+		g.fillGradient(x0, y0, x1, y1, tinted(top), tinted(bottom));
 	}
 
 	@Override
 	public void text(String text, int x, int y, int color, boolean shadow) {
+		color = tinted(color);
 		// The game's font draws a colour with alpha 1-3 fully opaque (before 1.21.6 alpha 0 too): the last frame of
 		// every fade would flash. Nothing visible is lost by skipping it.
 		if ((color >>> 24) < 4) {
+			return;
+		}
+		MenuFont menu = useMenuText ? menuFont() : null;
+		if (menu != null && menu.width(text) >= 0) {
+			menu.draw(this, text, x, y, color, shadow);
 			return;
 		}
 		//#if MC >= 26.1
@@ -219,6 +300,9 @@ public final class GfxImpl implements Gfx {
 
 	@Override
 	public int textWidth(String text) {
+		MenuFont menu = useMenuText ? menuFont() : null;
+		int menuWidth = menu == null ? -1 : menu.width(text);
+		if (menuWidth >= 0) return menuWidth;
 		long now = System.nanoTime();
 		if (widthsFont != font || WIDTHS.size() > MAX_WIDTHS || now - widthsSince > WIDTHS_NANOS) {
 			WIDTHS.clear();
@@ -256,20 +340,47 @@ public final class GfxImpl implements Gfx {
 	@Override
 	public void texture(String key, int x, int y, int w, int h, float u, float v, int regionW, int regionH, int texW, int texH) {
 		Identifier id = key.startsWith("look:") ? look(key.substring(5))
-				: key.startsWith("asset:") ? asset(key.substring(6))
+				: key.startsWith("asset:") ? assetKey(key)
 				: key.startsWith("dyn:") ? dynamic(key.substring(4)) : icon();
 		if (id == null) {
 			return;
 		}
+		blitTinted(id, x, y, w, h, u, v, regionW, regionH, texW, texH, tinted(0xFFFFFFFF));
+	}
+
+	private void blitTinted(Identifier id, int x, int y, int w, int h, float u, float v, int regionW,
+			int regionH, int texW, int texH, int color) {
 		//#if MC >= 1.21.6
-		g.blit(RenderPipelines.GUI_TEXTURED, id, x, y, u, v, w, h, regionW, regionH, texW, texH);
+		g.blit(RenderPipelines.GUI_TEXTURED, id, x, y, u, v, w, h, regionW, regionH, texW, texH, color);
 		//#elif MC >= 1.21.2
-		g.blit(RenderType::guiTextured, id, x, y, u, v, w, h, regionW, regionH, texW, texH);
+		g.blit(RenderType::guiTextured, id, x, y, u, v, w, h, regionW, regionH, texW, texH, color);
 		//#else
-		// Before 1.21.2 blit has no RenderType lookup: it always draws with the gui texture.
-		g.blit(id, x, y, w, h, u, v, regionW, regionH, texW, texH);
+		if (color != 0xFFFFFFFF) tintTexture(color);
+		try {
+			g.blit(id, x, y, w, h, u, v, regionW, regionH, texW, texH);
+		} finally {
+			if (color != 0xFFFFFFFF) tintTexture(0xFFFFFFFF);
+		}
 		//#endif
 	}
+
+	//#if MC < 1.21.2
+	private void tintTexture(int color) {
+		float r = (color >>> 16 & 255) / 255f;
+		float green = (color >>> 8 & 255) / 255f;
+		float b = (color & 255) / 255f;
+		float a = (color >>> 24) / 255f;
+		//#if MC >= 1.20
+		g.setColor(r, green, b, a);
+		//#elif MC >= 1.17
+		com.mojang.blaze3d.systems.RenderSystem.setShaderColor(r, green, b, a);
+		//#elif MC >= 1.15
+		com.mojang.blaze3d.systems.RenderSystem.color4f(r, green, b, a);
+		//#else
+		com.mojang.blaze3d.platform.GlStateManager.color4f(r, green, b, a);
+		//#endif
+	}
+	//#endif
 
 	@Override
 	public void item(Object stack, int x, int y) {

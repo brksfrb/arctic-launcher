@@ -59,6 +59,15 @@ public final class Style {
 			.ink(0xFFEAF4FF, 0xFF8FA6BF, 0x900A1422)
 			.build();
 
+	/** Arctic menu chrome shared by the catalog, editor and native title/pause controls. */
+	public static final Style D4 = new Builder("arctic", "Arctic", "mods.style.arctic.description") // i18n-ignore
+			.accent(0xFF7BD0F4, 0xFF061523)
+			.sky(ARCTIC.skyTop, ARCTIC.skyBottom, ARCTIC.aurora)
+			.mountains(ARCTIC.mountainsBack, ARCTIC.mountainsFront)
+			.surfaces(0xE60F1929, 0x737BD0F4, 0xFF152236, 0xFF223B50, 0xFF111B29, 0xB80B1524)
+			.ink(0xFFE7F1FF, 0xFF8CA9C6, ARCTIC.hud)
+			.build();
+
 	public static final Style AURORA = new Builder("aurora", "Aurora", "mods.style.aurora.description") // i18n-ignore
 			.accent(0xFF86EFAC, 0xFF0B2A18)
 			.sky(0xFF0B0A1C, 0xFF231A45, 0x5886EFAC)

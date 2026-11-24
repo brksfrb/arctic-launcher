@@ -20,10 +20,20 @@ abstract class NativeMenuMixin extends Screen {
 	@Unique private com.arcticlauncher.client.servers.DisconnectedPage arctic$reconnect;
 	@Unique private ButtonWidget arctic$cancel;
 	@Unique private ButtonWidget arctic$main;
+	@Unique private ButtonWidget arctic$hud;
+	@Unique private ButtonWidget arctic$replays;
 	@Inject(method = "init", at = @At("TAIL"))
 	private void arctic$init(CallbackInfo ci) {
 		arctic$actions.clear(); arctic$reconnect = null; arctic$cancel = null;
 		arctic$main = arctic$add(ArcticClient.hubLabel(), () -> ArcticClient.platform().openPage(ArcticClient.hub()));
+		arctic$hud = null;
+		arctic$replays = null;
+		if ((Object) this instanceof TitleScreen && ArcticClient.style() == com.arcticlauncher.client.style.Style.ARCTIC) {
+			arctic$hud = arctic$add(Lang.t("mods.edit_hud"), () -> ArcticClient.platform().openPage(new com.arcticlauncher.client.menu.HudEditor()));
+			if (com.arcticlauncher.client.replay.Replays.canWatch()) {
+				arctic$replays = arctic$add(Lang.t("mods.replays"), () -> com.arcticlauncher.client.menu.Menus.open("replays"));
+			}
+		}
 		if ((Object) this instanceof MultiplayerScreen) {
 			arctic$add(Lang.t("platform.arctic_servers"), () -> com.arcticlauncher.legacy.ServerMenus.open((Screen) (Object) this));
 		} else if ((Object) this instanceof DisconnectedScreen) {
@@ -54,6 +64,15 @@ abstract class NativeMenuMixin extends Screen {
 		for (ButtonWidget b : buttons) if (!arctic$actions.containsKey(b) && b.visible) placed.add(b);
 		for (ButtonWidget button : arctic$actions.keySet()) {
 			if (!button.visible) continue;
+			if (button == arctic$hud || button == arctic$replays) {
+				int x = width - 82 - 80 * (button == arctic$hud ? 3 : 2);
+				if (x >= 4 && arctic$free(x, 6, 76, placed, null, null)) {
+					button.x = x;
+					button.y = 6;
+					placed.add(button);
+					continue;
+				}
+			}
 			if (button == arctic$main && (Object) this instanceof TitleScreen && ArcticClient.restyles() && arctic$center(button, placed)) {
 				placed.add(button); continue;
 			}

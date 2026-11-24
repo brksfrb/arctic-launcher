@@ -37,15 +37,17 @@ public class Toggle extends Widget {
 		if (hover > 0f) {
 			Draw.round(g, x, y, x + w, y + h, 2, Draw.alpha(s.buttonHover, 0.5f * hover));
 		}
-		int textRoom = w - SWITCH_W - 12;
-		boolean twoLines = hint != null && h >= 22;
+		int switchWidth = s == Style.D4 ? 28 : SWITCH_W;
+		int switchHeight = s == Style.D4 ? 14 : SWITCH_H;
+		int textRoom = w - switchWidth - 10;
+		boolean twoLines = hint != null && !hint.isEmpty() && h >= 22;
 		int ty = twoLines ? y + (h - 19) / 2 : y + (h - 8) / 2;
 		g.text(Draw.fit(g, label, textRoom, x + 4, ty), x + 4, ty, s.text, false);
 		if (twoLines) {
 			g.text(Draw.fit(g, hint, textRoom, x + 4, ty + 11), x + 4, ty + 11, s.muted, false);
 		}
-		int sx = x + w - SWITCH_W - 4;
-		Skin.toggle(g, s, sx, y + (h - SWITCH_H) / 2, SWITCH_W, SWITCH_H, t, hover > 0.5f);
+		int sx = x + w - switchWidth - 2;
+		Skin.toggle(g, s, sx, y + (h - switchHeight) / 2, switchWidth, switchHeight, t, hover > 0.5f);
 	}
 
 	@Override

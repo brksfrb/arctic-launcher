@@ -15,6 +15,13 @@ public final class TitleBranding {
 		{88, 18}, {175, 37}, {263, 55}, {351, 74}, {438, 92}, {526, 111}, {613, 129}, {701, 147},
 	};
 
+	private static final String[] WORDMARK_KEYS = {
+			"asset:wordmark-1", "asset:wordmark-2", "asset:wordmark-3", "asset:wordmark-4",
+			"asset:wordmark-5", "asset:wordmark-6", "asset:wordmark-7", "asset:wordmark-8"
+	};
+	private static String version;
+	private static String subtitle;
+
 	private TitleBranding() {}
 
 	public static void draw(Gfx g, int width, int height) {
@@ -27,9 +34,19 @@ public final class TitleBranding {
 		int wordTop = top + ICON + 6;
 		g.push();
 		g.scale(1f / ps);
-		g.texture("asset:wordmark-" + scale, Math.round(width * ps / 2f - w / 2f), Math.round(wordTop * ps), w, h, 0, 0, w, h, w, h);
+		g.texture(WORDMARK_KEYS[scale - 1], Math.round(width * ps / 2f - w / 2f), Math.round(wordTop * ps), w, h, 0, 0, w, h, w, h);
 		g.pop();
-		Draw.centered(g, "Minecraft " + ArcticClient.platform().minecraftVersion(), width / 2,
-				wordTop + Math.round(h / ps) + 5, ArcticClient.style().accent, true);
+		String current = ArcticClient.platform().minecraftVersion();
+		if (!current.equals(version)) {
+			version = current;
+			subtitle = "Minecraft " + current;
+		}
+		boolean menuText = g.menuText(Draw.TEST_MENU_FANCY
+				&& ArcticClient.style() == com.arcticlauncher.client.style.Style.ARCTIC);
+		try {
+			Draw.centered(g, subtitle, width / 2, wordTop + Math.round(h / ps) + 5, ArcticClient.style().accent, true);
+		} finally {
+			g.menuText(menuText);
+		}
 	}
 }

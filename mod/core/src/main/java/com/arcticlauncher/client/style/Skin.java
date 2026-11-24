@@ -13,6 +13,11 @@ public final class Skin {
 	private Skin() {}
 
 	public static void button(Gfx g, Style s, int x, int y, int w, int h, boolean active, float hover) {
+		if (s == Style.D4) {
+			outlined(g, x, y, x + w, y + h, 2, active ? Draw.mix(s.button, s.buttonHover, hover) : s.buttonOff,
+					Draw.mix(s.border, s.accent, active ? hover * 0.55f : 0f));
+			return;
+		}
 		if (!active) {
 			Draw.round(g, x, y, x + w, y + h, RADIUS, s.buttonOff);
 			return;
@@ -27,8 +32,13 @@ public final class Skin {
 
 	/** A filled accent button (the main action). */
 	public static void primary(Gfx g, Style s, int x, int y, int w, int h, boolean active, float hover) {
-		int base = active ? Draw.mix(Draw.alpha(s.accent, 0.8f), s.accent, hover) : s.buttonOff;
-		Draw.round(g, x, y, x + w, y + h, RADIUS, base);
+		if (s == Style.D4) {
+			int fill = active ? Draw.mix(s.accent, 0xFF9DE3FF, hover * 0.35f) : s.buttonOff;
+			outlined(g, x, y, x + w, y + h, 2, fill, s.border);
+			return;
+		}
+		int fill = active ? Draw.mix(Draw.alpha(s.accent, 0.8f), s.accent, hover) : s.buttonOff;
+		Draw.round(g, x, y, x + w, y + h, RADIUS, fill);
 	}
 
 	public static void sliderTrack(Gfx g, Style s, int x, int y, int w, int h, boolean hovered) {
@@ -70,18 +80,25 @@ public final class Skin {
 
 	/** An on/off switch; {@code t} animates from off (0) to on (1). */
 	public static void toggle(Gfx g, Style s, int x, int y, int w, int h, float t, boolean hovered) {
-		int track = Draw.mix(s.field, Draw.alpha(s.accent, 0.85f), t);
-		int radius = Draw.fancy ? Draw.PILL : 3;
+		int track = Draw.mix(s == Style.D4 ? 0xFF263548 : s.field, s == Style.D4 ? 0xFF319CC6 : Draw.alpha(s.accent, 0.85f), t);
+		int radius = Draw.fancy ? Draw.PILL : s == Style.D4 ? 4 : 3;
 		Draw.round(g, x, y, x + w, y + h, radius, track);
 		Draw.outline(g, x, y, x + w, y + h, radius, hovered ? s.accent : s.border);
 		int knob = h - 4;
 		int kx = x + 2 + Math.round((w - 4 - knob) * t);
-		Draw.round(g, kx, y + 2, kx + knob, y + 2 + knob, Draw.fancy ? Draw.PILL : 2, t > 0.5f ? s.onAccent : s.muted);
+		Draw.round(g, kx, y + 2, kx + knob, y + 2 + knob, Draw.fancy ? Draw.PILL : 2, Draw.mix(s.muted, s == Style.D4 ? s.text : s.onAccent, t));
 	}
 
 	/** A translucent panel with a faint border. */
 	public static void panel(Gfx g, Style s, int x0, int y0, int x1, int y1) {
-		Draw.round(g, x0, y0, x1, y1, 3, s.panel);
-		Draw.outline(g, x0, y0, x1, y1, 3, s.border);
+		outlined(g, x0, y0, x1, y1, s == Style.D4 ? 2 : 3, s.panel, s.border);
+	}
+	public static void inset(Gfx g, Style s, int x0, int y0, int x1, int y1) {
+		outlined(g, x0, y0, x1, y1, 2, s == Style.D4 ? 0xD20B1422 : s.field, s.border);
+	}
+
+	public static void outlined(Gfx g, int x0, int y0, int x1, int y1, int radius, int fill, int stroke) {
+		Draw.round(g, x0, y0, x1, y1, radius, fill);
+		Draw.outline(g, x0, y0, x1, y1, radius, stroke);
 	}
 }

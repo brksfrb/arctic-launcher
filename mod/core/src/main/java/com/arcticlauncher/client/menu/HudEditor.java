@@ -24,6 +24,7 @@ import com.arcticlauncher.client.Lang;
  * other Arctic screens; drop a widget on the bar to take it off the HUD.
  */
 public final class HudEditor extends Page {
+	@Override protected boolean arcticMenuChrome() { return true; }
 	private static final float SCALE_STEP = 0.1f;
 	private static final int DRAG_START = 3;
 	private static final float FADE_SPEED = 6f;
@@ -72,6 +73,7 @@ public final class HudEditor extends Page {
 
 	private final List<Button> barButtons = new ArrayList<Button>();
 	private Map<HudWidget, int[]> rects = new java.util.HashMap<HudWidget, int[]>();
+	private List<Map.Entry<HudWidget, int[]>> sortedRects;
 	private final Snapper snapper = new Snapper();
 
 	@Override
@@ -160,25 +162,39 @@ public final class HudEditor extends Page {
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
 		Hud hud = ArcticClient.hud();
 		// Laid out as the editor shows it (the boss bar's stand-in has its own place).
-		hud.previewing(true);
-		rects = hud.layout(g);
-		for (Map.Entry<HudWidget, int[]> e : hud.sorted(rects)) {
-			HudWidget w = e.getKey();
-			int[] r = e.getValue();
-			boolean over = w == dragging || w == resizing || w == menuFor || (dragging == null && resizing == null && !inBar(mx, my) && inside(r, mx, my));
-			// One pixel out: half the gap between stacked widgets, so boxes touch but never overlap.
-			int o = HIGHLIGHT;
-			g.fill(r[0] - o, r[1] - o, r[0] + r[2] + o, r[1] + r[3] + o, Draw.alpha(0xFFFFFFFF, over ? 0.12f : 0.04f));
-			Draw.outline(g, r[0] - o, r[1] - o, r[0] + r[2] + o, r[1] + r[3] + o, 1, Draw.alpha(0xFFFFFFFF, over ? 0.9f : 0.3f));
-			hud.draw(g, s, w, r, true);
-			if (over) {
-				// The resize corner: a small triangle at the bottom-right.
-				int cx = r[0] + r[2] + o;
-				int cy = r[1] + r[3] + o;
-				for (int k = 0; k < HANDLE; k++) {
-					g.fill(cx - k - 1, cy - HANDLE + k, cx, cy - HANDLE + k + 1, s.accent);
+		boolean menuText = g.menuText(false);
+		boolean previousEdges = Draw.fancy;
+		Draw.fancy = ArcticClient.config().fancy;
+		try {
+			hud.previewing(true);
+			Map<HudWidget, int[]> layout = hud.layout(g);
+			if (rects != layout || sortedRects == null) {
+				rects = layout;
+				sortedRects = hud.sorted(layout);
+			}
+			for (int i = 0; i < sortedRects.size(); i++) {
+				Map.Entry<HudWidget, int[]> e = sortedRects.get(i);
+				HudWidget w = e.getKey();
+				int[] r = e.getValue();
+				boolean over = w == dragging || w == resizing || w == menuFor || (dragging == null && resizing == null && !inBar(mx, my) && inside(r, mx, my));
+				// One pixel out: half the gap between stacked widgets, so boxes touch but never overlap.
+				int o = HIGHLIGHT;
+				g.fill(r[0] - o, r[1] - o, r[0] + r[2] + o, r[1] + r[3] + o, Draw.alpha(0xFFFFFFFF, over ? 0.12f : 0.04f));
+				Draw.outline(g, r[0] - o, r[1] - o, r[0] + r[2] + o, r[1] + r[3] + o, 1, Draw.alpha(over ? s.accent : s.text, over ? 0.9f : 0.3f));
+				hud.draw(g, s, w, r, true);
+				if (over) {
+					// The resize corner: a small triangle at the bottom-right.
+					int cx = r[0] + r[2] + o;
+					int cy = r[1] + r[3] + o;
+					for (int k = 0; k < HANDLE; k++) {
+						g.fill(cx - k - 1, cy - HANDLE + k, cx, cy - HANDLE + k + 1, s.accent);
+					}
 				}
 			}
+		} finally {
+			hud.previewing(false);
+			g.menuText(menuText);
+			Draw.fancy = previousEdges;
 		}
 		snapper.draw(g, s, width, height);
 		drawBar(g, s, mx, my);

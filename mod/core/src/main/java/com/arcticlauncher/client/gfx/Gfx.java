@@ -12,6 +12,12 @@ public interface Gfx {
 
 	int height();
 
+	/** Scope the test font to menu lettering. Returns the previous value. */
+	default boolean menuText(boolean on) { return false; }
+
+	/** Scope opacity to the menu being animated. Returns the previous value. */
+	default float opacity(float value) { return 1f; }
+
 	/** Consecutive fills with one color; adapters may submit their quads together. */
 	default void beginFills(int color) {}
 

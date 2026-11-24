@@ -13,6 +13,9 @@ import net.minecraft.network.chat.Component;
 /** Shows a core {@link Page} as a Minecraft screen and forwards input. */
 public final class PageScreen extends Screen {
 	private final Page page;
+	//#if MC >= 1.20
+	private GfxImpl gfx;
+	//#endif
 	private final Screen parent;
 
 	/** The screen under the Arctic menu (the game's, or none). */
@@ -49,6 +52,10 @@ public final class PageScreen extends Screen {
 
 	@Override
 	public void tick() {
+		if (page.finishedClosing()) {
+			onClose();
+			return;
+		}
 		page.tick();
 	}
 
@@ -57,7 +64,15 @@ public final class PageScreen extends Screen {
 	public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
 		// Pages with their own backdrop draw it with the rest.
 		if (!page.ownBackground() && page.dimWorld()) {
-			super.extractBackground(g, mouseX, mouseY, delta);
+			if (page.arcticMenu()) {
+				//#if MC >= 26.1
+				if (Compat.screen() == this && !VulkanCompat.ACTIVE) extractBlurredBackground(g);
+				//#elif MC >= 1.20.5
+				if (Compat.screen() == this && !VulkanCompat.ACTIVE) super.extractBackground(g, mouseX, mouseY, delta);
+				//#endif
+			} else {
+				super.extractBackground(g, mouseX, mouseY, delta);
+			}
 		}
 	}
 	//#elif MC >= 1.20
@@ -87,7 +102,9 @@ public final class PageScreen extends Screen {
 	//#if MC >= 1.20
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
-		page.render(new GfxImpl(g), mouseX, mouseY);
+		if (gfx == null) gfx = new GfxImpl(g);
+		else gfx.bind(g);
+		page.render(gfx, mouseX, mouseY);
 	}
 	//#elif MC >= 1.16
 	@Override

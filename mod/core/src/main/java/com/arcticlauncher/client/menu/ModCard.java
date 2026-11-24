@@ -1,79 +1,76 @@
 package com.arcticlauncher.client.menu;
 
 import com.arcticlauncher.client.Keys;
+import com.arcticlauncher.client.Lang;
 import com.arcticlauncher.client.gfx.Draw;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Widget;
 
-import com.arcticlauncher.client.Lang;
-/**
- * A mod on the Mods screen: its icon and name, and a bar at the bottom that
- * switches it on and off (green when on). Clicking the rest of the card opens
- * its settings; mods without a switch open on any click.
- */
+/** Card body selects the feature, the gear opens its full settings and the footer switches it. */
 final class ModCard extends Widget {
-	static final int BAR = 16;
-	private static final int ICON = 32;
-	private static final int ON = 0xFF22C55E;
-	private static final int OFF = 0xFF3F3F46;
-	private static final int GEAR = 12;
+	private static final int BAR = 12;
+	private static final int GEAR = 9;
 
 	private final Mod mod;
+	private final boolean selected;
+	private final Runnable select;
 	private final Runnable open;
-	private final Runnable changed;
+	private final String onLabel = Lang.t("mods.badge_on");
+	private final String offLabel = Lang.t("mods.badge_off");
+	private final String openLabel = Lang.t("mods.open");
+	private float toggle = -1f;
 
-	ModCard(Mod mod, Runnable open, Runnable changed) {
+	ModCard(Mod mod, boolean selected, Runnable select, Runnable open) {
 		this.mod = mod;
+		this.selected = selected;
+		this.select = select;
 		this.open = open;
-		this.changed = changed;
 	}
 
 	private boolean onBar(double my) {
-		return my >= y + h - BAR;
+		return my >= y + h - BAR - 2;
 	}
 
 	@Override
 	protected void draw(Gfx g, Style s, int mx, int my, float dt) {
-		Skin.button(g, s, x, y, w, h, true, hover * 0.6f);
-		int iconY = y + (h - BAR - ICON - 12) / 2;
-		g.texture(mod.iconKey(), x + (w - ICON) / 2, iconY, ICON, ICON, 0, 0, 32, 32, 32, 32);
-		String name = Draw.fitCentered(g, mod.name, w - 6, x + w / 2, iconY + ICON + 4);
-		Draw.centered(g, name, x + w / 2, iconY + ICON + 4, s.text, true);
-		int by = y + h - BAR;
-		boolean overBar = hover > 0f && onBar(my) && contains(mx, my);
-		if (mod.hasSwitch()) {
-			boolean on = mod.on();
-			int color = on ? ON : OFF;
-			Draw.round(g, x + 2, by, x + w - 2, y + h - 2, 2, overBar ? Draw.mix(color, 0xFFFFFFFF, 0.15f) : color);
-			Draw.centered(g, Lang.t(on ? "mods.badge_on" : "mods.badge_off"), x + w / 2, by + (BAR - 2 - 8) / 2 + 1, 0xFFFFFFFF, true);
-		} else {
-			Draw.round(g, x + 2, by, x + w - 2, y + h - 2, 2, Draw.alpha(s.accent, overBar ? 0.5f : 0.3f));
-			Draw.centered(g, Lang.t("mods.open"), x + w / 2, by + (BAR - 2 - 8) / 2 + 1, s.text, true);
-		}
-		if (ModCatalog.isNew(mod.id)) {
-			Draw.round(g, x + 3, y + 4, x + 27, y + 14, 3, s.accent);
-			Draw.centered(g, Lang.t("mods.new"), x + 15, y + 5, s.onAccent, false);
-		}
-		com.arcticlauncher.client.ui.Hints.offer(mod.description, x, y, w, h - BAR);
-		if (mod.hasSettings() && mod.hasSwitch()) {
+		int base = s == Style.D4 ? 0xA8121C2B : s.button;
+		int fill = Draw.mix(base, s.buttonHover, selected ? 0.65f : hover * 0.45f);
+		int stroke = Draw.mix(s.border, s.accent, selected ? 0.72f : hover * 0.25f);
+		Skin.outlined(g, x, y, x + w, y + h, 2, fill, stroke);
+		int icon = h <= 63 ? 22 : 26;
+		int iconY = y + 8;
+		g.texture(mod.iconKey(), x + (w - icon) / 2, iconY, icon, icon, 0, 0, 32, 32, 32, 32);
+		int center = x + w / 2;
+		int titleY = iconY + icon + 3;
+		Draw.centered(g, Draw.fitCentered(g, mod.name, w - 8, center, titleY), center, titleY, s.text, false);
+		int by = y + h - BAR - 2;
+		boolean on = mod.on();
+		toggle = toggle < 0 ? (on ? 1f : 0f) : approach(toggle, on ? 1f : 0f, dt * 9f);
+		float over = onBar(my) && contains(mx, my) ? hover * 0.2f : 0f;
+		int barFill = Draw.mix(Draw.alpha(s.field, 0.55f), Draw.alpha(s.accent, 0.25f), toggle + (1f - toggle) * over);
+		int barStroke = Draw.mix(Draw.alpha(s.muted, 0.48f), Draw.alpha(s.accent, 0.82f), toggle);
+		Skin.outlined(g, x + 3, by, x + w - 3, y + h - 2, 1, barFill, barStroke);
+		Draw.centered(g, mod.hasSwitch() ? (on ? onLabel : offLabel) : openLabel, center, by + 2,
+				mod.hasSwitch() ? Draw.mix(s.muted, s.accent, toggle) : s.text, false);
+		if (mod.hasSettings()) {
 			g.texture("asset:icons/settings", x + w - GEAR - 4, y + 4, GEAR, GEAR, 0, 0, 32, 32, 32, 32);
 		}
+		com.arcticlauncher.client.ui.Hints.offer(mod.description, x, y, w, h - BAR);
 	}
 
 	@Override
 	public boolean click(double mx, double my, int button) {
-		if (button != Keys.MOUSE_LEFT) {
-			return false;
-		}
+		if (button != Keys.MOUSE_LEFT) return false;
 		ModCatalog.markSeen(mod.id);
-		if (mod.hasSwitch() && (onBar(my) || !mod.hasSettings())) {
+		if (onBar(my) && mod.hasSwitch()) {
 			mod.setOn(!mod.on());
-			changed.run();
-			return true;
+		} else if (mod.hasSettings() && (my < y + 16 && mx >= x + w - 17 || onBar(my))) {
+			open.run();
+		} else if (mod.hasSettings() || mod.hasSwitch()) {
+			select.run();
 		}
-		open.run();
 		return true;
 	}
 }

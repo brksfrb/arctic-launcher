@@ -4,254 +4,316 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.Keys;
+import com.arcticlauncher.client.Lang;
 import com.arcticlauncher.client.gfx.Draw;
-import com.arcticlauncher.client.gfx.BrandMark;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Skin;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
+import com.arcticlauncher.client.ui.KeyButton;
 import com.arcticlauncher.client.ui.Page;
 import com.arcticlauncher.client.ui.Scroll;
 import com.arcticlauncher.client.ui.TextField;
+import com.arcticlauncher.client.ui.Toggle;
+import com.arcticlauncher.client.ui.Widget;
 
-import com.arcticlauncher.client.Lang;
-/**
- * The Mods screen: every Arctic feature as a card, with a search box and
- * category chips. Cards switch mods on and off and open their settings.
- */
+/** Catalog, recent features and the settings for the selected card. */
 final class ModsScreen extends Page {
-	private static final int CARD_H = 74;
+	@Override protected boolean arcticMenuChrome() { return true; }
 	private static final int GAP = 6;
-	private static final int MIN_CARD_W = 96;
-	private static final int HUD_W = 60;
-	private static final int STYLE_W = 70;
-	private static final int ACCOUNTS_W = 62;
-	/** Room the "Arctic / Mods" title takes on the left; header buttons stay right of it. */
-	private static final int TITLE_ROOM = 80;
-	/** Menu Style is a header button (always in sight), not a card. */
-	private static final String STYLE_ID = "style";
-	/** Accounts too: a header button, a card only when searched for (or when the window is narrow). */
-	private static final String ACCOUNT_ID = "account";
-	private static final int SEARCH_W = 150;
-	private static final int FIELD_H = 18;
-	private static final int CHIP_H = 16;
-	private static final int CHIP_GAP = 4;
-	private static final int LOGO = 18;
-	private static final int MAX_QUERY = 32;
-
-	/** The tab is kept while the game runs; the search starts empty each time the menu opens. */
+	private static final int DETAIL_W = 168;
+	private static final int RECENT_MAX = 4;
+	private static final String[] FIRST = {
+			"armorhider", "zoom", "freelook", "sprint", "sneak", "waypoints", "screenshots",
+			"replays", "death", "durability", "leave", "reconnect"
+	};
+	private static final List<String> RECENT = new ArrayList<>();
 	private static Mod.Category category = Mod.Category.ALL;
-	private static String query = "";
-	/** The HUD list's group chip (see ModCatalog.HUD_GROUPS). */
 	private static String hudGroup = "mods.hud_group.all";
-	private static int scrollOffset;
 
-	private final TextField search = new TextField(Lang.t("mods.search_mods"), MAX_QUERY, TextField.ANY);
-	/** Typing in the search box: rebuild the grid but keep typing. */
-	private boolean keepSearchFocus;
-	private Scroll scroll;
-	private int px;
-	private int py;
-	private int pw;
-	private int ph;
-	private int gridTop;
-	private int shown;
+	private final TextField search = new TextField(Lang.t("mods.search_mods"), 32, TextField.ANY);
+	private final List<KeyButton> keys = new ArrayList<>();
+	private MenuFrame frame;
+	private String selectedId = FIRST[0];
+	private Scroll grid;
+	private Scroll details;
+	private int gridTop, detailX, detailTop;
+	private Mod selected;
+	private boolean wide;
+	private String emptyMessage;
+	private boolean resetGrid;
+	private String previousDetail;
+	private int detailOffset;
 
 	ModsScreen() {
-		// A search left over from earlier would quietly hide mods (opening a mod's settings and
-		// coming back is the same screen, so its search stays).
-		query = "";
-		scrollOffset = 0;
-		search.text(query);
 		search.onChange(() -> {
-			query = search.text();
-			scrollOffset = 0;
-			keepSearchFocus = true;
+			resetGrid = true;
 			rebuild();
 		});
 	}
 
-	@Override
-	public boolean pausesGame() {
-		return false;
-	}
+	@Override public boolean pausesGame() { return false; }
+	@Override protected boolean typesAnywhere() { return true; }
 
 	@Override
 	protected void build() {
-		pw = Math.min(TabPage.MAX_W, width - TabPage.MARGIN * 2);
-		ph = Math.min(TabPage.MAX_H, height - TabPage.MARGIN * 2);
-		px = (width - pw) / 2;
-		py = (height - ph) / 2;
-		int x = px + TabPage.PAD;
-		int w = pw - TabPage.PAD * 2;
-		if (scroll != null) {
-			scrollOffset = scroll.offset();
-		}
-		add(search).bounds(px + pw - TabPage.PAD - SEARCH_W - 22, py + (TabPage.HEADER - FIELD_H) / 2, SEARCH_W, FIELD_H);
-		add(new Button("×", this::close)).bounds(px + pw - TabPage.PAD - FIELD_H, py + (TabPage.HEADER - FIELD_H) / 2, FIELD_H, FIELD_H);
-		int headerY = py + (TabPage.HEADER - FIELD_H) / 2;
-		int hudX = px + pw - TabPage.PAD - SEARCH_W - 22 - CHIP_GAP - HUD_W;
-		int styleX = hudX;
-		if (ArcticClient.platform().hasFeatures()) {
-			// The HUD layout, from anywhere (outside a world it shows sample values).
+		int offset = resetGrid || grid == null ? 0 : grid.offset();
+		resetGrid = false;
+		keys.clear();
+		detailOffset = details == null ? 0 : details.offset();
+		details = null;
+		frame = new MenuFrame(width, height);
+		int x = frame.content, end = frame.end();
+		int searchW = Math.min(120, Math.max(34, (end - x) / 3));
+		int searchX = end - 20 - searchW;
+		add(search).bounds(searchX, frame.top, searchW, 16);
+		add(new Button("×", this::close)).bounds(end - 16, frame.top, 16, 16);
+		if (ArcticClient.platform().hasFeatures() && searchX - x >= 90) {
 			add(new Button(Lang.t("mods.edit_hud"), () -> ArcticClient.platform().openPage(new HudEditor())))
-					.bounds(hudX, headerY, HUD_W, FIELD_H);
-			styleX = hudX - CHIP_GAP - STYLE_W;
+					.bounds(searchX - 62, frame.top, 56, 16);
 		}
-		if (styleX >= px + TabPage.PAD + TITLE_ROOM) {
-			add(new Button(Lang.t("mods.menu_style"), () -> openMod(STYLE_ID))).bounds(styleX, headerY, STYLE_W, FIELD_H);
-			int accountsX = styleX - CHIP_GAP - ACCOUNTS_W;
-			if (accountsX >= px + TabPage.PAD + TITLE_ROOM) {
-				add(new Button(Lang.t("mods.accounts"), () -> openMod(ACCOUNT_ID))).bounds(accountsX, headerY, ACCOUNTS_W, FIELD_H);
-				int presetsX = accountsX - CHIP_GAP - 56;
-				if (presetsX >= px + TabPage.PAD + TITLE_ROOM && ArcticClient.platform().hasFeatures()) {
-					add(new Button(Lang.t("mods.presets"), () -> ArcticClient.platform().openPage(new Presets()))).bounds(presetsX, headerY, 56, FIELD_H);
-				}
-			}
+		Host navigation = host(0);
+		int rows = frame.navigation(navigation, category, this::selectCategory, () -> Menus.open("account", this));
+		if (end - x >= 220 && ArcticClient.platform().hasFeatures() && category == Mod.Category.CLIENT) {
+			add(new Button(Lang.t("mods.presets"), () -> ArcticClient.platform().openPage(new Presets())))
+					.bounds(x, rows, 56, 16);
+			rows += 20;
 		}
-		if (keepSearchFocus) {
-			keepSearchFocus = false;
-			focus(search);
-		}
-		int cy = py + TabPage.HEADER + 6;
-		int cx = x;
-		for (final Mod.Category cat : Mod.Category.values()) {
-			if (cat == Mod.Category.GAMEPLAY) {
-				continue;
-			}
-			int cw = Math.max(34, 12 + chipWidth(cat.title()));
-			// Too many for one row (a small window or a big GUI scale): the rest goes on the next.
-			if (cx > x && cx + cw > x + w) {
-				cx = x;
-				cy += CHIP_H + CHIP_GAP;
-			}
-			add(new Button(cat.title(), () -> {
-				category = cat;
-				scrollOffset = 0;
-				rebuild();
-			}).selected(cat == category)).bounds(cx, cy, cw, CHIP_H);
-			cx += cw + CHIP_GAP;
-		}
-		int rowBottom = cy + CHIP_H;
 		if (category == Mod.Category.HUD) {
-			int gx = x;
-			int gy = cy + CHIP_H + 4;
-			for (final String group : ModCatalog.HUD_GROUPS) {
-				int gw = Math.max(34, 12 + chipWidth(Lang.t(group)));
-				if (gx > x && gx + gw > x + w) {
-					gx = x;
-					gy += CHIP_H + CHIP_GAP;
+			int cx = x;
+			for (String group : ModCatalog.HUD_GROUPS) {
+				String label = Lang.t(group);
+				int cw = Math.min(end - x, Math.max(30, label.length() * 5 + 8));
+				if (cx + cw > end) {
+					cx = x;
+					rows += 19;
 				}
-				add(new Button(Lang.t(group), () -> {
+				add(new Button(label, () -> {
 					hudGroup = group;
-					scrollOffset = 0;
+					resetGrid = true;
 					rebuild();
-				}).selected(group.equals(hudGroup))).bounds(gx, gy, gw, CHIP_H);
-				gx += gw + CHIP_GAP;
+				}).selected(group.equals(hudGroup))).bounds(cx, rows, cw, 16);
+				cx += cw + 4;
 			}
-			rowBottom = gy + CHIP_H;
+			rows += 20;
 		}
-		gridTop = rowBottom + 8;
-		int bottom = py + ph - TabPage.PAD;
-		scroll = new Scroll(x, gridTop, x + w, bottom, scrollOffset);
-		add(scroll.bar());
-		int cols = Math.max(1, (w - 6 + GAP) / (MIN_CARD_W + GAP));
-		int cardW = (w - 6 - (cols - 1) * GAP) / cols;
 		List<Mod> mods = visible();
-		shown = mods.size();
+		selected = find(mods, selectedId);
+		if (selected == null && !mods.isEmpty()) selected = mods.get(0);
+		wide = end - x >= 440 && frame.bottom - rows >= 100;
+		detailX = end - DETAIL_W;
+		int gridEnd = wide ? detailX - 8 : end;
+		gridTop = recent(x, rows, gridEnd);
+		detailTop = gridTop;
+		int bottom = Math.max(gridTop + 1, frame.bottom - 8);
+		int gridW = Math.max(1, gridEnd - x);
+		grid = new Scroll(x, gridTop, gridEnd, bottom, offset);
+		add(grid.bar());
+		int cols = Math.max(1, Math.min(wide ? 3 : 5, (gridW + GAP) / 84));
+		int cardW = (gridW - (cols - 1) * GAP) / cols;
+		int cardH = wide ? 63 : 71;
 		for (int i = 0; i < mods.size(); i++) {
-			final Mod m = mods.get(i);
-			ModCard card = new ModCard(m, () -> ArcticClient.platform().openPage(Menus.pageFor(m, this)), () -> {});
-			card.bounds(x + (i % cols) * (cardW + GAP), gridTop + (i / cols) * (CARD_H + GAP), cardW, CARD_H);
-			scroll.add(add(card));
+			Mod mod = mods.get(i);
+			ModCard card = new ModCard(mod, wide && mod == selected, () -> choose(mod), () -> open(mod));
+			card.bounds(x + i % cols * (cardW + GAP), gridTop + i / cols * (cardH + GAP), cardW, cardH);
+			grid.add(add(card));
 		}
-		scroll.settle();
+		grid.settle();
+		emptyMessage = mods.isEmpty() ? Lang.t("mods.no_mods_match") + search.text() + "\"." : null;
+		if (wide && selected != null) {
+			if (!selected.id.equals(previousDetail)) detailOffset = 0;
+			previousDetail = selected.id;
+			buildDetails(selected, bottom);
+		}
 	}
 
-	/** The chips' text is short; a rough width keeps them tidy before the first frame. */
-	private static int chipWidth(String title) {
-		return title.length() * 6;
-	}
-
-	private void openMod(String id) {
-		for (Mod m : ModCatalog.all()) {
-			if (m.id.equals(id)) {
-				ArcticClient.platform().openPage(Menus.pageFor(m, this));
-				return;
+	private Host host(int offset) {
+		return new Host() {
+			@Override public Widget add(Widget w) { return ModsScreen.this.add(w); }
+			@Override public void rebuild() { ModsScreen.this.rebuild(); }
+			@Override public void listenKeys(KeyButton button) { keys.add(button); }
+			@Override public Scroll scroll(int x0, int y0, int x1, int y1) {
+				details = new Scroll(x0, y0, x1, y1, offset);
+				ModsScreen.this.add(details.bar());
+				return details;
 			}
+		};
+	}
+
+	static Mod.Category category() { return category; }
+
+	void selectCategory(Mod.Category next) {
+		category = next;
+		resetGrid = true;
+		if (frame != null) rebuild();
+	}
+
+	private int recent(int x, int y, int end) {
+		if (end - x < 160 || frame.bottom - y < 70) return y;
+		add(new com.arcticlauncher.client.ui.Label(Lang.t("mods.recent"), com.arcticlauncher.client.ui.Label.Kind.MUTED))
+				.bounds(x, y, 35, 16);
+		int cx = x + 36;
+		List<Mod> all = ModCatalog.all();
+		List<String> ids = new ArrayList<>(RECENT);
+		for (String id : new String[] {"armorhider", "zoom", "freelook", "waypoints"}) {
+			if (!ids.contains(id)) ids.add(id);
 		}
+		int shown = 0;
+		for (String id : ids) {
+			if (shown == RECENT_MAX) break;
+			Mod mod = find(all, id);
+			if (mod == null) continue;
+			int cw = Math.min(90, mod.name.length() * 5 + 22);
+			if (cx + cw > end) break;
+			add(new Widget() {
+				@Override
+				protected void draw(Gfx g, Style s, int mx, int my, float dt) {
+					boolean active = selected != null && selected.id.equals(mod.id);
+					int fill = active ? Draw.mix(s.button, s.buttonHover, 0.82f) : Draw.mix(s.field, s.buttonHover, hover);
+					Skin.outlined(g, x, y, x + w, y + h, 2, fill, active ? s.accent : s.border);
+					g.texture(mod.iconKey(), x + 4, y + 3, 10, 10, 0, 0, 32, 32, 32, 32);
+					g.text(Draw.fit(g, mod.name, w - 19), x + 16, y + 4, s.text, false);
+				}
+
+				@Override
+				public boolean click(double mx, double my, int button) {
+					if (button != Keys.MOUSE_LEFT) return false;
+					search.text("");
+					category = Mod.Category.ALL;
+					resetGrid = true;
+					remember(mod);
+					selectedId = mod.id;
+					if (!wide && mod.hasSettings()) open(mod);
+					else rebuild();
+					return true;
+				}
+			}).bounds(cx, y, cw, 16);
+			cx += cw + 4;
+			shown++;
+		}
+		return y + 20;
+	}
+
+	private void buildDetails(Mod mod, int bottom) {
+		int x = detailX + 5;
+		int w = DETAIL_W - 10;
+		if (mod.hasSwitch()) {
+			add(new Toggle("", null, Form.binding(mod::on, mod::setOn)))
+					.bounds(x + w - 31, detailTop + 3, 31, 18);
+		}
+		int top = detailTop + 39;
+		if (mod.settings != null && mod.inlineSettings) {
+			Host host = host(detailOffset);
+			Form form = new Form(host, x - 2, top, w + 4, bottom - 26, true);
+			mod.settings.build(host, form);
+			form.done();
+		}
+		if (mod.hasSettings()) {
+			int buttonY = mod.inlineSettings ? bottom - 20 : top + 3;
+			add(new Button(Lang.t("mods.settings"), () -> open(mod))).bounds(x, buttonY, w, 16);
+		}
+	}
+
+	private void choose(Mod mod) {
+		remember(mod);
+		if (wide) {
+			if (!mod.id.equals(selectedId)) {
+				selectedId = mod.id;
+				rebuild();
+			} else if (mod.hasSettings()) {
+				open(mod);
+			}
+		} else if (mod.hasSettings()) {
+			open(mod);
+		}
+	}
+
+	private static void remember(Mod mod) {
+		RECENT.remove(mod.id);
+		RECENT.add(0, mod.id);
+		if (RECENT.size() > RECENT_MAX) RECENT.remove(RECENT_MAX);
+		ModCatalog.markSeen(mod.id);
+	}
+
+	private void open(Mod mod) {
+		remember(mod);
+		selectedId = mod.id;
+		ArcticClient.platform().openPage(Menus.pageFor(mod, this));
+	}
+
+	private static Mod find(List<Mod> mods, String id) {
+		for (Mod mod : mods) if (id.equals(mod.id)) return mod;
+		return null;
 	}
 
 	private List<Mod> visible() {
-		// Menu Style has its header button; it shows as a card only when searched for (or when
-		// the window is too narrow for the button).
-		int left = px + pw - TabPage.PAD - SEARCH_W - 22 - CHIP_GAP - HUD_W
-				- (ArcticClient.platform().hasFeatures() ? CHIP_GAP + STYLE_W : 0);
-		boolean styleButton = width > 0 && left >= px + TabPage.PAD + TITLE_ROOM;
-		boolean accountsButton = styleButton && left - CHIP_GAP - ACCOUNTS_W >= px + TabPage.PAD + TITLE_ROOM;
-		List<Mod> out = new ArrayList<Mod>();
-		for (Mod m : ModCatalog.all()) {
-			if (query.trim().isEmpty() && (styleButton && m.id.equals(STYLE_ID) || accountsButton && m.id.equals(ACCOUNT_ID))) {
-				continue;
-			}
-			if (category == Mod.Category.HUD && !"mods.hud_group.all".equals(hudGroup) && m.category == Mod.Category.HUD && !hudGroup.equals(m.group)) {
-				continue;
-			}
-			if ((category == Mod.Category.ALL || m.category == category) && m.matches(query)) {
-				out.add(m);
+		List<Mod> filtered = new ArrayList<>();
+		for (Mod mod : ModCatalog.all()) {
+			if (category != Mod.Category.ALL && !inCategory(mod.category)) continue;
+			if (category == Mod.Category.HUD && !"mods.hud_group.all".equals(hudGroup) && !hudGroup.equals(mod.group)) continue;
+			if (mod.matches(search.text())) filtered.add(mod);
+		}
+		if (category != Mod.Category.ALL || !search.text().trim().isEmpty()) return filtered;
+		List<Mod> ordered = new ArrayList<>(filtered.size());
+		for (String id : FIRST) {
+			Mod mod = find(filtered, id);
+			if (mod != null) {
+				ordered.add(mod);
+				filtered.remove(mod);
 			}
 		}
-		return out;
+		ordered.addAll(filtered);
+		return ordered;
+	}
+
+	private static boolean inCategory(Mod.Category value) {
+		if (category == Mod.Category.GAMEPLAY) {
+			return value == Mod.Category.GAMEPLAY || value == Mod.Category.COMBAT || value == Mod.Category.INVENTORY
+					|| value == Mod.Category.MOVEMENT || value == Mod.Category.TOOLS;
+		}
+		return category == value || category == Mod.Category.SOCIAL && value == Mod.Category.PLAYERS;
 	}
 
 	@Override
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
-		Skin.panel(g, s, px, py, px + pw, py + ph);
-		int x = px + TabPage.PAD;
-		BrandMark.draw(g, x, py + (TabPage.HEADER - LOGO) / 2, LOGO);
-		g.text("§lArctic", x + LOGO + 6, py + 10, s.text, false); // i18n-ignore: the brand
-		g.text(Lang.t("mods.mods"), x + LOGO + 6, py + 22, s.muted, false);
-		g.fill(x, py + TabPage.HEADER, px + pw - TabPage.PAD, py + TabPage.HEADER + 1, s.border);
-		if (shown == 0) {
-			Draw.centered(g, Lang.t("mods.no_mods_match") + query + "\".", px + pw / 2, gridTop + 30, s.muted, false);
+		frame.draw(g, s);
+		g.text(Lang.t("mods.mods"), frame.content, frame.top + 3, s.text, false);
+		g.fill(frame.content, frame.top + 20, frame.end(), frame.top + 21, s.border);
+		if (emptyMessage != null) {
+			Draw.centered(g, Draw.fit(g, emptyMessage, frame.end() - frame.content), (frame.content + frame.end()) / 2, gridTop + 20, s.muted, false);
 		}
-	}
-
-	@Override
-	protected void drawAbove(Gfx g, Style s, int mx, int my) {
-		if (scroll != null) {
-			scroll.drawBar(g, s);
+		if (wide && selected != null) {
+			int right = detailX + DETAIL_W;
+			Skin.inset(g, s, detailX, detailTop, right, frame.bottom - 8);
+			g.texture(selected.iconKey(), detailX + 6, detailTop + 5, 13, 13, 0, 0, 32, 32, 32, 32);
+			g.text(Draw.fit(g, selected.name, DETAIL_W - 55), detailX + 24, detailTop + 5, s.text, false);
+			String description = selected.detailHint == null ? selected.description : selected.detailHint;
+			g.text(Draw.fit(g, description, DETAIL_W - 12, detailX + 6, detailTop + 23),
+					detailX + 6, detailTop + 23, s.muted, false);
+			g.fill(detailX + 6, detailTop + 33, right - 6, detailTop + 34, s.border);
 		}
+		grid.drawBar(g, s);
+		if (details != null) details.drawBar(g, s);
 	}
 
 	@Override
 	public boolean mouseScrolled(double mx, double my, double amount) {
-		return scroll != null && scroll.wheel(mx, my, amount);
+		return details != null && details.wheel(mx, my, amount) || grid != null && grid.wheel(mx, my, amount);
 	}
 
 	@Override
-	protected boolean typesAnywhere() {
-		return true;
+	public boolean keyPressed(int key, int nativeKey) {
+		for (KeyButton button : keys) if (button.keyPressed(key, nativeKey)) return true;
+		return super.keyPressed(key, nativeKey);
 	}
 
-	/** Typing anywhere starts a search (like Lunar's). */
 	@Override
 	public boolean charTyped(int codepoint) {
-		if (!typing() && codepoint > ' ') {
-			focus(search);
-		}
+		if (!typing() && codepoint > ' ') focus(search);
 		return super.charTyped(codepoint);
 	}
 
-	@Override
-	protected boolean rightShift() {
-		close();
-		return true;
-	}
-
-	@Override
-	public void close() {
-		ArcticClient.saveConfig();
-		super.close();
-	}
+	@Override protected boolean rightShift() { close(); return true; }
+	@Override public void close() { ArcticClient.saveConfig(); super.close(); }
 }

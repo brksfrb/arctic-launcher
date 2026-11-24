@@ -14,11 +14,14 @@ import java.util.List;
  * screen and forward input; everything else happens here.
  */
 public abstract class Page {
+	private Widget[] widgetSnapshot;
 	private final List<Widget> widgets = new ArrayList<Widget>();
 	protected int width;
 	protected int height;
 	/** When the page was first drawn: it eases in for {@link #OPEN_SECONDS}. */
 	private long openedAt;
+	private long closingAt;
+	private static final long CLOSE_NANOS = 125_000_000L;
 	private static final float OPEN_SECONDS = 0.18f;
 	/** It rises this far (GUI pixels) and grows from {@link #OPEN_SCALE} to full size. */
 	private static final float OPEN_RISE = 8f;
@@ -37,6 +40,7 @@ public abstract class Page {
 		TextField keep = focused;
 		focus(null);
 		widgets.clear();
+		widgetSnapshot = null;
 		pressed = null;
 		build();
 		if (keep != null && widgets.contains(keep)) {
@@ -120,6 +124,7 @@ public abstract class Page {
 
 	protected final <T extends Widget> T add(T widget) {
 		widgets.add(widget);
+		widgetSnapshot = null;
 		return widget;
 	}
 
@@ -150,18 +155,37 @@ public abstract class Page {
 		return true;
 	}
 
+	protected boolean arcticMenuChrome() { return false; }
+
+	public final boolean arcticMenu() { return arcticMenuChrome() && style() == Style.ARCTIC; }
+
 	public void render(Gfx g, int mx, int my) {
-		Draw.fancy = ArcticClient.config().fancy;
+		boolean themed = arcticMenu();
+		boolean previousEdges = Draw.fancy;
+		Draw.fancy = ArcticClient.config().fancy || themed && Draw.TEST_MENU_FANCY;
+		boolean previousText = g.menuText(themed && Draw.TEST_MENU_FANCY);
+		try {
+			renderPage(g, mx, my, themed ? Style.D4 : style(), themed);
+		} finally {
+			g.menuText(previousText);
+			Draw.fancy = previousEdges;
+		}
+	}
+
+	private void renderPage(Gfx g, int mx, int my, Style s, boolean themed) {
 		Hints.frame(mx, my);
-		Style s = style();
 		if (ownBackground()) {
 			Backdrop.render(g, s);
 		}
 		float open = openProgress();
-		boolean opening = open < 1f;
+		float closed = closingAt == 0 ? 0f : Math.min(1f, (System.nanoTime() - closingAt) / (float) CLOSE_NANOS);
+		float easedOpen = 1f - (1f - open) * (1f - open) * (1f - open);
+		boolean fades = themed && animatesIn();
+		float previousOpacity = fades ? g.opacity(easedOpen * (1f - closed * closed)) : 1f;
+		boolean opening = !themed && open < 1f;
 		if (opening) {
 			// Ease out: quick at first, settling into place.
-			float e = 1f - (1f - open) * (1f - open) * (1f - open);
+			float e = easedOpen;
 			float cx = width / 2f;
 			float cy = height / 2f;
 			g.push();
@@ -186,7 +210,10 @@ public abstract class Page {
 		if (opening) {
 			g.pop();
 		}
+		if (fades) g.opacity(previousOpacity);
+		boolean menuText = g.menuText(false);
 		com.arcticlauncher.client.notice.Notices.render(g, s);
+		g.menuText(menuText);
 		Hints.draw(g, s, width, height);
 	}
 
@@ -212,10 +239,12 @@ public abstract class Page {
 	protected void drawAbove(Gfx g, Style s, int mx, int my) {}
 
 	private Widget[] snapshot() {
-		return widgets.toArray(new Widget[0]);
+		if (widgetSnapshot == null) widgetSnapshot = widgets.toArray(new Widget[widgets.size()]);
+		return widgetSnapshot;
 	}
 
 	public boolean mouseClicked(double mx, double my, int button) {
+		if (closingAt != 0) return true;
 		Widget[] all = snapshot();
 		for (int i = all.length - 1; i >= 0; i--) {
 			Widget w = all[i];
@@ -252,6 +281,7 @@ public abstract class Page {
 	 * as the game reported it (for binding keys, see {@code Platform.keyName}).
 	 */
 	public boolean keyPressed(int key, int nativeKey) {
+		if (closingAt != 0) return true;
 		if (focused != null) {
 			if (key == Keys.ENTER && focused.submit()) {
 				return true;
@@ -299,8 +329,19 @@ public abstract class Page {
 		return true;
 	}
 
+	/** The adapter closes after the final fade frame instead of changing screens during extraction. */
+	public final boolean finishedClosing() {
+		return closingAt != 0 && System.nanoTime() - closingAt >= CLOSE_NANOS;
+	}
+
 	public void close() {
-		ArcticClient.platform().closePage();
+		if (closingAt != 0) return;
+		if (arcticMenu() && animatesIn() && openedAt != 0) {
+			closingAt = System.nanoTime();
+			focus(null);
+		} else {
+			ArcticClient.platform().closePage();
+		}
 	}
 
 	/** Called 20 times a second while shown. */

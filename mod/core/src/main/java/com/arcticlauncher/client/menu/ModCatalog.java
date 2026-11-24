@@ -237,6 +237,7 @@ final class ModCatalog {
 	private static void gameplay(List<Mod> out, final ClientConfig c, Platform p) {
 		out.add(new Mod("zoom", Lang.t("mods.zoom"), Lang.t("mods.hold_a_key_to_zoom_in_scroll_to_zoom_further"), "zoom", Category.GAMEPLAY, "optifine spyglass") // i18n-ignore
 				.toggle(() -> c.zoomEnabled, on -> c.zoomEnabled = on)
+				.inlineSettings()
 				.settings((host, f) -> {
 					f.section(Lang.t("mods.key"));
 					f.key(Lang.t("mods.zoom_key"), Lang.t("mods.hold_it_to_zoom_scroll_while_zooming_to_go"), Form.key(() -> c.zoomKey, k -> c.zoomKey = k));
@@ -261,6 +262,7 @@ final class ModCatalog {
 		if (p.freelookWorks()) {
 			out.add(new Mod("freelook", Lang.t("mods.freelook"), Lang.t("mods.hold_a_key_to_look_around_without_turning"), "freelook", Category.GAMEPLAY, "perspective 360")
 					.toggle(() -> c.freelookEnabled, on -> c.freelookEnabled = on)
+					.inlineSettings()
 					.settings((host, f) -> {
 						f.section(Lang.t("mods.key"));
 						f.key(Lang.t("mods.freelook_key"), Lang.t("mods.hold_it_to_look_around"), Form.key(() -> c.freelookKey, k -> c.freelookKey = k));
@@ -269,6 +271,7 @@ final class ModCatalog {
 			out.add(new Mod("snaplook", Lang.t("mods.snaplook"), Lang.t("mods.hold_a_key_to_see_yourself_from_the_front"), "snaplook", Category.GAMEPLAY,
 					"front view third person behind look back mirror")
 					.toggle(() -> c.snaplookEnabled, on -> c.snaplookEnabled = on)
+					.inlineSettings()
 					.settings((host, f) -> {
 						f.section(Lang.t("mods.key"));
 						f.key(Lang.t("mods.snaplook_key"), Lang.t("mods.hold_it_to_see_yourself_from_the_front"), Form.key(() -> c.snaplookKey, k -> c.snaplookKey = k));
@@ -293,6 +296,7 @@ final class ModCatalog {
 		out.add(new Mod("screenshots", Lang.t("mods.screenshots"), Lang.t("mods.copy_new_screenshots_to_the_clipboard"), "camera", Category.GAMEPLAY,
 				"clipboard copy f2 picture")
 				.toggle(() -> c.copyScreenshots, on -> c.copyScreenshots = on)
+				.inlineSettings()
 				.settings((host, f) -> {
 					f.section(Lang.t("mods.copy"));
 					f.toggle(Lang.t("mods.copy_automatically"), Lang.t("mods.every_new_screenshot_goes_onto_the_clipboard"), () -> c.copyScreenshots,
@@ -504,6 +508,7 @@ final class ModCatalog {
 		out.add(new Mod("reconnect", Lang.t("mods.auto_reconnect"), Lang.t("mods.lost_connection_join_the_server_again_by"), "reconnect", Category.GAMEPLAY,
 				"rejoin disconnect kicked timeout connection lost")
 				.toggle(() -> c.autoReconnect, on -> c.autoReconnect = on)
+				.inlineSettings()
 				.settings((host, f) -> {
 					f.section(Lang.t("mods.reconnect"));
 					String[] delays = new String[com.arcticlauncher.client.servers.DisconnectedPage.DELAYS.length];
@@ -684,7 +689,7 @@ final class ModCatalog {
 							() -> c.enchantDescriptionsAllItems ? 1 : 0, i -> c.enchantDescriptionsAllItems = i == 1);
 				}));
 		Mod armorHider = new Mod("armorhider", Lang.t("mods.armor_hider"), Lang.t("mods.armor_hider_help"),
-				"items", Category.VISUAL, "armor hide helmet chestplate leggings boots")
+				"armor", Category.VISUAL, "armor hide helmet chestplate leggings boots")
 				.toggle(() -> c.armorHider, on -> c.armorHider = on)
 				.settings((host, f) -> {
 					f.toggle(Lang.t("mods.hide_helmet"), "", () -> c.hideHelmet, on -> c.hideHelmet = on);
@@ -695,6 +700,8 @@ final class ModCatalog {
 					f.slider(Lang.t("mods.duration"), () -> c.showArmorSeconds, v -> c.showArmorSeconds = v,
 							0.5, 5.0, 0.1, "%.1f s");
 				});
+		armorHider.inlineSettings();
+		armorHider.detailHint = Lang.t("mods.armor_hider_detail");
 		armorHider.toggleKeyLabel = "mods.toggle_armor_hider";
 		out.add(armorHider);
 		if (p.tooltipScrollWorks()) {

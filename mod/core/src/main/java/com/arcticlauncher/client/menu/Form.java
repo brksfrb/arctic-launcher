@@ -30,9 +30,15 @@ final class Form {
 	final int w;
 	private int y;
 	private boolean first = true;
+	private final boolean compact;
 
 	Form(Host host, int x, int top, int w, int bottom) {
+		this(host, x, top, w, bottom, false);
+	}
+
+	Form(Host host, int x, int top, int w, int bottom, boolean compact) {
 		this.host = host;
+		this.compact = compact;
 		this.x = x;
 		// Room on the right for the scroll bar.
 		this.w = w - SCROLLBAR;
@@ -83,7 +89,8 @@ final class Form {
 	}
 
 	Toggle toggle(String name, String hint, BooleanSupplier get, Consumer<Boolean> set) {
-		return put(new Toggle(name, hint, binding(get, set)), x, row(ROW), w, ROW);
+		int h = compact && (hint == null || hint.isEmpty()) ? 17 : hint == null || hint.isEmpty() ? 22 : ROW;
+		return put(new Toggle(name, hint, binding(get, set)), x, row(h), w, h);
 	}
 
 	/** A switch with the key that also switches it (or that you hold). */
@@ -124,8 +131,12 @@ final class Form {
 	private static final int STEP_BTN = 16;
 	private static final int STEP_VALUE_W = 36;
 
+	private int labelWidth() {
+		return compact ? 56 : LABEL_W;
+	}
+
 	private void rowLabel(int top, String text) {
-		put(new Label(text, Label.Kind.TEXT), x + 4, top, LABEL_W - 4, ROW);
+		put(new Label(text, Label.Kind.TEXT), x + 4, top, labelWidth() - 4, ROW);
 	}
 
 	/** The swatch row whose free color picker is open (one at a time), and the color it holds. */
@@ -143,7 +154,7 @@ final class Form {
 	void swatches(final String label, int[] colors, final java.util.function.IntSupplier get, final java.util.function.IntConsumer set) {
 		int top = row(ROW);
 		rowLabel(top, label);
-		int sx = x + LABEL_W;
+		int sx = x + labelWidth();
 		boolean preset = false;
 		for (final int color : colors) {
 			preset |= get.getAsInt() == color;
@@ -174,7 +185,7 @@ final class Form {
 			ColorPicker.toHsv(get.getAsInt(), PICKER_HSV);
 		}
 		int pickerTop = row(ColorPicker.HEIGHT + 6);
-		final int left = x + LABEL_W;
+		final int left = x + labelWidth();
 		final int hexTop = row(ROW);
 		put(new Label(Lang.t("mods.hex"), Label.Kind.TEXT), x + 4, hexTop, LABEL_W - 4, ROW);
 		final com.arcticlauncher.client.ui.TextField hex = new com.arcticlauncher.client.ui.TextField(Lang.t("mods.rrggbb"), 6, HEX)
@@ -185,7 +196,7 @@ final class Form {
 		}, () -> {
 			ArcticClient.saveConfig();
 			host.rebuild();
-		}), left, pickerTop + 2, Math.min(w - LABEL_W, 180), ColorPicker.HEIGHT);
+		}), left, pickerTop + 2, Math.min(w - labelWidth(), 180), ColorPicker.HEIGHT);
 		hex.onChange(() -> {
 			String typed = hex.text();
 			if (typed.length() == 6) {
@@ -231,14 +242,14 @@ final class Form {
 	void choice(String label, String[] options, final java.util.function.IntSupplier get, final java.util.function.IntConsumer set) {
 		int top = row(ROW);
 		rowLabel(top, label);
-		int bw = (w - LABEL_W) / options.length;
+		int bw = (w - labelWidth()) / options.length;
 		for (int i = 0; i < options.length; i++) {
 			final int index = i;
 			put(new com.arcticlauncher.client.ui.Button(options[i], () -> {
 				set.accept(index);
 				ArcticClient.saveConfig();
 				host.rebuild();
-			}).selected(get.getAsInt() == i), x + LABEL_W + i * bw, top + (ROW - CHOICE_H) / 2, bw - 2, CHOICE_H);
+			}).selected(get.getAsInt() == i), x + labelWidth() + i * bw, top + (ROW - CHOICE_H) / 2, bw - 2, CHOICE_H);
 		}
 	}
 
@@ -267,34 +278,39 @@ final class Form {
 	void action(String label, String text, Runnable run) {
 		int top = row(ROW);
 		rowLabel(top, label);
-		put(new com.arcticlauncher.client.ui.Button(text, run), x + LABEL_W, top + (ROW - CHOICE_H) / 2, 64, CHOICE_H);
+		put(new com.arcticlauncher.client.ui.Button(text, run), x + labelWidth(), top + (ROW - CHOICE_H) / 2, 64, CHOICE_H);
 	}
 
 	/** Like {@link #action(String, String, Runnable)}, but the first click only asks ("Sure?"); the second runs it. */
 	void action(String label, String text, String confirm, Runnable run) {
 		int top = row(ROW);
 		rowLabel(top, label);
-		put(new com.arcticlauncher.client.ui.Button(text, run).confirm(confirm), x + LABEL_W, top + (ROW - CHOICE_H) / 2, 120, CHOICE_H);
+		put(new com.arcticlauncher.client.ui.Button(text, run).confirm(confirm), x + labelWidth(), top + (ROW - CHOICE_H) / 2, 120, CHOICE_H);
 	}
 
 	/** "Label   ----o----   35%": a number on a track, set by click or drag. */
 	void slider(String label, final java.util.function.DoubleSupplier get, final java.util.function.DoubleConsumer set, double min,
 			double max, double step, final String format) {
 		int top = row(ROW);
-		rowLabel(top, label);
+		int labelWidth = compact ? w - STEP_VALUE_W : 48;
 		int right = x + w;
-		final Label value = new Label(String.format(java.util.Locale.ROOT, format, get.getAsDouble()), Label.Kind.TEXT);
+		int trackX = compact ? x + 4 : x + labelWidth;
+		int trackTop = compact ? top + 12 : top;
+		int trackW = right - trackX - (compact ? 0 : STEP_VALUE_W + 8);
+		put(new Label(label, Label.Kind.TEXT), x + 4, top, labelWidth - 4, compact ? 14 : ROW);
+		final Label value = new Label(String.format(java.util.Locale.ROOT, format, get.getAsDouble()), Label.Kind.MUTED);
 		put(new SliderBar(get, set, min, max, step,
 				() -> value.text(String.format(java.util.Locale.ROOT, format, get.getAsDouble())),
-				ArcticClient::saveConfig), x + LABEL_W, top, right - x - LABEL_W - STEP_VALUE_W - 8, ROW);
-		put(value, right - STEP_VALUE_W, top, STEP_VALUE_W, ROW);
+				ArcticClient::saveConfig), trackX, trackTop, Math.max(1, trackW), compact ? 15 : ROW);
+		put(value, right - STEP_VALUE_W, top, STEP_VALUE_W, compact ? 14 : ROW);
+		if (compact) gap(4);
 	}
 
 	/** A picture of joined clear glass at the level the slider above it is on. */
 	void glassPreview(java.util.function.IntSupplier level) {
 		int top = row(GlassPreview.SIZE + 6);
 		rowLabel(top, Lang.t("mods.preview"));
-		put(new GlassPreview(level), x + LABEL_W, top + 2, GlassPreview.SIZE, GlassPreview.SIZE);
+		put(new GlassPreview(level), x + labelWidth(), top + 2, GlassPreview.SIZE, GlassPreview.SIZE);
 	}
 
 	/** "Label     <  Sword  >": one of many options, stepped through (too many for {@link #choice}). */
@@ -302,7 +318,7 @@ final class Form {
 			final java.util.function.IntConsumer set) {
 		int top = row(ROW);
 		rowLabel(top, label);
-		int left = x + LABEL_W;
+		int left = x + labelWidth();
 		int right = x + w;
 		int by = top + (ROW - STEP_BTN) / 2;
 		final Label value = new Label(options[Math.floorMod(get.getAsInt(), options.length)], Label.Kind.TEXT);

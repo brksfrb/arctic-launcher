@@ -13,6 +13,7 @@
 		"CheckboxMixin",
 		"EditBoxMixin",<% } %>
 <% if (widgets13) { %>		"ScreenButtonsAccess",
+		"NativeButton13Mixin",
 <% } %>		"AbstractClientPlayerMixin",
 		"FontMaskMixin",<% if (badgeShadow) { %>
 		"BadgeShadowMixin",<% } %><% if (badgeShadow13) { %>

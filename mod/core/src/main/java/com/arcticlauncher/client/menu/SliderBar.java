@@ -40,10 +40,12 @@ final class SliderBar extends Widget {
 		int trackTop = y + (h - TRACK_H) / 2;
 		double share = max > min ? (Math.max(min, Math.min(max, get.getAsDouble())) - min) / (max - min) : 0;
 		int knobX = x + KNOB_W / 2 + (int) Math.round(share * (w - KNOB_W));
-		Draw.round(g, x, trackTop, x + w, trackTop + TRACK_H, 2, s.border);
+		Draw.round(g, x, trackTop, x + w, trackTop + TRACK_H, 1, s == Style.D4 ? 0xFF0D1726 : s.border);
 		Draw.round(g, x, trackTop, knobX, trackTop + TRACK_H, 2, s.accent);
-		int ring = dragging || hover > 0.5f ? s.text : s.muted;
-		Draw.round(g, knobX - KNOB_W / 2, y + (h - KNOB_H) / 2, knobX + KNOB_W / 2, y + (h + KNOB_H) / 2, 2, ring);
+		int ring = s == Style.D4 || dragging || hover > 0.5f ? s.text : s.muted;
+		int knobHeight = s == Style.D4 ? 9 : KNOB_H;
+		com.arcticlauncher.client.style.Skin.outlined(g, knobX - KNOB_W / 2, y + (h - knobHeight) / 2,
+				knobX + KNOB_W / 2, y + (h + knobHeight) / 2, 2, ring, s.border);
 	}
 
 	@Override
