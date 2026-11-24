@@ -77,7 +77,7 @@ public final class ServerPackFonts {
 	//#if MC >= 1.19
 	public static final class BlockedFont extends RuntimeException {
 		public BlockedFont(String path) {
-			super("TrueType font from a server resource pack: " + path);
+			super("TrueType font from a server resource pack: " + path); // i18n-ignore
 		}
 	}
 	//#endif
