@@ -8,6 +8,7 @@ use regex::Regex;
 use sha2::{Digest, Sha256};
 
 use crate::launch::args::{CUSTOM_MAX_HEAP_SOURCE, heap_size_mb};
+use crate::launch::exit_diagnostics::ExitDiagnostics;
 
 /// A fix the launcher can do for the player in one click (see `crash_fix`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2652,6 +2653,13 @@ pub struct Report {
     pub contact: String,
 }
 
+/// Information from the process watcher and the launch plan.
+#[derive(Default)]
+pub struct ReportRun<'a> {
+    pub java: Option<&'a str>,
+    pub diagnostics: Option<&'a ExitDiagnostics>,
+}
+
 /// Lines of the game log's end that are sent.
 const REPORT_LOG_LINES: usize = 150;
 /// Leave room under the server's 48 KB cap.
@@ -2860,6 +2868,30 @@ impl Report {
         crash_report: Option<&str>,
         java: Option<&str>,
     ) -> Self {
+        Self::build_with_run(
+            game,
+            loader,
+            title,
+            lines,
+            launcher_lines,
+            crash_report,
+            ReportRun {
+                java,
+                diagnostics: None,
+            },
+        )
+    }
+
+    pub fn build_with_run(
+        game: &str,
+        loader: &str,
+        title: &str,
+        lines: &[&str],
+        launcher_lines: &[&str],
+        crash_report: Option<&str>,
+        run: ReportRun<'_>,
+    ) -> Self {
+        let java = run.java;
         let own = Own::this_pc();
         let all = lines.join("\n");
         // Reserve the resolved mod inventory and agent failure context before trimming verbose
@@ -2950,6 +2982,22 @@ impl Report {
             {
                 priority.push_str(&scrub(head_of(&diagnosis.detail, 2048), &own));
                 priority.push('\n');
+            }
+        }
+        #[cfg(windows)]
+        {
+            priority.push_str("\n---- Windows ----\n");
+            priority.push_str(&scrub(&crate::system::windows::description(), &own));
+            priority.push('\n');
+        }
+        if let Some(diagnostics) = run.diagnostics {
+            if let Some(dll_report) = diagnostics.dll_report() {
+                priority.push_str("\n---- missing DLL checks ----\n");
+                priority.push_str(&scrub(dll_report, &own));
+            }
+            if diagnostics.output.count() != 0 {
+                priority.push_str("\n---- child stdout/stderr ----\n");
+                priority.push_str(&scrub(&diagnostics.output.report(), &own));
             }
         }
         let vanilla_evidence = all

@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use super::LaunchPlan;
+use super::exit_diagnostics::{ChildOutput, ExitDiagnostics};
 use super::logparse::{LogLine, LogParser};
 use super::session::GameSession;
 use super::{priority, runtime_repair};
@@ -36,6 +37,7 @@ pub enum GameEvent {
         killed: bool,
         played: Duration,
         ended_at: SystemTime,
+        diagnostics: ExitDiagnostics,
     },
     /// Parsed output lines (one raw line may expand to several).
     Output(Vec<LogLine>),
@@ -194,7 +196,9 @@ pub(super) fn spawn_with_session(
     let ready_seen = Arc::new(AtomicBool::new(false));
     priority::settle_when_ready(child.id(), ready_seen.clone(), window_seen.clone());
     let secrets: Arc<[String]> = plan.log_secrets().into();
-    let tee = |stream: Box<dyn Read + Send>| {
+    let output = Arc::new(Mutex::new(ChildOutput::default()));
+    let tee = |stream: Box<dyn Read + Send>, name| {
+        let output = output.clone();
         let (log, seen, on_event) = (log.clone(), window_seen.clone(), on_event.clone());
         let (ready, secrets) = (ready_seen.clone(), secrets.clone());
         std::thread::spawn(move || {
@@ -202,11 +206,11 @@ pub(super) fn spawn_with_session(
                 window: &seen,
                 ready: &ready,
             };
-            tee_output(stream, &log, seen, &secrets, &*on_event)
+            tee_output(stream, (&output, name), &log, seen, &secrets, &*on_event)
         })
     };
-    let out_reader = child.stdout.take().map(|out| tee(Box::new(out)));
-    let err_reader = child.stderr.take().map(|err| tee(Box::new(err)));
+    let out_reader = child.stdout.take().map(|out| tee(Box::new(out), "stdout"));
+    let err_reader = child.stderr.take().map(|err| tee(Box::new(err), "stderr"));
 
     let kill = Arc::new(AtomicBool::new(false));
     let handle = GameHandle {
@@ -218,6 +222,8 @@ pub(super) fn spawn_with_session(
     let game_dir = plan.game_dir.clone();
     let managed_runtime = plan.managed_runtime.clone();
     let log_path = plan.log_file.clone();
+    #[cfg(windows)]
+    let (source, high_performance_gpu) = (plan.java.clone(), plan.high_performance_gpu);
     std::thread::spawn(move || {
         let mut killed = false;
         let code = loop {
@@ -294,7 +300,12 @@ pub(super) fn spawn_with_session(
                 }]));
             }
         }
-        if !killed && code.is_some_and(|c| c != 0) && runtime < Duration::from_secs(5) {
+        let missing_dll = cfg!(windows) && code == Some(super::exit_diagnostics::DLL_NOT_FOUND);
+        if !killed
+            && !missing_dll
+            && code.is_some_and(|c| c != 0)
+            && runtime < Duration::from_secs(5)
+        {
             let probe = runtime_probe_diagnostic(&exe);
             writeln!(log.lock().unwrap(), "{probe}").ok();
             on_event(GameEvent::Output(vec![LogLine {
@@ -346,11 +357,26 @@ pub(super) fn spawn_with_session(
                 text: evidence,
             }]));
         }
+        let mut diagnostics = ExitDiagnostics::default();
+        if !killed && code.is_some_and(|c| c != 0) {
+            diagnostics.output = std::mem::take(&mut *output.lock().unwrap());
+            #[cfg(windows)]
+            if missing_dll {
+                diagnostics.check_dlls(&source, &exe, |path| {
+                    let mut probe = Command::new(path);
+                    probe
+                        .current_dir(game_cwd(&game_dir))
+                        .envs(crate::gpu_preference::env(high_performance_gpu));
+                    probe
+                });
+            }
+        }
         on_event(GameEvent::Exited {
             code,
             killed,
             played: runtime,
             ended_at: exited_at,
+            diagnostics,
         });
     });
     Ok(handle)
@@ -373,10 +399,13 @@ fn drain_readers(readers: Vec<std::thread::JoinHandle<()>>) {
 
 /// Bounded and invisible: same executable, no game or account arguments.
 fn runtime_probe(exe: &Path) -> io::Result<Option<(ExitStatus, String)>> {
+    runtime_probe_command(Command::new(exe))
+}
+
+pub(super) fn runtime_probe_command(mut cmd: Command) -> io::Result<Option<(ExitStatus, String)>> {
     // A wrapper can leave a child holding stdout or stderr open. A file lets us
     // read the completed probe's output without waiting for that child.
     let mut output = tempfile::tempfile()?;
-    let mut cmd = Command::new(exe);
     cmd.arg("-version")
         .stdin(Stdio::null())
         .stdout(output.try_clone()?)
@@ -801,6 +830,7 @@ struct Seen<'a> {
 /// the log or the launcher (1.8 prints its session token, for one).
 fn tee_output(
     stream: Box<dyn Read + Send>,
+    output: (&Mutex<ChildOutput>, &str),
     log: &Mutex<File>,
     seen: Seen,
     secrets: &[String],
@@ -822,6 +852,8 @@ fn tee_output(
             Ok(_) => {}
         }
         redact(&mut line, secrets);
+        let text = String::from_utf8_lossy(&line);
+        output.0.lock().unwrap().push(output.1, &text);
         if let Ok(mut file) = log.lock() {
             let _ = file.write_all(&line);
         }
@@ -830,10 +862,10 @@ fn tee_output(
         if is_window_marker(&line) && !seen.window.swap(true, Ordering::Relaxed) {
             on_event(GameEvent::WindowReady);
         }
-        if String::from_utf8_lossy(&line).contains(priority::READY_MARKER) {
+        if text.contains(priority::READY_MARKER) {
             seen.ready.store(true, Ordering::Relaxed);
         }
-        let parsed = parser.feed(&String::from_utf8_lossy(&line));
+        let parsed = parser.feed(&text);
         if !parsed.is_empty() {
             on_event(GameEvent::Output(parsed));
         }
@@ -953,6 +985,50 @@ mod tests {
             {
                 return (code, killed);
             }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn crash_report_includes_output_from_both_child_pipes() {
+        use crate::crash::{Report, ReportRun};
+
+        let (_dir, _game, rx) = test_process(
+            "printf 'first line\\n\\nsecond line\\n'; printf 'error one\\nerror two' >&2; exit 1",
+        );
+        let diagnostics = loop {
+            if let GameEvent::Exited { diagnostics, .. } =
+                rx.recv_timeout(Duration::from_secs(10)).unwrap()
+            {
+                break diagnostics;
+            }
+        };
+        assert_eq!(diagnostics.output.count(), 5);
+        let report = Report::build_with_run(
+            "26.3",
+            "",
+            "",
+            &["Launcher banner"],
+            &[],
+            None,
+            ReportRun {
+                diagnostics: Some(&diagnostics),
+                ..Default::default()
+            },
+        );
+        assert!(report.log.contains("---- child stdout/stderr ----"));
+        for line in [
+            "[stdout] first line",
+            "[stdout] \n",
+            "[stdout] second line",
+            "[stderr] error one",
+            "[stderr] error two",
+        ] {
+            assert!(
+                report.log.contains(line),
+                "{line:?} missing from {}",
+                report.log
+            );
         }
     }
 
@@ -1250,8 +1326,10 @@ mod tests {
         let fired = Mutex::new(Vec::new());
         let input =
             b"a\nLWJGL Version: 2\nLWJGL Version: 2\n[Arctic startup] ready 9000 ms\nz".to_vec();
+        let captured = Mutex::new(ChildOutput::default());
         tee_output(
             Box::new(std::io::Cursor::new(input.clone())),
+            (&captured, "stdout"),
             &log,
             seen,
             &[],
@@ -1290,8 +1368,10 @@ ok SECRET SECRET
 "
         .to_vec();
         let shown = Mutex::new(Vec::new());
+        let captured = Mutex::new(ChildOutput::default());
         tee_output(
             Box::new(std::io::Cursor::new(input)),
+            (&captured, "stdout"),
             &log,
             seen,
             &["eyJ.SECRET".to_owned(), "SECRET".to_owned()],
@@ -1308,6 +1388,9 @@ ok SECRET SECRET
         let written = std::fs::read_to_string(&path).unwrap();
         assert!(!written.contains("SECRET"), "{written}");
         assert!(written.contains("token:<redacted>:15ca"));
+        let captured = captured.into_inner().unwrap().report();
+        assert!(!captured.contains("SECRET"));
+        assert!(captured.contains("token:<redacted>:15ca"));
         assert!(
             shown
                 .into_inner()

@@ -5,6 +5,7 @@
 //! background threads.
 
 pub mod args;
+pub mod exit_diagnostics;
 pub mod files;
 mod game_window;
 mod language;
