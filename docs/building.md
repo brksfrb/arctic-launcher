@@ -79,9 +79,8 @@ of its screens and quit, which is handy after changing an adapter.
 
 In the test launcher, open the Minecraft instance's settings and add
 `-Darctic.d4.fancy=true` to **Extra JVM arguments**. Start the instance with the Arctic
-menu style selected. The switch enables Inter and smooth edges for Arctic menu
-chrome for that run. It leaves the saved Fancy settings and the in-world HUD,
-chat, and hotbar font alone.
+menu style selected. The switch enables Inter and smooth edges on Arctic menus
+for that run.
 
 In a world, press Right Shift to open the HUD editor, then select Mods. Click a
 card to select it, its ON/OFF bar to toggle it, or its gear to open full settings.
