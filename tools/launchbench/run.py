@@ -51,6 +51,14 @@ def launch(bench, root, version, profile, window):
     started = time.monotonic()
     done = subprocess.run(cmd, capture_output=True, text=True, env=env)
     wall = round((time.monotonic() - started) * 1000)
+    # Every launch's log is kept next to the roots, to look into an odd timing afterwards.
+    logs = os.path.join(os.path.dirname(os.path.abspath(root)), "logs")
+    os.makedirs(logs, exist_ok=True)
+    name = f"{time.strftime('%H%M%S')}-{version}-{profile}.log"
+    with open(os.path.join(logs, name), "w") as f:
+        # Not the command line: it holds the (offline) session.
+        f.write("\n".join(l for l in done.stderr.splitlines() if "launching:" not in l))
+        f.write("\n" + done.stdout)
     if done.returncode != 0:
         sys.stderr.write(done.stdout[-2000:] + done.stderr[-4000:])
         raise SystemExit(f"{version} {profile}: startup_bench failed")

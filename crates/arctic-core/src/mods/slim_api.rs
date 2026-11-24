@@ -328,8 +328,14 @@ struct JarUse {
 
 #[derive(Default, PartialEq, Eq, Serialize, Deserialize)]
 struct Uses {
+    /// How the jars were read ([`USES_FORMAT`]): entries of another one are not used.
+    #[serde(default)]
+    format: u32,
     jars: Vec<JarUse>,
 }
+
+/// Bump when [`read_use`] finds other things in the same jar.
+const USES_FORMAT: u32 = 1;
 
 fn jar_key(name: &str, meta: &fs::Metadata) -> Option<String> {
     let time = meta
@@ -364,7 +370,9 @@ fn keep(mods_dir: &Path, umbrella: &str, modules: &[Module]) -> BTreeSet<String>
     let mut known: Uses = fs::read_to_string(&uses_file)
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
+        .filter(|known: &Uses| known.format == USES_FORMAT)
         .unwrap_or_default();
+    known.format = USES_FORMAT;
     let mut used: Vec<JarUse> = Vec::new();
     let mut learned = false;
     for entry in fs::read_dir(mods_dir).into_iter().flatten().flatten() {

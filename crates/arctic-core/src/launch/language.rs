@@ -175,9 +175,19 @@ mod tests {
         let found = legacy_languages(&client).unwrap().unwrap();
         assert_eq!(found, ["en_US", "de_DE"]);
         let known = dir.path().join(".1.5.2.jar.languages.json");
-        let noted = fs::read(&known).unwrap();
+        assert!(known.is_file());
+        // The same size and time: what was read from it is used (these bytes are no jar).
+        let (len, time) = {
+            let meta = fs::metadata(&client).unwrap();
+            (meta.len() as usize, meta.modified().unwrap())
+        };
+        let jar = fs::read(&client).unwrap();
+        fs::write(&client, vec![0u8; len]).unwrap();
+        let file = fs::File::options().write(true).open(&client).unwrap();
+        file.set_modified(time).unwrap();
+        drop(file);
         assert_eq!(legacy_languages(&client).unwrap().unwrap(), found);
-        assert_eq!(fs::read(&known).unwrap(), noted);
+        fs::write(&client, jar).unwrap();
 
         // Another client under the same name (its size differs): read, not remembered.
         write(&["en_US", "de_DE", "tr_TR"]);

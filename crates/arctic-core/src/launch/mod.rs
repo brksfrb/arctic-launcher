@@ -598,8 +598,12 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
     // none of the vanilla files (Fabric's profile is one small download), so they are done while
     // those are checked and fetched. Their progress is held back until the vanilla files are in,
     // so the stages arrive in the order they always did. "Gentle launch" keeps one thing at a time.
+    // A mods folder that can't be put right stops the start before anything is fetched.
+    if launcher_owned_vanilla {
+        crate::mods::performance::recover_vanilla_api(game_dir)?;
+    }
     let (base, loader, done) = if req.settings.gentle_launch {
-        let loader = side.pick_loader()?;
+        let loader = side.pick_loader();
         timer.step("pick loader");
         (install_vanilla(&mut timer), loader, None)
     } else {
@@ -607,25 +611,36 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
         std::thread::scope(|scope| {
             let alongside = scope.spawn(|| {
                 let mut timer = StepTimer::new();
-                let loader = side.pick_loader()?;
+                let loader = side.pick_loader();
                 timer.step("pick loader");
                 let done = match &loader {
                     Some((kind, version)) if loaders::profile_needs_no_game_files(*kind) => {
-                        // The loader's own libraries (a few MB) come in meanwhile too. Quietly:
-                        // the installation pass after this one finds them there and reports
-                        // that, like at every later start.
+                        // Fabric's own libraries (a few MB) come in meanwhile too. Quietly: the
+                        // installation pass after this one finds them there and reports that,
+                        // like at every later start. Not Quilt's: its loader jar is fetched by
+                        // the compatibility check, and no file is ever fetched twice at once.
+                        let fabric = *kind == loaders::LoaderKind::Fabric;
+                        let prefetching = std::cell::Cell::new(None);
                         let prefetch = |profile: &VersionJson| {
-                            let profile = profile.clone();
-                            scope.spawn(move || side.prefetch_libraries(&profile));
+                            if fabric {
+                                let profile = profile.clone();
+                                let fetch = scope.spawn(move || side.prefetch_libraries(&profile));
+                                prefetching.set(Some(fetch));
+                            }
                         };
-                        Some(side.fabric_like(
+                        let done = side.fabric_like(
                             *kind,
                             version,
                             None,
                             &|p| held.report(p),
                             &mut timer,
                             prefetch,
-                        )?)
+                        );
+                        // Best effort: what it did not fetch, the installation pass does.
+                        if let Some(fetch) = prefetching.take() {
+                            let _ = fetch.join();
+                        }
+                        Some(done?)
                     }
                     _ => None,
                 };
@@ -785,11 +800,8 @@ struct FabricLike {
 impl LoaderSide<'_> {
     /// The loader to launch with; an instance without one gets its mods folder cleared of what
     /// earlier Fabric runs left.
-    fn pick_loader(&self) -> Result<Option<(loaders::LoaderKind, String)>> {
+    fn pick_loader(&self) -> Option<(loaders::LoaderKind, String)> {
         let (req, game_dir, game) = (self.req, self.game_dir, &self.vanilla.id);
-        if self.launcher_owned_vanilla {
-            crate::mods::performance::recover_vanilla_api(game_dir)?;
-        }
         let loader = effective_loader(req.dirs, req.instance, game, game_dir);
         if loader.is_none()
             && self.launcher_owned_vanilla
@@ -797,7 +809,7 @@ impl LoaderSide<'_> {
         {
             log::warn!("vanilla performance cleanup: {e}");
         }
-        Ok(loader)
+        loader
     }
 
     /// Fetch the libraries `profile` adds to the vanilla ones (which the vanilla installation is

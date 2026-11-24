@@ -162,19 +162,25 @@ fn nanos(meta: &fs::Metadata) -> Option<u128> {
 }
 
 /// Every entry of a folder (a missing folder is an empty one), sorted: name, kind, size, time.
+/// Files are looked at themselves (through a link, as the work reads them; and not as the
+/// folder's listing has them, which on Windows can be behind for a file with another name).
 fn listing(dir: &Path, out: &mut String) -> Option<()> {
     let mut lines = Vec::new();
     match fs::read_dir(dir) {
         Ok(entries) => {
             for entry in entries {
                 let entry = entry.ok()?;
-                let meta = entry.metadata().ok()?;
+                // A link to nowhere, a device: can't be told, so the work runs.
+                let meta = fs::metadata(entry.path()).ok()?;
                 let name = entry.file_name();
                 let name = name.to_str()?;
                 lines.push(if meta.is_file() {
                     format!("{name}\0{}\0{}", meta.len(), nanos(&meta)?)
+                } else if meta.is_dir() {
+                    // The work reads no folder inside these.
+                    format!("{name}\0folder")
                 } else {
-                    format!("{name}\0other")
+                    return None;
                 });
             }
         }

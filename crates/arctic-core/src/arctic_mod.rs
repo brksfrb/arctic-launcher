@@ -222,19 +222,27 @@ fn jar_of(build: &'static str, kept: Option<&Path>) -> Option<Arc<Vec<u8>>> {
     if let Some(jar) = jars.get(build) {
         return Some(jar.clone());
     }
-    let id = pack_id();
-    let jar = match kept.and_then(|dir| read_kept(dir, id, build)) {
-        Some(jar) => jar,
-        None => {
-            let jar = pack()?.jar(build)?;
-            if let Some(dir) = kept {
-                keep(dir, id, build, &jar);
-            }
-            jar
-        }
-    };
+    let jar = kept_or_built(kept, pack_id(), build, || pack()?.jar(build))?;
     let jar = Arc::new(jar);
     jars.insert(build, jar.clone());
+    Some(jar)
+}
+
+/// The kept jar of pack `id` and target `build` if there is a whole one, or else a new one
+/// from `rebuild`, kept for the next time.
+fn kept_or_built(
+    kept: Option<&Path>,
+    id: u64,
+    build: &str,
+    rebuild: impl FnOnce() -> Option<Vec<u8>>,
+) -> Option<Vec<u8>> {
+    if let Some(jar) = kept.and_then(|dir| read_kept(dir, id, build)) {
+        return Some(jar);
+    }
+    let jar = rebuild()?;
+    if let Some(dir) = kept {
+        keep(dir, id, build, &jar);
+    }
     Some(jar)
 }
 
@@ -551,17 +559,38 @@ mod tests {
     }
 
     #[test]
-    fn the_mod_put_in_from_the_kept_jar_is_the_same() {
+    fn a_jar_is_rebuilt_only_when_no_whole_one_is_kept() {
         let dir = tempfile::tempdir().unwrap();
         let kept = dir.path().join("kept");
         let build = build_for("26.3").unwrap();
-        let jar = jar_for("26.3").unwrap();
-        keep(&kept, pack_id(), build, &jar);
-        assert_eq!(read_kept(&kept, pack_id(), build).unwrap(), *jar);
-        let mods = dir.path().join("mods");
-        sync_cached(&mods, "26.3", true, &kept).unwrap();
-        assert_eq!(fs::read(mods.join(FILE_NAME)).unwrap(), *jar);
-        assert!(jar_usable(&mods.join(FILE_NAME)));
+        let jar = pack().unwrap().jar(build).unwrap();
+        let rebuilt = std::cell::Cell::new(0);
+        let get = || {
+            kept_or_built(Some(&kept), pack_id(), build, || {
+                rebuilt.set(rebuilt.get() + 1);
+                pack()?.jar(build)
+            })
+            .unwrap()
+        };
+        assert_eq!(get(), jar);
+        assert_eq!(rebuilt.get(), 1);
+        // Kept: read, not rebuilt, and the same bytes the pack gives.
+        assert_eq!(get(), jar);
+        assert_eq!(rebuilt.get(), 1);
+        // Damaged on disk: rebuilt and kept again.
+        let path = kept.join(kept_name(pack_id(), build));
+        let mut damaged = fs::read(&path).unwrap();
+        damaged[100] ^= 1;
+        fs::write(&path, damaged).unwrap();
+        assert_eq!(get(), jar);
+        assert_eq!(rebuilt.get(), 2);
+        assert_eq!(get(), jar);
+        assert_eq!(rebuilt.get(), 2);
+        // Without a folder to keep it in, as before.
+        assert_eq!(
+            kept_or_built(None, pack_id(), build, || pack()?.jar(build)).unwrap(),
+            jar
+        );
     }
 
     #[test]

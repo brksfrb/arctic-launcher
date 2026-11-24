@@ -602,7 +602,8 @@ pub(crate) fn prepare_for_launch(
     // Vanilla instances (nothing in the folder but the launcher's own mods): load only
     // the Fabric API modules those use, which starts the game noticeably faster.
     if instance.loader.kind().is_none() {
-        finish_vanilla(
+        // A cut-down that failed is tried again at the next start.
+        complete &= finish_vanilla(
             game_dir,
             game_version,
             launcher_owned_vanilla,
@@ -758,7 +759,7 @@ fn sync_with_install(
     let (installed, failed) = install?;
     checked?;
     let mut reached = !installed.is_empty();
-    let mut unreachable = false;
+    let mut only_no_build = true;
     for (id, e) in failed {
         let name = wanted
             .iter()
@@ -766,10 +767,11 @@ fn sync_with_install(
             .map_or(id.as_str(), |(_, n)| n);
         match e {
             crate::Error::Http(e) => {
-                unreachable = true;
+                only_no_build = false;
                 log::info!("{name}: can't reach Modrinth: {e}");
             }
             e => {
+                only_no_build &= super::resolve::is_no_version(&e);
                 // Usually "no version for this Minecraft yet".
                 reached = true;
                 log::info!("{name} skipped for {game_version}: {e}");
@@ -777,8 +779,9 @@ fn sync_with_install(
         }
     }
     if reached {
-        // Every project answered, and none has a build: worth keeping across a version switch.
-        let nothing = !unreachable && !index.exists();
+        // Modrinth said of every project that it has no build: worth keeping across a version
+        // switch (an answer that could not be had or read is asked for again).
+        let nothing = only_no_build && !index.exists();
         save_json(
             &state_path(game_dir),
             &State {
@@ -968,17 +971,20 @@ pub(crate) fn finish_vanilla(
     game_version: &str,
     launcher_owned: bool,
     slim_api: bool,
-) -> Result<()> {
+) -> Result<bool> {
     let _lock = lock(game_dir)?;
     if launcher_owned {
         park_incompatible_vanilla(game_dir, game_version)?;
     }
     let mods_dir = game_dir.join("mods");
+    // `Ok(false)`: the Fabric API could not be cut down this time (the whole one is in place).
+    let mut done = true;
     if slim_api && let Err(e) = super::slim_api::apply(&mods_dir) {
         log::warn!("couldn't cut Fabric API down: {e}");
         super::slim_api::undo(&mods_dir)?;
+        done = false;
     }
-    Ok(())
+    Ok(done)
 }
 
 /// The state and index can disagree after a crash or a launch from an older
@@ -1628,7 +1634,7 @@ mod tests {
         let failed = ids
             .iter()
             .map(|id| {
-                let none = crate::Error::Other(format!("{id} has no version for this Minecraft"));
+                let none = crate::Error::Other(format!("{id} has no version for Fabric 0"));
                 ((*id).to_owned(), none)
             })
             .collect();
@@ -1716,9 +1722,26 @@ mod tests {
             let mut failed: Vec<super::super::Failed> = ids
                 .iter()
                 .skip(1)
-                .map(|id| ((*id).to_owned(), crate::Error::Other("no version".into())))
+                .map(|id| {
+                    let none = crate::Error::Other(format!("{id} has no version for Fabric 0"));
+                    ((*id).to_owned(), none)
+                })
                 .collect();
             failed.push((ids[0].to_owned(), crate::Error::Http("offline".into())));
+            Ok((Vec::new(), failed))
+        })
+        .unwrap();
+        let state: State = load_json(&state_path(game)).unwrap().unwrap();
+        assert!(state.none_for.is_empty());
+
+        // Nor is an answer that could not be read.
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        sync_with_install(vanilla_target(game, "1.8.9"), true, false, &[], |_, ids| {
+            let failed = ids
+                .iter()
+                .map(|id| ((*id).to_owned(), crate::Error::Other("bad JSON".into())))
+                .collect();
             Ok((Vec::new(), failed))
         })
         .unwrap();
@@ -1779,12 +1802,12 @@ mod tests {
 
         // The weekly look at Modrinth falls due without anything in the folder changing.
         state.update_waiting = false;
-        state.checked = crate::auth::now_secs() - RECHECK_SECS + 2;
+        state.checked = crate::auth::now_secs() - RECHECK_SECS + 3600;
         save_json(&state_path(game), &state).unwrap();
         let settled = settled::Settled::new(game, "0.0-test", &instance, true);
         settled.remember(settled.inputs());
         assert!(settled.holds(settled.inputs().as_ref()));
-        state.checked -= 5;
+        state.checked -= 7200;
         save_json(&state_path(game), &state).unwrap();
         settled.remember(settled.inputs());
         assert!(!settled.holds(settled.inputs().as_ref()));
