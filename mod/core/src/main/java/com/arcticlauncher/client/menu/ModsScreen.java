@@ -173,7 +173,7 @@ final class ModsScreen extends Page {
 					int fill = active ? Draw.mix(s.button, s.buttonHover, 0.82f) : Draw.mix(s.field, s.buttonHover, hover);
 					Skin.outlined(g, x, y, x + w, y + h, 2, fill, active ? s.accent : s.border);
 					g.texture(mod.iconKey(), x + 4, y + 3, 10, 10, 0, 0, 32, 32, 32, 32);
-					g.text(Draw.fit(g, mod.name, w - 19), x + 16, y + 4, s.text, false);
+					g.text(Draw.fit(g, mod.name, w - 17), x + 16, y + 4, s.text, false);
 				}
 
 				@Override
