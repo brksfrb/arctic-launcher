@@ -294,7 +294,7 @@ fn segmented_retry_fetches_only_unfinished_ranges() {
         let hits = requests.iter().filter(|r| has_header(r, &range)).count();
         if start == 0 {
             assert!(
-                hits >= ATTEMPTS as usize + 1,
+                hits > ATTEMPTS as usize,
                 "unfinished first range should be retried, got {hits}"
             );
         } else {
