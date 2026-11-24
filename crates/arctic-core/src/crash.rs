@@ -1434,8 +1434,7 @@ fn forge_language_provider_diagnosis(text: &str) -> Option<(Diagnosis, String)> 
             "klf" => ("KotlinLangForge", false),
             "scorge" => ("Scorge", false),
             "javafml" => ("JavaFML", true),
-            "lowcodefml" => ("Low-Code Language Loader", true),
-            "minecraft" => ("Minecraft Language Loader", true),
+            "lowcodefml" | "minecraft" => (id, true),
             _ => (id, false),
         };
         let required = minimum.map_or_else(|| name.to_owned(), |v| format!("{name} {v} or newer"));
@@ -5394,8 +5393,8 @@ Caused by: java.lang.NullPointerException: Cannot invoke "net.minecraftforge.fml
 
         for (id, name) in [
             ("javafml", "JavaFML"),
-            ("lowcodefml", "Low-Code Language Loader"),
-            ("minecraft", "Minecraft Language Loader"),
+            ("lowcodefml", "lowcodefml"),
+            ("minecraft", "minecraft"),
         ] {
             let diagnosis = diagnose(&format!(
                 "Minecraft Version: 1.21.1\nIs Modded: Definitely; Client brand changed to 'neoforge'\nFailure message: Mod File example.jar needs language provider {id}:5 or above to load"
