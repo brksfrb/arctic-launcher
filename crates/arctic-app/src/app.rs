@@ -286,6 +286,24 @@ impl ArcticApp {
         );
         bridge.set_voice(voice.clone());
         tasks.load_manifest();
+        // Use the instances already loaded for this profile. The cached manifest
+        // supplies the default only if Play has no saved selection yet.
+        let prefetch_dirs = dirs.clone();
+        let instances: Vec<_> = std::iter::once(&data.instance)
+            .chain(&data.custom_instances)
+            .cloned()
+            .collect();
+        let selected_game = data.settings.last_version.clone();
+        std::thread::spawn(move || {
+            let game = selected_game.or_else(|| {
+                VersionManifest::cached(&prefetch_dirs).map(|manifest| manifest.latest.release)
+            });
+            arctic_core::launch::prefetch_fabric_loaders(
+                &prefetch_dirs,
+                &instances,
+                game.as_deref(),
+            );
+        });
         // A game that crashed or was killed leaves its unfinished replay recording
         // behind: clear them (nothing the launcher started is running yet).
         let sweep_dirs = dirs.clone();

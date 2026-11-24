@@ -6,6 +6,7 @@
 
 pub mod args;
 pub mod exit_diagnostics;
+pub(crate) mod fabric_refresh;
 pub mod files;
 mod game_window;
 mod language;
@@ -23,6 +24,7 @@ pub mod startup;
 pub mod startup_cache;
 mod truststore;
 
+pub use fabric_refresh::prefetch_fabric_loaders;
 pub use process::{GameEvent, GameHandle, spawn, spawn_detached};
 
 use crate::proxy::ProxySettings;
@@ -1055,11 +1057,20 @@ fn effective_loader(
     game_dir: &Path,
 ) -> Option<(loaders::LoaderKind, String)> {
     if let (Some(kind), Some(version)) = (instance.loader.kind(), instance.loader.version()) {
-        return Some((kind, version.to_owned()));
+        let version = if kind == loaders::LoaderKind::Fabric {
+            fabric_refresh::fabric_loader(dirs, instance, game, version)
+        } else {
+            version.to_owned()
+        };
+        return Some((kind, version));
     }
     let client = instance.arctic_mod && arctic_mod::supports(game);
-    let fabric = (client || instance.performance || instance.shaders)
-        .then(|| arctic_mod::client_loader(dirs, game))
+    let fabric = fabric_refresh::vanilla_uses_fabric(instance, game)
+        .then(|| {
+            fabric_refresh::automatic_loader(dirs, game, |version| {
+                !client || arctic_mod::loader_fits(game, version)
+            })
+        })
         .flatten();
     if fabric.is_none() {
         // Pure vanilla: make sure earlier Fabric runs left nothing behind.

@@ -3,11 +3,12 @@
 //!
 //! `cargo run -p arctic-core --features offline-accounts --example startup_bench -- <root> <version>
 //!  [--performance] [--without-client] [--profile vanilla|fabric|arctic] [--spawn]
-//!  [--window <seconds>] [--command-out <file>]`
+//!  [--window <seconds>] [--command-out <file>] [--prefetch-fabric]`
 //!
 //! `--profile` picks what the player would have: `vanilla` (no client, no performance mods),
 //! `fabric` (a Fabric instance with nothing in it) or `arctic` (the default instance: Arctic
 //! Client and performance mods on Fabric underneath). Without it the instance is Fabric 0.20.1.
+//! `--prefetch-fabric` lets launcher startup prefetch finish before timing Play.
 //! `--window` (with `--spawn`) waits for the game window and needs a display (Xvfb).
 //! `tools/launchbench/run.py` runs first installs, repeat launches and version switches with it.
 //!
@@ -72,6 +73,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     instance.java_path = std::env::var_os("ARCTIC_BENCH_JAVA").map(PathBuf::from);
     let account = offline::create("StartupOffline")?;
     let settings = Settings::default();
+    if flag("--prefetch-fabric") {
+        instance.version = Some(entry.id.clone());
+        launch::prefetch_fabric_loaders(&dirs, std::slice::from_ref(&instance), Some(&entry.id));
+    }
     let started = Instant::now();
     let plan = launch::prepare(
         &LaunchRequest {

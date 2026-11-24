@@ -270,7 +270,7 @@ fn same_size_jar_with_a_damaged_zip_end_is_replaced_on_play() {
     }
 }
 
-fn jar_with_class(entry: &str) -> Vec<u8> {
+pub(super) fn jar_with_class(entry: &str) -> Vec<u8> {
     let mut jar = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     jar.start_file(
         entry,

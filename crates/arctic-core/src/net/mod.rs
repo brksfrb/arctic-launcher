@@ -6,12 +6,12 @@ mod resolver;
 
 pub use download::{Compressed, DownloadJob, download_all, set_gentle, sha1_file};
 pub(crate) use download::{
-    Policy, body_timeout, download_all_with_replacements, download_single, fetch_text,
-    is_not_found, mirror_for, part_path,
+    Policy, body_timeout, download_all_with_replacements, download_before, download_single,
+    fetch_text, is_not_found, mirror_for, part_path,
 };
 
 use std::sync::{PoisonError, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::de::DeserializeOwned;
 
@@ -119,6 +119,22 @@ pub fn get_json<T: DeserializeOwned>(url: &str) -> Result<T> {
         .with_config()
         .limit(MAX_JSON_BYTES)
         .read_json()?)
+}
+
+pub(crate) fn time_remaining(deadline: Instant) -> Result<Duration> {
+    deadline
+        .checked_duration_since(Instant::now())
+        .ok_or_else(|| crate::Error::Other("background download timed out".into()))
+}
+
+pub(crate) fn get_json_before<T: DeserializeOwned>(url: &str, deadline: Instant) -> Result<T> {
+    let mut resp = agent()
+        .get(url)
+        .config()
+        .timeout_global(Some(time_remaining(deadline)?))
+        .build()
+        .call()?;
+    read_json_any_status(&mut resp)
 }
 
 /// Read a JSON body regardless of HTTP status (used by OAuth/Xbox endpoints

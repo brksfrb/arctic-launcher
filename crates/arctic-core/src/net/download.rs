@@ -536,13 +536,13 @@ fn retry_job(job: &DownloadJob, reporter: &Reporter, policy: &Policy) -> Result<
                     segmented = false;
                     reporter.remove_bytes(transferred.get());
                     transferred.set(0);
-                    download_one(job, reporter, &transferred, try_fast_recovery)
+                    download_one(job, reporter, &transferred, try_fast_recovery, None)
                 }
                 Err(Segmented::Failed(e)) => Err(e),
                 Ok(()) => Ok(()),
             }
         } else {
-            download_one(job, reporter, &transferred, try_fast_recovery)
+            download_one(job, reporter, &transferred, try_fast_recovery, None)
         };
         if result.is_err() {
             reporter.remove_bytes(transferred.get());
@@ -575,6 +575,7 @@ fn download_one(
     reporter: &Reporter,
     transferred: &Cell<u64>,
     retry_slow_tail: bool,
+    timeout: Option<Duration>,
 ) -> Result<()> {
     if let Some(parent) = job.dest.parent() {
         fs::create_dir_all(parent).at(parent)?;
@@ -584,6 +585,7 @@ fn download_one(
     let mut resp = super::agent()
         .get(url)
         .config()
+        .timeout_global(timeout)
         .timeout_connect(connect_timeout(url))
         .timeout_recv_body(Some(body_timeout(job.transfer_size())))
         .build()
@@ -622,6 +624,45 @@ fn download_one(
         return Err(e);
     }
     fs::rename(&tmp, &job.dest).at(&job.dest)
+}
+
+/// Single bounded attempt for background prefetch. Stage beside the destination with
+/// its own temporary name so a concurrent launch can use the regular download path.
+pub(crate) fn download_before(job: DownloadJob, deadline: Instant) -> Result<()> {
+    if job.is_satisfied() {
+        return Ok(());
+    }
+    let dest = job.dest.clone();
+    let parent = dest.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent).at(parent)?;
+    let stage = tempfile::tempdir_in(parent).at(parent)?;
+    let job = DownloadJob {
+        dest: stage.path().join(dest.file_name().unwrap_or_default()),
+        ..job
+    };
+    let reporter = Reporter {
+        stage: "Prefetching loader libraries",
+        progress: &|_| {},
+        start: Instant::now(),
+        last_ms: AtomicU64::new(0),
+        files_done: AtomicU64::new(0),
+        files_total: 1,
+        bytes_done: AtomicU64::new(0),
+        bytes_total: job.transfer_size().unwrap_or(0),
+        all_sizes_known: job.transfer_size().is_some(),
+        fast_batch: Default::default(),
+    };
+    download_one(
+        &job,
+        &reporter,
+        &Cell::new(0),
+        false,
+        Some(super::time_remaining(deadline)?),
+    )?;
+    if !job.is_satisfied() {
+        return Err(Error::Other(format!("invalid library: {}", job.url)));
+    }
+    fs::rename(&job.dest, &dest).at(&dest)
 }
 
 /// Detect a crawling final file on a batch that has already demonstrated fast throughput.

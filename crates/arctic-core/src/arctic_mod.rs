@@ -432,44 +432,10 @@ pub fn at_least(a: &str, b: &str) -> bool {
     nums(a) >= nums(b)
 }
 
-/// How long a looked-up Fabric Loader version is used before asking again.
-const LOADER_RECHECK: std::time::Duration = std::time::Duration::from_secs(6 * 60 * 60);
-
 /// Fabric loader version for running the Arctic Client on `game`: the
 /// newest stable build, remembered so launches also work offline.
 pub fn client_loader(dirs: &crate::storage::DataDirs, game: &str) -> Option<String> {
-    let cache = dirs.meta().join("arctic-client-loader.json");
-    let mut known: std::collections::HashMap<String, String> = crate::storage::load_json(&cache)
-        .ok()
-        .flatten()
-        .unwrap_or_default();
-    // Asked recently: don't hold up the launch with another round trip.
-    let recent = std::fs::metadata(&cache)
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| t.elapsed().ok())
-        .is_some_and(|age| age < LOADER_RECHECK);
-    if recent && let Some(version) = known.get(game) {
-        return Some(version.clone());
-    }
-    let fresh = crate::loaders::loader_versions(crate::loaders::LoaderKind::Fabric, game)
-        .ok()
-        .and_then(|versions| {
-            versions
-                .iter()
-                .find(|v| v.stable)
-                .or(versions.first())
-                .map(|v| v.id.clone())
-        });
-    match fresh {
-        Some(version) => {
-            known.insert(game.to_owned(), version.clone());
-            // Saved every time: the file's age says when we last asked.
-            let _ = crate::storage::save_json(&cache, &known);
-            Some(version)
-        }
-        None => known.get(game).cloned(),
-    }
+    crate::launch::fabric_refresh::client_loader(dirs, game)
 }
 
 /// JVM flag pointing the mod at a different cosmetics server, if set.
