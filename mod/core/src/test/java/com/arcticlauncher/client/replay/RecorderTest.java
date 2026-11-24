@@ -313,4 +313,24 @@ class RecorderTest {
 		assertTrue(atStart < 100, "clip starts with " + atStart + " packets");
 		t.end(); await(r);
 	}
+	/** A world written out in one go (recording started inside it) is far more than the writer's pending limit. */
+	@Test void aBulkProducerWaitsForTheWriterInsteadOfEndingTheBuffer() throws Exception {
+		Recorder r = recorder(1L << 40, 0); Recorder.Take t = r.begin("s", true, 47, "1.8.9");
+		byte[] chunk = new byte[1 << 20]; chunk[0] = 1;
+		for (int i = 0; i < 160; i++) { chunk = chunk.clone(); chunk[1] = (byte) i; t.packetWhenRoom(chunk); }
+		await(r);
+		assertTrue(r.bufferReady(), "160 MB written in one go ended the buffer");
+		assertTrue(r.startRecording(file -> {}), "recording must still start after a large snapshot");
+		t.end(); await(r);
+	}
+	@Test void theNetworkPathStillStopsWhenItOutrunsTheWriter() throws Exception {
+		Recorder r = recorder(1L << 40, 0); Recorder.Take t = r.begin("s", true, 47, "1.8.9");
+		CountDownLatch release = new CountDownLatch(1);
+		r.afterPackets(() -> { try { release.await(10, TimeUnit.SECONDS); } catch (InterruptedException ignored) {} });
+		byte[] chunk = new byte[1 << 20];
+		for (int i = 0; i < 80; i++) t.packet(chunk);
+		release.countDown(); await(r);
+		assertFalse(r.bufferReady(), "the pending limit protects game memory from a stalled writer");
+		t.end(); await(r);
+	}
 }

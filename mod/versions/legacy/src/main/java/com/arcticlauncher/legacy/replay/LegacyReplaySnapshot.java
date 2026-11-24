@@ -68,7 +68,8 @@ final class LegacyReplaySnapshot {
 		for (Packet<?> packet : out) {
 			byte[] bytes = LegacyReplayCodec.encode(packet);
 			if (bytes != null) {
-				take.packet(bytes);
+				// A far render distance is well over the recorder's pending limit: wait for its writer.
+				take.packetWhenRoom(bytes);
 				written++;
 			}
 		}
