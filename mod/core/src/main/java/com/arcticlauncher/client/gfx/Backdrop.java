@@ -66,16 +66,26 @@ public final class Backdrop {
 	/** A ridge of peaks from {@code base} (fraction of height) up by {@code height}. */
 	private static void mountains(Gfx g, int w, int h, double base, double height, int peaks, int seed, int color) {
 		int baseY = (int) (h * base);
-		for (int x = 0; x < w; x += MOUNTAIN_STEP) {
-			double top = 0;
-			for (int i = 0; i < peaks; i++) {
-				double px = (i + rand(seed * 31 + i)) / peaks * w;
-				double pw = w / (double) peaks * (0.7 + rand(seed * 17 + i) * 0.8);
-				double ph = 0.45 + rand(seed * 7 + i) * 0.55;
-				top = Math.max(top, ph * (1 - Math.abs(x - px) / pw));
+		double[] centers = new double[peaks];
+		double[] widths = new double[peaks];
+		double[] heights = new double[peaks];
+		for (int i = 0; i < peaks; i++) {
+			centers[i] = (i + rand(seed * 31 + i)) / peaks * w;
+			widths[i] = w / (double) peaks * (0.7 + rand(seed * 17 + i) * 0.8);
+			heights[i] = 0.45 + rand(seed * 7 + i) * 0.55;
+		}
+		g.beginFills(color);
+		try {
+			for (int x = 0; x < w; x += MOUNTAIN_STEP) {
+				double top = 0;
+				for (int i = 0; i < peaks; i++) {
+					top = Math.max(top, heights[i] * (1 - Math.abs(x - centers[i]) / widths[i]));
+				}
+				int y = baseY - (int) (top * h * height);
+				g.fill(x, y, x + MOUNTAIN_STEP, h, color);
 			}
-			int y = baseY - (int) (top * h * height);
-			g.fill(x, y, x + MOUNTAIN_STEP, h, color);
+		} finally {
+			g.endFills();
 		}
 	}
 
