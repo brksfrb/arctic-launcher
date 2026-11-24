@@ -106,7 +106,7 @@ fn supplies_main_class(library: &str, main_class: &str) -> bool {
 }
 
 /// Read only the ZIP directory and the main class, including its CRC, not the entire loader.
-fn jar_has_main_class(path: &Path, entry: &str) -> bool {
+pub(super) fn jar_has_main_class(path: &Path, entry: &str) -> bool {
     let Ok(file) = fs::File::open(path) else {
         return false;
     };
