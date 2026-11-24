@@ -49,21 +49,41 @@ public final class Replays {
 		CAMERA("replay.switch_camera", "v", KEY_V);
 
 		public final String label;
+		public final String translationKey;
 		private final String defaultKey;
 		private final int defaultCode;
+		private java.util.function.Supplier<String> nativeBinding;
+		private java.util.function.Consumer<String> setNativeBinding;
 
 		ViewerAction(String label, String key, int defaultCode) {
 			this.label = label;
+			this.translationKey = "key.arctic.replay." + name().toLowerCase(java.util.Locale.ROOT);
 			this.defaultKey = "key.keyboard." + key;
 			this.defaultCode = defaultCode;
 		}
 
 		public String binding() {
+			if (nativeBinding != null) return nativeBinding.get();
+			return previousBinding();
+		}
+
+		public String defaultKey() { return defaultKey; }
+
+		private String previousBinding() {
 			com.arcticlauncher.client.config.ClientConfig c = ArcticClient.config();
 			return c == null || c.replayViewerKeys == null ? defaultKey : c.replayViewerKeys.getOrDefault(name(), defaultKey);
 		}
 
+		public void register(java.util.function.Supplier<String> binding, java.util.function.Consumer<String> set) {
+			nativeBinding = binding;
+			setNativeBinding = set;
+		}
+
 		public void bind(String key) {
+			if (setNativeBinding != null) {
+				setNativeBinding.accept(key);
+				return;
+			}
 			com.arcticlauncher.client.config.ClientConfig c = ArcticClient.config();
 			if (c.replayViewerKeys == null) c.replayViewerKeys = new HashMap<String, String>();
 			c.replayViewerKeys.put(name(), key);
@@ -71,8 +91,30 @@ public final class Replays {
 
 		boolean pressed(int code, String nativeName) {
 			String key = binding();
-			return key.equals(nativeName) || (defaultKey.equals(key) && code == defaultCode);
+			return !"key.keyboard.unknown".equals(key) && (key.equals(nativeName) || (nativeName == null && defaultKey.equals(key) && code == defaultCode));
 		}
+	}
+
+	public static boolean viewerBinding(String name) { return name.startsWith("key.arctic.replay."); }
+
+	/** Vanilla options load can precede Arctic's initializer, especially on Forge. */
+	public static Map<String, String> previousViewerKeys(File configDir) {
+		com.arcticlauncher.client.config.ClientConfig config = ArcticClient.config();
+		if (config == null) {
+			try (java.io.Reader in = Files.newBufferedReader(new File(configDir, "arctic.json").toPath(), StandardCharsets.UTF_8)) {
+				config = GSON.fromJson(in, com.arcticlauncher.client.config.ClientConfig.class);
+			} catch (IOException | RuntimeException ignored) {
+				// The regular config loader handles missing or invalid settings.
+			}
+		}
+		return config == null || config.replayViewerKeys == null ? Collections.emptyMap() : config.replayViewerKeys;
+	}
+	public static String viewerKeyLabel(String key) {
+		if ("key.categories.arctic.replay".equals(key) || "key.category.arctic.replay".equals(key)) return Lang.t("replay.replay");
+		if (viewerBinding(key)) for (ViewerAction action : ViewerAction.values()) {
+			if (action.translationKey.equals(key)) return Lang.t(action.label);
+		}
+		return null;
 	}
 
 	private static Platform platform;
@@ -307,11 +349,12 @@ public final class Replays {
 		openProblem = null;
 		Notices.post(Lang.t("replay.opening_replay"), file.getName().replace(".mcpr", ""));
 		Thread t = new Thread(() -> {
+			ReplayData opened = null;
 			try {
 				long began = System.nanoTime();
 				final ReplayData data = ReplayData.open(file, new File(gameDir, ".arctic/replay-cache"));
+				opened = data;
 				if (data.meta.protocol != 0 && backend.protocol() != 0 && data.meta.protocol != backend.protocol()) {
-					data.close();
 					platform.runOnGameThread(() -> openFailed(Lang.t("replay.it_was_recorded_on_minecraft") + data.meta.mcversion
 							+ Lang.t("replay.open_it_from_an_instance_of_that_version")));
 					return;
@@ -320,9 +363,13 @@ public final class Replays {
 				// Sorted before joining, so the opening world can be applied like a jump (see ReplayViewer).
 				ReplayBackend.Classifier classifier = backend.classifier(data);
 				if (classifier != null) data.classify(classifier);
+				long sorted = System.nanoTime();
+				backend.prepareOpen();
 				platform.log(false, "replay: opened " + file.getName() + ": " + data.count() + " packets, unpacked in "
-						+ (unpacked - began) / 1_000_000 + " ms, sorted in " + (System.nanoTime() - unpacked) / 1_000_000 + " ms");
+						+ (unpacked - began) / 1_000_000 + " ms, sorted in " + (sorted - unpacked) / 1_000_000
+						+ " ms, prepared in " + (System.nanoTime() - sorted) / 1_000_000 + " ms");
 				platform.runOnGameThread(() -> start(data, then));
+				opened = null; // The viewer now owns the mapped file.
 			} catch (IOException | RuntimeException e) {
 				platform.runOnGameThread(() -> openFailed(String.valueOf(e.getMessage())));
 			} catch (OutOfMemoryError e) {
@@ -330,6 +377,8 @@ public final class Replays {
 				platform.runOnGameThread(() -> openFailed(Lang.t("replay.not_enough_memory_to_open_it_give_the_game")));
 			} catch (Throwable e) {
 				platform.runOnGameThread(() -> openFailed(String.valueOf(e)));
+			} finally {
+				if (opened != null) try { opened.close(); } catch (IOException ignored) { /* The cache is reusable. */ }
 			}
 		}, "arctic-replay-open");
 		t.setDaemon(true);
@@ -425,6 +474,10 @@ public final class Replays {
 	public static boolean key(int key) { return key(key, -1); }
 
 	public static boolean key(int key, int nativeKey) {
+		return viewer != null && key(key, nativeKey < 0 ? null : platform.keyName(nativeKey));
+	}
+
+	public static boolean key(int key, String nativeName) {
 		ReplayViewer v = viewer;
 		if (v == null) {
 			return false;
@@ -435,7 +488,6 @@ public final class Replays {
 			}
 			return true;
 		}
-		String nativeName = nativeKey < 0 ? null : platform.keyName(nativeKey);
 		if (key == com.arcticlauncher.client.Keys.ESCAPE || ViewerAction.CONTROLS.pressed(key, nativeName)) {
 			platform.openPage(new ReplayMenu());
 			return true;
@@ -456,6 +508,10 @@ public final class Replays {
 					break;
 				default: break;
 			}
+			return true;
+		}
+		if (key == com.arcticlauncher.client.Keys.RIGHT_SHIFT) {
+			platform.openPage(new ReplayMenu());
 			return true;
 		}
 		return false;

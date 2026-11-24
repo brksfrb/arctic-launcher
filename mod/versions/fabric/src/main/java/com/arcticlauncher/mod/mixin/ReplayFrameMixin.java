@@ -36,8 +36,9 @@ abstract class ReplayFrameMixin {
 	//#else
 	@Inject(method = "forceSetScreen", at = @At("HEAD"), cancellable = true)
 	//#endif
-	private void arctic$seekWithoutForcedFrame(net.minecraft.client.gui.screens.Screen screen, CallbackInfo ci) {
-		if (com.arcticlauncher.mod.replay.ReplayPlayback.INSTANCE.deferSeekFrame(screen)) ci.cancel();
+	private void arctic$replayWithoutForcedFrame(net.minecraft.client.gui.screens.Screen screen, CallbackInfo ci) {
+		if (com.arcticlauncher.client.replay.Replays.watching()
+				&& com.arcticlauncher.mod.replay.ReplayPlayback.INSTANCE.deferForcedFrame(screen)) ci.cancel();
 	}
 	//#endif
 

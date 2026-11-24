@@ -511,9 +511,6 @@ public final class ArcticClient {
 	/** A key went down with no screen open; true if Arctic used it. */
 	public static boolean keyPressed(int key, int nativeKey) {
 		if (com.arcticlauncher.client.replay.Replays.watching()) {
-			if (key == Keys.RIGHT_SHIFT) {
-				return com.arcticlauncher.client.replay.Replays.key(Keys.ESCAPE);
-			}
 			return com.arcticlauncher.client.replay.Replays.key(key, nativeKey);
 		}
 		if (key == Keys.RIGHT_SHIFT && platform.inWorld()) {

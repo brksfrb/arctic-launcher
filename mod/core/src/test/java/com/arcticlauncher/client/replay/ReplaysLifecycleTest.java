@@ -9,10 +9,12 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -103,6 +105,61 @@ class ReplaysLifecycleTest {
 		} finally {
 			p.set(null, oldP); r.set(null, oldR); c.set(null, oldC); w.set(null, oldW);
 		}
+	}
+
+	@Test void interruptedTakeRecoversOnlyThePublishedCheckpointAndDoesNotDuplicateIt() throws Exception {
+		AtomicLong clock = new AtomicLong();
+		Path live = dir.resolve("live");
+		Path crashed = dir.resolve("crashed");
+		Recorder recorder = new Recorder(live.toFile(), () -> 30, ignored -> {}, () -> (p, k) -> Category.ALWAYS,
+				1L << 20, 0, 10_000, clock::get);
+		Recorder.Take take = recorder.begin("test", true, 47, "1.8.9");
+		recorder.enabled(true);
+		try {
+			take.packet(new byte[] {1});
+			clock.set(TimeUnit.SECONDS.toNanos(1));
+			assertTrue(recorder.startRecording(null));
+			clock.set(TimeUnit.SECONDS.toNanos(2));
+			assertTrue(recorder.mark());
+			take.packet(new byte[] {2});
+			waitForWriter(recorder);
+			Path recovery = live.resolve(".arctic/replay-recovery");
+			Path source;
+			try (java.util.stream.Stream<Path> files = Files.list(recovery)) {
+				source = files.findFirst().orElseThrow(AssertionError::new);
+			}
+			Path taken = crashed.resolve(".arctic/replay-recovery").resolve(source.getFileName());
+			Files.createDirectories(taken);
+			try (java.nio.file.DirectoryStream<Path> files = Files.newDirectoryStream(source)) {
+				for (Path file : files) Files.copy(file, taken.resolve(file.getFileName()));
+			}
+			Files.write(taken.resolve("checkpoint.next"), new byte[] {'{'});
+			Files.write(taken.resolve("take.tmcpr"), new byte[] {1, 2, 3}, StandardOpenOption.APPEND);
+
+			waitForWriter(new Recorder(crashed.toFile(), () -> 30, ignored -> {}, () -> null));
+			File[] files = crashed.resolve("replay_recordings").toFile().listFiles();
+			assertNotNull(files);
+			assertEquals(1, files.length);
+			try (ReplayData data = ReplayData.open(files[0], crashed.resolve("cache").toFile())) {
+				assertEquals(1000, data.duration());
+				assertEquals(2, data.count());
+				assertEquals(1, data.packet(0).get());
+				assertEquals(2, data.packet(1).get());
+				assertEquals(java.util.Collections.singletonList(1000), data.extras.markers);
+			}
+			assertFalse(Files.exists(taken));
+			waitForWriter(new Recorder(crashed.toFile(), () -> 30, ignored -> {}, () -> null));
+			assertEquals(1, crashed.resolve("replay_recordings").toFile().list().length);
+		} finally {
+			take.end();
+			waitForWriter(recorder);
+		}
+	}
+
+	private static void waitForWriter(Recorder recorder) throws InterruptedException {
+		CountDownLatch done = new CountDownLatch(1);
+		recorder.afterWrites(done::countDown);
+		assertTrue(done.await(10, TimeUnit.SECONDS));
 	}
 	private static Field field(Class<?> type, String name) throws Exception {
 		Field f = type.getDeclaredField(name); f.setAccessible(true); return f;

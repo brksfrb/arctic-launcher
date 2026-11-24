@@ -104,7 +104,6 @@
   "replay.mark_recording": "Mark recording",
   "replay.add_marker_at_playhead": "Adds a marker to the active recording",
   "replay.export_range_seconds": "Export range in seconds from the beginning",
-  "replay.retimed_export_range": "Export range in seconds · Time keys mute exported game audio",
   "replay.export_from": "Start (s)",
   "replay.export_to": "End (s)",
   "replay.export_auto_bitrate": "Auto bitrate",

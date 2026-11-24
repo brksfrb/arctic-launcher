@@ -9,7 +9,8 @@ abstract class AudioDecoder implements Closeable {
 	int channels, rate;
 	long length;
 	abstract short[] read() throws Exception;
-	abstract void seek(double seconds) throws Exception;
+	final void seek(double seconds) throws Exception { seekFrame((long) (seconds * rate)); }
+	abstract void seekFrame(long sample) throws Exception;
 	static AudioDecoder open(File file) throws Exception {
 		try { Class.forName("org.lwjgl.stb.STBVorbis"); return new Stb(file); }
 		catch (ClassNotFoundException oldMinecraft) { return new Legacy(file); }
@@ -42,9 +43,8 @@ abstract class AudioDecoder implements Closeable {
 			int n = (Integer) read.invoke(null, handle, channels, buffer);
 			short[] data = new short[n * channels]; buffer.get(data); return data;
 		}
-		@Override void seek(double seconds) throws Exception {
-			long sample = Math.max(0, (long) (seconds * rate));
-			seek.invoke(null, handle, (int) Math.min(Math.max(0, length), sample));
+		@Override void seekFrame(long sample) throws Exception {
+			seek.invoke(null, handle, (int) Math.min(Math.max(0, length), Math.max(0, sample)));
 		}
 		@Override public void close() throws IOException {
 			try { close.invoke(null, handle); } catch (Exception e) { throw new IOException(e); }
@@ -81,9 +81,9 @@ abstract class AudioDecoder implements Closeable {
 			ByteBuffer.wrap(raw).order(f.isBigEndian() ? ByteOrder.BIG_ENDIAN : ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(data);
 			return data;
 		}
-		@Override void seek(double seconds) throws Exception {
+		@Override void seekFrame(long sample) throws Exception {
 			close(); pending = null; init();
-			long skip = Math.max(0, (long) (seconds * rate)) * channels;
+			long skip = Math.max(0, sample) * channels;
 			while (skip > 0) {
 				short[] data = read(); if (data.length == 0) return;
 				if (data.length > skip) { pending = java.util.Arrays.copyOfRange(data, (int) skip, data.length); return; }

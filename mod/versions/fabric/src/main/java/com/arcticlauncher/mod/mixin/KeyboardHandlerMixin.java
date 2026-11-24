@@ -43,7 +43,7 @@ abstract class KeyboardHandlerMixin {
 	//#if MC >= 1.21.9
 	@Inject(method = "keyPress", at = @At("HEAD"), cancellable = true)
 	private void arctic$key(long window, int action, KeyEvent event, CallbackInfo ci) {
-		if (container(event.key(), action) || handled(event.key(), action)) {
+		if (container(event.key(), action) || handled(event.key(), action, InputConstants.getKey(event).getName())) {
 			ci.cancel();
 		}
 	}
@@ -58,7 +58,7 @@ abstract class KeyboardHandlerMixin {
 	//#else
 	@Inject(method = "keyPress", at = @At("HEAD"), cancellable = true)
 	private void arctic$key(long window, int key, int scancode, int action, int modifiers, CallbackInfo ci) {
-		if (container(key, action) || handled(key, action)) {
+		if (container(key, action) || handled(key, action, InputConstants.getKey(key, scancode).getName())) {
 			ci.cancel();
 		}
 	}
@@ -85,12 +85,13 @@ abstract class KeyboardHandlerMixin {
 		return used;
 	}
 
-	private static boolean handled(int key, int action) {
+	private static boolean handled(int key, int action, String name) {
 		if (action != com.arcticlauncher.mod.compat.KeyCodes.PRESS) {
 			return false;
 		}
 		Screen screen = Compat.screen();
 		if (screen == null) {
+			if (com.arcticlauncher.client.replay.Replays.watching()) return com.arcticlauncher.client.replay.Replays.key(Input.key(key), name);
 			return ArcticClient.keyPressed(Input.key(key), key);
 		}
 		if (screen instanceof PageScreen || typing(screen)) {

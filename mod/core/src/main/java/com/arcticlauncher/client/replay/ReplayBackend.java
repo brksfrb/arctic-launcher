@@ -36,6 +36,9 @@ public interface ReplayBackend {
 	/** A packet sorter for this recording (null if the version can't sort: jumping is slower). */
 	Classifier classifier(ReplayData data);
 
+	/** Resolve the first-world classes alongside file preparation, off the render thread. */
+	default void prepareOpen() {}
+
 	/**
 	 * Join the replay: leave any world and connect the game to it. Packets
 	 * then go through {@link #apply}, starting with the login. Returns why it

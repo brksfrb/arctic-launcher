@@ -2,6 +2,7 @@ package com.arcticlauncher.client.replay;
 
 import java.io.*;
 import java.util.*;
+import java.util.function.DoubleUnaryOperator;
 import java.util.zip.*;
 
 /** Small, deterministic stereo blocks on the encoder worker; never hours of PCM on disk. */
@@ -15,22 +16,42 @@ final class AudioMix implements Closeable {
 	private final Map<Integer, Voice> voices = new LinkedHashMap<Integer, Voice>();
 	private AudioEvent next;
 	private long sample;
+	private final DoubleUnaryOperator timeMap;
+	private final List<Change> changes = new ArrayList<Change>();
+	private final Map<Integer, AudioEvent> changedVoices = new LinkedHashMap<Integer, AudioEvent>();
+	private int change;
 	private final Map<Integer, AudioEvent> initial = new LinkedHashMap<Integer, AudioEvent>();
-	AudioMix(File replay, ReplayBackend backend, int from) throws IOException {
+	AudioMix(File replay, ReplayBackend backend, int from, DoubleUnaryOperator timeMap) throws IOException {
 		live = null;
+		this.timeMap = timeMap;
 		this.backend = backend;
 		zip = new ZipFile(replay);
 		ZipEntry entry = zip.getEntry(AudioEvent.ENTRY);
 		events = entry == null ? null : new DataInputStream(new BufferedInputStream(zip.getInputStream(entry)));
 		sample = (long) from * RATE / 1000;
-		advance();
-		while (next != null && next.time <= from) {
-			if (next.resource.isEmpty()) initial.remove(next.id); else initial.put(next.id, next);
+		try {
 			advance();
+			if (timeMap == null) {
+				while (next != null && next.time <= from) {
+					if (next.resource.isEmpty()) initial.remove(next.id); else initial.put(next.id, next);
+					advance();
+				}
+			} else {
+				Map<Integer, AudioEvent> previous = new HashMap<Integer, AudioEvent>();
+				while (next != null) {
+					AudioEvent before = next.resource.isEmpty() ? previous.remove(next.id) : previous.put(next.id, next);
+					changes.add(new Change(before, next));
+					advance();
+				}
+			}
+		} catch (IOException | RuntimeException e) {
+			close();
+			throw e;
 		}
 	}
 	AudioMix(ReplayBackend backend, int from, java.util.function.Supplier<AudioEvent> live) {
 		this.backend = backend; this.live = live; zip = null; events = null;
+		timeMap = null;
 		sample = (long) from * RATE / 1000;
 		advanceLive();
 	}
@@ -42,6 +63,7 @@ final class AudioMix implements Closeable {
 	}
 	/** Always exactly frames of signed 16-bit little-endian stereo, including silence. */
 	byte[] block(int frames) throws IOException {
+		if (timeMap != null) return retimedBlock(frames);
 		if (next == null && live != null) advanceLive();
 		byte[] out = new byte[frames * 4];
 		try {
@@ -75,6 +97,57 @@ final class AudioMix implements Closeable {
 			}
 		} catch (Exception e) { throw e instanceof IOException ? (IOException) e : new IOException("Replay audio: " + e, e); }
 		return out;
+	}
+
+	private byte[] retimedBlock(int frames) throws IOException {
+		byte[] out = new byte[frames * 4];
+		try {
+			double ms = timeMap.applyAsDouble(sample * 1000.0 / RATE);
+			for (int i = 0; i < frames; i++, sample++) {
+				double following = timeMap.applyAsDouble((sample + 1) * 1000.0 / RATE);
+				// A held frame has no source audio interval.
+				if (ms != following) {
+					while (change > 0 && changes.get(change - 1).after.time > ms) {
+						Change c = changes.get(--change);
+						changedVoices.put(c.after.id, c.before);
+					}
+					while (change < changes.size() && changes.get(change).after.time <= ms) {
+						Change c = changes.get(change++);
+						changedVoices.put(c.after.id, c.after);
+					}
+					for (Map.Entry<Integer, AudioEvent> dirty : changedVoices.entrySet()) update(dirty.getKey(), dirty.getValue());
+					changedVoices.clear();
+					double left = 0, right = 0;
+					for (Voice voice : voices.values()) {
+						voice.at(ms);
+						left += voice.left * voice.event.left;
+						right += voice.right * voice.event.right;
+					}
+					put(out, i * 4, left);
+					put(out, i * 4 + 2, right);
+				}
+				ms = following;
+			}
+		} catch (Exception e) { throw e instanceof IOException ? (IOException) e : new IOException("Replay audio: " + e, e); }
+		return out;
+	}
+
+	private void update(int id, AudioEvent event) throws Exception {
+		Voice voice = voices.get(id);
+		if (event == null || event.resource.isEmpty() || (event.left < .0001f && event.right < .0001f)) {
+			if (voice != null) { voices.remove(id); voice.close(); }
+		} else if (voice != null && voice.event.resource.equals(event.resource)) {
+			voice.event = event;
+		} else {
+			if (voice != null) { voices.remove(id); voice.close(); }
+			if (voices.size() >= 256) throw new IOException("Too many simultaneous replay sounds");
+			voices.put(id, new Voice(event, asset(event.resource), false));
+		}
+	}
+
+	private static final class Change {
+		final AudioEvent before, after;
+		Change(AudioEvent before, AudioEvent after) { this.before = before; this.after = after; }
 	}
 	private static void put(byte[] out, int at, double value) {
 		int n = (int) Math.max(-32768, Math.min(32767, value)); out[at] = (byte) n; out[at + 1] = (byte) (n >> 8);
@@ -111,17 +184,50 @@ final class AudioMix implements Closeable {
 		try { if (events != null) events.close(); } finally { if (zip != null) zip.close(); }
 	}
 	private static final class Voice implements Closeable {
+		private static final int TILE = 4096;
 		AudioEvent event;
 		final AudioDecoder decoder;
 		short[] buffer = new short[0];
 		double cursor;
 		boolean ended;
 		float left, right;
+		long bufferStart = -1;
+		long decoderAt;
 		Voice(AudioEvent event, File file) throws Exception {
+			this(event, file, true);
+		}
+		Voice(AudioEvent event, File file, boolean sequential) throws Exception {
 			this.event = event; decoder = AudioDecoder.open(file);
-			double position = event.position;
-			if (event.loop && decoder.length > 0) position %= (double) decoder.length / decoder.rate;
-			decoder.seek(position);
+			if (sequential) {
+				double position = event.position;
+				if (event.loop && decoder.length > 0) position %= (double) decoder.length / decoder.rate;
+				decoder.seek(position);
+			}
+		}
+		void at(double ms) throws Exception {
+			long frame = (long) ((event.position + (ms - event.time) * event.pitch / 1000) * decoder.rate);
+			if (event.loop && decoder.length > 0) frame %= decoder.length;
+			left = right = 0;
+			if (frame < 0 || (decoder.length > 0 && frame >= decoder.length)) return;
+			if (frame < bufferStart || frame >= bufferStart + buffer.length / decoder.channels) {
+				long begin = frame / TILE * TILE;
+				if (begin != decoderAt) decoder.seekFrame(begin);
+				bufferStart = begin;
+				buffer = new short[TILE * decoder.channels];
+				int written = 0;
+				while (written < buffer.length) {
+					short[] decoded = decoder.read();
+					if (decoded.length == 0) break;
+					int count = Math.min(decoded.length, buffer.length - written);
+					System.arraycopy(decoded, 0, buffer, written, count);
+					written += count;
+					begin += decoded.length / decoder.channels;
+				}
+				decoderAt = begin;
+			}
+			int at = (int) (frame - bufferStart) * decoder.channels;
+			left = buffer[at];
+			right = buffer[at + (decoder.channels > 1 ? 1 : 0)];
 		}
 		void step() throws Exception {
 			if (ended) { left = right = 0; return; }

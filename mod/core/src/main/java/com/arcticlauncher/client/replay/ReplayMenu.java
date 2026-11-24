@@ -368,8 +368,7 @@ public final class ReplayMenu extends Page {
 		g.text(name, px + pw - PAD - g.textWidth(name), py + PAD, s.muted, false);
 		if (exportOptions && !needsFfmpeg) {
 			Skin.panel(g, s, px, py - 101, px + pw, py - 2);
-			String label = exportError != null ? exportError : exportMode == ReplayViewer.Mode.PATH && v.hasTimeKeys()
-					? Lang.t("replay.retimed_export_range") : Lang.t("replay.export_range_seconds");
+			String label = exportError != null ? exportError : Lang.t("replay.export_range_seconds");
 			g.text(Draw.fit(g, label, pw - PAD * 2, px, py - 94), px + PAD, py - 94, exportError == null ? s.text : 0xFFF87171, false);
 		}
 		if (needsFfmpeg) {

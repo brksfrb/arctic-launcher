@@ -27,7 +27,7 @@ abstract class MouseHandlerMixin {
 			ci.cancel();
 			return;
 		}
-		pressed(info.button(), action);
+		if (pressed(info.button(), action)) ci.cancel();
 	}
 	//#else
 	@Inject(method = "onPress", at = @At("HEAD"), cancellable = true)
@@ -36,7 +36,7 @@ abstract class MouseHandlerMixin {
 			ci.cancel();
 			return;
 		}
-		pressed(button, action);
+		if (pressed(button, action)) ci.cancel();
 	}
 	//#endif
 
@@ -85,10 +85,13 @@ abstract class MouseHandlerMixin {
 		return com.arcticlauncher.client.notice.Notices.click(at[0], at[1]);
 	}
 
-	private static void pressed(int button, int action) {
+	private static boolean pressed(int button, int action) {
 		Compat.mouseButton(button, action != com.arcticlauncher.mod.compat.KeyCodes.RELEASE);
 		if (action == com.arcticlauncher.mod.compat.KeyCodes.PRESS && Compat.screen() == null) {
-			ArcticClient.mousePressed(Input.mouse(button));
+			int key = Input.mouse(button);
+			if (com.arcticlauncher.client.replay.Replays.key(key, InputConstants.Type.MOUSE.getOrCreate(button).getName())) return true;
+			ArcticClient.mousePressed(key);
 		}
+		return false;
 	}
 }

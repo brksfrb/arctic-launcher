@@ -82,6 +82,7 @@ public final class ReplayPlayback implements ReplayBackend {
 	private Entity following;
 	private boolean firstPerson;
 	private boolean seeking;
+	private boolean applyingPacket;
 	private boolean exportSeek;
 	private net.minecraft.client.gui.screens.Screen seekScreen;
 
@@ -93,6 +94,42 @@ public final class ReplayPlayback implements ReplayBackend {
 	@Override
 	public Classifier classifier(ReplayData data) {
 		return ReplayCodec.sorter();
+	}
+
+	@Override
+	public void prepareOpen() {
+		// Resolve classes without running their world/renderer initializers here.
+		for (Class<?> type : new Class<?>[] {ClientHandshakePacketListenerImpl.class, ClientPacketListener.class,
+				//#if MC >= 1.14
+				ClientLevel.class, LocalPlayer.class, net.minecraft.client.multiplayer.ClientChunkCache.class,
+				//#else
+				ClientLevel.class, LocalPlayer.class, net.minecraft.world.chunk.ClientChunkProvider.class,
+				//#endif
+				net.minecraft.world.level.chunk.LevelChunk.class}) {
+			type.getName();
+		}
+		//#if MC >= 26.3
+		for (Class<?> type : new Class<?>[] {net.minecraft.client.multiplayer.ClientConfigurationPacketListenerImpl.class,
+				net.minecraft.world.level.lighting.SkyLightEngine.class, net.minecraft.world.level.lighting.LevelLightEngine.class,
+				net.minecraft.world.ticks.LevelChunkTicks.class, net.minecraft.client.multiplayer.PlayerInfo.class,
+				net.minecraft.client.renderer.PostPass.class}) {
+			type.getName();
+		}
+		if (net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("sodium")) {
+			ClassLoader loader = ReplayPlayback.class.getClassLoader();
+			for (String name : new String[] {"render.chunk.RenderSectionManager", "render.chunk.compile.executor.ChunkBuilder",
+					"render.chunk.compile.ChunkBuildContext", "render.chunk.compile.pipeline.BlockRenderCache",
+					"render.chunk.region.RenderRegionManager", "render.chunk.DefaultChunkRenderer",
+					"render.chunk.ShaderChunkRenderer", "render.chunk.map.ChunkTracker",
+					"world.LevelSlice"}) {
+				try {
+					Class.forName("net.caffeinemc.mods.sodium.client." + name, false, loader);
+				} catch (ClassNotFoundException | LinkageError ignored) {
+					// Sodium may use a different renderer on another build.
+				}
+			}
+		}
+		//#endif
 	}
 
 	@Override
@@ -134,9 +171,11 @@ public final class ReplayPlayback implements ReplayBackend {
 	}
 
 	/** Exports keep the terrain-ready screen, but never render halfway through a packet batch. */
-	public boolean deferSeekFrame(net.minecraft.client.gui.screens.Screen screen) {
-		if (!seeking || !(screen == null || loadingScreen(screen) || ReplayCompat.messageScreen(screen))) return false;
-		if (exportSeek) ReplayCompat.setScreen(screen);
+	public boolean deferForcedFrame(net.minecraft.client.gui.screens.Screen screen) {
+		if (!applyingPacket || !(screen == null || loadingScreen(screen) || ReplayCompat.messageScreen(screen))) return false;
+		// Keep the loading screen and its normal ticks. The main loop draws it immediately
+		// after packet delivery; the login handler must not render a nested first world frame.
+		if (!seeking || exportSeek) ReplayCompat.setScreen(screen);
 		return true;
 	}
 
@@ -180,6 +219,7 @@ public final class ReplayPlayback implements ReplayBackend {
 		Object protocol = phase;
 		packetName = null;
 		jumpingPacket = jumping;
+		applyingPacket = true;
 		try {
 			//#if MC >= 1.19.4
 			ReplayTransport.receive(channel, bytes);
@@ -206,6 +246,8 @@ public final class ReplayPlayback implements ReplayBackend {
 				throw new ReplayBackend.ProtocolFailure("Replay protocol handover failed (" + context + "): " + e, e); // i18n-ignore
 			}
 			throw new IllegalStateException("replay pipeline " + context, e);
+		} finally {
+			applyingPacket = false;
 		}
 	}
 

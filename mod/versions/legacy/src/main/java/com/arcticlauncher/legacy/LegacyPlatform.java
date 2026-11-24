@@ -356,7 +356,7 @@ public final class LegacyPlatform implements Platform {
 			return null;
 		}
 		for (KeyBinding k : mc().options.allKeys) {
-			if (k.getCode() == code && !"of.key.zoom".equals(k.getTranslationKey())) {
+			if (k.getCode() == code && !com.arcticlauncher.client.replay.Replays.viewerBinding(k.getTranslationKey()) && !"of.key.zoom".equals(k.getTranslationKey())) {
 				return net.minecraft.client.resource.language.I18n.translate(k.getTranslationKey());
 			}
 		}

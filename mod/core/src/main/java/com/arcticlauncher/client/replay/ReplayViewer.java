@@ -682,18 +682,22 @@ public final class ReplayViewer {
 	private void sortTimeKeys() { timeKeys.sort(java.util.Comparator.comparingInt(key -> key.time)); }
 
 	private double recordedTime(double at) {
-		if (timeKeys.isEmpty()) return at;
-		Keyframe before = timeKeys.get(0);
-		if (at <= before.time) return before.replayTime;
-		for (int i = 1; i < timeKeys.size(); i++) {
-			Keyframe after = timeKeys.get(i);
-			if (at <= after.time) {
-				double f = (at - before.time) / Math.max(1, after.time - before.time);
-				return before.replayTime + f * (after.replayTime - before.replayTime);
-			}
-			before = after;
+		return export == null ? recordedTime(timeKeys, at) : export.recordedTime(at);
+	}
+
+	private static double recordedTime(List<Keyframe> keys, double at) {
+		if (keys.isEmpty()) return at;
+		int low = 0, high = keys.size() - 1;
+		if (at <= keys.get(low).time) return keys.get(low).replayTime;
+		if (at >= keys.get(high).time) return keys.get(high).replayTime;
+		while (high - low > 1) {
+			int mid = (low + high) >>> 1;
+			if (at <= keys.get(mid).time) high = mid;
+			else low = mid;
 		}
-		return before.replayTime;
+		Keyframe before = keys.get(low), after = keys.get(high);
+		double f = (at - before.time) / Math.max(1, after.time - before.time);
+		return before.replayTime + f * (after.replayTime - before.replayTime);
 	}
 
 	private void keyframesChanged() {
@@ -707,7 +711,6 @@ public final class ReplayViewer {
 		onKeyframesChanged.run();
 	}
 
-	boolean hasTimeKeys() { return !timeKeys.isEmpty(); }
 
 	public boolean canPlayPath() { return new CameraPath(keyframes).usable(); }
 
@@ -760,7 +763,9 @@ public final class ReplayViewer {
 		setMode(camera == Mode.PATH ? Mode.FREE : camera);
 		mode = camera;
 		pathTime = job.from();
-		if (camera != Mode.PATH || timeKeys.isEmpty()) job.audio(data.file, backend);
+		List<Keyframe> exportTimeKeys = new ArrayList<Keyframe>();
+		if (camera == Mode.PATH) for (Keyframe key : timeKeys) exportTimeKeys.add(key.copy());
+		job.audio(data.file, backend, exportTimeKeys.isEmpty() ? null : at -> recordedTime(exportTimeKeys, at));
 		export = job;
 		backend.cleanView(camera == Mode.PATH);
 		paused = false;

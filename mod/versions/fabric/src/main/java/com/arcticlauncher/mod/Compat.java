@@ -320,7 +320,7 @@ public final class Compat {
 			return null;
 		}
 		for (net.minecraft.client.KeyMapping k : mc().options.keyMappings) {
-			if (name.equals(k.saveString())) {
+			if (!com.arcticlauncher.client.replay.Replays.viewerBinding(k.getName()) && name.equals(k.saveString())) {
 				return net.minecraft.client.resources.language.I18n.get(k.getName());
 			}
 		}

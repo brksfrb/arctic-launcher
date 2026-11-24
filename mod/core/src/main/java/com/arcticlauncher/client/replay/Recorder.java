@@ -4,9 +4,13 @@ import com.arcticlauncher.client.LocalClock;
 
 import com.google.gson.Gson;
 import java.io.*;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.Date;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -31,9 +35,11 @@ public final class Recorder {
 	static final long MAX_RECORDING_BYTES = 512L << 20;
 	static final long MIN_FREE_BYTES = 512L << 20;
 	private static final int COMPACT_INTERVAL_MS = 10_000;
+	private static final int CHECKPOINT_INTERVAL_MS = 1_000;
 	private static final Gson GSON = new Gson();
 	private final File tempDir;
 	private final File savedDir;
+	private final File recoveryDir;
 	private final IntSupplier clipSeconds;
 	private final Consumer<String> log;
 	private final Supplier<ReplayBackend.Classifier> sorter;
@@ -65,6 +71,7 @@ public final class Recorder {
 		this.nanoTime = nanoTime;
 		this.tempDir = new File(gameDir, ".arctic/replay-temp");
 		this.savedDir = new File(gameDir, "replay_recordings");
+		this.recoveryDir = new File(gameDir, ".arctic/replay-recovery");
 		this.clipSeconds = clipSeconds;
 		this.log = log;
 		this.sorter = sorter;
@@ -91,6 +98,7 @@ public final class Recorder {
 		writer.setDaemon(true);
 		writer.setPriority(Thread.MIN_PRIORITY + 1);
 		writer.start();
+		saves.execute(this::recoverRecordings);
 	}
 
 	public File savedDir() { return savedDir; }
@@ -150,7 +158,6 @@ public final class Recorder {
 		final boolean singleplayer;
 		final int protocol;
 		final String mcVersion;
-		final long date = System.currentTimeMillis();
 		private final long startNanos = nanoTime.getAsLong();
 		private long pausedNanos;
 		private long pausedAt = -1;
@@ -162,6 +169,7 @@ public final class Recorder {
 		private int windowStart;
 		private int enabledAt;
 		private volatile int manualFrom;
+		private long recordingRequest;
 		private volatile int latest;
 		private volatile int selfId = -1;
 		private volatile String selfName;
@@ -170,9 +178,12 @@ public final class Recorder {
 		private Ring ring;
 		private boolean compacting;
 		private Stream manual;
+		private Journal journal;
+		private int checkpointAt;
 		private final java.util.List<Integer> manualMarkers = new java.util.ArrayList<Integer>();
 		private Consumer<File> manualDone;
 		private int manualBase;
+		private long manualDate;
 		private int compactedAt;
 		private int checkedAt = -1;
 		private volatile long manualDiskBytes;
@@ -199,6 +210,8 @@ public final class Recorder {
 					manual.delete();
 					manual = null;
 					manualDone = null;
+					journal.close(true);
+					journal = null;
 				}
 			});
 		}
@@ -295,6 +308,7 @@ public final class Recorder {
 		}
 
 		private void maintain(int t) throws IOException {
+			if (manual != null && t - checkpointAt >= CHECKPOINT_INTERVAL_MS) checkpoint(t);
 			int window = buffering ? clipSeconds.getAsInt() * 1000 : 0;
 			int from = Math.max(windowStart, t - window);
 			int interval = compactInterval > 0 ? compactInterval : buffering ? window : COMPACT_INTERVAL_MS;
@@ -334,7 +348,6 @@ public final class Recorder {
 			if (checkedAt < 0 || t - checkedAt >= 5_000) {
 				checkedAt = t;
 				ring.flush();
-				if (manual != null) { manual.flush(); manualDiskBytes = manual.diskBytes(); }
 				if (tempDir.getUsableSpace() < minFreeBytes) fail(Lang.t("replay.less_than_512_mb_of_disk_space_remains"));
 				else if (ring.diskBytes() > maxBytes) fail(Lang.t("replay.the_replays_world_data_is_too_large_for_the"));
 			}
@@ -350,17 +363,33 @@ public final class Recorder {
 		private synchronized boolean startRecording(Consumer<File> done) {
 			if (ended || state != TakeState.BUFFERING) return false;
 			final int at = time();
+			final long request = ++recordingRequest;
 			state = TakeState.RECORDING;
 			manualFrom = at;
 			tasks.add(() -> {
 				manualBase = at;
+				manualDate = System.currentTimeMillis();
+				manualDiskBytes = 0;
 				manualMarkers.clear();
 				manualDone = done;
 				try {
-					manual = new Stream();
+					journal = new Journal(recoveryDir, archiveName(Lang.t("replay.recording")));
+					manual = new Stream(journal.dir, "take");
 					// Seed a fresh stream with the world at this instant, then append live packets.
 					copyRange(ring.view(), manual.packets, manual.self, at, at, at, sorter.get(), manual);
-				} catch (IOException | RuntimeException e) { fail(e.toString()); }
+					checkpoint(at);
+				} catch (IOException | RuntimeException e) {
+					if (manual != null) manual.delete();
+					manual = null;
+					if (journal != null) journal.close(true);
+					journal = null;
+					manualDone = null;
+					synchronized (Take.this) {
+						if (recordingRequest == request && state == TakeState.RECORDING) state = TakeState.BUFFERING;
+					}
+					log.accept("replay: recording start failed: " + e); // i18n-ignore
+					if (done != null) done.accept(null);
+				}
 			});
 			return true;
 		}
@@ -380,13 +409,48 @@ public final class Recorder {
 		}
 		private void finishManual(int at) {
 			Stream stream = manual;
+			Journal owner = journal;
 			Consumer<File> done = manualDone;
 			manual = null;
+			journal = null;
 			manualDone = null;
-			saveLater(stream == null ? java.util.Collections.emptyList() : java.util.Collections.singletonList(stream),
-					0, Math.max(0, at - manualBase), Lang.t("replay.recording"), null, done,
-					new java.util.ArrayList<Integer>(manualMarkers));
-			if (stream != null) stream.delete();
+			if (stream == null) return;
+			try {
+				Snapshot view = stream.view();
+				Checkpoint cp = recordingCheckpoint(view, at);
+				owner.write(cp);
+				stream.close();
+				pendingSaves.incrementAndGet();
+				saves.execute(() -> {
+					File file = null;
+					try {
+						if (view.packetBytes != 0) file = writeArchive(view, 0, cp.meta, cp.extras, null, owner.output(savedDir));
+					} catch (IOException | RuntimeException e) {
+						log.accept("replay: save failed: " + e); // i18n-ignore
+					} finally {
+						owner.close(file != null || view.packetBytes == 0);
+						pendingSaves.decrementAndGet();
+					}
+					if (done != null) done.accept(file);
+				});
+			} catch (IOException e) {
+				stream.close();
+				owner.close(false); // The last complete checkpoint is still recoverable.
+				log.accept("replay: recording checkpoint failed: " + e); // i18n-ignore
+				if (done != null) done.accept(null);
+			}
+		}
+
+		private void checkpoint(int at) throws IOException {
+			Snapshot view = manual.view();
+			journal.write(recordingCheckpoint(view, at));
+			manualDiskBytes = manual.diskBytes();
+			checkpointAt = at;
+		}
+
+		private Checkpoint recordingCheckpoint(Snapshot view, int at) {
+			int duration = Math.max(0, at - manualBase);
+			return new Checkpoint(metadata(duration, manualDate), extras(duration, new java.util.ArrayList<Integer>(manualMarkers)), view);
 		}
 		public synchronized void end() {
 			if (ended) return;
@@ -434,47 +498,171 @@ public final class Recorder {
 		}
 		private File save(Snapshot stream, int from, int to, String kind, byte[] thumbnail, java.util.List<Integer> markers) {
 			if (stream == null || stream.packetBytes == 0) return null;
+			try {
+				return writeArchive(stream, from, metadata(to - from, System.currentTimeMillis()), extras(to - from, markers), thumbnail,
+						new File(savedDir, archiveName(kind)));
+			} catch (IOException | RuntimeException e) {
+				log.accept("replay: save failed: " + e); return null; // i18n-ignore
+			}
+		}
+
+		private String archiveName(String kind) {
 			String where = server.replaceAll("[^A-Za-z0-9 ._-]", "_").trim();
 			if (where.length() > 40) where = where.substring(0, 40).trim();
 			String when = LocalClock.formatter("yyyy-MM-dd HH-mm-ss-SSS").format(new Date());
-			File out = new File(savedDir, (where.isEmpty() ? "Replay" : where) + " " + when + " " + kind + " " + UUID.randomUUID().toString().substring(0, 8) + ".mcpr");
-			File part = new File(out.getPath() + ".part");
-			try {
-				savedDir.mkdirs();
-				ReplayMeta meta = new ReplayMeta();
-				meta.singleplayer = singleplayer; meta.serverName = server; meta.duration = to - from;
-				meta.date = System.currentTimeMillis(); meta.protocol = protocol; meta.selfId = selfId; meta.mcversion = mcVersion;
-				ReplayMeta.Extras extras = new ReplayMeta.Extras();
-				extras.selfName = selfName; extras.selfUuid = selfUuid == null ? null : selfUuid.toString();
-				extras.clipSeconds = clipSeconds.getAsInt(); extras.moments.add(to - from);
-				extras.markers = markers;
-				try (ZipOutputStream zip = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(part), BUFFER))) {
-					zip.setLevel(6);
-					// Batch packet headers, entity updates and track fields before ZIP compression.
-					// Buffering only the file underneath ZIP still calls zlib for every tiny write.
-					DataOutputStream track = new DataOutputStream(new BufferedOutputStream(zip, BUFFER));
-					entry(zip, META_ENTRY, GSON.toJson(meta).getBytes(StandardCharsets.UTF_8));
-					entry(zip, EXTRAS_ENTRY, GSON.toJson(extras).getBytes(StandardCharsets.UTF_8));
-					zip.putNextEntry(new ZipEntry(PACKETS_ENTRY));
-					if (from == 0) {
-						try (InputStream in = stream.packets()) { copyLength(in, track, stream.packetBytes); }
-					} else copyRange(stream, track, null, from, to, from, sorter.get(), null);
-					track.flush();
-					zip.closeEntry();
-					zip.putNextEntry(new ZipEntry(SELF_ENTRY));
-					copySelf(stream, track, from, to, from, null);
-					track.flush();
-					zip.closeEntry();
-					zip.putNextEntry(new ZipEntry(AudioEvent.ENTRY));
-					copyAudio(stream, track, from, to, from, null);
-					track.flush();
-					zip.closeEntry();
-					if (thumbnail != null) entry(zip, THUMB_ENTRY, thumbnail);
+			return (where.isEmpty() ? "Replay" : where) + " " + when + " " + kind.replaceAll("[\\\\/:*?\"<>|]", "_")
+					+ " " + UUID.randomUUID().toString().substring(0, 8) + ".mcpr";
+		}
+
+		private ReplayMeta metadata(int duration, long recordedAt) {
+			ReplayMeta meta = new ReplayMeta();
+			meta.singleplayer = singleplayer; meta.serverName = server; meta.duration = duration;
+			meta.date = recordedAt; meta.protocol = protocol; meta.selfId = selfId; meta.mcversion = mcVersion;
+			return meta;
+		}
+
+		private ReplayMeta.Extras extras(int duration, java.util.List<Integer> markers) {
+			ReplayMeta.Extras extras = new ReplayMeta.Extras();
+			extras.selfName = selfName; extras.selfUuid = selfUuid == null ? null : selfUuid.toString();
+			extras.clipSeconds = clipSeconds.getAsInt(); extras.moments.add(duration);
+			extras.markers = markers;
+			return extras;
+		}
+	}
+
+	private File writeArchive(Snapshot stream, int from, ReplayMeta meta, ReplayMeta.Extras extras, byte[] thumbnail, File out) throws IOException {
+		int to = from + meta.duration;
+		File part = new File(out.getPath() + ".part");
+		Files.createDirectories(savedDir.toPath());
+		try {
+			try (ZipOutputStream zip = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(part), BUFFER))) {
+				zip.setLevel(6);
+				// Batch track writes before calling zlib.
+				DataOutputStream track = new DataOutputStream(new BufferedOutputStream(zip, BUFFER));
+				entry(zip, META_ENTRY, GSON.toJson(meta).getBytes(StandardCharsets.UTF_8));
+				entry(zip, EXTRAS_ENTRY, GSON.toJson(extras).getBytes(StandardCharsets.UTF_8));
+				zip.putNextEntry(new ZipEntry(PACKETS_ENTRY));
+				if (from == 0) {
+					try (InputStream in = stream.packets()) { copyLength(in, track, stream.packetBytes); }
+				} else copyRange(stream, track, null, from, to, from, sorter.get(), null);
+				track.flush();
+				zip.closeEntry();
+				zip.putNextEntry(new ZipEntry(SELF_ENTRY));
+				copySelf(stream, track, from, to, from, null);
+				track.flush();
+				zip.closeEntry();
+				zip.putNextEntry(new ZipEntry(AudioEvent.ENTRY));
+				copyAudio(stream, track, from, to, from, null);
+				track.flush();
+				zip.closeEntry();
+				if (thumbnail != null) entry(zip, THUMB_ENTRY, thumbnail);
+			}
+			Files.move(part.toPath(), out.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+			return out;
+		} finally {
+			Files.deleteIfExists(part.toPath());
+		}
+	}
+
+	private void recoverRecordings() {
+		File[] dirs = recoveryDir.listFiles(File::isDirectory);
+		if (dirs == null) return;
+		for (File dir : dirs) {
+			// Only the process that owns the lock can read or discard a take.
+			File lockFile = new File(dir, "owner");
+			// The creator takes the lock before creating any track files.
+			if (!lockFile.isFile() || !new File(dir, "take.audio").isFile()) continue;
+			boolean recovered = false;
+			try (FileChannel lock = FileChannel.open(lockFile.toPath(), StandardOpenOption.WRITE)) {
+				try (FileLock claim = lock.tryLock()) {
+					if (claim == null) continue;
+					File file = new File(dir, "checkpoint.json");
+					if (file.isFile()) {
+						Checkpoint cp;
+						try (Reader in = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
+							cp = GSON.fromJson(in, Checkpoint.class);
+						}
+						if (cp == null || cp.meta == null || cp.extras == null || cp.output == null || !cp.output.endsWith(".mcpr")
+								|| !cp.output.equals(new File(cp.output).getName())) throw new IOException("Invalid replay checkpoint");
+						File out = new File(savedDir, cp.output);
+						if (!out.isFile() && cp.packetBytes > 0) {
+							writeArchive(cp.snapshot(dir), 0, cp.meta, cp.extras, null, out);
+							log.accept("replay: recovered " + out.getName()); // i18n-ignore
+						}
+					}
+					Journal.clear(dir);
+					recovered = true;
 				}
-				Files.move(part.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING);
-				return out;
+			} catch (OverlappingFileLockException ignored) {
+				// Another recorder in this process owns the take.
 			} catch (IOException | RuntimeException e) {
-				part.delete(); log.accept("replay: save failed: " + e); return null; // i18n-ignore
+				log.accept("replay: recovery could not finish " + dir.getName() + ": " + e); // i18n-ignore
+			}
+			if (recovered) {
+				lockFile.delete();
+				dir.delete();
+			}
+		}
+	}
+
+	/** Lengths published only after all tracks are flushed, so a partial tail is never read. */
+	private static final class Checkpoint {
+		final ReplayMeta meta;
+		final ReplayMeta.Extras extras;
+		final long packetBytes, selfBytes, audioCount, audioBytes;
+		String output;
+
+		Checkpoint(ReplayMeta meta, ReplayMeta.Extras extras, Snapshot view) {
+			this.meta = meta;
+			this.extras = extras;
+			packetBytes = view.packetBytes;
+			selfBytes = view.selfBytes;
+			audioCount = view.audioCount;
+			audioBytes = view.audioBytes;
+		}
+
+		Snapshot snapshot(File dir) {
+			return new Snapshot(new File(dir, "take.tmcpr"), new File(dir, "take.self"), new File(dir, "take.audio"),
+					packetBytes, selfBytes, audioCount, audioBytes);
+		}
+	}
+
+	private static final class Journal {
+		final File dir;
+		private final String output;
+		private final FileChannel lock;
+
+		Journal(File parent, String output) throws IOException {
+			this.output = output;
+			Files.createDirectories(parent.toPath());
+			dir = new File(parent, UUID.randomUUID().toString());
+			Files.createDirectory(dir.toPath());
+			lock = FileChannel.open(new File(dir, "owner").toPath(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+			try { lock.lock(); } catch (IOException | RuntimeException e) { lock.close(); throw e; }
+		}
+
+		File output(File parent) { return new File(parent, output); }
+
+		void write(Checkpoint cp) throws IOException {
+			cp.output = output;
+			File next = new File(dir, "checkpoint.next");
+			Files.write(next.toPath(), GSON.toJson(cp).getBytes(StandardCharsets.UTF_8));
+			Files.move(next.toPath(), new File(dir, "checkpoint.json").toPath(), StandardCopyOption.ATOMIC_MOVE,
+					StandardCopyOption.REPLACE_EXISTING);
+		}
+
+		void close(boolean discard) {
+			if (discard) clear(dir);
+			try { lock.close(); } catch (IOException ignored) {}
+			if (discard) {
+				new File(dir, "owner").delete();
+				dir.delete();
+			}
+		}
+
+		static void clear(File dir) {
+			for (String name : new String[] {"checkpoint.json", "checkpoint.next", "take.tmcpr", "take.self", "take.audio"}) {
+				new File(dir, name).delete();
 			}
 		}
 	}
@@ -519,16 +707,19 @@ public final class Recorder {
 		long selfBytes;
 		private int readers;
 		private boolean retired;
+		private boolean closed;
 		Snapshot view() throws IOException { flush(); return new Snapshot(packetFile, selfFile, audioFile, packetBytes, selfBytes, audioCount, audioCounter.bytes); }
 		synchronized void retain() { readers++; }
 		synchronized void release() { readers--; removeRetired(); }
 		private void removeRetired() { if (retired && readers == 0) { packetFile.delete(); selfFile.delete(); audioFile.delete(); } }
 		Stream() throws IOException {
-			tempDir.mkdirs();
-			String id = UUID.randomUUID().toString();
-			packetFile = new File(tempDir, id + ".tmcpr");
-			selfFile = new File(tempDir, id + ".self");
-			audioFile = new File(tempDir, id + ".audio");
+			this(tempDir, UUID.randomUUID().toString());
+		}
+		Stream(File dir, String id) throws IOException {
+			Files.createDirectories(dir.toPath());
+			packetFile = new File(dir, id + ".tmcpr");
+			selfFile = new File(dir, id + ".self");
+			audioFile = new File(dir, id + ".audio");
 			audioCounter = new CountedOutput(new BufferedOutputStream(new DeflaterOutputStream(new BufferedOutputStream(new FileOutputStream(audioFile), BUFFER / 8), audioDeflater, BUFFER / 8, true), BUFFER / 8));
 			audio = new DataOutputStream(audioCounter);
 			// Batch small entity updates before entering zlib; crowded worlds send thousands per tick.
@@ -543,10 +734,15 @@ public final class Recorder {
 		synchronized void delete() {
 			if (retired) return;
 			retired = true;
+			close();
+			removeRetired();
+		}
+		void close() {
+			if (closed) return;
+			closed = true;
 			try { packets.close(); } catch (IOException ignored) {} finally { deflater.end(); }
 			try { self.close(); } catch (IOException ignored) {}
 			try { audio.close(); } catch (IOException ignored) {} finally { audioDeflater.end(); }
-			removeRetired();
 		}
 	}
 

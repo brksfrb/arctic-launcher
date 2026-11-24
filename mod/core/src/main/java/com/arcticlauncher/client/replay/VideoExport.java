@@ -44,11 +44,18 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 	private Thread writer;
 	private File audioReplay;
 	private ReplayBackend audioBackend;
+	private java.util.function.DoubleUnaryOperator audioTimeMap;
 	private boolean interleavedAudio;
 	private java.net.ServerSocket audioServer;
 	private volatile java.net.Socket audioSocket;
 	private Thread audioWriter;
-	void audio(File replay, ReplayBackend backend) { audioReplay = replay; audioBackend = backend; }
+	void audio(File replay, ReplayBackend backend, java.util.function.DoubleUnaryOperator timeMap) {
+		audioReplay = replay;
+		audioBackend = backend;
+		audioTimeMap = timeMap;
+	}
+
+	double recordedTime(double at) { return audioTimeMap == null ? at : audioTimeMap.applyAsDouble(at); }
 	private int audioFrames(long frame) {
 		return (int) (((frame + 1) * AudioMix.RATE / fps) - (frame * AudioMix.RATE / fps));
 	}
@@ -215,7 +222,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 
 	private void write(WritableByteChannel out) {
 		long written = 0;
-		try (AudioMix audio = interleavedAudio ? new AudioMix(audioReplay, audioBackend, from) : null) {
+		try (AudioMix audio = interleavedAudio ? new AudioMix(audioReplay, audioBackend, from, audioTimeMap) : null) {
 			while (true) {
 				ByteBuffer f = frames.poll(200, TimeUnit.MILLISECONDS);
 				if (f != null) {
@@ -249,7 +256,7 @@ public final class VideoExport implements ReplayBackend.FrameSink {
 	private void writeAudio() {
 		try (java.net.ServerSocket server = audioServer;
 				java.net.Socket socket = server.accept();
-				AudioMix mix = new AudioMix(audioReplay, audioBackend, from)) {
+				AudioMix mix = new AudioMix(audioReplay, audioBackend, from, audioTimeMap)) {
 			audioSocket = socket;
 			java.io.OutputStream out = socket.getOutputStream();
 			long total = (long) Math.floor((to - from) * (double) fps / 1000) + 1;

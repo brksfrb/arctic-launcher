@@ -89,6 +89,20 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 	}
 
 	@Override
+	public void prepareOpen() {
+		// This cache fills 65,535 slots the first time terrain visibility uses it.
+		net.minecraft.util.collection.IntegerStorage.get(1);
+		// EmbeddedChannel initializes Netty's allocator, event loop and pipeline.
+		com.arcticlauncher.client.replay.ReplayChannel.open(new io.netty.channel.ChannelInboundHandlerAdapter()).finish();
+		for (Class<?> type : new Class<?>[] {ClientLoginNetworkHandler.class, ClientPlayNetworkHandler.class,
+				ClientWorld.class, net.minecraft.client.network.ClientPlayerInteractionManager.class,
+				net.minecraft.client.render.BuiltChunkStorage.class, net.minecraft.client.world.BuiltChunk.class,
+				net.minecraft.client.render.world.ChunkRenderHelperImpl.class, net.minecraft.client.render.chunk.ChunkOcclusionDataBuilder.class}) {
+			type.getName();
+		}
+	}
+
+	@Override
 	public String start(ReplayData data) {
 		leaveWorld();
 		return connect();
