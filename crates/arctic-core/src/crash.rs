@@ -4530,6 +4530,21 @@ mod tests {
     }
 
     #[test]
+    fn recovered_gl_frame_wait_after_reported_exception_does_not_show_driver_banner() {
+        let log = concat!(
+            "[Render thread/ERROR] Reported exception thrown!\n",
+            "    java.lang.NullPointerException: Rendering screen\n",
+            "    \tat net.minecraft.client.Minecraft.runTick(Minecraft.java:1274)\n",
+            "[Render thread/WARN] Caught and recovered\n",
+            "java.lang.IllegalStateException: Failed to wait for frame completion\n",
+            "\tat knot//com.mojang.blaze3d.opengl.GlCommandEncoder.submit(GlCommandEncoder.java:94)",
+        );
+        assert!(
+            diagnose(log).is_none_or(|diagnosis| diagnosis.title != GRAPHICS_DRIVER_HANG_TITLE)
+        );
+    }
+
+    #[test]
     fn report_489_explains_the_gl_fence_hang_and_skips_background_requests() {
         let (log, exit) = HANG_489.rsplit_once("\n(exit code ").unwrap();
         let exit = format!("(exit code {exit}");

@@ -298,7 +298,8 @@ pub(crate) fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
         let head = HEAD.get_or_init(|| {
             Regex::new(r#"^(?:Exception in thread "[^"]*" )?[\w$]+(?:\.[\w$]+)+(?::.*)?$"#).unwrap()
         });
-        // The last exception head followed by stack frames. Fabric can indent the whole trace.
+        // Prefer the stack introduced by the fatal marker (Fabric can indent the whole trace).
+        // Otherwise use the last exception head followed by stack frames.
         let mut start = None;
         let mut pos = 0;
         let mut after_reported = false;
@@ -314,6 +315,9 @@ pub(crate) fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
             };
             if next_is_frame && head.is_match(header) && !secondary_mod_failure(line) {
                 start = Some(pos);
+                if after_reported {
+                    break;
+                }
             }
             after_reported = line.trim_end().ends_with("Reported exception thrown!");
             pos += line.len();
