@@ -1142,8 +1142,62 @@ pub(crate) fn diagnose_with_java(
 
 const VANILLA_CRASH: &str = "[Arctic diagnostics] vanilla crash";
 const VANILLA_CRASH_TRACE: &str = "[Arctic diagnostics] vanilla crash trace ";
+const DISK_FULL_TITLE: &str = "Your disk is full";
 pub(crate) const SAVE_FAILED_TITLE: &str =
     "Minecraft crashed while starting and couldn't save its crash report";
+
+pub(crate) fn disk_full_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    static DISK_FULL: OnceLock<Regex> = OnceLock::new();
+    static WINDOWS_DRIVE: OnceLock<Regex> = OnceLock::new();
+    let disk_full = DISK_FULL.get_or_init(|| {
+        Regex::new(
+            r"(?i)there is not enough space on the disk|no space left on device|\bos error (?:112|28)\b|\bIOException:[ \t]*disk full\b",
+        )
+        .unwrap()
+    });
+    let drive_in = |line| {
+        let drives = WINDOWS_DRIVE.get_or_init(|| Regex::new(r"\b[A-Za-z]:[/\\]").unwrap());
+        drives
+            .find(line)
+            .map(|drive| drive.as_str()[..2].to_ascii_uppercase())
+    };
+
+    let mut previous = "";
+    let mut evidence = None;
+    let mut drive = None;
+    for line in text.lines() {
+        if disk_full.is_match(line) {
+            evidence.get_or_insert(line);
+            // Java can log the failed write's path on the line above the exception.
+            drive = drive_in(line).or_else(|| {
+                (previous.contains("Could not save crash report to ")
+                    || previous.starts_with("[Arctic diagnostics] vanilla crash save failed: "))
+                .then(|| drive_in(previous))
+                .flatten()
+            });
+            if drive.is_some() {
+                evidence = Some(line);
+                break;
+            }
+        }
+        previous = line;
+    }
+    let evidence = head_of(evidence?.trim(), 2048);
+    let drive = drive.map_or_else(
+        || "the drive".to_owned(),
+        |drive| format!("the {drive} drive"),
+    );
+    Some((
+        Diagnosis::new(
+            DISK_FULL_TITLE,
+            format!(
+                "Minecraft couldn't write files because {drive} is out of space. Free up some space and try again."
+            ),
+            Vec::new(),
+        ),
+        evidence.to_owned(),
+    ))
+}
 
 pub(crate) fn vanilla_crash_save_failed(text: &str, code: i32) -> Option<&str> {
     // POSIX process exit statuses carry only the low byte of Java's -2.
@@ -1766,6 +1820,9 @@ fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
 }
 
 fn diagnose_crash_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
+    if let Some(disk_full) = disk_full_diagnosis(text) {
+        return Some(disk_full);
+    }
     if let Some(caller) = logged_vanilla_crash_save_failure(text) {
         let captured = captured_vanilla_crash(text);
         let (cause, matched) = captured
@@ -2902,7 +2959,12 @@ impl Report {
             loader: loader.to_owned(),
             os: std::env::consts::OS.to_owned(),
             title: scrub(
-                if failed_save {
+                if diagnosis
+                    .as_ref()
+                    .is_some_and(|(d, _)| d.title == DISK_FULL_TITLE)
+                {
+                    DISK_FULL_TITLE
+                } else if failed_save {
                     SAVE_FAILED_TITLE
                 } else if sodium_driver.is_some() {
                     SODIUM_DRIVER_TITLE
@@ -4061,6 +4123,106 @@ mod tests {
                 .contains("save trace java.nio.file.AccessDeniedException: <home>")
         );
         assert!(report.log.len() < 48 * 1024);
+    }
+
+    const SHADERC_MISSING_515: &str = "\
+java.lang.UnsatisfiedLinkError: Failed to locate library: shaderc.dll\n\
+    \tat org.lwjgl.util.shaderc.Shaderc.<clinit>(Shaderc.java:22)\n\
+    \tat com.mojang.blaze3d.platform.NativeLibrariesBootstrap.loadShaderc(NativeLibrariesBootstrap.java:325)";
+
+    #[test]
+    fn crash_515_disk_full_outranks_missing_shaderc_and_failed_save() {
+        // The uploaded log redacts the home directory. Use a sample drive for the local log.
+        let log = format!(
+            "{SHADERC_MISSING_515}\n{}",
+            r"[07:03:12] [main/ERROR] Could not save crash report to D:\Game\crash-reports\crash-2026-11-24_07.03.12-client.txt
+    java.io.IOException: There is not enough space on the disk
+[Arctic diagnostics] exit caller vanilla knot//net.minecraft.client.Minecraft.crash(Minecraft.java:1051)
+[Arctic diagnostics] process ended after 8658 ms; exit code -2 (0xFFFFFFFE; no known NTSTATUS name)"
+        );
+        let mods = tempfile::tempdir().unwrap();
+        let diagnosis = diagnose(&log).unwrap();
+        assert_eq!(diagnosis.title, DISK_FULL_TITLE);
+        assert!(diagnosis.detail.contains("the D: drive"));
+        assert!(
+            diagnosis
+                .detail
+                .contains("Free up some space and try again.")
+        );
+        assert_eq!(diagnosis.fix, None);
+        assert!(!diagnosis.repair);
+        assert_eq!(
+            crate::crash_conflicts::diagnose_exit_in(&log, -2, mods.path()),
+            Some(diagnosis.clone())
+        );
+        assert_eq!(
+            crate::crash_conflicts::diagnose_in(&log, mods.path()),
+            Some(diagnosis)
+        );
+        let report = Report::build(
+            "26.2",
+            "vanilla",
+            SAVE_FAILED_TITLE,
+            &[&log],
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(report.title, DISK_FULL_TITLE);
+        assert!(
+            report
+                .log
+                .contains("matched: java.io.IOException: There is not enough space on the disk")
+        );
+    }
+
+    #[test]
+    fn disk_full_matches_unix_and_java_errors_over_version_errors() {
+        let version_error = "---- Minecraft Crash Report ----\n\njava.lang.NoSuchMethodError: 'void example.Mod.start()'";
+        assert_eq!(
+            diagnose(version_error).unwrap().title,
+            "A mod is for a different version"
+        );
+        for error in [
+            // OpenJDK on Linux writing to /dev/full.
+            "Exception in thread \"main\" java.io.IOException: No space left on device\n\tat java.base/java.io.FileOutputStream.write(Native Method)",
+            "[WARN] arctic session file: I/O error at /home/player/game/config/arctic-session.json.tmp: write failed (os error 28)",
+            "java.io.IOException: disk full",
+        ] {
+            let log = format!("{version_error}\n{error}");
+            let diagnosis = diagnose(&log).unwrap();
+            assert_eq!(diagnosis.title, DISK_FULL_TITLE);
+            assert!(diagnosis.detail.contains("the drive is out of space"));
+        }
+    }
+
+    #[test]
+    fn disk_full_matches_windows_os_error_and_its_drive() {
+        let launcher_line = r"[WARN] arctic session file: I/O error at e:\Game\config\arctic-session.json.tmp: write failed (os error 112)";
+        let report = Report::build(
+            "1.8.9",
+            "vanilla",
+            "unknown",
+            &[SHADERC_MISSING_515],
+            &[launcher_line],
+            None,
+            None,
+        );
+        assert_eq!(report.title, DISK_FULL_TITLE);
+        assert!(
+            diagnose(launcher_line)
+                .unwrap()
+                .detail
+                .contains("the E: drive")
+        );
+    }
+
+    #[test]
+    fn missing_shaderc_without_disk_full_keeps_its_diagnosis() {
+        assert!(diagnose(SHADERC_MISSING_515).is_none());
+        for other_error in ["os error 1120", "os error 280"] {
+            assert!(diagnose(&format!("{SHADERC_MISSING_515}\n{other_error}")).is_none());
+        }
     }
 
     #[test]

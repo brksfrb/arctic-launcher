@@ -1021,6 +1021,9 @@ pub(crate) fn diagnose_config<'a>(
 
 /// `crash::diagnose` plus the clash check against the mods in `mods_dir`.
 pub fn diagnose_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
+    if let Some((disk_full, _)) = crate::crash::disk_full_diagnosis(text) {
+        return Some(disk_full);
+    }
     if crate::crash::logged_vanilla_crash_save_failure(text).is_some() {
         return diagnose_exit_in(text, -2, mods_dir);
     }
@@ -1076,6 +1079,9 @@ pub fn diagnose_exit_in_with_java(
     mods_dir: &Path,
     java: Option<&str>,
 ) -> Option<Diagnosis> {
+    if let Some((disk_full, _)) = crate::crash::disk_full_diagnosis(text) {
+        return Some(disk_full);
+    }
     let mods = scan(mods_dir);
     let diagnosis = if crate::crash::vanilla_crash_save_failed(text, code).is_some() {
         let cause = crate::crash::captured_vanilla_crash(text)
