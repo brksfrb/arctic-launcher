@@ -114,6 +114,12 @@ fn unusable_copies(mods_dir: &Path, game_version: &str) -> Vec<PathBuf> {
         .collect()
 }
 
+/// Whether a copy that can't run on `game_version` is still in the folder after [`sync`] (it
+/// could not be put aside: held by another program, say).
+pub(super) fn unusable_left(mods_dir: &Path, game_version: &str) -> bool {
+    !unusable_copies(mods_dir, game_version).is_empty()
+}
+
 /// Put Polarium in `mods_dir` (when `enabled`, there's a build for the
 /// version and the player hasn't their own) or take it out.
 pub fn sync(mods_dir: &Path, game_version: &str, enabled: bool) -> Result<()> {

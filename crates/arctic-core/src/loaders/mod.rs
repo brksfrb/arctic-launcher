@@ -145,6 +145,12 @@ pub fn install_profile(
     }
 }
 
+/// Whether [`install_profile`] for this loader is one small download that needs neither Java
+/// nor the vanilla client jar, so it can run while the vanilla files are still being fetched.
+pub fn profile_needs_no_game_files(kind: LoaderKind) -> bool {
+    matches!(kind, LoaderKind::Fabric | LoaderKind::Quilt)
+}
+
 /// Catch a NeoForge build picked for the wrong Minecraft version early,
 /// with a clear message instead of a failing installer.
 fn check_neoforge_target(loader_version: &str, game: &str) -> Result<()> {

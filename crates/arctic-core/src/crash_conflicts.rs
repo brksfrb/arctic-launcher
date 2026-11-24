@@ -311,9 +311,19 @@ pub(crate) const FABRIC_MIXIN_APPLY_FAILURE: &str = r"Mixin apply for mod ([\w-]
 pub(crate) const MIXIN_APPLY_FAILURE: &str = r"Mixin \[[^\]\r\n]+\] from mod ([\w-]+) failed\b";
 
 pub(crate) fn mixin_warning(line: &str) -> bool {
-    line.trim_start().starts_with("@Mixin target ")
-        || line.contains("/WARN]")
-        || line.contains("[WARN]")
+    if line.contains("/WARN]") || line.contains("[WARN]") || warning_log_line(line) {
+        return true;
+    }
+    // A bare target probe can have logger prefixes, while a real failure can quote the probe
+    // after an exception type. Only inspect the start of the message.
+    let mut message = line.trim_start().trim_start_matches("matched: ");
+    while let Some((_, rest)) = message
+        .strip_prefix('[')
+        .and_then(|prefix| prefix.split_once(']'))
+    {
+        message = rest.trim_start_matches(':').trim_start();
+    }
+    message.starts_with("@Mixin target ")
 }
 
 /// Prefer the explicit owner in the deepest injection error over outer transformation failures.
@@ -626,7 +636,7 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
 pub(crate) fn preprocessing_class_failure(text: &str) -> bool {
     let text = crate::crash::crash_exception(text).unwrap_or(text);
     text.lines()
-        .any(|line| line.contains("ClassNotFoundException") && !warning_log_line(line))
+        .any(|line| line.contains("ClassNotFoundException") && !mixin_warning(line))
         && text.lines().any(|line| {
             [
                 "MixinTransformerError",
@@ -635,7 +645,7 @@ pub(crate) fn preprocessing_class_failure(text: &str) -> bool {
             ]
             .iter()
             .any(|marker| line.contains(marker))
-                && !warning_log_line(line)
+                && !mixin_warning(line)
         })
 }
 
@@ -1021,6 +1031,9 @@ pub(crate) fn diagnose_config<'a>(
 
 /// `crash::diagnose` plus the clash check against the mods in `mods_dir`.
 pub fn diagnose_in(text: &str, mods_dir: &Path) -> Option<Diagnosis> {
+    if let Some((disk_full, _)) = crate::crash::disk_full_diagnosis(text) {
+        return Some(disk_full);
+    }
     if crate::crash::logged_vanilla_crash_save_failure(text).is_some() {
         return diagnose_exit_in(text, -2, mods_dir);
     }
@@ -1076,6 +1089,9 @@ pub fn diagnose_exit_in_with_java(
     mods_dir: &Path,
     java: Option<&str>,
 ) -> Option<Diagnosis> {
+    if let Some((disk_full, _)) = crate::crash::disk_full_diagnosis(text) {
+        return Some(disk_full);
+    }
     let mods = scan(mods_dir);
     let diagnosis = if crate::crash::vanilla_crash_save_failed(text, code).is_some() {
         let cause = crate::crash::captured_vanilla_crash(text)

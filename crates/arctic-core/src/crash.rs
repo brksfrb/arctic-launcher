@@ -8,6 +8,7 @@ use regex::Regex;
 use sha2::{Digest, Sha256};
 
 use crate::launch::args::{CUSTOM_MAX_HEAP_SOURCE, heap_size_mb};
+use crate::launch::exit_diagnostics::ExitDiagnostics;
 
 /// A fix the launcher can do for the player in one click (see `crash_fix`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1142,8 +1143,62 @@ pub(crate) fn diagnose_with_java(
 
 const VANILLA_CRASH: &str = "[Arctic diagnostics] vanilla crash";
 const VANILLA_CRASH_TRACE: &str = "[Arctic diagnostics] vanilla crash trace ";
+const DISK_FULL_TITLE: &str = "Your disk is full";
 pub(crate) const SAVE_FAILED_TITLE: &str =
     "Minecraft crashed while starting and couldn't save its crash report";
+
+pub(crate) fn disk_full_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    static DISK_FULL: OnceLock<Regex> = OnceLock::new();
+    static WINDOWS_DRIVE: OnceLock<Regex> = OnceLock::new();
+    let disk_full = DISK_FULL.get_or_init(|| {
+        Regex::new(
+            r"(?i)there is not enough space on the disk|no space left on device|\bos error (?:112|28)\b|\bIOException:[ \t]*disk full\b",
+        )
+        .unwrap()
+    });
+    let drive_in = |line| {
+        let drives = WINDOWS_DRIVE.get_or_init(|| Regex::new(r"\b[A-Za-z]:[/\\]").unwrap());
+        drives
+            .find(line)
+            .map(|drive| drive.as_str()[..2].to_ascii_uppercase())
+    };
+
+    let mut previous = "";
+    let mut evidence = None;
+    let mut drive = None;
+    for line in text.lines() {
+        if disk_full.is_match(line) {
+            evidence.get_or_insert(line);
+            // Java can log the failed write's path on the line above the exception.
+            drive = drive_in(line).or_else(|| {
+                (previous.contains("Could not save crash report to ")
+                    || previous.starts_with("[Arctic diagnostics] vanilla crash save failed: "))
+                .then(|| drive_in(previous))
+                .flatten()
+            });
+            if drive.is_some() {
+                evidence = Some(line);
+                break;
+            }
+        }
+        previous = line;
+    }
+    let evidence = head_of(evidence?.trim(), 2048);
+    let drive = drive.map_or_else(
+        || "the drive".to_owned(),
+        |drive| format!("the {drive} drive"),
+    );
+    Some((
+        Diagnosis::new(
+            DISK_FULL_TITLE,
+            format!(
+                "Minecraft couldn't write files because {drive} is out of space. Free up some space and try again."
+            ),
+            Vec::new(),
+        ),
+        evidence.to_owned(),
+    ))
+}
 
 pub(crate) fn vanilla_crash_save_failed(text: &str, code: i32) -> Option<&str> {
     // POSIX process exit statuses carry only the low byte of Java's -2.
@@ -1766,6 +1821,9 @@ fn diagnose_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)>
 }
 
 fn diagnose_crash_match(text: &str, java: Option<&str>) -> Option<(Diagnosis, String)> {
+    if let Some(disk_full) = disk_full_diagnosis(text) {
+        return Some(disk_full);
+    }
     if let Some(caller) = logged_vanilla_crash_save_failure(text) {
         let captured = captured_vanilla_crash(text);
         let (cause, matched) = captured
@@ -1829,6 +1887,83 @@ fn launchwrapper_java_mismatch(text: &str) -> Option<(Diagnosis, String)> {
     ))
 }
 
+fn damaged_jar_diagnosis(text: &str, mods_dir: Option<&Path>) -> Option<(Diagnosis, String)> {
+    static READING_JAR: OnceLock<Regex> = OnceLock::new();
+    static BROKEN_ZIP: OnceLock<Regex> = OnceLock::new();
+    let reading_jar = READING_JAR.get_or_init(|| {
+        Regex::new(r#"(?i)\berror reading[ \t]+["']?(.+?\.jar)(?:["']?[ \t]*$|["']?[:!)])"#)
+            .unwrap()
+    });
+    let broken_zip = BROKEN_ZIP.get_or_init(|| {
+        Regex::new(
+            r"(?i)\bZipException:[ \t]+(?:zip END header not found|invalid LOC header|zip file is empty)\b",
+        )
+        .unwrap()
+    });
+    let mut suspect = None;
+    for line in text.lines().map(str::trim_start) {
+        let broken = broken_zip.is_match(line);
+        if let Some(reading) = reading_jar.captures(line) {
+            suspect = reading.get(1).map(|path| path.as_str());
+        } else if !broken
+            && !["at ", "... ", "Caused by: "]
+                .iter()
+                .any(|prefix| line.starts_with(prefix))
+        {
+            suspect = None;
+        }
+        if broken
+            && let Some(path) = suspect
+            && let Some((file, repair)) = damaged_jar_location(path, mods_dir)
+        {
+            let action = if repair {
+                "Arctic will re-download it on the next launch."
+            } else {
+                "Re-download this mod and replace the damaged file."
+            };
+            return Some((
+                Diagnosis {
+                    repair,
+                    ..Diagnosis::new(
+                        "A game file was damaged",
+                        format!("Minecraft couldn't read {file}. {action}"),
+                        Vec::new(),
+                    )
+                },
+                head_of(line, 2048).to_owned(),
+            ));
+        }
+    }
+    None
+}
+
+fn damaged_jar_location(path: &str, mods_dir: Option<&Path>) -> Option<(String, bool)> {
+    // Logs can come from a different OS and can have their home directory redacted.
+    let normalized = path.replace('\\', "/");
+    let (parent, file) = normalized.rsplit_once('/')?;
+    let folders: Vec<_> = parent.split('/').collect();
+    if folders.contains(&"..") {
+        return None;
+    }
+    let repair = folders.windows(2).any(|pair| {
+        pair[0].eq_ignore_ascii_case("shared")
+            && (pair[1].eq_ignore_ascii_case("libraries")
+                || pair[1].eq_ignore_ascii_case("versions"))
+    });
+    let player_mod = folders.windows(4).any(|part| {
+        part[0].eq_ignore_ascii_case("instances")
+            && part[2].eq_ignore_ascii_case("minecraft")
+            && part[3].eq_ignore_ascii_case("mods")
+    }) || mods_dir.is_some_and(|dir| {
+        let dir = dir.to_string_lossy().replace('\\', "/");
+        normalized
+            .to_ascii_lowercase()
+            .strip_prefix(&dir.to_ascii_lowercase())
+            .is_some_and(|suffix| suffix.starts_with('/'))
+    });
+    (repair || player_mod).then(|| (file.to_owned(), repair))
+}
+
 fn diagnose_rules(
     text: &str,
     java: Option<&str>,
@@ -1843,6 +1978,9 @@ fn diagnose_rules(
     }
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
+    }
+    if let Some(damaged) = damaged_jar_diagnosis(tail_of(text, MAX_TEXT), mods_dir) {
+        return Some(damaged);
     }
     if let Some(mismatch) = launchwrapper_java_mismatch(tail_of(text, MAX_TEXT)) {
         return Some(mismatch);
@@ -2196,6 +2334,49 @@ fn iris_shader_loading_frame(snapshot: &str) -> Option<&str> {
     })
 }
 
+const JEI_RECIPE_LOADING_TITLE: &str = "JEI was still loading recipes";
+
+fn jei_recipe_loading_frame<'a>(text: &'a str, snapshot: &'a str) -> Option<&'a str> {
+    fn loading(frame: &str) -> bool {
+        let Some((class, method)) = freeze_frame(frame)
+            .and_then(|call| call.strip_prefix("mezz.jei."))
+            .and_then(|call| call.rsplit_once('.'))
+        else {
+            return false;
+        };
+        let class = class.rsplit('.').next().unwrap_or(class);
+        class.ends_with("RecipeMaker")
+            || matches!(
+                (class, method),
+                ("JeiStarter", "start")
+                    | ("PluginLoader", "createRecipeManager")
+                    | ("ClientLifecycleHandler", "startJei")
+            )
+    }
+
+    if let Some((_, dump)) = text.rsplit_once("[Arctic diagnostics] hang begin") {
+        // The watchdog puts the client thread first in the dump.
+        let mut lines = dump.lines().skip(1);
+        let thread = lines.next()?.strip_prefix("[Arctic diagnostics] thread ")?;
+        if !matches!(
+            thread,
+            "\"Render thread\" RUNNABLE" | "\"Client thread\" RUNNABLE"
+        ) || dump.contains("[Arctic diagnostics] hang recovered")
+        {
+            return None;
+        }
+        return lines
+            .map_while(|line| line.trim_start().strip_prefix("at "))
+            .find(|frame| loading(frame));
+    }
+    if !snapshot.contains("(still frozen when written)") {
+        return None;
+    }
+    freeze_hot_frames(snapshot)
+        .find(|(percent, frame, _)| (51..=100).contains(percent) && loading(frame))
+        .map(|(_, frame, _)| frame)
+}
+
 const GRAPHICS_DRIVER_HANG_TITLE: &str = "The graphics driver stopped responding";
 
 fn graphics_wait(frame: &str) -> bool {
@@ -2331,6 +2512,16 @@ fn hang_diagnosis(full_text: &str, mods_dir: Option<&Path>) -> Option<(Diagnosis
         })
         .unwrap_or("The run contains an unrecovered watchdog freeze.");
     let snapshot = latest_freeze_snapshot(text);
+    if let Some(frame) = jei_recipe_loading_frame(text, snapshot) {
+        return Some((
+            Diagnosis::new(
+                JEI_RECIPE_LOADING_TITLE,
+                "JEI builds its recipe list when you join a world. This can take several minutes in large modpacks. Give it more time to finish, or remove or replace mods that add very large recipe sets.",
+                vec!["jei".into()],
+            ),
+            format!("{summary}\n{frame}"),
+        ));
+    }
     if !snapshot
         .lines()
         .any(|line| line.starts_with("duration: ") && !line.contains("(still frozen when written)"))
@@ -2460,6 +2651,13 @@ pub struct Report {
     pub ram_free_mb: Option<u64>,
     /// How the player can be reached (their own words, optional); filled in by the app when it sends.
     pub contact: String,
+}
+
+/// Information from the process watcher and the launch plan.
+#[derive(Default)]
+pub struct ReportRun<'a> {
+    pub java: Option<&'a str>,
+    pub diagnostics: Option<&'a ExitDiagnostics>,
 }
 
 /// Lines of the game log's end that are sent.
@@ -2670,6 +2868,30 @@ impl Report {
         crash_report: Option<&str>,
         java: Option<&str>,
     ) -> Self {
+        Self::build_with_run(
+            game,
+            loader,
+            title,
+            lines,
+            launcher_lines,
+            crash_report,
+            ReportRun {
+                java,
+                diagnostics: None,
+            },
+        )
+    }
+
+    pub fn build_with_run(
+        game: &str,
+        loader: &str,
+        title: &str,
+        lines: &[&str],
+        launcher_lines: &[&str],
+        crash_report: Option<&str>,
+        run: ReportRun<'_>,
+    ) -> Self {
+        let java = run.java;
         let own = Own::this_pc();
         let all = lines.join("\n");
         // Reserve the resolved mod inventory and agent failure context before trimming verbose
@@ -2760,6 +2982,22 @@ impl Report {
             {
                 priority.push_str(&scrub(head_of(&diagnosis.detail, 2048), &own));
                 priority.push('\n');
+            }
+        }
+        #[cfg(windows)]
+        {
+            priority.push_str("\n---- Windows ----\n");
+            priority.push_str(&scrub(&crate::system::windows::description(), &own));
+            priority.push('\n');
+        }
+        if let Some(diagnostics) = run.diagnostics {
+            if let Some(dll_report) = diagnostics.dll_report() {
+                priority.push_str("\n---- missing DLL checks ----\n");
+                priority.push_str(&scrub(dll_report, &own));
+            }
+            if diagnostics.output.count() != 0 {
+                priority.push_str("\n---- child stdout/stderr ----\n");
+                priority.push_str(&scrub(&diagnostics.output.report(), &own));
             }
         }
         let vanilla_evidence = all
@@ -2902,7 +3140,12 @@ impl Report {
             loader: loader.to_owned(),
             os: std::env::consts::OS.to_owned(),
             title: scrub(
-                if failed_save {
+                if diagnosis
+                    .as_ref()
+                    .is_some_and(|(d, _)| d.title == DISK_FULL_TITLE)
+                {
+                    DISK_FULL_TITLE
+                } else if failed_save {
                     SAVE_FAILED_TITLE
                 } else if sodium_driver.is_some() {
                     SODIUM_DRIVER_TITLE
@@ -3552,6 +3795,7 @@ mod tests {
     const HANG_436: &str = include_str!("../tests/fixtures/crash-436-customrecipe-hang.log");
     const HANG_487: &str = include_str!("../tests/fixtures/crash-487-iris-shader-hang.log");
     const HANG_489: &str = include_str!("../tests/fixtures/crash-489-gl-fence-hang.log");
+    const HANG_516: &str = include_str!("../tests/fixtures/crash-516-jei-hang.log");
     const FREEZE_440: &str = include_str!("../tests/fixtures/crash-440-create-world-freeze.log");
     const SODIUM_490: &str = include_str!("../tests/fixtures/crash-490-sodium-driver.log");
 
@@ -3799,6 +4043,68 @@ mod tests {
             assert!(!report.log.contains("---- first error ----"));
             assert!(!report.log.contains("---- first exceptions ----"));
         }
+    }
+
+    #[test]
+    fn report_516_explains_the_jei_recipe_loading_freeze() {
+        let (diagnosis, matched) = diagnose_match(HANG_516, None).unwrap();
+        assert_eq!(diagnosis.title, JEI_RECIPE_LOADING_TITLE);
+        assert!(diagnosis.detail.contains("when you join a world"));
+        assert!(diagnosis.detail.contains("several minutes"));
+        assert_eq!(diagnosis.mods, ["jei"]);
+        assert!(diagnosis.fix.is_none());
+        assert!(matched.contains("AnvilRecipeMaker.getAnvilOutput"));
+
+        let mods = tempfile::tempdir().unwrap();
+        assert_eq!(
+            crate::crash_conflicts::diagnose_exit_in(HANG_516, -805306369, mods.path()),
+            Some(diagnosis)
+        );
+        let lines: Vec<_> = HANG_516.lines().collect();
+        let report = Report::build(
+            "1.20.1",
+            "Fabric",
+            "The game froze and was closed",
+            &lines,
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(report.title, JEI_RECIPE_LOADING_TITLE);
+        assert!(report.log.contains("Error: Watchdog freeze at exit"));
+        assert!(report.log.contains(&format!(
+            "---- diagnosis ----\n{JEI_RECIPE_LOADING_TITLE}\nmatched:"
+        )));
+        assert!(!report.log.contains("porting_lib_base failed"));
+        assert!(!report.log.contains("failed to change the game"));
+    }
+
+    #[test]
+    fn jei_recipe_loading_needs_an_active_client_stall() {
+        let (log, dump) = HANG_516.split_once("---- diagnostics ----").unwrap();
+        assert!(diagnose(log).is_none());
+        assert!(diagnose(&format!("{dump}\n[Arctic diagnostics] hang recovered")).is_none());
+
+        let worker_stack = dump.replace("\"Render thread\"", "\"Worker-Main-1\"");
+        let client_stack = dump.replace("\"Render thread\"", "\"Client thread\"");
+        let unrelated_frame = dump.replace("mezz.jei.", "example.not_jei.");
+        for text in [worker_stack, unrelated_frame] {
+            assert_eq!(
+                diagnose(&text).unwrap().title,
+                "The game froze and was closed"
+            );
+        }
+        assert_eq!(
+            diagnose(&client_stack).unwrap().title,
+            JEI_RECIPE_LOADING_TITLE
+        );
+
+        let sample = "---- logs/arctic-freezes/freeze.txt ----\n\
+            duration: 16.0s (still frozen when written)\n\
+            == Where the time went (frames present in the most samples) ==\n\
+            95%  mezz.jei.startup.JeiStarter.start(JeiStarter.java:42)";
+        assert_eq!(diagnose(sample).unwrap().title, JEI_RECIPE_LOADING_TITLE);
+        assert!(diagnose(&sample.replace(" (still frozen when written)", "")).is_none());
     }
 
     #[test]
@@ -4061,6 +4367,106 @@ mod tests {
                 .contains("save trace java.nio.file.AccessDeniedException: <home>")
         );
         assert!(report.log.len() < 48 * 1024);
+    }
+
+    const SHADERC_MISSING_515: &str = "\
+java.lang.UnsatisfiedLinkError: Failed to locate library: shaderc.dll\n\
+    \tat org.lwjgl.util.shaderc.Shaderc.<clinit>(Shaderc.java:22)\n\
+    \tat com.mojang.blaze3d.platform.NativeLibrariesBootstrap.loadShaderc(NativeLibrariesBootstrap.java:325)";
+
+    #[test]
+    fn crash_515_disk_full_outranks_missing_shaderc_and_failed_save() {
+        // The uploaded log redacts the home directory. Use a sample drive for the local log.
+        let log = format!(
+            "{SHADERC_MISSING_515}\n{}",
+            r"[07:03:12] [main/ERROR] Could not save crash report to D:\Game\crash-reports\crash-2026-11-24_07.03.12-client.txt
+    java.io.IOException: There is not enough space on the disk
+[Arctic diagnostics] exit caller vanilla knot//net.minecraft.client.Minecraft.crash(Minecraft.java:1051)
+[Arctic diagnostics] process ended after 8658 ms; exit code -2 (0xFFFFFFFE; no known NTSTATUS name)"
+        );
+        let mods = tempfile::tempdir().unwrap();
+        let diagnosis = diagnose(&log).unwrap();
+        assert_eq!(diagnosis.title, DISK_FULL_TITLE);
+        assert!(diagnosis.detail.contains("the D: drive"));
+        assert!(
+            diagnosis
+                .detail
+                .contains("Free up some space and try again.")
+        );
+        assert_eq!(diagnosis.fix, None);
+        assert!(!diagnosis.repair);
+        assert_eq!(
+            crate::crash_conflicts::diagnose_exit_in(&log, -2, mods.path()),
+            Some(diagnosis.clone())
+        );
+        assert_eq!(
+            crate::crash_conflicts::diagnose_in(&log, mods.path()),
+            Some(diagnosis)
+        );
+        let report = Report::build(
+            "26.2",
+            "vanilla",
+            SAVE_FAILED_TITLE,
+            &[&log],
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(report.title, DISK_FULL_TITLE);
+        assert!(
+            report
+                .log
+                .contains("matched: java.io.IOException: There is not enough space on the disk")
+        );
+    }
+
+    #[test]
+    fn disk_full_matches_unix_and_java_errors_over_version_errors() {
+        let version_error = "---- Minecraft Crash Report ----\n\njava.lang.NoSuchMethodError: 'void example.Mod.start()'";
+        assert_eq!(
+            diagnose(version_error).unwrap().title,
+            "A mod is for a different version"
+        );
+        for error in [
+            // OpenJDK on Linux writing to /dev/full.
+            "Exception in thread \"main\" java.io.IOException: No space left on device\n\tat java.base/java.io.FileOutputStream.write(Native Method)",
+            "[WARN] arctic session file: I/O error at /home/player/game/config/arctic-session.json.tmp: write failed (os error 28)",
+            "java.io.IOException: disk full",
+        ] {
+            let log = format!("{version_error}\n{error}");
+            let diagnosis = diagnose(&log).unwrap();
+            assert_eq!(diagnosis.title, DISK_FULL_TITLE);
+            assert!(diagnosis.detail.contains("the drive is out of space"));
+        }
+    }
+
+    #[test]
+    fn disk_full_matches_windows_os_error_and_its_drive() {
+        let launcher_line = r"[WARN] arctic session file: I/O error at e:\Game\config\arctic-session.json.tmp: write failed (os error 112)";
+        let report = Report::build(
+            "1.8.9",
+            "vanilla",
+            "unknown",
+            &[SHADERC_MISSING_515],
+            &[launcher_line],
+            None,
+            None,
+        );
+        assert_eq!(report.title, DISK_FULL_TITLE);
+        assert!(
+            diagnose(launcher_line)
+                .unwrap()
+                .detail
+                .contains("the E: drive")
+        );
+    }
+
+    #[test]
+    fn missing_shaderc_without_disk_full_keeps_its_diagnosis() {
+        assert!(diagnose(SHADERC_MISSING_515).is_none());
+        for other_error in ["os error 1120", "os error 280"] {
+            assert!(diagnose(&format!("{SHADERC_MISSING_515}\n{other_error}")).is_none());
+        }
     }
 
     #[test]
@@ -4963,6 +5369,61 @@ USERNAME=someone
     }
 
     #[test]
+    fn crash_517_names_the_damaged_library_and_requests_repair() {
+        let log = include_str!("../tests/fixtures/crash-517-corrupt-library.log");
+        let diagnosis =
+            crate::crash_conflicts::diagnose_exit_in(log, 1, Path::new("mods")).unwrap();
+        assert_eq!(diagnose(log), Some(diagnosis.clone()));
+        assert_eq!(diagnosis.title, "A game file was damaged");
+        assert_eq!(
+            diagnosis.detail,
+            "Minecraft couldn't read log4j-core-2.22.1.jar. Arctic will re-download it on the next launch."
+        );
+        assert!(diagnosis.repair);
+    }
+
+    #[test]
+    fn damaged_jar_advice_depends_on_where_the_jar_is_installed() {
+        let trace = |path, cause| {
+            format!(
+                "java.io.IOException: error reading {path}\n\tat loader.read(Loader.java:1)\nCaused by: java.util.zip.ZipException: {cause}"
+            )
+        };
+        let version = trace(
+            "/portable data/shared/versions/1.8.9/1.8.9.jar",
+            "invalid LOC header (bad signature)",
+        );
+        let diagnosis = diagnose(&version).unwrap();
+        assert!(diagnosis.detail.contains("1.8.9.jar"));
+        assert!(diagnosis.repair);
+
+        for path in [
+            r"C:\game\profiles\p\instances\i\minecraft\mods\Example Mod.jar",
+            "/custom game/mods/Example Mod.jar",
+        ] {
+            let report = trace(path, "zip file is empty");
+            let diagnosis = crate::crash_conflicts::diagnose_exit_in(
+                &report,
+                1,
+                Path::new("/custom game/mods"),
+            )
+            .unwrap();
+            assert_eq!(diagnosis.title, "A game file was damaged");
+            assert!(diagnosis.detail.contains("Example Mod.jar"));
+            assert!(diagnosis.detail.contains("Re-download this mod"));
+            assert!(!diagnosis.repair);
+        }
+
+        for report in [
+            trace("/unrelated/libraries/example.jar", "zip END header not found"),
+            trace("/data/shared/libraries/example.jar", "unrelated ZIP error"),
+            "java.io.IOException: error reading /data/shared/libraries/example.jar\nOther failure\nCaused by: java.util.zip.ZipException: zip file is empty".into(),
+        ] {
+            assert!(damaged_jar_diagnosis(&report, None).is_none());
+        }
+    }
+
+    #[test]
     fn missing_loader_entrypoints_request_repair_before_the_loader_starts() {
         for (class, loader) in [
             ("net.fabricmc.loader.launch.knot.KnotClient", "Fabric"),
@@ -5821,8 +6282,14 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
     #[test]
     fn optional_mixin_warnings_never_supply_mixin_failure_evidence() {
         for warning in [
+            HANG_516
+                .lines()
+                .find(|line| line.contains("@Mixin target "))
+                .unwrap(),
             "@Mixin target net.minecraft.Foo was not found optional.mixins.json:FooMixin",
             "@Mixin target example.InvalidMixinException was not found optional.mixins.json:FooMixin",
+            "[mixin] @Mixin target example.InvalidMixinException was not found optional.mixins.json:FooMixin from mod optional",
+            "[main/WARNING] InvalidMixinException: target not found optional.mixins.json:FooMixin",
             "[main/WARN] InvalidMixinException: target not found optional.mixins.json:FooMixin",
             "[main/WARN] Mixin [optional.mixins.json:FooMixin] from mod optional failed",
             "[main/WARN] Mixin apply for mod optional failed optional.mixins.json:FooMixin",
