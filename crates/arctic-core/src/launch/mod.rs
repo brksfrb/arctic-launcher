@@ -471,8 +471,6 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
     let dirs = req.dirs;
     let repair = files::LibraryRepair::new(dirs)?;
     let mut timer = StepTimer::new();
-    // The Arctic session (a network round trip) is fetched while the game files are checked.
-    let mut share_session = false;
     // First start of this game folder: the profile's default game settings.
     match crate::game_defaults::Defaults::load(dirs)
         .and_then(|d| d.apply_if_new(game_dir, Some(&req.version.id)))
@@ -523,140 +521,144 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
     timer.step("read version");
     let launcher_owned_vanilla =
         req.instance.loader.kind().is_none() && req.instance.game_folder.is_none();
-    if launcher_owned_vanilla {
-        crate::mods::performance::recover_vanilla_api(game_dir)?;
-    }
-    let loader = effective_loader(dirs, req.instance, &vanilla.id, game_dir);
-    timer.step("pick loader");
+    let side = LoaderSide {
+        req,
+        game_dir,
+        vanilla: &vanilla,
+        launcher_owned_vanilla,
+    };
+    let install_vanilla = |timer: &mut StepTimer| {
+        let base = install_with_repair(
+            dirs,
+            vanilla.clone(),
+            game_dir,
+            java_override.clone(),
+            progress,
+            &repair,
+            None,
+        );
+        timer.step("vanilla files");
+        base
+    };
+    // Picking the loader, its profile, the Arctic Client's jar and the performance mods need
+    // none of the vanilla files (Fabric's profile is one small download), so they are done while
+    // those are checked and fetched. Their progress is held back until the vanilla files are in,
+    // so the stages arrive in the order they always did. "Gentle launch" keeps one thing at a time.
+    let (base, loader, done) = if req.settings.gentle_launch {
+        let loader = side.pick_loader()?;
+        timer.step("pick loader");
+        (install_vanilla(&mut timer), loader, None)
+    } else {
+        let held = HeldProgress::new(progress);
+        std::thread::scope(|scope| {
+            let alongside = scope.spawn(|| {
+                let mut timer = StepTimer::new();
+                let loader = side.pick_loader()?;
+                timer.step("pick loader");
+                let done = match &loader {
+                    Some((kind, version)) if loaders::profile_needs_no_game_files(*kind) => Some(
+                        side.fabric_like(*kind, version, None, &|p| held.report(p), &mut timer)?,
+                    ),
+                    _ => None,
+                };
+                Ok::<_, Error>((loader, done, timer.steps))
+            });
+            let base = install_vanilla(&mut timer);
+            held.release();
+            let alongside = alongside
+                .join()
+                .unwrap_or_else(|_| Err(Error::Other("preparing the loader crashed".into())));
+            // The vanilla files' error first, as when they were checked first.
+            let base = base?;
+            let (loader, done, steps) = alongside?;
+            timer.alongside("vanilla files", steps, "waiting for loader and mods");
+            Ok::<_, Error>((Ok(base), loader, done))
+        })?
+    };
+    let base = base?;
     let mut vanilla_client = None;
-    let version = match loader
-        .as_ref()
-        .map(|(k, v)| (Some(*k), Some(v.as_str())))
-        .unwrap_or((None, None))
-    {
-        (Some(kind), Some(loader_version)) => {
-            let base = install_with_repair(
-                dirs,
-                vanilla.clone(),
-                game_dir,
-                java_override.clone(),
-                progress,
-                &repair,
-                None,
-            )?;
-            timer.step("vanilla files");
-            let stage = format!("Installing {} {loader_version}", kind.label());
-            progress(ProgressInfo::stage(&stage));
-            let mut profile = loaders::install_profile(
-                dirs,
-                kind,
-                loader_version,
-                &vanilla,
-                &base.java,
-                progress,
-            )?;
-            timer.step("loader profile");
+    let mut share_session = false;
+    // The vanilla installation is the whole game when there is no loader.
+    let mut installed = None;
+    let version = match loader.as_ref() {
+        Some((kind, loader_version)) => {
+            let (kind, loader_version) = (*kind, loader_version.as_str());
             if matches!(
                 kind,
                 loaders::LoaderKind::Fabric | loaders::LoaderKind::Quilt
             ) {
-                vanilla_client = Some(files::client_job(dirs, &vanilla)?);
-                // Quilt provides its own Fabric compatibility version, not its loader version.
-                let fits =
-                    arctic_mod_fits(dirs, &vanilla.id, kind, loader_version, &profile, progress)?;
-                if req.instance.arctic_mod && !fits {
-                    log::warn!(
-                        "{} Loader {loader_version} cannot provide the Fabric Loader version needed by the Arctic Client on {}; starting without it",
-                        kind.label(),
-                        vanilla.id
-                    );
-                }
-                arctic_mod::sync(
-                    &game_dir.join("mods"),
-                    &vanilla.id,
-                    req.instance.arctic_mod && fits,
-                )?;
-                timer.step("arctic client");
-                // Vanilla instances (on Fabric underneath) and Fabric/Quilt
-                // instances alike; in those, mods the player already has stay theirs.
-                progress(ProgressInfo::stage("Checking performance mods"));
-                // Best effort, like the Forge branch: no Sodium is better than no game (an
-                // unreachable Modrinth CDN, a locked or truncated index).
-                if let Err(e) = crate::mods::performance::sync_for_launch(
-                    game_dir,
-                    &vanilla.id,
-                    req.instance,
+                let done = match done {
+                    Some(done) => done,
+                    None => side.fabric_like(
+                        kind,
+                        loader_version,
+                        Some(&base.java),
+                        progress,
+                        &mut timer,
+                    )?,
+                };
+                vanilla_client = Some(done.vanilla_client);
+                share_session = done.share_session;
+                done.profile
+            } else {
+                let stage = format!("Installing {} {loader_version}", kind.label());
+                progress(ProgressInfo::stage(&stage));
+                let mut profile = loaders::install_profile(
+                    dirs,
+                    kind,
+                    loader_version,
+                    &vanilla,
+                    &base.java,
                     progress,
-                ) {
-                    log::warn!("performance mods: {e}");
-                }
-                if let Err(e) = crate::mods::polarium::sync(
-                    &game_dir.join("mods"),
-                    &vanilla.id,
-                    req.instance.performance,
-                ) {
-                    log::warn!("polarium: {e}");
-                }
-                // Vanilla instances (nothing in the folder but the launcher's own mods): load only
-                // the Fabric API modules those use, which starts the game noticeably faster.
-                if req.instance.loader.kind().is_none() {
-                    crate::mods::performance::finish_vanilla(
+                )?;
+                timer.step("loader profile");
+                if kind == loaders::LoaderKind::Forge {
+                    // Forge instances: the Arctic Client's Forge build, where there is one (1.8.9).
+                    arctic_mod::sync_forge(
+                        &game_dir.join("mods"),
+                        &vanilla.id,
+                        req.instance.arctic_mod,
+                    )?;
+                    share_session =
+                        req.instance.arctic_mod && arctic_mod::supports_forge(&vanilla.id);
+                    if share_session {
+                        arctic_mod::update_forge_asm(&vanilla.id, &mut profile);
+                    }
+                    timer.step("arctic client");
+                    // 1.8.9: Patcher and Entity Culling for FPS (the Performance switch); never stops a start.
+                    progress(ProgressInfo::stage("Checking performance mods"));
+                    if let Err(e) = crate::mods::performance::sync_forge(
                         game_dir,
                         &vanilla.id,
-                        launcher_owned_vanilla,
                         req.instance.performance,
-                    )?;
+                        progress,
+                    ) {
+                        log::warn!("performance mods for Forge: {e}");
+                    }
+                    timer.step("performance mods");
                 }
-                timer.step("performance mods");
-                share_session =
-                    req.instance.arctic_mod && fits && arctic_mod::supports(&vanilla.id);
-            } else if kind == loaders::LoaderKind::Forge {
-                // Forge instances: the Arctic Client's Forge build, where there is one (1.8.9).
-                arctic_mod::sync_forge(
-                    &game_dir.join("mods"),
-                    &vanilla.id,
-                    req.instance.arctic_mod,
-                )?;
-                share_session = req.instance.arctic_mod && arctic_mod::supports_forge(&vanilla.id);
-                if share_session {
-                    arctic_mod::update_forge_asm(&vanilla.id, &mut profile);
-                }
-                timer.step("arctic client");
-                // 1.8.9: Patcher and Entity Culling for FPS (the Performance switch); never stops a start.
-                progress(ProgressInfo::stage("Checking performance mods"));
-                if let Err(e) = crate::mods::performance::sync_forge(
-                    game_dir,
-                    &vanilla.id,
-                    req.instance.performance,
-                    progress,
-                ) {
-                    log::warn!("performance mods for Forge: {e}");
-                }
-                timer.step("performance mods");
+                profile
             }
-            profile
         }
-        _ => {
-            if launcher_owned_vanilla
-                && let Err(e) =
-                    crate::mods::performance::finish_vanilla(game_dir, &vanilla.id, true, false)
-            {
-                log::warn!("vanilla performance cleanup: {e}");
-            }
-            vanilla
+        None => {
+            installed = Some(base);
+            vanilla.clone()
         }
     };
     // The Arctic sign-in (a network round trip) runs while the game files are checked.
     let session = share_session.then(|| start_cosmetics_session(req, game_dir));
-    let mut installation = install_with_repair(
-        dirs,
-        version,
-        game_dir,
-        java_override,
-        progress,
-        &repair,
-        vanilla_client.as_ref(),
-    )?;
+    let mut installation = match installed {
+        Some(vanilla) => vanilla,
+        None => install_with_repair(
+            dirs,
+            version,
+            game_dir,
+            java_override,
+            progress,
+            &repair,
+            vanilla_client.as_ref(),
+        )?,
+    };
     if share_session && matches!(loader, Some((loaders::LoaderKind::Forge, _))) {
         // Make Arctic's Mixin available before Forge discovers mods that embed an
         // older version. Forge still discovers the mod at the same path.
@@ -677,6 +679,151 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
     timer.step("JVM arguments + startup cache");
     timer.done();
     Ok(plan)
+}
+
+/// What a launch does about its loader, apart from the game's own files: pick it, and for
+/// Fabric and Quilt the profile, the Arctic Client's jar and the performance mods.
+struct LoaderSide<'a> {
+    req: &'a LaunchRequest<'a>,
+    game_dir: &'a Path,
+    vanilla: &'a VersionJson,
+    launcher_owned_vanilla: bool,
+}
+
+/// A Fabric or Quilt profile with the instance's mods folder made ready for it.
+struct FabricLike {
+    profile: VersionJson,
+    vanilla_client: DownloadJob,
+    /// The Arctic Client is in: the game gets the Arctic session.
+    share_session: bool,
+}
+
+impl LoaderSide<'_> {
+    /// The loader to launch with; an instance without one gets its mods folder cleared of what
+    /// earlier Fabric runs left.
+    fn pick_loader(&self) -> Result<Option<(loaders::LoaderKind, String)>> {
+        let (req, game_dir, game) = (self.req, self.game_dir, &self.vanilla.id);
+        if self.launcher_owned_vanilla {
+            crate::mods::performance::recover_vanilla_api(game_dir)?;
+        }
+        let loader = effective_loader(req.dirs, req.instance, game, game_dir);
+        if loader.is_none()
+            && self.launcher_owned_vanilla
+            && let Err(e) = crate::mods::performance::finish_vanilla(game_dir, game, true, false)
+        {
+            log::warn!("vanilla performance cleanup: {e}");
+        }
+        Ok(loader)
+    }
+
+    /// `java` is only needed by loaders whose profile is made by an installer
+    /// ([`loaders::profile_needs_no_game_files`] tells).
+    fn fabric_like(
+        &self,
+        kind: loaders::LoaderKind,
+        loader_version: &str,
+        java: Option<&Path>,
+        progress: Progress,
+        timer: &mut StepTimer,
+    ) -> Result<FabricLike> {
+        let (req, game_dir, vanilla) = (self.req, self.game_dir, self.vanilla);
+        let dirs = req.dirs;
+        let stage = format!("Installing {} {loader_version}", kind.label());
+        progress(ProgressInfo::stage(&stage));
+        let profile = loaders::install_profile(
+            dirs,
+            kind,
+            loader_version,
+            vanilla,
+            java.unwrap_or(Path::new("")),
+            progress,
+        )?;
+        timer.step("loader profile");
+        let vanilla_client = files::client_job(dirs, vanilla)?;
+        // Quilt provides its own Fabric compatibility version, not its loader version.
+        let fits = arctic_mod_fits(dirs, &vanilla.id, kind, loader_version, &profile, progress)?;
+        if req.instance.arctic_mod && !fits {
+            log::warn!(
+                "{} Loader {loader_version} cannot provide the Fabric Loader version needed by the Arctic Client on {}; starting without it",
+                kind.label(),
+                vanilla.id
+            );
+        }
+        arctic_mod::sync_cached(
+            &game_dir.join("mods"),
+            &vanilla.id,
+            req.instance.arctic_mod && fits,
+            &dirs.cache().join(arctic_mod::JAR_CACHE),
+        )?;
+        timer.step("arctic client");
+        // Vanilla instances (on Fabric underneath) and Fabric/Quilt
+        // instances alike; in those, mods the player already has stay theirs.
+        progress(ProgressInfo::stage("Checking performance mods"));
+        crate::mods::performance::prepare_for_launch(
+            game_dir,
+            &vanilla.id,
+            req.instance,
+            self.launcher_owned_vanilla,
+            progress,
+        )?;
+        timer.step("performance mods");
+        Ok(FabricLike {
+            profile,
+            vanilla_client,
+            share_session: req.instance.arctic_mod && fits && arctic_mod::supports(&vanilla.id),
+        })
+    }
+}
+
+/// Progress of work done alongside an earlier step: kept back (the latest of each stage) until
+/// that step is over, then passed on as it comes.
+struct HeldProgress<'a> {
+    to: Progress<'a>,
+    /// `None` once released.
+    held: std::sync::Mutex<Option<Vec<HeldStage>>>,
+}
+
+struct HeldStage {
+    stage: String,
+    counts: [u64; 4],
+}
+
+impl<'a> HeldProgress<'a> {
+    fn new(to: Progress<'a>) -> Self {
+        Self {
+            to,
+            held: std::sync::Mutex::new(Some(Vec::new())),
+        }
+    }
+
+    fn report(&self, p: ProgressInfo) {
+        let mut held = self.held.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(stages) = held.as_mut() else {
+            // Still under the lock: nothing overtakes what `release` is passing on.
+            return (self.to)(p);
+        };
+        let counts = [p.done, p.total, p.bytes_done, p.bytes_total];
+        match stages.last_mut() {
+            Some(last) if last.stage == p.stage => last.counts = counts,
+            _ => stages.push(HeldStage {
+                stage: p.stage.to_owned(),
+                counts,
+            }),
+        }
+    }
+
+    fn release(&self) {
+        let mut held = self.held.lock().unwrap_or_else(|e| e.into_inner());
+        for HeldStage { stage, counts } in held.take().into_iter().flatten() {
+            (self.to)(ProgressInfo {
+                stage: &stage,
+                done: counts[0],
+                total: counts[1],
+                bytes_done: counts[2],
+                bytes_total: counts[3],
+            });
+        }
+    }
 }
 
 /// How long each part of getting ready took, logged when done (to find slow starts).
@@ -701,6 +848,17 @@ impl StepTimer {
         self.steps
             .push(format!("{name} {}ms", (now - self.last).as_millis()));
         self.last = now;
+    }
+
+    /// Steps that ran on another thread while `during` did: listed after it, with how long this
+    /// thread then still waited for them (`waiting`).
+    fn alongside(&mut self, during: &str, steps: Vec<String>, waiting: &str) {
+        self.steps.extend(
+            steps
+                .into_iter()
+                .map(|step| format!("during {during}: {step}")),
+        );
+        self.step(waiting);
     }
 
     fn done(&self) {
@@ -1270,6 +1428,42 @@ mod tests {
             assert_eq!(incompatible_custom_java(&version, Some(8)), None);
             assert_eq!(incompatible_custom_java(&version, None), None);
         }
+    }
+
+    #[test]
+    fn progress_of_work_done_alongside_arrives_after_the_step_before_it() {
+        let seen = std::sync::Mutex::new(Vec::new());
+        let note = |p: ProgressInfo| {
+            seen.lock()
+                .unwrap()
+                .push(format!("{} {}/{}", p.stage, p.bytes_done, p.bytes_total));
+        };
+        let held = HeldProgress::new(&note);
+        let download = |done| ProgressInfo {
+            stage: "Downloading mods",
+            bytes_done: done,
+            bytes_total: 9,
+            ..ProgressInfo::default()
+        };
+        held.report(ProgressInfo::stage("Installing Fabric 1"));
+        held.report(ProgressInfo::stage("Finding mods"));
+        held.report(download(3));
+        held.report(download(6));
+        note(ProgressInfo::stage("Preparing"));
+        assert_eq!(*seen.lock().unwrap(), ["Preparing 0/0"]);
+        // Each stage once, in order, with where it had got to; from then on as it comes.
+        held.release();
+        held.report(download(9));
+        assert_eq!(
+            *seen.lock().unwrap(),
+            [
+                "Preparing 0/0",
+                "Installing Fabric 1 0/0",
+                "Finding mods 0/0",
+                "Downloading mods 6/9",
+                "Downloading mods 9/9"
+            ]
+        );
     }
 
     #[test]

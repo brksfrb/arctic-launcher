@@ -210,19 +210,84 @@ type JarCache = Mutex<HashMap<&'static str, Arc<Vec<u8>>>>;
 /// The mod's jar for `game_version` (built once per target).
 #[cfg(test)]
 fn jar_for(game_version: &str) -> Option<Arc<Vec<u8>>> {
-    jar_of(build_for(game_version)?)
+    jar_of(build_for(game_version)?, None)
 }
 
-/// The jar of build target `build` (built once).
-fn jar_of(build: &'static str) -> Option<Arc<Vec<u8>>> {
+/// The jar of build target `build` (built once). With `kept` (a folder in the launcher's cache),
+/// a jar built by an earlier run is read from there instead of unpacking the pack again, which
+/// is most of a second of every first Play on another game version.
+fn jar_of(build: &'static str, kept: Option<&Path>) -> Option<Arc<Vec<u8>>> {
     static JARS: OnceLock<JarCache> = OnceLock::new();
     let mut jars = JARS.get_or_init(Default::default).lock().ok()?;
     if let Some(jar) = jars.get(build) {
         return Some(jar.clone());
     }
-    let jar = Arc::new(pack()?.jar(build)?);
+    let id = pack_id();
+    let jar = match kept.and_then(|dir| read_kept(dir, id, build)) {
+        Some(jar) => jar,
+        None => {
+            let jar = pack()?.jar(build)?;
+            if let Some(dir) = kept {
+                keep(dir, id, build, &jar);
+            }
+            jar
+        }
+    };
+    let jar = Arc::new(jar);
     jars.insert(build, jar.clone());
     Some(jar)
+}
+
+/// Folder (in the launcher's cache folder) of the jars rebuilt from the pack.
+pub const JAR_CACHE: &str = "arctic-client";
+
+fn kept_name(id: u64, build: &str) -> String {
+    format!("{id:016x}-{build}.jar")
+}
+
+fn sha1_hex(bytes: &[u8]) -> String {
+    use sha1::Digest;
+    hex::encode(sha1::Sha1::digest(bytes))
+}
+
+/// A kept jar of this pack and target, only if it is whole: its checksum was written after it.
+fn read_kept(dir: &Path, id: u64, build: &str) -> Option<Vec<u8>> {
+    let path = dir.join(kept_name(id, build));
+    let sum = fs::read_to_string(path.with_extension("sha1")).ok()?;
+    let jar = fs::read(&path).ok()?;
+    (sha1_hex(&jar) == sum.trim()).then_some(jar)
+}
+
+/// Best effort: a jar that can't be kept is built again next time.
+fn keep(dir: &Path, id: u64, build: &str, jar: &[u8]) {
+    let name = kept_name(id, build);
+    let path = dir.join(&name);
+    let sum = path.with_extension("sha1");
+    let write = || -> std::io::Result<()> {
+        fs::create_dir_all(dir)?;
+        // Jars of an earlier pack (an older launcher) are never used again.
+        let current = format!("{id:016x}-");
+        for entry in fs::read_dir(dir)?.flatten() {
+            if !entry.file_name().to_string_lossy().starts_with(&current) {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+        // The checksum goes last, so it never vouches for a half-written jar.
+        match fs::remove_file(&sum) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
+            _ => {}
+        }
+        let part = dir.join(format!("{name}.{}.part", std::process::id()));
+        fs::write(&part, jar)?;
+        fs::rename(&part, &path)?;
+        fs::write(&sum, sha1_hex(jar))
+    };
+    if let Err(e) = write() {
+        log::info!(
+            "couldn't keep the Arctic Client's jar in {}: {e}",
+            dir.display()
+        );
+    }
 }
 
 /// Next to the jar: which pack and target it came from, and its size, so a
@@ -231,7 +296,12 @@ const STAMP_NAME: &str = ".arctic-mod.stamp";
 
 /// Put the mod in `mods_dir` (when enabled and available) or take it out.
 pub fn sync(mods_dir: &Path, game_version: &str, enabled: bool) -> Result<()> {
-    sync_build(mods_dir, build_for(game_version), enabled)
+    sync_build(mods_dir, build_for(game_version), enabled, None)
+}
+
+/// [`sync`], with the rebuilt jar kept in (and taken from) `kept`: see [`JAR_CACHE`].
+pub fn sync_cached(mods_dir: &Path, game_version: &str, enabled: bool, kept: &Path) -> Result<()> {
+    sync_build(mods_dir, build_for(game_version), enabled, Some(kept))
 }
 
 /// The same for a Forge instance: the Forge build of the mod.
@@ -240,10 +310,16 @@ pub fn sync_forge(mods_dir: &Path, game_version: &str, enabled: bool) -> Result<
         mods_dir,
         forge_build_for(game_version).filter(|_| supports_forge(game_version)),
         enabled,
+        None,
     )
 }
 
-fn sync_build(mods_dir: &Path, build: Option<&'static str>, enabled: bool) -> Result<()> {
+fn sync_build(
+    mods_dir: &Path,
+    build: Option<&'static str>,
+    enabled: bool,
+    kept: Option<&Path>,
+) -> Result<()> {
     let path = mods_dir.join(FILE_NAME);
     let stamp_path = mods_dir.join(STAMP_NAME);
     let Some(build) = build.filter(|_| enabled) else {
@@ -260,7 +336,7 @@ fn sync_build(mods_dir: &Path, build: Option<&'static str>, enabled: bool) -> Re
     {
         return Ok(());
     }
-    let Some(jar) = jar_of(build) else {
+    let Some(jar) = jar_of(build, kept) else {
         return Ok(());
     };
     fs::create_dir_all(mods_dir).at(mods_dir)?;
@@ -450,6 +526,42 @@ mod tests {
         rewrite(&mods, "26.3").unwrap();
         assert!(jar_usable(&path));
         assert!(!mods.join(format!("{FILE_NAME}.part")).exists());
+    }
+
+    #[test]
+    fn a_kept_jar_is_used_only_while_it_is_whole() {
+        let dir = tempfile::tempdir().unwrap();
+        let (kept, id) = (dir.path().join("kept"), 7);
+        assert!(read_kept(&kept, id, "fabric-26.3").is_none());
+        fs::create_dir_all(&kept).unwrap();
+        fs::write(kept.join("00000000000000aa-fabric-26.3.jar"), b"older pack").unwrap();
+        keep(&kept, id, "fabric-26.3", b"the jar");
+        assert_eq!(read_kept(&kept, id, "fabric-26.3").unwrap(), b"the jar");
+        assert!(!kept.join("00000000000000aa-fabric-26.3.jar").exists());
+        // Another pack or target has its own; a damaged jar is not used.
+        assert!(read_kept(&kept, id + 1, "fabric-26.3").is_none());
+        assert!(read_kept(&kept, id, "fabric-1.8.9").is_none());
+        let path = kept.join(kept_name(id, "fabric-26.3"));
+        fs::write(&path, b"the jaR").unwrap();
+        assert!(read_kept(&kept, id, "fabric-26.3").is_none());
+        keep(&kept, id, "fabric-26.3", b"the jar");
+        assert_eq!(read_kept(&kept, id, "fabric-26.3").unwrap(), b"the jar");
+        fs::remove_file(path.with_extension("sha1")).unwrap();
+        assert!(read_kept(&kept, id, "fabric-26.3").is_none());
+    }
+
+    #[test]
+    fn the_mod_put_in_from_the_kept_jar_is_the_same() {
+        let dir = tempfile::tempdir().unwrap();
+        let kept = dir.path().join("kept");
+        let build = build_for("26.3").unwrap();
+        let jar = jar_for("26.3").unwrap();
+        keep(&kept, pack_id(), build, &jar);
+        assert_eq!(read_kept(&kept, pack_id(), build).unwrap(), *jar);
+        let mods = dir.path().join("mods");
+        sync_cached(&mods, "26.3", true, &kept).unwrap();
+        assert_eq!(fs::read(mods.join(FILE_NAME)).unwrap(), *jar);
+        assert!(jar_usable(&mods.join(FILE_NAME)));
     }
 
     #[test]

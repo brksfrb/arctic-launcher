@@ -733,8 +733,14 @@ fn game_exe(plan: &LaunchPlan) -> (PathBuf, String) {
 fn choose_game_exe(plan: &LaunchPlan) -> (PathBuf, String, bool) {
     #[cfg(windows)]
     if let Some(runtime) = &plan.managed_runtime {
+        let started = std::time::Instant::now();
         return match super::named_runtime::prepare(runtime, &plan.java) {
             Ok((exe, rebuilt)) => {
+                log::info!(
+                    "[startup] named Java runtime {} in {} ms",
+                    if rebuilt { "rebuilt" } else { "checked" },
+                    started.elapsed().as_millis()
+                );
                 let version = release_version(&exe);
                 (exe, version, rebuilt)
             }
