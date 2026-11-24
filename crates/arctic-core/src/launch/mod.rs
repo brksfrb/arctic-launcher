@@ -1228,6 +1228,7 @@ fn share_cosmetics_session(
             share_server: settings.share_server_with_friends,
             proxy: &proxy,
             bridge,
+            minecraft_refresh_at: account.minecraft_refresh_at(),
             duel: quick_play.and_then(QuickPlay::duel_json),
             replay: quick_play.and_then(QuickPlay::replay_json),
             language: if settings.language == "system" {

@@ -50,9 +50,10 @@ pub struct AccountEntry {
 }
 
 /// What the game needs to play as an account.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SessionGrant {
     pub identity: LaunchIdentity,
+    pub minecraft_refresh_at: Option<u64>,
     /// A session for the Arctic cosmetics server, if one could be made.
     pub arctic_token: Option<String>,
 }
@@ -60,7 +61,7 @@ pub struct SessionGrant {
 /// The launcher side: its accounts and how to get a fresh session.
 pub trait Accounts: Send + Sync + 'static {
     fn list(&self) -> Vec<AccountEntry>;
-    fn session(&self, id: &str) -> Result<SessionGrant>;
+    fn session(&self, id: &str, force: bool) -> Result<SessionGrant>;
     /// Start adding an account: the launcher opens Microsoft's sign-in in
     /// the browser. Credentials never go through the game.
     fn add(&self) -> Result<()> {
@@ -349,13 +350,18 @@ fn respond(request: &Request, accounts: &dyn Accounts) -> (&'static str, String)
             Err(e) => error("501 Not Implemented", &e.to_string()),
         },
         ("POST", path) => {
+            let (path, force) = match path.split_once('?') {
+                Some((path, "force=1")) => (path, true),
+                Some(_) => return error("404 Not Found", "not found"),
+                None => (path, false),
+            };
             let Some(id) = path
                 .strip_prefix("/v1/accounts/")
                 .and_then(|rest| rest.strip_suffix("/session"))
             else {
                 return error("404 Not Found", "not found");
             };
-            match accounts.session(id) {
+            match accounts.session(id, force) {
                 Ok(grant) => (
                     "200 OK",
                     serde_json::json!({
@@ -364,6 +370,7 @@ fn respond(request: &Request, accounts: &dyn Accounts) -> (&'static str, String)
                         "access_token": grant.identity.access_token,
                         "xuid": grant.identity.xuid,
                         "user_type": grant.identity.user_type,
+                        "minecraft_refresh_at": grant.minecraft_refresh_at,
                         "arctic_token": grant.arctic_token,
                     })
                     .to_string(),
@@ -371,6 +378,8 @@ fn respond(request: &Request, accounts: &dyn Accounts) -> (&'static str, String)
                 Err(e) if e.to_string() == WAITING => {
                     ("202 Accepted", r#"{"pending":true}"#.to_owned())
                 }
+                Err(e @ Error::OfflineSessionRefresh) => error("400 Bad Request", &e.to_string()),
+                Err(_) if force => error("502 Bad Gateway", "Microsoft session refresh failed"),
                 Err(e) => error("502 Bad Gateway", &e.to_string()),
             }
         }
@@ -389,30 +398,44 @@ mod tests {
             serde_json::json!({ "state": if start { "downloading" } else { "ready" }, "builtin": false }).to_string()
         }
         fn list(&self) -> Vec<AccountEntry> {
-            vec![AccountEntry {
-                id: "a1".into(),
-                name: "Alice".into(),
-                uuid: "u1".into(),
-                microsoft: true,
-                active: true,
-            }]
+            vec![
+                AccountEntry {
+                    id: "a1".into(),
+                    name: "Alice".into(),
+                    uuid: "u1".into(),
+                    microsoft: true,
+                    active: true,
+                },
+                AccountEntry {
+                    id: "a2".into(),
+                    name: "Bob".into(),
+                    uuid: "u2".into(),
+                    microsoft: false,
+                    active: false,
+                },
+            ]
         }
 
-        fn session(&self, id: &str) -> Result<SessionGrant> {
+        fn session(&self, id: &str, force: bool) -> Result<SessionGrant> {
             if id == "wait" {
                 return Err(Error::Other(WAITING.into()));
             }
-            if id != "a1" {
+            if id != "a1" && id != "a2" {
                 return Err(Error::Other("no such account".into()));
+            }
+            let microsoft = id == "a1";
+            if force && !microsoft {
+                return Err(Error::OfflineSessionRefresh);
             }
             Ok(SessionGrant {
                 identity: LaunchIdentity {
-                    username: "Alice".into(),
-                    uuid: "u1".into(),
-                    access_token: "tok".into(),
-                    user_type: "msa",
+                    username: if microsoft { "Alice" } else { "Bob" }.into(),
+                    uuid: if microsoft { "u1" } else { "u2" }.into(),
+                    access_token: if microsoft { "tok" } else { "0" }.into(),
+                    user_type: if microsoft { "msa" } else { "legacy" },
                     xuid: "x".into(),
                 },
+                minecraft_refresh_at: microsoft.then_some(if force { 200 } else { 100 }),
                 arctic_token: None,
             })
         }
@@ -437,7 +460,7 @@ mod tests {
             fn list(&self) -> Vec<AccountEntry> {
                 Vec::new()
             }
-            fn session(&self, _id: &str) -> Result<SessionGrant> {
+            fn session(&self, _id: &str, _force: bool) -> Result<SessionGrant> {
                 Err(Error::Other("no".into()))
             }
             fn join(&self, launch: &str) -> Option<String> {
@@ -462,7 +485,7 @@ mod tests {
             "handed out once"
         );
         let (launch, token) = info.for_launch();
-        assert_eq!(launch.launch.as_deref(), Some(token.as_str()));
+        assert!(launch.launch.as_deref() == Some(token.as_str()));
         assert_eq!(token.len(), 64);
     }
 
@@ -471,7 +494,10 @@ mod tests {
         let info = start(Fake).unwrap();
         let listed = call(&info, "GET", "/v1/accounts", &info.secret);
         assert!(listed.starts_with("HTTP/1.1 200") && listed.contains("\"Alice\""));
-        assert!(!listed.contains("tok"), "the list never has tokens");
+        assert!(
+            !listed.contains("token") && !listed.contains("tok"),
+            "the list never has tokens"
+        );
         let granted = call(&info, "POST", "/v1/accounts/a1/session", &info.secret);
         assert!(granted.contains("\"access_token\":\"tok\""));
         assert!(call(&info, "GET", "/v1/accounts", "wrong").starts_with("HTTP/1.1 401"));
@@ -486,6 +512,32 @@ mod tests {
         assert!(encoder.starts_with("HTTP/1.1 200") && encoder.contains("\"builtin\":false"));
         assert!(call(&info, "POST", "/v1/ffmpeg/capture", &info.secret).contains("downloading"));
         assert!(call(&info, "GET", "/v1/ffmpeg/capture", "wrong").starts_with("HTTP/1.1 401"));
+    }
+
+    #[test]
+    fn force_session_refresh_is_explicit_and_microsoft_only() {
+        let info = start(Fake).unwrap();
+        let ordinary = call(&info, "POST", "/v1/accounts/a1/session", &info.secret);
+        assert!(ordinary.contains(r#""minecraft_refresh_at":100"#));
+        let forced = call(
+            &info,
+            "POST",
+            "/v1/accounts/a1/session?force=1",
+            &info.secret,
+        );
+        assert!(
+            forced.starts_with("HTTP/1.1 200") && forced.contains(r#""minecraft_refresh_at":200"#)
+        );
+        let offline = call(&info, "POST", "/v1/accounts/a2/session", &info.secret);
+        assert!(offline.starts_with("HTTP/1.1 200") && offline.contains(r#""access_token":"0""#));
+        let forced = call(
+            &info,
+            "POST",
+            "/v1/accounts/a2/session?force=1",
+            &info.secret,
+        );
+        assert!(forced.starts_with("HTTP/1.1 400") && !forced.contains("access_token"));
+        assert!(forced.contains("offline accounts have no session to refresh"));
     }
 
     #[test]

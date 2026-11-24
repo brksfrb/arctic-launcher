@@ -2,15 +2,19 @@ package com.arcticlauncher.client.servers;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.Platform;
+import com.arcticlauncher.client.account.AccountSwitcher;
+import com.arcticlauncher.client.account.InvalidSession;
 import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.gfx.Draw;
 import com.arcticlauncher.client.gfx.Gfx;
+import com.arcticlauncher.client.notice.Notices;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.Page;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 import com.arcticlauncher.client.Lang;
 /**
@@ -44,16 +48,29 @@ public final class DisconnectedPage extends Page {
 	private final Platform platform = ArcticClient.platform();
 	private final String title;
 	private final String reason;
+	private final boolean invalidSession;
+	private final BooleanSupplier stillHere;
 	private final String address = rememberCurrent(ArcticClient.platform());
 	private final long shownAt = System.currentTimeMillis();
 	private boolean cancelled;
+	private boolean refreshingSession;
+	private boolean refreshFailed;
+	private String nativeHint;
+	private int reconnectAttempt;
 	/** Lines the reason takes (known once drawn: the page lays itself out again if it changes). */
 	private int reasonLines = 1;
 
 	public DisconnectedPage(String title, String reason) {
+		this(title, reason, null);
+	}
+
+	/** The native disconnect screen also uses this reconnect controller for its buttons. */
+	public DisconnectedPage(String title, String reason, BooleanSupplier stillHere) {
+		this.stillHere = stillHere;
 		this.title = title == null || title.isEmpty() ? Lang.t("servers.connection_lost") : title;
 		String shown = reason == null ? "" : reason;
-		String hint = hint(shown);
+		this.invalidSession = InvalidSession.matches(shown, tr(InvalidSession.TRANSLATION_KEY, "Invalid session"));
+		String hint = invalidSession ? null : hint(shown);
 		this.reason = hint == null ? shown : shown + "\n\n§r" + hint;
 	}
 
@@ -138,7 +155,27 @@ public final class DisconnectedPage extends Page {
 
 	public boolean autoOn() {
 		ClientConfig c = ArcticClient.config();
-		return c.autoReconnect && address != null && !cancelled && tries < maxTries();
+		return c.autoReconnect && address != null && !cancelled && tries < maxTries()
+				&& allowsAutoReconnect(invalidSession, this::offlineSession);
+	}
+
+	static boolean allowsAutoReconnect(boolean invalidSession, BooleanSupplier offlineSession) {
+		return !invalidSession || !offlineSession.getAsBoolean();
+	}
+
+	static String sessionHint(boolean invalidSession, boolean offlineSession, boolean refreshFailed) {
+		if (!invalidSession) {
+			return null;
+		}
+		if (offlineSession) {
+			return Lang.t("servers.invalid_session_offline");
+		}
+		return refreshFailed ? Lang.t("servers.invalid_session_refresh_failed") : null;
+	}
+
+	private boolean offlineSession() {
+		AccountSwitcher accounts = ArcticClient.accounts();
+		return accounts == null ? platform.offlineSession() : accounts.offlineSession();
 	}
 
 	private static int maxTries() {
@@ -159,7 +196,18 @@ public final class DisconnectedPage extends Page {
 	public long secondsLeft() { return Math.max(0, (millisLeft() + 999) / 1000); }
 	/** What the countdown says on a button: "Reconnect 4s", or milliseconds under a second. */
 	public String countdown() { return millisLeft() < 1000 ? millisLeft() + "ms" : secondsLeft() + "s"; }
-	public void tickReconnect() { if (autoOn() && millisLeft() == 0) { cancelled = true; reconnect(); } }
+	public void tickReconnect() {
+		if (invalidSession && stillHere != null) {
+			String hint = sessionHint(true, offlineSession(), refreshFailed);
+			if (hint != null && !hint.equals(nativeHint)) {
+				Notices.post(title, hint);
+			}
+			nativeHint = hint;
+		}
+		if (autoOn() && millisLeft() == 0) {
+			reconnect(true);
+		}
+	}
 
 	private long millisLeft() {
 		return Math.max(0, deadline() - System.currentTimeMillis());
@@ -178,6 +226,8 @@ public final class DisconnectedPage extends Page {
 	public void removed() {
 		// Covered by another menu (Right Shift) or left: never count down to a rejoin behind it.
 		cancelled = true;
+		reconnectAttempt++;
+		refreshingSession = false;
 		super.removed();
 	}
 
@@ -223,7 +273,9 @@ public final class DisconnectedPage extends Page {
 		int left = width / 2 - BUTTON_W / 2;
 		int y = layout()[4];
 		if (address != null) {
-			add(new Button(Lang.t("servers.reconnect"), this::reconnect).primary()).bounds(left, y, BUTTON_W, BUTTON_H);
+			Button reconnect = new Button(Lang.t("servers.reconnect"), this::reconnect).primary();
+			reconnect.enabled = !refreshingSession;
+			add(reconnect).bounds(left, y, BUTTON_W, BUTTON_H);
 			y += BUTTON_H + GAP;
 		}
 		// The game's own wording: "gui.toMenu" is its "Back to Server List".
@@ -246,9 +298,56 @@ public final class DisconnectedPage extends Page {
 	}
 
 	public void reconnect() {
-		if (address == null) {
+		reconnect(false);
+	}
+
+	private void reconnect(boolean automatic) {
+		if (address == null || refreshingSession) {
 			return;
 		}
+		if (!invalidSession) {
+			if (automatic) {
+				cancelled = true;
+			}
+			joinServer();
+			return;
+		}
+		cancelled = true;
+		if (offlineSession()) {
+			if (!automatic) {
+				joinServer();
+			}
+			return;
+		}
+		AccountSwitcher accounts = ArcticClient.accounts();
+		if (accounts == null) {
+			refreshFailed = true;
+			if (stillHere == null) {
+				rebuild();
+			}
+			return;
+		}
+		refreshingSession = true;
+		refreshFailed = false;
+		if (stillHere == null) {
+			rebuild();
+		}
+		int attempt = ++reconnectAttempt;
+		accounts.renewSession(renewed -> {
+			if (attempt != reconnectAttempt || (stillHere != null && !stillHere.getAsBoolean())) {
+				return;
+			}
+			refreshingSession = false;
+			refreshFailed = !renewed;
+			if (renewed) {
+				joinServer();
+			} else if (stillHere == null) {
+				rebuild();
+			}
+		});
+	}
+
+	private void joinServer() {
 		tries++;
 		File gameDir = platform.configDir().getAbsoluteFile().getParentFile();
 		Servers servers = new Servers(platform, gameDir);
@@ -264,7 +363,9 @@ public final class DisconnectedPage extends Page {
 
 	@Override
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
-		List<String> lines = wrap(g, reason, Math.min(width - 40, 360));
+		String sessionHint = invalidSession ? sessionHint(true, offlineSession(), refreshFailed) : null;
+		String shown = sessionHint == null ? reason : sessionHint + "\n\n§r" + reason;
+		List<String> lines = wrap(g, shown, Math.min(width - 40, 360));
 		if (lines.size() != reasonLines) {
 			// The buttons go below however many lines the reason turned out to be.
 			reasonLines = lines.size();
@@ -283,8 +384,7 @@ public final class DisconnectedPage extends Page {
 		if (autoOn()) {
 			long left = deadline() - System.currentTimeMillis();
 			if (left <= 0) {
-				cancelled = true;
-				reconnect();
+				reconnect(true);
 				return;
 			}
 			String text = Lang.t("servers.reconnecting_in") + (left < 1000 ? left + " ms" : (left + 999) / 1000 + " s") + "…";

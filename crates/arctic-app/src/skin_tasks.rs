@@ -8,8 +8,7 @@ use std::path::Path;
 #[cfg(feature = "offline-accounts")]
 use arctic_core::Error;
 use arctic_core::Result as CoreResult;
-use arctic_core::auth::microsoft::{self, MsaConfig};
-use arctic_core::auth::{Account, AccountKind, now_secs};
+use arctic_core::auth::{Account, AccountKind};
 use arctic_core::cosmetic_models;
 use arctic_core::cosmetics::{self, CapeChoice, Look, NewLook, Preset, Texture};
 use arctic_core::skins::Variant;
@@ -195,18 +194,6 @@ impl Tasks {
             skin_png,
             capes,
         })
-    }
-
-    /// The account refreshed if needed (Microsoft tokens expire).
-    pub(crate) fn fresh_account(&self, account: Account) -> CoreResult<Account> {
-        if account.needs_refresh(now_secs()) {
-            let cfg = MsaConfig::load(self.dirs())?;
-            let fresh = microsoft::refresh(&cfg, &account)?;
-            self.send(Event::AccountRefreshed(fresh.clone()));
-            Ok(fresh)
-        } else {
-            Ok(account)
-        }
     }
 
     /// A valid Minecraft access token, refreshing the login if needed.

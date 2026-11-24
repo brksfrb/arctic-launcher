@@ -2,6 +2,7 @@
 //! back through `Event`s, so the UI thread never blocks on the network or
 //! the game process.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -11,7 +12,7 @@ use std::sync::mpsc::Sender;
 use crate::t;
 use arctic_core::auth::avatar::{self, Face};
 use arctic_core::auth::microsoft::{self, DeviceCode, MsaConfig};
-use arctic_core::auth::{Account, now_secs};
+use arctic_core::auth::{self, Account, now_secs};
 use arctic_core::cosmetics::{self, SuggestionReceipt, SuggestionReplies};
 use arctic_core::instances::Instance;
 use arctic_core::launch::progress::{LaunchProgress, LaunchSteps};
@@ -103,7 +104,10 @@ pub enum Event {
     ModMalwareWarning(ModMalwareWarning),
     LaunchCancelled(LaunchId),
     UpdateProgress(ProgressSnapshot),
-    AccountRefreshed(Account),
+    AccountRefreshed {
+        previous: Account,
+        fresh: Account,
+    },
     /// Game process started (window not necessarily up yet). Carries the
     /// version id that was actually launched.
     /// The game, its log file, its version and how Java was started.
@@ -275,6 +279,14 @@ pub enum Event {
     Share(arctic_share::SessionId, arctic_share::ShareEvent),
 }
 
+#[derive(Default)]
+struct AccountRefresh {
+    /// The account from the UI and its replacement, while other jobs may still have the old copy.
+    last: Option<(Account, Account)>,
+}
+
+type AccountRefreshes = HashMap<String, Arc<Mutex<AccountRefresh>>>;
+
 /// Handle used by the UI to start background jobs.
 #[derive(Clone)]
 pub struct Tasks {
@@ -284,6 +296,7 @@ pub struct Tasks {
     /// The in-game account switcher's bridge, passed to launched games.
     bridge: Option<Arc<arctic_core::bridge::BridgeInfo>>,
     content_lock: Arc<Mutex<()>>,
+    account_refreshes: Arc<Mutex<AccountRefreshes>>,
 }
 
 /// How a game starts beyond its instance: which copy it is, and where it
@@ -304,6 +317,7 @@ impl Tasks {
             dirs,
             bridge: None,
             content_lock: Arc::default(),
+            account_refreshes: Arc::default(),
         }
     }
 
@@ -315,6 +329,7 @@ impl Tasks {
             dirs,
             bridge: self.bridge.clone(),
             content_lock: Arc::clone(&self.content_lock),
+            account_refreshes: Arc::default(),
         }
     }
 
@@ -326,6 +341,47 @@ impl Tasks {
     /// Installs that share a mod index or pack settings must not race.
     pub(crate) fn content_lock(&self) -> std::sync::MutexGuard<'_, ()> {
         self.content_lock.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub(crate) fn fresh_account(&self, account: Account) -> Result<Account> {
+        self.refresh_account(account, false)
+    }
+
+    /// Serialize refresh for each Microsoft account across game requests, launches and other jobs.
+    pub(crate) fn refresh_account(&self, account: Account, force: bool) -> Result<Account> {
+        if !account.is_microsoft() {
+            return if force {
+                Err(arctic_core::Error::OfflineSessionRefresh)
+            } else {
+                Ok(account)
+            };
+        }
+        let slot = {
+            let mut refreshes = self
+                .account_refreshes
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            Arc::clone(refreshes.entry(account.id.clone()).or_default())
+        };
+        let mut refresh = slot.lock().unwrap_or_else(|e| e.into_inner());
+        let current = match &refresh.last {
+            Some((previous, fresh)) if previous == &account => {
+                if !fresh.needs_refresh(now_secs()) {
+                    return Ok(fresh.clone());
+                }
+                fresh
+            }
+            _ => &account,
+        };
+        let (fresh, changed) = auth::refresh_session(&self.dirs, current, force)?;
+        if changed {
+            self.send(Event::AccountRefreshed {
+                previous: current.clone(),
+                fresh: fresh.clone(),
+            });
+            refresh.last = Some((account, fresh.clone()));
+        }
+        Ok(fresh)
     }
 
     pub(crate) fn dirs(&self) -> &DataDirs {
@@ -515,15 +571,10 @@ impl Tasks {
             snapshot.percent = Some(percent);
             self.send(Event::LaunchProgress(id, snapshot));
         };
-        let account = if account.needs_refresh(now_secs()) {
+        if account.needs_refresh(now_secs()) {
             progress(ProgressInfo::stage(t!("tasks.refreshing_microsoft_login")));
-            let cfg = MsaConfig::load(&self.dirs)?;
-            let fresh = microsoft::refresh(&cfg, &account)?;
-            self.send(Event::AccountRefreshed(fresh.clone()));
-            fresh
-        } else {
-            account
-        };
+        }
+        let account = self.fresh_account(account)?;
         let req = LaunchRequest {
             dirs: &self.dirs,
             version,
