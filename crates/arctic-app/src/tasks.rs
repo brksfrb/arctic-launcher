@@ -407,7 +407,7 @@ impl Tasks {
     pub fn send_log(&self, source: String, game: String, text: String) {
         self.run(move |t| {
             let base = arctic_core::cosmetics::base_url();
-            let log = arctic_core::crash::scrubbed_tail(&text, SENT_LOG_BYTES);
+            let log = arctic_core::crash::scrubbed_shared_log(&text, SENT_LOG_BYTES);
             let result = arctic_core::cosmetics::send_log(
                 &base,
                 &arctic_core::cosmetics::SharedLog {
