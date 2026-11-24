@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::collections::HashSet;
 use std::fs;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -173,15 +173,35 @@ impl DownloadJob {
         self.lzma.as_ref().map(|c| c.size).or(self.size)
     }
 
-    /// Cheap "is it already there" check: existence + size. Full hashing of
-    /// thousands of assets on every launch would make launches slow.
+    /// Check existence and size, plus the ZIP boundaries for JARs. Keep the
+    /// thousands of assets on the metadata-only path.
     pub(crate) fn is_satisfied(&self) -> bool {
-        match (fs::metadata(&self.dest), self.size) {
-            (Ok(meta), Some(size)) => meta.is_file() && meta.len() == size,
-            (Ok(meta), None) => meta.is_file(),
-            (Err(_), _) => false,
-        }
+        fs::metadata(&self.dest)
+            .is_ok_and(|meta| meta.is_file() && self.size.is_none_or(|size| meta.len() == size))
+            && (!self
+                .dest
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("jar"))
+                || jar_has_zip_headers(&self.dest).unwrap_or(false))
     }
+}
+
+fn jar_has_zip_headers(path: &Path) -> std::io::Result<bool> {
+    const END_RECORD_LEN: usize = 22;
+    let mut file = fs::File::open(path)?;
+    let mut start = [0; 4];
+    let mut end = [0; END_RECORD_LEN];
+    file.read_exact(&mut start)?;
+    file.seek(SeekFrom::End(-(END_RECORD_LEN as i64)))?;
+    file.read_exact(&mut end)?;
+    if start == *b"PK\x03\x04" && end.starts_with(b"PK\x05\x06") && end[20..] == [0, 0] {
+        return Ok(true);
+    }
+
+    // ZIP comments and other valid layouts can move these records. Let the
+    // ZIP reader handle them and check that the first entry has a local header.
+    Ok(zip::ZipArchive::new(BufReader::new(file))
+        .is_ok_and(|mut jar| jar.is_empty() || jar.by_index_raw(0).is_ok()))
 }
 
 /// Aggregated, rate-limited progress reporting shared by all workers.
@@ -1153,6 +1173,27 @@ mod tests {
         assert!(j(Some(5)).is_satisfied());
         assert!(!j(Some(6)).is_satisfied());
         assert!(j(None).is_satisfied());
+    }
+
+    #[test]
+    fn cached_jars_can_have_zip_comments_but_need_readable_local_headers() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("library.JAR");
+        let mut jar = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        jar.set_comment("a ZIP comment").unwrap();
+        jar.start_file("test.class", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        jar.write_all(b"class data").unwrap();
+        let mut bytes = jar.finish().unwrap().into_inner();
+        let entry = DownloadJob {
+            dest: dest.clone(),
+            ..job("", Some(bytes.len() as u64))
+        };
+        fs::write(&dest, &bytes).unwrap();
+        assert!(entry.is_satisfied());
+        bytes[0] ^= 1;
+        fs::write(&dest, &bytes).unwrap();
+        assert!(!entry.is_satisfied());
     }
 
     #[test]

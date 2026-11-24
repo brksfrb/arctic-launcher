@@ -1886,6 +1886,83 @@ fn launchwrapper_java_mismatch(text: &str) -> Option<(Diagnosis, String)> {
     ))
 }
 
+fn damaged_jar_diagnosis(text: &str, mods_dir: Option<&Path>) -> Option<(Diagnosis, String)> {
+    static READING_JAR: OnceLock<Regex> = OnceLock::new();
+    static BROKEN_ZIP: OnceLock<Regex> = OnceLock::new();
+    let reading_jar = READING_JAR.get_or_init(|| {
+        Regex::new(r#"(?i)\berror reading[ \t]+["']?(.+?\.jar)(?:["']?[ \t]*$|["']?[:!)])"#)
+            .unwrap()
+    });
+    let broken_zip = BROKEN_ZIP.get_or_init(|| {
+        Regex::new(
+            r"(?i)\bZipException:[ \t]+(?:zip END header not found|invalid LOC header|zip file is empty)\b",
+        )
+        .unwrap()
+    });
+    let mut suspect = None;
+    for line in text.lines().map(str::trim_start) {
+        let broken = broken_zip.is_match(line);
+        if let Some(reading) = reading_jar.captures(line) {
+            suspect = reading.get(1).map(|path| path.as_str());
+        } else if !broken
+            && !["at ", "... ", "Caused by: "]
+                .iter()
+                .any(|prefix| line.starts_with(prefix))
+        {
+            suspect = None;
+        }
+        if broken
+            && let Some(path) = suspect
+            && let Some((file, repair)) = damaged_jar_location(path, mods_dir)
+        {
+            let action = if repair {
+                "Arctic will re-download it on the next launch."
+            } else {
+                "Re-download this mod and replace the damaged file."
+            };
+            return Some((
+                Diagnosis {
+                    repair,
+                    ..Diagnosis::new(
+                        "A game file was damaged",
+                        format!("Minecraft couldn't read {file}. {action}"),
+                        Vec::new(),
+                    )
+                },
+                head_of(line, 2048).to_owned(),
+            ));
+        }
+    }
+    None
+}
+
+fn damaged_jar_location(path: &str, mods_dir: Option<&Path>) -> Option<(String, bool)> {
+    // Logs can come from a different OS and can have their home directory redacted.
+    let normalized = path.replace('\\', "/");
+    let (parent, file) = normalized.rsplit_once('/')?;
+    let folders: Vec<_> = parent.split('/').collect();
+    if folders.contains(&"..") {
+        return None;
+    }
+    let repair = folders.windows(2).any(|pair| {
+        pair[0].eq_ignore_ascii_case("shared")
+            && (pair[1].eq_ignore_ascii_case("libraries")
+                || pair[1].eq_ignore_ascii_case("versions"))
+    });
+    let player_mod = folders.windows(4).any(|part| {
+        part[0].eq_ignore_ascii_case("instances")
+            && part[2].eq_ignore_ascii_case("minecraft")
+            && part[3].eq_ignore_ascii_case("mods")
+    }) || mods_dir.is_some_and(|dir| {
+        let dir = dir.to_string_lossy().replace('\\', "/");
+        normalized
+            .to_ascii_lowercase()
+            .strip_prefix(&dir.to_ascii_lowercase())
+            .is_some_and(|suffix| suffix.starts_with('/'))
+    });
+    (repair || player_mod).then(|| (file.to_owned(), repair))
+}
+
 fn diagnose_rules(
     text: &str,
     java: Option<&str>,
@@ -1900,6 +1977,9 @@ fn diagnose_rules(
     }
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
+    }
+    if let Some(damaged) = damaged_jar_diagnosis(tail_of(text, MAX_TEXT), mods_dir) {
+        return Some(damaged);
     }
     if let Some(mismatch) = launchwrapper_java_mismatch(tail_of(text, MAX_TEXT)) {
         return Some(mismatch);
@@ -5238,6 +5318,61 @@ USERNAME=someone
             title("java.lang.OutOfMemoryError: Java heap space"),
             "Minecraft ran out of memory"
         );
+    }
+
+    #[test]
+    fn crash_517_names_the_damaged_library_and_requests_repair() {
+        let log = include_str!("../tests/fixtures/crash-517-corrupt-library.log");
+        let diagnosis =
+            crate::crash_conflicts::diagnose_exit_in(log, 1, Path::new("mods")).unwrap();
+        assert_eq!(diagnose(log), Some(diagnosis.clone()));
+        assert_eq!(diagnosis.title, "A game file was damaged");
+        assert_eq!(
+            diagnosis.detail,
+            "Minecraft couldn't read log4j-core-2.22.1.jar. Arctic will re-download it on the next launch."
+        );
+        assert!(diagnosis.repair);
+    }
+
+    #[test]
+    fn damaged_jar_advice_depends_on_where_the_jar_is_installed() {
+        let trace = |path, cause| {
+            format!(
+                "java.io.IOException: error reading {path}\n\tat loader.read(Loader.java:1)\nCaused by: java.util.zip.ZipException: {cause}"
+            )
+        };
+        let version = trace(
+            "/portable data/shared/versions/1.8.9/1.8.9.jar",
+            "invalid LOC header (bad signature)",
+        );
+        let diagnosis = diagnose(&version).unwrap();
+        assert!(diagnosis.detail.contains("1.8.9.jar"));
+        assert!(diagnosis.repair);
+
+        for path in [
+            r"C:\game\profiles\p\instances\i\minecraft\mods\Example Mod.jar",
+            "/custom game/mods/Example Mod.jar",
+        ] {
+            let report = trace(path, "zip file is empty");
+            let diagnosis = crate::crash_conflicts::diagnose_exit_in(
+                &report,
+                1,
+                Path::new("/custom game/mods"),
+            )
+            .unwrap();
+            assert_eq!(diagnosis.title, "A game file was damaged");
+            assert!(diagnosis.detail.contains("Example Mod.jar"));
+            assert!(diagnosis.detail.contains("Re-download this mod"));
+            assert!(!diagnosis.repair);
+        }
+
+        for report in [
+            trace("/unrelated/libraries/example.jar", "zip END header not found"),
+            trace("/data/shared/libraries/example.jar", "unrelated ZIP error"),
+            "java.io.IOException: error reading /data/shared/libraries/example.jar\nOther failure\nCaused by: java.util.zip.ZipException: zip file is empty".into(),
+        ] {
+            assert!(damaged_jar_diagnosis(&report, None).is_none());
+        }
     }
 
     #[test]
