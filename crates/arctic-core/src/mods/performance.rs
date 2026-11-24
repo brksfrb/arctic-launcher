@@ -6,6 +6,7 @@
 //! mods are never touched.
 
 mod dependencies;
+mod settled;
 
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
@@ -375,6 +376,11 @@ struct State {
     /// A background check found newer builds: the next start installs them.
     #[serde(default)]
     update_waiting: bool,
+    /// Modrinth had no build of any of these for the version (project ids joined by "+"), so
+    /// nothing is installed: kept across a switch to another version and back, so that coming
+    /// back doesn't ask for each of them again before the weekly look.
+    #[serde(default)]
+    none_for: String,
 }
 
 fn index_path(game_dir: &Path) -> PathBuf {
@@ -418,10 +424,30 @@ fn stash_dir(game_dir: &Path, game_version: &str, shaders: bool, extras: &str) -
 /// Move the current set (files, index, state) out of the way, into its stash.
 fn stash(game_dir: &Path, state: &State) -> Result<()> {
     let index = index_path(game_dir);
-    if state.game_version.is_empty() || !index.exists() {
+    if state.game_version.is_empty() || (!index.exists() && state.none_for.is_empty()) {
         return Ok(());
     }
     let to = stash_dir(game_dir, &state.game_version, state.shaders, &state.extras);
+    if !index.exists() {
+        // The folder is named after what the state file says: nothing is removed unless that
+        // is one plain name inside the stash folder (a state file can come with a pack).
+        let stashes = game_dir.join(".arctic").join("performance");
+        let plain = to.parent() == Some(stashes.as_path())
+            && to
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(plain_name);
+        if !plain {
+            return Ok(());
+        }
+        // Nothing was installed: only that Modrinth was asked. A set left here from before
+        // (too old to be used again, or incomplete) must not pass for this one's.
+        if to.exists() {
+            fs::remove_dir_all(&to).at(&to)?;
+        }
+        fs::create_dir_all(&to).at(&to)?;
+        return save_json(&to.join("arctic-performance-state.json"), state);
+    }
     // Keep files already moved if an earlier attempt was interrupted.
     fs::create_dir_all(&to).at(&to)?;
     let mods_dir = game_dir.join("mods");
@@ -438,18 +464,43 @@ fn stash(game_dir: &Path, state: &State) -> Result<()> {
     fs::rename(&index, to.join("arctic-performance.json")).at(&index)
 }
 
+/// One folder name and nothing that leads elsewhere.
+fn plain_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('.')
+        && !name.contains("..")
+        && !name
+            .chars()
+            .any(|c| matches!(c, '/' | '\\' | ':' | '\0') || c.is_control())
+}
+
 /// Bring back a stashed set for this version if it's complete and recent;
-/// true when it's in place.
-fn unstash(game_dir: &Path, game_version: &str, shaders: bool, extras: &str) -> Result<bool> {
+/// true when it's in place. `none_for`: the projects wanted now, for the stash of a version
+/// none of them had a build for ([`State::none_for`]); `None` where that isn't kept.
+fn unstash(
+    game_dir: &Path,
+    game_version: &str,
+    shaders: bool,
+    extras: &str,
+    none_for: Option<&str>,
+) -> Result<bool> {
     let from = stash_dir(game_dir, game_version, shaders, extras);
     let index = from.join("arctic-performance.json");
     let Some(state) = load_json::<State>(&from.join("arctic-performance-state.json"))? else {
         return Ok(false);
     };
-    if !index.exists()
-        || crate::auth::now_secs().saturating_sub(state.checked) >= RECHECK_SECS
-        || !all_present(&index, &from)?
-    {
+    if crate::auth::now_secs().saturating_sub(state.checked) >= RECHECK_SECS {
+        return Ok(false);
+    }
+    if !index.exists() {
+        if state.none_for.is_empty() || none_for != Some(state.none_for.as_str()) {
+            return Ok(false);
+        }
+        save_json(&state_path(game_dir), &state)?;
+        let _ = fs::remove_dir_all(&from);
+        return Ok(true);
+    }
+    if !all_present(&index, &from)? {
         return Ok(false);
     }
     let mods_dir = game_dir.join("mods");
@@ -467,6 +518,14 @@ fn unstash(game_dir: &Path, game_version: &str, shaders: bool, extras: &str) -> 
         let file = from.join(&name);
         let part = mods_dir.join(format!("{name}.part"));
         fs::copy(&file, &part).at(&file)?;
+        // The same file as before it was put away, time included: what was worked out from
+        // it then (which Fabric API modules it uses) still holds.
+        if let Ok(modified) = fs::metadata(&file).and_then(|meta| meta.modified()) {
+            let _ = File::options()
+                .write(true)
+                .open(&part)
+                .and_then(|copy| copy.set_modified(modified));
+        }
         fs::rename(&part, mods_dir.join(&name)).at(&part)?;
     }
     save_json(&state_path(game_dir), &state)?;
@@ -501,14 +560,17 @@ pub fn sync(
         extras,
         install_wanted,
     )
+    .map(|_| ())
 }
 
+/// [`sync`] for a start. `Ok(true)`: everything wanted was already there and in order, found
+/// without asking Modrinth (so the same folder and settings give the same answer again).
 pub(crate) fn sync_for_launch(
     game_dir: &Path,
     game_version: &str,
     instance: &crate::instances::Instance,
     progress: Progress,
-) -> Result<()> {
+) -> Result<bool> {
     let loader = instance.loader.kind();
     sync_with_install(
         SyncTarget {
@@ -524,6 +586,75 @@ pub(crate) fn sync_for_launch(
         install_wanted,
     )
 }
+
+/// Everything the Performance switch does to a Fabric or Quilt game folder before a start: its
+/// mods from Modrinth, Polarium, and for Vanilla instances the Fabric API cut down to what those
+/// use. Best effort (no Sodium is better than no game: an unreachable Modrinth CDN, a locked or
+/// truncated index), except for what would stop Fabric from starting.
+///
+/// All of it reads every jar in the folder more than once. A start that found nothing to change
+/// is remembered with everything it depended on (see [`settled`]), and the next start with the
+/// same folder, settings, game version and launcher skips it.
+pub(crate) fn prepare_for_launch(
+    game_dir: &Path,
+    game_version: &str,
+    instance: &crate::instances::Instance,
+    launcher_owned_vanilla: bool,
+    progress: Progress,
+) -> Result<()> {
+    let started = std::time::Instant::now();
+    let settled = settled::Settled::new(game_dir, game_version, instance, launcher_owned_vanilla);
+    let before = settled.inputs();
+    if settled.holds(before.as_ref()) {
+        log::debug!("performance mods: nothing changed since the last start");
+        return Ok(());
+    }
+    // Only a run that needed nothing from Modrinth gives the same answer next time.
+    let mut complete = match sync_for_launch(game_dir, game_version, instance, progress) {
+        Ok(in_order) => in_order,
+        Err(e) => {
+            log::warn!("performance mods: {e}");
+            false
+        }
+    };
+    let synced = started.elapsed();
+    let mods_dir = game_dir.join("mods");
+    if let Err(e) = super::polarium::sync(&mods_dir, game_version, instance.performance) {
+        log::warn!("polarium: {e}");
+        complete = false;
+    }
+    // A copy that could not be put aside this time is tried again at the next start.
+    complete &= !super::polarium::unusable_left(&mods_dir, game_version);
+    let polarium = started.elapsed();
+    // Vanilla instances (nothing in the folder but the launcher's own mods): load only
+    // the Fabric API modules those use, which starts the game noticeably faster.
+    if instance.loader.kind().is_none() {
+        // A cut-down that failed is tried again at the next start.
+        complete &= finish_vanilla(
+            game_dir,
+            game_version,
+            launcher_owned_vanilla,
+            instance.performance,
+        )?;
+    }
+    let total = started.elapsed();
+    if total >= SLOW_PREPARE {
+        log::info!(
+            "performance mods took {} ms: Modrinth set and its dependencies {}, Polarium {}, Fabric API {}",
+            total.as_millis(),
+            synced.as_millis(),
+            (polarium - synced).as_millis(),
+            (total - polarium).as_millis()
+        );
+    }
+    if complete {
+        settled.remember(before);
+    }
+    Ok(())
+}
+
+/// From here the parts of [`prepare_for_launch`] are worth a line in the log.
+const SLOW_PREPARE: std::time::Duration = std::time::Duration::from_millis(100);
 
 struct SyncTarget<'a> {
     game_dir: &'a Path,
@@ -542,7 +673,7 @@ fn sync_with_install(
         &SyncTarget<'_>,
         &[&str],
     ) -> Result<(Vec<super::InstalledMod>, Vec<super::Failed>)>,
-) -> Result<()> {
+) -> Result<bool> {
     let SyncTarget {
         game_dir,
         game_version,
@@ -574,10 +705,15 @@ fn sync_with_install(
         .collect::<Vec<_>>()
         .join("+");
     if wanted.is_empty() {
-        return remove_all(game_dir);
+        return remove_all(game_dir).map(|()| true);
     }
     let modded = loader.is_some();
     let loader = loader.unwrap_or(LoaderKind::Fabric);
+    // In an instance with the player's own mods what is asked for depends on those too.
+    let none_key = (!modded).then(|| {
+        let ids: Vec<&str> = wanted.iter().map(|(id, _)| *id).collect();
+        ids.join("+")
+    });
     let check = || {
         // The old set has already been stashed. Park any incompatible leftovers
         // before deciding which active jars need or provide dependencies.
@@ -597,7 +733,13 @@ fn sync_with_install(
         super::slim_api::undo(&mods_dir)?;
         stash(game_dir, &state)?;
         remove_all(game_dir)?;
-        unstash(game_dir, game_version, shaders, &extras_key)?
+        unstash(
+            game_dir,
+            game_version,
+            shaders,
+            &extras_key,
+            none_key.as_deref(),
+        )?
     };
     if game_version == "1.16" {
         if let Some(m) = ModIndex::load(&index)?.by_project(ENTITY_CULLING) {
@@ -617,23 +759,25 @@ fn sync_with_install(
         leave_players_mods(game_dir, &mut wanted)?;
     }
     if restored || wanted.is_empty() {
-        return check();
+        return Ok(check()? && !restored);
     }
     if same_set && !state.update_waiting && all_present(&index, &mods_dir)? {
-        if crate::auth::now_secs().saturating_sub(state.checked) >= RECHECK_SECS {
+        let due = crate::auth::now_secs().saturating_sub(state.checked) >= RECHECK_SECS;
+        if due {
             // Due for a look at Modrinth: the game starts with what is here meanwhile,
             // and only a real update is installed (at the next start).
             let ids: Vec<String> = wanted.iter().map(|(id, _)| (*id).to_owned()).collect();
             recheck_later(game_dir.to_path_buf(), ids, game_version.to_owned(), state);
         }
-        return check();
+        return Ok(check()? && !due);
     }
     // New or changed mods are about to be written: Fabric API goes back to the whole one first.
     super::slim_api::undo(&mods_dir)?;
     if modded {
         leave_players_mods(game_dir, &mut wanted)?;
         if wanted.is_empty() {
-            return check();
+            check()?;
+            return Ok(false);
         }
     }
     let ids: Vec<&str> = wanted.iter().map(|(id, _)| *id).collect();
@@ -642,14 +786,19 @@ fn sync_with_install(
     let (installed, failed) = install?;
     checked?;
     let mut reached = !installed.is_empty();
+    let mut only_no_build = true;
     for (id, e) in failed {
         let name = wanted
             .iter()
             .find(|(i, _)| *i == id)
             .map_or(id.as_str(), |(_, n)| n);
         match e {
-            crate::Error::Http(e) => log::info!("{name}: can't reach Modrinth: {e}"),
+            crate::Error::Http(e) => {
+                only_no_build = false;
+                log::info!("{name}: can't reach Modrinth: {e}");
+            }
             e => {
+                only_no_build &= super::resolve::is_no_version(&e);
                 // Usually "no version for this Minecraft yet".
                 reached = true;
                 log::info!("{name} skipped for {game_version}: {e}");
@@ -657,6 +806,9 @@ fn sync_with_install(
         }
     }
     if reached {
+        // Modrinth said of every project that it has no build: worth keeping across a version
+        // switch (an answer that could not be had or read is asked for again).
+        let nothing = only_no_build && !index.exists();
         save_json(
             &state_path(game_dir),
             &State {
@@ -665,10 +817,11 @@ fn sync_with_install(
                 extras: extras_key,
                 checked: crate::auth::now_secs(),
                 update_waiting: false,
+                none_for: none_key.filter(|_| nothing).unwrap_or_default(),
             },
         )?;
     }
-    Ok(())
+    Ok(false)
 }
 
 fn install_wanted(
@@ -845,17 +998,20 @@ pub(crate) fn finish_vanilla(
     game_version: &str,
     launcher_owned: bool,
     slim_api: bool,
-) -> Result<()> {
+) -> Result<bool> {
     let _lock = lock(game_dir)?;
     if launcher_owned {
         park_incompatible_vanilla(game_dir, game_version)?;
     }
     let mods_dir = game_dir.join("mods");
+    // `Ok(false)`: the Fabric API could not be cut down this time (the whole one is in place).
+    let mut done = true;
     if slim_api && let Err(e) = super::slim_api::apply(&mods_dir) {
         log::warn!("couldn't cut Fabric API down: {e}");
         super::slim_api::undo(&mods_dir)?;
+        done = false;
     }
-    Ok(())
+    Ok(done)
 }
 
 /// The state and index can disagree after a crash or a launch from an older
@@ -1116,6 +1272,7 @@ mod tests {
             extras: String::new(),
             checked: crate::auth::now_secs(),
             update_waiting: false,
+            none_for: String::new(),
         };
         save_json(&state_path(dir.path()), &state).unwrap();
         // Would fail (and log) if it tried Modrinth with a fake version.
@@ -1139,6 +1296,7 @@ mod tests {
             extras: String::new(),
             checked: 0,
             update_waiting: false,
+            none_for: String::new(),
         };
         save_json(&state_path(dir.path()), &state).unwrap();
         let start = std::time::Instant::now();
@@ -1163,6 +1321,7 @@ mod tests {
             extras: String::new(),
             checked: crate::auth::now_secs(),
             update_waiting: false,
+            none_for: String::new(),
         };
         save_json(&state_path(game_dir), &state).unwrap();
     }
@@ -1493,5 +1652,223 @@ mod tests {
         assert!(!mods.join("dep.jar").exists());
         assert!(mods.join("user.jar").is_file());
         assert!(!pending_path(game).exists());
+    }
+
+    fn no_build(
+        _: &SyncTarget<'_>,
+        ids: &[&str],
+    ) -> Result<(Vec<super::super::InstalledMod>, Vec<super::super::Failed>)> {
+        let failed = ids
+            .iter()
+            .map(|id| {
+                let none = crate::Error::Other(format!("{id} has no version for Fabric 0"));
+                ((*id).to_owned(), none)
+            })
+            .collect();
+        Ok((Vec::new(), failed))
+    }
+
+    fn must_not_ask(
+        _: &SyncTarget<'_>,
+        _: &[&str],
+    ) -> Result<(Vec<super::super::InstalledMod>, Vec<super::super::Failed>)> {
+        panic!("Modrinth was asked again")
+    }
+
+    #[test]
+    fn a_version_without_builds_is_not_asked_about_again_after_switching_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        type Install = fn(
+            &SyncTarget<'_>,
+            &[&str],
+        )
+            -> Result<(Vec<super::super::InstalledMod>, Vec<super::super::Failed>)>;
+        let run = |version, shaders, install: Install| {
+            sync_with_install(vanilla_target(game, version), true, shaders, &[], install)
+        };
+        // Asking Modrinth is never "everything was in order already".
+        assert!(!run("1.8.9", false, no_build).unwrap());
+        assert!(run("1.8.9", false, must_not_ask).unwrap());
+        assert!(
+            !load_json::<State>(&state_path(game))
+                .unwrap()
+                .unwrap()
+                .none_for
+                .is_empty()
+        );
+
+        assert!(!run("0.0-other", false, no_build).unwrap());
+        assert!(stash_dir(game, "1.8.9", false, "").is_dir());
+        // Back: the answer of a moment ago is used, once (the stash is taken out).
+        assert!(!run("1.8.9", false, must_not_ask).unwrap());
+        assert!(!stash_dir(game, "1.8.9", false, "").exists());
+        assert!(run("1.8.9", false, must_not_ask).unwrap());
+
+        // A set left in the stash from long ago is not taken for the "no build" answer's.
+        run("0.0-other", false, no_build).unwrap();
+        let stale = stash_dir(game, "1.8.9", false, "");
+        fs::write(stale.join("old-sodium.jar"), b"old").unwrap();
+        ModIndex::default()
+            .with(tracked("old-sodium.jar"))
+            .save(&stale.join("arctic-performance.json"))
+            .unwrap();
+        // (As when it was found too old on the way to 1.8.9: left there, and Modrinth asked.)
+        fs::remove_file(stale.join("arctic-performance-state.json")).unwrap();
+        assert!(!run("1.8.9", false, no_build).unwrap());
+        assert!(stale.join("old-sodium.jar").is_file());
+        run("0.0-other", false, no_build).unwrap();
+        assert!(!stale.join("old-sodium.jar").exists());
+        assert!(!run("1.8.9", false, must_not_ask).unwrap());
+        assert!(!game.join("mods/old-sodium.jar").exists());
+
+        // A state file naming a folder outside the stash never gets anything removed.
+        let precious = game.join("saves");
+        fs::create_dir_all(&precious).unwrap();
+        fs::write(precious.join("world"), b"keep").unwrap();
+        for version in ["../../saves", "..", "a/../../../saves", ".hidden"] {
+            let odd = State {
+                game_version: version.into(),
+                none_for: "x".into(),
+                ..State::default()
+            };
+            stash(game, &odd).unwrap();
+        }
+        assert!(precious.join("world").is_file());
+        assert!(plain_name("1.8.9-shaders-kYuIpRLv") && !plain_name("a\\b") && !plain_name(""));
+
+        // Another set of mods (Iris too) was never asked about.
+        let asked = std::cell::Cell::new(false);
+        sync_with_install(
+            vanilla_target(game, "0.0-other"),
+            true,
+            true,
+            &[],
+            |_, ids| {
+                asked.set(ids.contains(&crate::mods::packs::IRIS));
+                no_build(&vanilla_target(game, "0.0-other"), ids)
+            },
+        )
+        .unwrap();
+        assert!(asked.get());
+
+        // An answer older than the weekly look is not used.
+        run("0.0-other", false, no_build).unwrap();
+        let stashed = stash_dir(game, "1.8.9", false, "").join("arctic-performance-state.json");
+        let mut old: State = load_json(&stashed).unwrap().unwrap();
+        old.checked -= RECHECK_SECS;
+        save_json(&stashed, &old).unwrap();
+        let asked = std::cell::Cell::new(false);
+        sync_with_install(
+            vanilla_target(game, "1.8.9"),
+            true,
+            false,
+            &[],
+            |target, ids| {
+                asked.set(true);
+                no_build(target, ids)
+            },
+        )
+        .unwrap();
+        assert!(asked.get());
+    }
+
+    #[test]
+    fn modrinth_out_of_reach_is_not_kept_as_no_build() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        sync_with_install(vanilla_target(game, "1.8.9"), true, false, &[], |_, ids| {
+            let mut failed: Vec<super::super::Failed> = ids
+                .iter()
+                .skip(1)
+                .map(|id| {
+                    let none = crate::Error::Other(format!("{id} has no version for Fabric 0"));
+                    ((*id).to_owned(), none)
+                })
+                .collect();
+            failed.push((ids[0].to_owned(), crate::Error::Http("offline".into())));
+            Ok((Vec::new(), failed))
+        })
+        .unwrap();
+        let state: State = load_json(&state_path(game)).unwrap().unwrap();
+        assert!(state.none_for.is_empty());
+
+        // Nor is an answer that could not be read.
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        sync_with_install(vanilla_target(game, "1.8.9"), true, false, &[], |_, ids| {
+            let failed = ids
+                .iter()
+                .map(|id| ((*id).to_owned(), crate::Error::Other("bad JSON".into())))
+                .collect();
+            Ok((Vec::new(), failed))
+        })
+        .unwrap();
+        let state: State = load_json(&state_path(game)).unwrap().unwrap();
+        assert!(state.none_for.is_empty());
+    }
+
+    #[test]
+    fn a_start_that_changed_nothing_is_skipped_until_something_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        installed_set(game, "0.0-test", "sodium.jar");
+        let mut instance = crate::instances::Instance::vanilla_default();
+        let holds = |instance: &crate::instances::Instance, version: &str| {
+            let settled = settled::Settled::new(game, version, instance, true);
+            settled.holds(settled.inputs().as_ref())
+        };
+        let start = |instance: &crate::instances::Instance| {
+            prepare_for_launch(game, "0.0-test", instance, true, &|_| {}).unwrap();
+        };
+        assert!(!holds(&instance, "0.0-test"));
+        start(&instance);
+        assert!(holds(&instance, "0.0-test"));
+
+        // Another game version, another switch: not the start that was remembered.
+        assert!(!holds(&instance, "0.0-other"));
+        instance.shaders = true;
+        assert!(!holds(&instance, "0.0-test"));
+        instance.shaders = false;
+        assert!(holds(&instance, "0.0-test"));
+
+        // A jar that is not the file it was (here: its size), or a new one.
+        let mods = game.join("mods");
+        fs::write(mods.join("sodium.jar"), b"another build").unwrap();
+        assert!(!holds(&instance, "0.0-test"));
+        start(&instance);
+        assert!(holds(&instance, "0.0-test"));
+        fs::write(mods.join("players-own.jar"), b"added").unwrap();
+        assert!(!holds(&instance, "0.0-test"));
+        start(&instance);
+        assert!(holds(&instance, "0.0-test"));
+
+        // Downloads an interrupted install left behind are cleared by the real work.
+        save_json(&pending_path(game), &vec!["left-behind.jar"]).unwrap();
+        assert!(!holds(&instance, "0.0-test"));
+        start(&instance);
+        assert!(!pending_path(game).exists());
+        // That start changed the folder, so it is the next one that is remembered.
+        assert!(!holds(&instance, "0.0-test"));
+        start(&instance);
+        assert!(holds(&instance, "0.0-test"));
+
+        // An update found in the background is installed by the next start.
+        let mut state: State = load_json(&state_path(game)).unwrap().unwrap();
+        state.update_waiting = true;
+        save_json(&state_path(game), &state).unwrap();
+        assert!(!holds(&instance, "0.0-test"));
+
+        // The weekly look at Modrinth falls due without anything in the folder changing.
+        state.update_waiting = false;
+        state.checked = crate::auth::now_secs() - RECHECK_SECS + 3600;
+        save_json(&state_path(game), &state).unwrap();
+        let settled = settled::Settled::new(game, "0.0-test", &instance, true);
+        settled.remember(settled.inputs());
+        assert!(settled.holds(settled.inputs().as_ref()));
+        state.checked -= 7200;
+        save_json(&state_path(game), &state).unwrap();
+        settled.remember(settled.inputs());
+        assert!(!settled.holds(settled.inputs().as_ref()));
     }
 }
