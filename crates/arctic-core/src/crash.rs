@@ -1334,45 +1334,156 @@ pub(crate) fn secondary_stack(stack: &str) -> bool {
     })
 }
 
-/// Forge can already have rejected the mod list before the client throws its fatal exception.
-pub(crate) fn forge_dependency_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
-    const MANDATORY: &str = "Missing or unsupported mandatory dependencies";
+fn forge_launch_context(text: &str) -> (Option<&'static str>, Option<&str>) {
+    static LOADER: OnceLock<Regex> = OnceLock::new();
+    static GAME: OnceLock<Regex> = OnceLock::new();
+    let loader = LOADER.get_or_init(|| {
+        Regex::new(r"(?im)--fml\.(neoforge|forge)Version\b|^[ \t]*Launched Version:[ \t]*(neoforge|forge)-|^[ \t]*(neoforge|forge):[ \t]*net\.|^[ \t]*Is Modded:[^\r\n]*Client brand changed to '(neoforge|forge)'").unwrap()
+    });
+    let game = GAME.get_or_init(|| {
+        Regex::new(r"(?m)(?:--fml\.mcVersion(?:,[ \t]*|[ \t]+)|^[ \t]*Minecraft Version:[ \t]*)([0-9][\w.+-]*)").unwrap()
+    });
+    let loader = loader.captures(text).and_then(|c| {
+        c.iter().skip(1).flatten().next().map(|name| {
+            if name.as_str().eq_ignore_ascii_case("neoforge") {
+                "NeoForge"
+            } else {
+                "Forge"
+            }
+        })
+    });
+    let game = game
+        .captures(text)
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str());
+    (loader, game)
+}
+
+fn forge_language_provider_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    if !text.contains(" needs language provider ") && !text.contains("Missing language ") {
+        return None;
+    }
     static PROVIDER: OnceLock<Regex> = OnceLock::new();
-    static DEPENDENCY: OnceLock<Regex> = OnceLock::new();
-    let provider_pattern = PROVIDER.get_or_init(|| {
+    static MISSING_LANGUAGE: OnceLock<Regex> = OnceLock::new();
+    let provider = PROVIDER.get_or_init(|| {
         Regex::new(
             r"\bMod File (.+?) needs language provider ([\w.-]+)(?::(\S+) or above)? to load\b",
         )
         .unwrap()
     });
+    let missing_language = MISSING_LANGUAGE.get_or_init(|| {
+        Regex::new(
+            r"\bMissing language ([\w.-]+) version \[([^,\]\s]+),\) wanted by (.+?)(?:, found .+|[ \t]*$)",
+        )
+        .unwrap()
+    });
+
+    struct Requirement<'a> {
+        file: &'a str,
+        id: &'a str,
+        minimum: Option<&'a str>,
+    }
+
+    let mut requirements: Vec<Requirement<'_>> = Vec::new();
+    let mut matched = None;
+    for line in text.lines().map(str::trim_start) {
+        let (file, id, minimum) = if line.contains(" needs language provider ")
+            && let Some(c) = provider.captures(line)
+        {
+            (c.get(1).unwrap(), c.get(2).unwrap(), c.get(3))
+        } else if line.contains("Missing language ")
+            && let Some(c) = missing_language.captures(line)
+        {
+            (c.get(3).unwrap(), c.get(1).unwrap(), c.get(2))
+        } else {
+            continue;
+        };
+        if warning_log_line(line.trim_start_matches("matched: ")) {
+            continue;
+        }
+        let file = file.as_str().trim().rsplit(['/', '\\']).next().unwrap();
+        let id = id.as_str();
+        let minimum = minimum.map(|m| m.as_str());
+        matched.get_or_insert(line);
+        // FML often repeats a requirement in the startup log and the crash report.
+        if let Some(existing) = requirements
+            .iter_mut()
+            .find(|r| r.file == file && r.id == id)
+        {
+            existing.minimum = existing.minimum.or(minimum);
+        } else {
+            requirements.push(Requirement { file, id, minimum });
+        }
+    }
+
+    let matched = matched?;
+    let (loader, game) = forge_launch_context(text);
+    let target = match (loader, game) {
+        (Some(loader), Some(game)) => format!(" for {loader} {game}"),
+        (Some(loader), None) => format!(" for {loader}"),
+        (None, Some(game)) => format!(" for Minecraft {game}"),
+        (None, None) => String::new(),
+    };
+    let multiple = requirements.len() > 1;
+    let mut title = "Mods need language providers".to_owned();
+    let mut details = Vec::new();
+    let mut involved = Vec::new();
+    for Requirement { file, id, minimum } in requirements {
+        let (name, bundled) = match id {
+            "kotlinforforge" => ("Kotlin for Forge", false),
+            "klf" => ("KotlinLangForge", false),
+            "scorge" => ("Scorge", false),
+            "javafml" => ("JavaFML", true),
+            "lowcodefml" => ("Low-Code Language Loader", true),
+            "minecraft" => ("Minecraft Language Loader", true),
+            _ => (id, false),
+        };
+        let required = minimum.map_or_else(|| name.to_owned(), |v| format!("{name} {v} or newer"));
+        let mod_context = if multiple {
+            format!(" to load {file}")
+        } else {
+            title = format!("{file} needs {required}");
+            String::new()
+        };
+        let advice = if bundled {
+            let loader = loader.unwrap_or("Forge or NeoForge");
+            let game = game.map_or_else(String::new, |v| format!(" for Minecraft {v}"));
+            format!(
+                "Use a version of {loader}{game} that includes {required}{mod_context}, or a compatible version of the mod."
+            )
+        } else if target.is_empty() {
+            format!("Install or update {required} in this instance{mod_context}.")
+        } else {
+            format!("Add {required}{target}{mod_context}.")
+        };
+        details.push(advice);
+        for item in [file, id] {
+            let item = item.to_owned();
+            if !involved.contains(&item) {
+                involved.push(item);
+            }
+        }
+    }
+    Some((
+        Diagnosis::new(title, details.join(" "), involved),
+        head_of(matched, 2048).to_owned(),
+    ))
+}
+
+/// Forge can already have rejected the mod list before the client throws its fatal exception.
+pub(crate) fn forge_dependency_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    const MANDATORY: &str = "Missing or unsupported mandatory dependencies";
+    let text = tail_of(text, MAX_TEXT);
+    if let Some(provider) = forge_language_provider_diagnosis(text) {
+        return Some(provider);
+    }
+    static DEPENDENCY: OnceLock<Regex> = OnceLock::new();
     let dependency_pattern = DEPENDENCY.get_or_init(|| {
         Regex::new(r"Mod ID: '([^']+)', Requested by: '([^']+)', Expected range: '([^']*)', Actual version: '([^']*)'").unwrap()
     });
     let mut summary = None;
     let mut dependency = None;
-    for line in tail_of(text, MAX_TEXT).lines().map(str::trim_start) {
-        if line.contains(" needs language provider ")
-            && !warning_log_line(line.trim_start_matches("matched: "))
-            && let Some(c) = provider_pattern.captures(line)
-        {
-            let file = c[1].trim().rsplit(['/', '\\']).next().unwrap_or(&c[1]);
-            let provider = match &c[2] {
-                "kotlinforforge" => "Kotlin for Forge",
-                id => id,
-            };
-            let required = c.get(3).map_or_else(
-                || provider.to_owned(),
-                |version| format!("{provider} {} or newer", version.as_str()),
-            );
-            return Some((
-                Diagnosis::new(
-                    format!("{file} needs {required}"),
-                    format!("Install or update {required} in this instance."),
-                    vec![file.to_owned(), c[2].to_owned()],
-                ),
-                head_of(line, 2048).to_owned(),
-            ));
-        }
+    for line in text.lines().map(str::trim_start) {
         if dependency.is_none()
             && line.contains("Mod ID: ")
             && !warning_log_line(line.trim_start_matches("matched: "))
@@ -5191,6 +5302,115 @@ Caused by: java.lang.NullPointerException: Cannot invoke "net.minecraftforge.fml
             assert!(diagnose(&warning).is_none(), "{warning}");
             let text = format!("{FOLLOW_ON_522}\n\n{warning}");
             assert!(diagnose_match(&text, None).is_none(), "{warning}");
+        }
+    }
+
+    const ARC_4M6E7E: &str =
+        include_str!("../tests/fixtures/crash-arc-4m6e7e-language-provider.log");
+    const ARC_APQQUU: &str =
+        include_str!("../tests/fixtures/crash-arc-apqquu-language-provider.log");
+    const VEINMINER: &str = "veinminer-neoforge-2.14.0+1.21.1.jar";
+    const VEINMINER_TITLE: &str =
+        "veinminer-neoforge-2.14.0+1.21.1.jar needs KotlinLangForge 1 or newer";
+
+    #[test]
+    fn forge_language_provider_errors_explain_both_player_crashes() {
+        let dir = tempfile::tempdir().unwrap();
+        for (log, title, detail, mods) in [
+            (
+                ARC_4M6E7E,
+                "Mods need language providers",
+                "Add Kotlin for Forge 5.10 or newer for NeoForge 1.21.1 to load the-broken-script-plus-1.1.0.jar. Add KotlinLangForge 1 or newer for NeoForge 1.21.1 to load veinminer-neoforge-2.14.0+1.21.1.jar.",
+                vec![
+                    "the-broken-script-plus-1.1.0.jar",
+                    "kotlinforforge",
+                    VEINMINER,
+                    "klf",
+                ],
+            ),
+            (
+                ARC_APQQUU,
+                VEINMINER_TITLE,
+                "Add KotlinLangForge 1 or newer for NeoForge 1.21.1.",
+                vec![VEINMINER, "klf"],
+            ),
+        ] {
+            let diagnosis = diagnose(log).unwrap();
+            assert_eq!(diagnosis.title, title);
+            assert_eq!(diagnosis.detail, detail);
+            assert_eq!(diagnosis.mods, mods);
+            assert_eq!(
+                crate::crash_conflicts::diagnose_exit_in(log, -1, dir.path()),
+                Some(diagnosis)
+            );
+
+            let (output, report) = log.split_once("---- Minecraft Crash Report ----").unwrap();
+            let report = format!("---- Minecraft Crash Report ----{report}");
+            let report = Report::build(
+                "1.21.1",
+                "NeoForge",
+                "A mod is for a different version",
+                &output.lines().collect::<Vec<_>>(),
+                &[],
+                Some(&report),
+                None,
+            );
+            assert_eq!(report.title, title);
+        }
+    }
+
+    #[test]
+    fn either_forge_language_provider_error_is_enough() {
+        for message in ["Missing language klf", "needs language provider klf:"] {
+            let line = ARC_APQQUU
+                .lines()
+                .find(|line| line.contains(message))
+                .unwrap();
+            let diagnosis = diagnose(line).unwrap();
+            assert_eq!(diagnosis.title, VEINMINER_TITLE);
+            assert_eq!(
+                diagnosis.detail,
+                "Install or update KotlinLangForge 1 or newer in this instance."
+            );
+
+            let crash = format!(
+                "{line}\n---- Minecraft Crash Report ----\njava.lang.NoSuchMethodError: example.missing()"
+            );
+            let (diagnosis, matched) = diagnose_match(&crash, None).unwrap();
+            assert_eq!(diagnosis.title, VEINMINER_TITLE);
+            assert_eq!(matched, line);
+        }
+    }
+
+    #[test]
+    fn forge_language_provider_names_and_report_context() {
+        let context = "Minecraft Version: 1.19.2\nLaunched Version: forge-43.4.0";
+        let diagnosis = diagnose(&format!(
+            "{context}\n[main/ERROR] Missing language scorge version [4,) wanted by Scala Mod.jar, found 3"
+        ))
+        .unwrap();
+        assert_eq!(diagnosis.title, "Scala Mod.jar needs Scorge 4 or newer");
+        assert_eq!(diagnosis.detail, "Add Scorge 4 or newer for Forge 1.19.2.");
+
+        for (id, name) in [
+            ("javafml", "JavaFML"),
+            ("lowcodefml", "Low-Code Language Loader"),
+            ("minecraft", "Minecraft Language Loader"),
+        ] {
+            let diagnosis = diagnose(&format!(
+                "Minecraft Version: 1.21.1\nIs Modded: Definitely; Client brand changed to 'neoforge'\nFailure message: Mod File example.jar needs language provider {id}:5 or above to load"
+            ))
+            .unwrap();
+            assert_eq!(
+                diagnosis.title,
+                format!("example.jar needs {name} 5 or newer")
+            );
+            assert_eq!(
+                diagnosis.detail,
+                format!(
+                    "Use a version of NeoForge for Minecraft 1.21.1 that includes {name} 5 or newer, or a compatible version of the mod."
+                )
+            );
         }
     }
 
