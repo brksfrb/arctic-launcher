@@ -11,7 +11,7 @@ thread_local! {
 
 /// The synchronous request and body reader run on the same thread. Keeping the
 /// limit on the read lets pooled connections use the policy of their current request.
-pub(super) fn with_body_idle<T>(limit: Option<Duration>, read: impl FnOnce() -> T) -> T {
+pub(super) fn with_body_idle<T>(limit: Duration, read: impl FnOnce() -> T) -> T {
     BODY_IDLE.with(|idle| {
         struct Restore<'a>(&'a Cell<Option<Duration>>, Option<Duration>);
 
@@ -21,7 +21,7 @@ pub(super) fn with_body_idle<T>(limit: Option<Duration>, read: impl FnOnce() -> 
             }
         }
 
-        let _restore = Restore(idle, idle.replace(limit));
+        let _restore = Restore(idle, idle.replace(Some(limit)));
         read()
     })
 }

@@ -1,5 +1,5 @@
 use std::cell::Cell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 
 use md5::Md5;
 use sha1::{Digest, Sha1};
+use ureq::ResponseExt;
+use ureq::http::{HeaderValue, Response, Uri};
 
 use crate::error::IoContext;
 use crate::{Error, Progress, ProgressInfo, Result};
@@ -17,6 +19,7 @@ use crate::{Error, Progress, ProgressInfo, Result};
 /// so their throughput is bounded by round trips, not bandwidth; many
 /// parallel keep-alive connections hide that latency.
 pub const WORKERS: usize = 64;
+pub(crate) type DownloadAlternates = HashMap<PathBuf, Vec<String>>;
 /// Downloads at a time in gentle mode (a computer that freezes under load).
 const GENTLE_WORKERS: usize = 6;
 const GENTLE_CONNECTIONS: usize = 2;
@@ -99,7 +102,7 @@ impl Policy {
 
 /// A missing file stays missing; retrying only delays the error.
 pub(crate) fn is_not_found(e: &Error) -> bool {
-    matches!(e, Error::Http(m) if m.contains("404"))
+    matches!(e, Error::Http(m) if m.ends_with("http status: 404"))
 }
 
 /// The mirror URL for a Forge maven file, if `job` may be fetched from there. Nothing from the
@@ -111,6 +114,27 @@ pub(crate) fn mirror_for(job: &DownloadJob) -> Option<String> {
     }
     let path = job.url.strip_prefix(FORGE_MAVEN)?;
     Some(format!("{FORGE_MIRROR}{path}"))
+}
+
+/// Mojang publishes identical content-addressed paths on these pairs of hosts.
+pub(crate) fn mojang_alternate(url: &str) -> Option<String> {
+    let (host, path) = url.strip_prefix("https://")?.split_once('/')?;
+    let alternate = match host {
+        "piston-meta.mojang.com" | "launchermeta.mojang.com"
+            if path.starts_with("v1/packages/")
+                || path.starts_with("v1/products/java-runtime/") =>
+        {
+            if host == "piston-meta.mojang.com" {
+                "launchermeta.mojang.com"
+            } else {
+                "piston-meta.mojang.com"
+            }
+        }
+        "piston-data.mojang.com" if path.starts_with("v1/objects/") => "launcher.mojang.com",
+        "launcher.mojang.com" if path.starts_with("v1/objects/") => "piston-data.mojang.com",
+        _ => return None,
+    };
+    Some(format!("https://{alternate}/{path}"))
 }
 
 /// Body timeout = base + size / slowest acceptable speed. The speed is per file, and up to
@@ -133,8 +157,12 @@ const CONNECTIONS: usize = 6;
 /// A chunk's slowest acceptable speed (its own connection; a 1 Mbit/s line shared by
 /// [`CONNECTIONS`] gives each ~20 KB/s).
 const CHUNK_MIN_SPEED: u64 = 12 * 1024;
-/// Limit idle reads on the first attempt, then allow the ordinary slow-link timeout.
-const FIRST_BODY_IDLE: Duration = Duration::from_secs(12);
+/// Limit time without body bytes independently of the overall transfer budget.
+const BODY_IDLE: Duration = if cfg!(test) {
+    Duration::from_secs(2)
+} else {
+    Duration::from_secs(12)
+};
 const TAIL_MIN_SPEED: u64 = 128 * 1024;
 const FAST_BATCH_SPEED: u64 = 1024 * 1024;
 /// Check for an idle or crawling transfer after this observation window.
@@ -152,10 +180,10 @@ pub struct DownloadJob {
     pub dest: PathBuf,
     pub sha1: Option<String>,
     /// MD5 of the final file, for the one source that publishes only that (Forge's meta.json).
-    /// Unlike `sha1` it is not checked for segmented or compressed jobs.
+    /// Jobs that require MD5 use the single-stream path.
     pub md5: Option<String>,
     pub size: Option<u64>,
-    /// Fetch this LZMA stream instead of `url` and decompress on the fly.
+    /// Fetch and verify this LZMA stream instead of `url`, then decompress it.
     pub lzma: Option<Compressed>,
 }
 
@@ -168,6 +196,28 @@ pub struct Compressed {
 }
 
 impl DownloadJob {
+    fn source(&self) -> &str {
+        self.lzma.as_ref().map_or(&self.url, |c| &c.url)
+    }
+
+    fn with_source(&self, url: String) -> Self {
+        let mut job = self.clone();
+        if let Some(compressed) = &mut job.lzma {
+            compressed.url = url;
+        } else {
+            job.url = url;
+        }
+        job
+    }
+
+    fn has_hash(&self) -> bool {
+        self.sha1.is_some() || self.md5.is_some() || self.lzma.is_some()
+    }
+
+    fn file_name(&self) -> std::borrow::Cow<'_, str> {
+        self.dest.file_name().unwrap_or_default().to_string_lossy()
+    }
+
     /// Bytes that actually travel over the network.
     fn transfer_size(&self) -> Option<u64> {
         self.lzma.as_ref().map(|c| c.size).or(self.size)
@@ -284,6 +334,25 @@ pub(crate) fn download_all_with_replacements(
     replacements: Vec<DownloadJob>,
     progress: Progress,
 ) -> Result<()> {
+    download_batch(stage, jobs, replacements, &HashMap::new(), progress)
+}
+
+pub(crate) fn download_all_with_alternates(
+    stage: &str,
+    jobs: Vec<DownloadJob>,
+    alternates: &DownloadAlternates,
+    progress: Progress,
+) -> Result<()> {
+    download_batch(stage, jobs, Vec::new(), alternates, progress)
+}
+
+fn download_batch(
+    stage: &str,
+    jobs: Vec<DownloadJob>,
+    replacements: Vec<DownloadJob>,
+    alternates: &DownloadAlternates,
+    progress: Progress,
+) -> Result<()> {
     let checks_started = Instant::now();
     let count = replacements.len() + jobs.len();
     let pending = pending_jobs(jobs, replacements);
@@ -351,7 +420,15 @@ pub(crate) fn download_all_with_replacements(
                         return;
                     };
                     let job = &pending[idx];
-                    if let Err(e) = download_with_retry(job, reporter) {
+                    let urls = alternates.get(&job.dest).into_iter().flatten().cloned();
+                    let mirror = mirror_for(job).filter(|_| job.lzma.is_none());
+                    let urls = urls.chain(mojang_alternate(job.source())).chain(mirror);
+                    if let Err(e) = download_with_alternates(
+                        job,
+                        reporter,
+                        urls,
+                        &Policy::for_url(job.source()),
+                    ) {
                         if let Ok(mut slot) = first_error.lock() {
                             slot.get_or_insert(e);
                         }
@@ -438,12 +515,6 @@ fn pending_jobs(jobs: Vec<DownloadJob>, mut replacements: Vec<DownloadJob>) -> V
     pending
 }
 
-/// Network hiccups (a stalled connection, a reset, a corrupted transfer)
-/// shouldn't fail a whole launch: retry each file a few times, then try the mirror.
-fn download_with_retry(job: &DownloadJob, reporter: &Reporter) -> Result<()> {
-    download_with_mirror(job, reporter, mirror_for(job), &Policy::for_url(&job.url))
-}
-
 /// Download one file, falling back to `mirror` (only ever used for hash-verified jobs).
 pub(crate) fn download_single(
     job: &DownloadJob,
@@ -464,7 +535,7 @@ pub(crate) fn download_single(
         fast_batch: Default::default(),
     };
     reporter.report(true);
-    download_with_mirror(job, &reporter, mirror, policy)?;
+    download_with_alternates(job, &reporter, mirror, policy)?;
     reporter.file_done();
     Ok(())
 }
@@ -481,82 +552,160 @@ pub(crate) fn fetch_text(url: &str, limit: u64, policy: &Policy) -> Result<Optio
             .timeout_global(Some(Duration::from_secs(60)))
             .build()
             .call()
-            .map_err(Error::from)
+            .map_err(request_error)
             .and_then(|mut resp| {
-                resp.body_mut()
-                    .with_config()
-                    .limit(limit)
-                    .read_to_string()
-                    .map_err(Error::from)
+                with_download_idle(|| resp.body_mut().with_config().limit(limit).read_to_string())
+                    .map_err(request_error)
             });
         match result {
             Ok(text) => return Ok(Some(text)),
             Err(e) if is_not_found(&e) => return Ok(None),
-            Err(e) if attempt < policy.attempts => {
-                log::warn!("retrying {url} (attempt {attempt}): {e}");
+            Err(e) => {
+                let e = metadata_error(url, e);
+                log::warn!("download attempt {attempt} failed: {e}");
+                if attempt >= policy.attempts {
+                    return Err(e);
+                }
                 let delay = policy.delays.get(attempt as usize - 1);
                 std::thread::sleep(delay.or(policy.delays.last()).copied().unwrap_or_default());
                 attempt += 1;
             }
-            Err(e) => return Err(e),
         }
     }
 }
 
-fn download_with_mirror(
-    job: &DownloadJob,
-    reporter: &Reporter,
-    mirror: Option<String>,
-    policy: &Policy,
-) -> Result<()> {
-    let Err(err) = retry_job(job, reporter, policy) else {
-        return Ok(());
-    };
-    // Defence in depth: `mirror_for` already refuses unhashed jobs.
-    let Some(url) = mirror.filter(|_| job.sha1.is_some() || job.md5.is_some()) else {
-        return Err(err);
-    };
-    log::warn!("{} failed ({err}); trying mirror {url}", job.url);
-    let from_mirror = DownloadJob { url, ..job.clone() };
-    retry_job(&from_mirror, reporter, policy).map_err(|mirror_err| {
-        log::warn!("mirror failed too: {mirror_err}");
-        err
-    })
+fn host(url: &str) -> String {
+    url.parse::<Uri>()
+        .ok()
+        .and_then(|uri| uri.host().map(str::to_owned))
+        .unwrap_or_else(|| "unknown host".into())
 }
 
-fn retry_job(job: &DownloadJob, reporter: &Reporter, policy: &Policy) -> Result<()> {
+pub(super) fn request_error(e: ureq::Error) -> Error {
+    // These errors can contain a full URL, including a signed query string.
+    match e {
+        ureq::Error::BadUri(_) => Error::Http("invalid URL".into()),
+        ureq::Error::RequireHttpsOnly(_) => Error::Http("HTTPS required".into()),
+        e => e.into(),
+    }
+}
+
+pub(super) fn metadata_error(url: &str, error: Error) -> Error {
+    let uri = url.parse::<Uri>().ok();
+    let file = uri
+        .as_ref()
+        .and_then(|uri| uri.path().rsplit('/').next())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("metadata");
+    let reason = match error {
+        Error::Http(reason) => reason,
+        e => e.chain(),
+    };
+    Error::Http(format!(
+        "could not download {file} from {}: {reason}",
+        host(url)
+    ))
+}
+
+pub(super) fn with_download_idle<T>(read: impl FnOnce() -> T) -> T {
+    super::download_transport::with_body_idle(BODY_IDLE, read)
+}
+
+fn download_error(job: &DownloadJob, error: Error) -> Error {
+    let source = || format!("{} from {}", job.file_name(), host(job.source()));
+    match error {
+        Error::Http(reason) => Error::Http(format!("could not download {}: {reason}", source())),
+        Error::Checksum(_) => Error::Checksum(source()),
+        other => other,
+    }
+}
+
+/// Retry the primary, then the supplied alternates in order. Keep the primary's
+/// error if all sources fail so callers can still distinguish a missing file.
+fn download_with_alternates(
+    job: &DownloadJob,
+    reporter: &Reporter,
+    alternates: impl IntoIterator<Item = String>,
+    policy: &Policy,
+) -> Result<()> {
+    let mut segmented = SegmentedPart::new(job);
+    let Err(primary) = retry_job(job, reporter, policy, &mut segmented) else {
+        return Ok(());
+    };
+    if job.has_hash() {
+        let mut tried = HashSet::from([job.source().to_owned()]);
+        for url in alternates {
+            if !tried.insert(url.clone()) {
+                continue;
+            }
+            log::warn!("trying {} from alternate {}", job.file_name(), host(&url));
+            let alternate = job.with_source(url);
+            if retry_job(&alternate, reporter, policy, &mut segmented).is_ok() {
+                return Ok(());
+            }
+        }
+    }
+    // The preallocated file needs the in-memory range map. Never leave it where
+    // a future single-stream download could mistake gaps for downloaded bytes.
+    if segmented.is_some_and(|part| part.initialized) {
+        let tmp = part_path(&job.dest);
+        fs::remove_file(&tmp).at(&tmp)?;
+    }
+    Err(primary)
+}
+
+fn retry_job(
+    job: &DownloadJob,
+    reporter: &Reporter,
+    policy: &Policy,
+    segmented: &mut Option<SegmentedPart>,
+) -> Result<()> {
     let mut attempt = 1;
-    let mut segmented = segments(job).is_some();
+    let mut validator = None;
     loop {
         let transferred = Cell::new(0);
         let try_fast_recovery = attempt == 1 && policy.attempts > 1;
-        let result = if segmented {
-            match download_segmented(job, reporter, &transferred) {
+        let result = if let Some(part) = segmented {
+            match download_segmented(job, reporter, &transferred, part) {
                 Err(Segmented::NoRanges) => {
-                    segmented = false;
-                    reporter.remove_bytes(transferred.get());
-                    transferred.set(0);
-                    download_one(job, reporter, &transferred, try_fast_recovery, None)
+                    *segmented = None;
+                    reporter.remove_bytes(transferred.replace(0));
+                    download_one(
+                        job,
+                        reporter,
+                        &transferred,
+                        try_fast_recovery,
+                        None,
+                        &mut validator,
+                    )
                 }
                 Err(Segmented::Failed(e)) => Err(e),
                 Ok(()) => Ok(()),
             }
         } else {
-            download_one(job, reporter, &transferred, try_fast_recovery, None)
+            download_one(
+                job,
+                reporter,
+                &transferred,
+                try_fast_recovery,
+                None,
+                &mut validator,
+            )
         };
-        if result.is_err() {
-            reporter.remove_bytes(transferred.get());
+        let Err(e) = result else { return Ok(()) };
+        reporter.remove_bytes(transferred.get());
+        let e = download_error(job, e);
+        log::warn!(
+            "download attempt {attempt} for {} from {} failed: {e}",
+            job.file_name(),
+            host(job.source())
+        );
+        if attempt >= policy.attempts || is_not_found(&e) {
+            return Err(e);
         }
-        match result {
-            Ok(()) => return Ok(()),
-            Err(e) if attempt < policy.attempts && !is_not_found(&e) => {
-                log::warn!("retrying {} (attempt {attempt}): {e}", job.url);
-                let delay = policy.delays.get(attempt as usize - 1);
-                std::thread::sleep(delay.or(policy.delays.last()).copied().unwrap_or_default());
-                attempt += 1;
-            }
-            Err(e) => return Err(e),
-        }
+        let delay = policy.delays.get(attempt as usize - 1);
+        std::thread::sleep(delay.or(policy.delays.last()).copied().unwrap_or_default());
+        attempt += 1;
     }
 }
 
@@ -567,63 +716,241 @@ pub(crate) fn body_timeout(size: Option<u64>) -> Duration {
     }
 }
 
-/// Stream into `<dest>.part` (decompressing if needed), hashing both the
-/// transferred and the final bytes, verify, then atomically rename.
-/// `transferred` tracks bytes reported so far, for retry accounting.
+/// A strong validator permits resuming an unhashed file during this job, even
+/// when the server cannot supply a checksum. Bind it to the final redirect URI.
+struct Validator {
+    etag: HeaderValue,
+    uri: Uri,
+}
+
+impl Validator {
+    fn from_response(resp: &Response<ureq::Body>) -> Option<Self> {
+        let etag = resp.headers().get("etag")?;
+        let tag = etag.to_str().ok()?;
+        (tag.len() >= 2 && tag.starts_with('"') && tag.ends_with('"')).then(|| Self {
+            etag: etag.clone(),
+            uri: resp.get_uri().clone(),
+        })
+    }
+
+    fn matches(&self, resp: &Response<ureq::Body>) -> bool {
+        self.uri == *resp.get_uri()
+            && resp
+                .headers()
+                .get("etag")
+                .is_none_or(|etag| *etag == self.etag)
+    }
+}
+
+/// Byte offsets in a Content-Range refer to the encoded representation.
+fn identity_body(resp: &Response<ureq::Body>) -> bool {
+    resp.headers()
+        .get("content-encoding")
+        .is_none_or(|encoding| encoding.as_bytes().eq_ignore_ascii_case(b"identity"))
+}
+
+fn content_range(resp: &Response<ureq::Body>) -> Option<(u64, u64, Option<u64>)> {
+    let value = resp.headers().get("content-range")?.to_str().ok()?;
+    let (range, total) = value.strip_prefix("bytes ")?.split_once('/')?;
+    let (start, end) = range.split_once('-')?;
+    let (start, end) = (start.parse().ok()?, end.parse().ok()?);
+    let total = if total == "*" {
+        None
+    } else {
+        Some(total.parse().ok()?)
+    };
+    (start <= end && total.is_none_or(|total| end < total)).then_some((start, end, total))
+}
+
+fn partial_len(tmp: &Path) -> Result<u64> {
+    match fs::metadata(tmp) {
+        Ok(meta) => Ok(meta.len()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(0),
+        Err(e) => Err(Error::io(tmp, e)),
+    }
+}
+
+/// Stream into `<dest>.part`, verify, then atomically rename.
+/// Only a verified hash or an unchanged strong ETag can confirm a resumed file.
 fn download_one(
     job: &DownloadJob,
     reporter: &Reporter,
     transferred: &Cell<u64>,
     retry_slow_tail: bool,
     timeout: Option<Duration>,
+    validator: &mut Option<Validator>,
 ) -> Result<()> {
     if let Some(parent) = job.dest.parent() {
         fs::create_dir_all(parent).at(parent)?;
     }
-    let tmp = part_path(&job.dest);
-    let url = job.lzma.as_ref().map_or(&job.url, |c| &c.url);
-    let mut resp = super::agent()
+    let raw_part = part_path(&job.dest);
+    let tmp = if job.lzma.is_some() {
+        let mut name = raw_part.as_os_str().to_owned();
+        name.push(".lzma");
+        PathBuf::from(name)
+    } else {
+        raw_part.clone()
+    };
+    let url = job.source();
+    let mut offset = 0;
+    let mut request = super::agent()
         .get(url)
+        .header("Accept-Encoding", "identity");
+    if job.has_hash() || validator.is_some() {
+        let len = partial_len(&tmp)?;
+        if len > 0 && job.transfer_size().is_none_or(|size| len < size) {
+            offset = len;
+            request = request.header("Range", format!("bytes={offset}-"));
+            if let Some(validator) = validator.as_ref() {
+                request = request.header("If-Range", &validator.etag);
+            }
+        }
+    }
+    let response = request
         .config()
         .timeout_global(timeout)
         .timeout_connect(connect_timeout(url))
         .timeout_recv_body(Some(body_timeout(job.transfer_size())))
         .build()
-        .call()?;
-    let size = job.transfer_size();
+        .call();
+    if offset > 0 && matches!(response, Err(ureq::Error::StatusCode(416))) {
+        fs::remove_file(&tmp).at(&tmp)?;
+        *validator = None;
+    }
+    let mut resp = response.map_err(request_error)?;
+    let identity = identity_body(&resp);
+    let mut size = job.transfer_size();
+    let mut response_end = None;
+    match resp.status().as_u16() {
+        200 => {
+            offset = 0;
+            // Content-Length is meaningful for bytes on disk only with identity encoding.
+            if identity && size.is_none() {
+                size = resp.body().content_length();
+            }
+        }
+        206 => {
+            let range = content_range(&resp).and_then(|(start, end, total)| {
+                let total = total?;
+                (offset > 0
+                    && identity
+                    && start == offset
+                    && size.is_none_or(|size| size == total)
+                    && resp
+                        .body()
+                        .content_length()
+                        .is_none_or(|len| len == end + 1 - offset)
+                    && validator
+                        .as_ref()
+                        .is_none_or(|validator| validator.matches(&resp)))
+                .then_some((end + 1, total))
+            });
+            let Some((end, total)) = range else {
+                if offset > 0 {
+                    fs::remove_file(&tmp).at(&tmp)?;
+                    *validator = None;
+                }
+                return Err(Error::Http(
+                    "response has an unexpected Content-Range".into(),
+                ));
+            };
+            response_end = Some(end);
+            size = Some(total);
+        }
+        status => return Err(request_error(ureq::Error::StatusCode(status))),
+    }
+    let hashed = job.has_hash();
+    if offset == 0 {
+        *validator = if identity && !hashed {
+            Validator::from_response(&resp)
+        } else {
+            None
+        };
+    }
+    let preserve = identity && (hashed || validator.is_some());
+
     let on_bytes = |n: u64| {
         transferred.set(transferred.get() + n);
         reporter.add_bytes(n);
     };
-    let body = resp.body_mut().as_reader();
     let tail = TailReader {
-        body,
+        body: resp.body_mut().as_reader(),
         reporter,
         retry_slow_tail,
         window: None,
-        received: 0,
+        received: offset,
         size,
     };
-    let mut input = Hashing::new(tail, &on_bytes);
+    let file = fs::OpenOptions::new()
+        .read(offset > 0)
+        .write(true)
+        .create(true)
+        .truncate(offset == 0)
+        .open(&tmp)
+        .at(&tmp)?;
     let mut output =
-        Hashing::new(fs::File::create(&tmp).at(&tmp)?, &|_| {}).with_md5(job.md5.is_some());
-    let copied = match &job.lzma {
-        Some(_) => {
-            let mut buffered = BufReader::with_capacity(BUF_SIZE, &mut input);
-            lzma_rs::lzma_decompress(&mut buffered, &mut output)
-                .map_err(|e| Error::Other(format!("corrupt download {url}: {e}")))
-        }
-        None => copy(&mut input, &mut output).at(&tmp),
-    };
-    let result = copied
-        .and_then(|()| output.inner.flush().at(&tmp))
-        .and_then(|()| verify(job, &input, &output));
+        Hashing::new(file, &on_bytes).with_md5(job.lzma.is_none() && job.md5.is_some());
+    if offset > 0 {
+        output.hash_prefix(offset).at(&tmp)?;
+    }
+    let limit = response_end.or(size).unwrap_or(u64::MAX);
+    let mut tail = tail.take((limit - offset).saturating_add(1));
+    let result = copy(&mut tail, &mut output, &tmp)
+        .and_then(|()| output.flush().at(&tmp))
+        .and_then(|()| {
+            if output.count > limit {
+                return Err(Error::Checksum(job.file_name().into_owned()));
+            }
+            if size.is_some_and(|size| output.count < size) {
+                return Err(Error::Http(
+                    "response ended before the file was complete".into(),
+                ));
+            }
+            let valid = size.is_none_or(|size| size == output.count)
+                && match &job.lzma {
+                    Some(compressed) => compressed.sha1.eq_ignore_ascii_case(&output.hex_digest()),
+                    None => raw_matches(job, &output),
+                };
+            if !valid {
+                return Err(Error::Checksum(job.file_name().into_owned()));
+            }
+            Ok(())
+        });
     drop(output);
     if let Err(e) = result {
-        let _ = fs::remove_file(&tmp);
+        if !preserve || !matches!(e, Error::Http(_)) {
+            fs::remove_file(&tmp).at(&tmp)?;
+            *validator = None;
+        }
         return Err(e);
     }
-    fs::rename(&tmp, &job.dest).at(&job.dest)
+    if job.lzma.is_some() {
+        let result = decompress(job, &tmp, &raw_part);
+        fs::remove_file(&tmp).at(&tmp)?;
+        if let Err(e) = result {
+            let _ = fs::remove_file(&raw_part);
+            return Err(e);
+        }
+    }
+    fs::rename(&raw_part, &job.dest).at(&job.dest)
+}
+
+fn decompress(job: &DownloadJob, compressed: &Path, raw: &Path) -> Result<()> {
+    let mut input = BufReader::with_capacity(BUF_SIZE, fs::File::open(compressed).at(compressed)?);
+    let mut output =
+        Hashing::new(fs::File::create(raw).at(raw)?, &|_| {}).with_md5(job.md5.is_some());
+    lzma_rs::lzma_decompress(&mut input, &mut output).map_err(|e| {
+        Error::Other(format!(
+            "corrupt compressed download of {} from {}: {e}",
+            job.file_name(),
+            host(job.source())
+        ))
+    })?;
+    output.flush().at(raw)?;
+    if !raw_matches(job, &output) {
+        return Err(Error::Checksum(job.file_name().into_owned()));
+    }
+    Ok(())
 }
 
 /// Single bounded attempt for background prefetch. Stage beside the destination with
@@ -658,9 +985,14 @@ pub(crate) fn download_before(job: DownloadJob, deadline: Instant) -> Result<()>
         &Cell::new(0),
         false,
         Some(super::time_remaining(deadline)?),
-    )?;
+        &mut None,
+    )
+    .map_err(|e| download_error(&job, e))?;
     if !job.is_satisfied() {
-        return Err(Error::Other(format!("invalid library: {}", job.url)));
+        return Err(Error::Other(format!(
+            "invalid library: {}",
+            job.file_name()
+        )));
     }
     fs::rename(&job.dest, &dest).at(&dest)
 }
@@ -680,8 +1012,7 @@ impl<R: Read> Read for TailReader<'_, '_, R> {
         if self.retry_slow_tail && self.window.is_none() && self.reporter.fast_tail() {
             self.window = Some((Instant::now(), self.received));
         }
-        let idle = self.retry_slow_tail.then_some(FIRST_BODY_IDLE);
-        let n = super::download_transport::with_body_idle(idle, || self.body.read(buf))?;
+        let n = with_download_idle(|| self.body.read(buf))?;
         self.received += n as u64;
         if n > 0
             && let Some((start, received)) = self.window
@@ -752,6 +1083,7 @@ struct ChunkState {
     /// Bytes reported by the primary attempt.
     got: u64,
     done: bool,
+    committed: bool,
     hedged: bool,
     sample: Option<(Instant, u64)>,
     moved: Option<Instant>,
@@ -789,6 +1121,7 @@ impl ChunkState {
 
     fn complete(&mut self, len: u64, tx: &std::sync::mpsc::Sender<ChunkNews>) {
         self.done = true;
+        self.committed = true;
         let _ = tx.send(ChunkNews::Bytes(len - self.got));
         let _ = tx.send(ChunkNews::Done);
     }
@@ -811,6 +1144,26 @@ struct Chunks {
     next: std::sync::atomic::AtomicUsize,
 }
 
+struct SegmentedPart {
+    remaining: Vec<(u64, u64)>,
+    initialized: bool,
+}
+
+impl SegmentedPart {
+    fn new(job: &DownloadJob) -> Option<Self> {
+        Some(Self {
+            remaining: segments(job)?,
+            initialized: false,
+        })
+    }
+
+    fn discard(&mut self, job: &DownloadJob, tmp: &Path) -> Result<()> {
+        fs::remove_file(tmp).at(tmp)?;
+        *self = Self::new(job).expect("discarding a segmented file");
+        Ok(())
+    }
+}
+
 /// Fetch a big file in chunks into one preallocated `.part` file, then hash the whole file and
 /// rename it into place. [`CONNECTIONS`] connections take chunks in turn, each with a timeout
 /// sized for the chunk (a stalled connection costs one chunk, not the file), and a chunk that
@@ -820,21 +1173,31 @@ fn download_segmented(
     job: &DownloadJob,
     reporter: &Reporter,
     transferred: &Cell<u64>,
+    part: &mut SegmentedPart,
 ) -> std::result::Result<(), Segmented> {
-    let Some(ranges) = segments(job) else {
-        return Err(Segmented::NoRanges);
-    };
     if let Some(parent) = job.dest.parent() {
         fs::create_dir_all(parent).at(parent)?;
     }
     let tmp = part_path(&job.dest);
-    let file = fs::File::create(&tmp).at(&tmp)?;
-    file.set_len(job.size.unwrap_or(0)).at(&tmp)?;
-    drop(file);
+    let size = job.size.expect("segmented downloads have a known size");
+    if !part.initialized {
+        let file = fs::File::create(&tmp).at(&tmp)?;
+        file.set_len(size).at(&tmp)?;
+        part.initialized = true;
+    }
+    let retained = size
+        - part
+            .remaining
+            .iter()
+            .map(|(start, end)| end - start)
+            .sum::<u64>();
+    transferred.set(retained);
+    reporter.add_bytes(retained);
     let chunks = std::sync::Arc::new(Chunks {
         job: job.clone(),
         tmp: tmp.clone(),
-        list: ranges
+        list: part
+            .remaining
             .iter()
             .map(|&(start, end)| Chunk {
                 start,
@@ -882,35 +1245,40 @@ fn download_segmented(
             }
             Ok(ChunkNews::Done) => {
                 done += 1;
-                fast_file |= fast_transfer(transferred.get(), start);
+                fast_file |= fast_transfer(transferred.get() - retained, start);
             }
             Ok(ChunkNews::NoRanges) => break Err(Segmented::NoRanges),
             Ok(ChunkNews::Failed(e)) => break Err(Segmented::Failed(e)),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                break Err(Segmented::Failed(Error::Other(format!(
-                    "download of {} stopped",
-                    job.url
-                ))));
+                break Err(Segmented::Failed(Error::Http(
+                    "range download stopped".into(),
+                )));
             }
         }
     };
-    // Fetches still running give up at their next read.
-    for chunk in &chunks.list {
-        chunk.state.lock().unwrap().done = true;
-    }
+    // A worker may still be reading. Once all chunks are closed under their
+    // locks, only committed ranges survive and no worker can write again.
+    let mut chunk = chunks.list.iter();
+    part.remaining.retain(|_| {
+        let mut state = chunk.next().unwrap().state.lock().unwrap();
+        state.done = true;
+        !state.committed
+    });
     if let Err(e) = result {
-        let _ = fs::remove_file(&tmp);
+        if matches!(e, Segmented::NoRanges) || job.sha1.is_none() {
+            part.discard(job, &tmp)?;
+        }
         return Err(e);
     }
-    let size_ok = fs::metadata(&tmp).at(&tmp)?.len() == job.size.unwrap_or(0);
+    let size_ok = fs::metadata(&tmp).at(&tmp)?.len() == size;
     let hash_ok = match &job.sha1 {
         Some(want) => want.eq_ignore_ascii_case(&sha1_file(&tmp)?),
         None => true,
     };
     if !size_ok || !hash_ok {
-        let _ = fs::remove_file(&tmp);
-        return Err(Error::Checksum(job.url.clone()).into());
+        part.discard(job, &tmp)?;
+        return Err(Error::Checksum(job.file_name().into_owned()).into());
     }
     fs::rename(&tmp, &job.dest).at(&job.dest)?;
     Ok(())
@@ -929,9 +1297,23 @@ fn hedge_stalled(
         let mut state = chunk.state.lock().unwrap();
         if state.should_hedge(chunk.end - chunk.start, Instant::now(), fast) {
             state.hedged = true;
-            log::info!("chunk {i} of {} is slow: fetching it again", chunks.job.url);
+            log::info!(
+                "chunk {i} of {} from {} is slow: fetching it again",
+                chunks.job.file_name(),
+                host(chunks.job.source())
+            );
             let (chunks, tx) = (chunks.clone(), tx.clone());
-            std::thread::spawn(move || fetch_once(&chunks, i, &tx, false, true));
+            std::thread::spawn(move || {
+                if let Err(Segmented::Failed(e)) = fetch_once(&chunks, i, &tx, false) {
+                    let job = &chunks.job;
+                    let e = download_error(job, e);
+                    log::warn!(
+                        "hedged chunk {i} of {} from {} failed: {e}",
+                        job.file_name(),
+                        host(job.source())
+                    );
+                }
+            });
         }
     }
 }
@@ -940,7 +1322,7 @@ fn hedge_stalled(
 fn fetch_chunk(chunks: &Chunks, i: usize, tx: &std::sync::mpsc::Sender<ChunkNews>) -> bool {
     let mut attempt = 1;
     loop {
-        match fetch_once(chunks, i, tx, true, attempt == 1) {
+        match fetch_once(chunks, i, tx, true) {
             Ok(()) => return true,
             Err(Segmented::NoRanges) => {
                 let mut state = chunks.list[i].state.lock().unwrap();
@@ -963,16 +1345,18 @@ fn fetch_chunk(chunks: &Chunks, i: usize, tx: &std::sync::mpsc::Sender<ChunkNews
                     state.sample = None;
                     state.moved = None;
                     let _ = tx.send(ChunkNews::Unreport(reported));
-                    if attempt >= ATTEMPTS {
+                    let job = &chunks.job;
+                    log::warn!(
+                        "chunk {i} attempt {attempt} for {} from {} failed: {e}",
+                        job.file_name(),
+                        host(job.source())
+                    );
+                    if attempt >= ATTEMPTS || is_not_found(&e) {
                         state.done = true;
                         let _ = tx.send(ChunkNews::Failed(e));
                         return false;
                     }
                 }
-                log::warn!(
-                    "retrying chunk {i} of {} (attempt {attempt}): {e}",
-                    chunks.job.url
-                );
                 std::thread::sleep(RETRY_BACKOFF * attempt);
                 attempt += 1;
             }
@@ -987,7 +1371,6 @@ fn fetch_once(
     i: usize,
     tx: &std::sync::mpsc::Sender<ChunkNews>,
     own: bool,
-    bound_idle: bool,
 ) -> std::result::Result<(), Segmented> {
     use std::io::{Seek, SeekFrom};
     let (job, chunk) = (&chunks.job, &chunks.list[i]);
@@ -1006,23 +1389,28 @@ fn fetch_once(
     let mut resp = super::agent()
         .get(&job.url)
         .header("Range", &format!("bytes={}-{}", chunk.start, chunk.end - 1))
+        .header("Accept-Encoding", "identity")
         .config()
         .timeout_connect(connect_timeout(&job.url))
         .timeout_recv_body(Some(chunk_timeout(len)))
         .build()
         .call()
-        .map_err(Error::from)?;
-    let expected_range = format!("bytes {}-{}", chunk.start, chunk.end - 1);
-    let ranged = resp.status().as_u16() == 206
-        && resp
-            .headers()
-            .get("content-range")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.split_once('/'))
-            .is_some_and(|(range, total)| {
-                range == expected_range && (total == "*" || total.parse::<u64>().ok() == job.size)
-            });
-    if !ranged {
+        .map_err(request_error)?;
+    if resp.status().as_u16() != 206 {
+        return Err(Segmented::NoRanges);
+    }
+    if !identity_body(&resp)
+        || !content_range(&resp).is_some_and(|(start, end, total)| {
+            start == chunk.start
+                && end == chunk.end - 1
+                && total.is_none_or(|n| Some(n) == job.size)
+        })
+    {
+        log::warn!(
+            "range request for {} from {} returned an unexpected Content-Range",
+            job.file_name(),
+            host(job.source())
+        );
         return Err(Segmented::NoRanges);
     }
     let tmp = &chunks.tmp;
@@ -1030,9 +1418,8 @@ fn fetch_once(
     let mut bytes = vec![0; len as usize];
     let mut got = 0;
     while got < bytes.len() {
-        let idle = bound_idle.then_some(FIRST_BODY_IDLE);
-        let n = super::download_transport::with_body_idle(idle, || body.read(&mut bytes[got..]))
-            .at(tmp)?;
+        let n = with_download_idle(|| body.read(&mut bytes[got..]))
+            .map_err(|e| request_error(e.into()))?;
         if n == 0 {
             break;
         }
@@ -1046,7 +1433,7 @@ fn fetch_once(
         }
     }
     if got != bytes.len() {
-        return Err(Error::Other(format!("short range read from {}", job.url)).into());
+        return Err(Error::Http("response ended before the range was complete".into()).into());
     }
     let mut state = chunk.state.lock().unwrap();
     if !state.done {
@@ -1066,13 +1453,9 @@ fn chunk_timeout(len: u64) -> Duration {
     BODY_TIMEOUT_BASE + Duration::from_secs(len / CHUNK_MIN_SPEED)
 }
 
-/// Both the transferred stream (if compressed) and the final file must match.
-fn verify<R, W>(job: &DownloadJob, input: &Hashing<R>, output: &Hashing<W>) -> Result<()> {
-    let compressed_ok = job
-        .lzma
-        .as_ref()
-        .is_none_or(|c| c.size == input.count && c.sha1.eq_ignore_ascii_case(&input.hex_digest()));
-    let raw_ok = job.size.is_none_or(|s| s == output.count)
+/// Match the expected size and available checksums of the final file.
+fn raw_matches<T>(job: &DownloadJob, output: &Hashing<T>) -> bool {
+    job.size.is_none_or(|s| s == output.count)
         && job
             .sha1
             .as_deref()
@@ -1081,22 +1464,17 @@ fn verify<R, W>(job: &DownloadJob, input: &Hashing<R>, output: &Hashing<W>) -> R
             output
                 .md5_digest()
                 .is_some_and(|got| want.eq_ignore_ascii_case(&got))
-        });
-    if compressed_ok && raw_ok {
-        Ok(())
-    } else {
-        Err(Error::Checksum(job.url.clone()))
-    }
+        })
 }
 
-fn copy(input: &mut impl Read, output: &mut impl Write) -> std::io::Result<()> {
+fn copy(input: &mut impl Read, output: &mut impl Write, path: &Path) -> Result<()> {
     let mut buf = vec![0u8; BUF_SIZE];
     loop {
-        let n = input.read(&mut buf)?;
+        let n = input.read(&mut buf).map_err(|e| request_error(e.into()))?;
         if n == 0 {
             return Ok(());
         }
-        output.write_all(&buf[..n])?;
+        output.write_all(&buf[..n]).at(path)?;
     }
 }
 
@@ -1152,6 +1530,18 @@ impl<T: Read> Read for Hashing<'_, T> {
     }
 }
 
+impl<T: Read> Hashing<'_, T> {
+    fn hash_prefix(&mut self, mut remaining: u64) -> std::io::Result<()> {
+        let mut buf = vec![0; BUF_SIZE];
+        while remaining > 0 {
+            let len = remaining.min(BUF_SIZE as u64) as usize;
+            self.read_exact(&mut buf[..len])?;
+            remaining -= len as u64;
+        }
+        Ok(())
+    }
+}
+
 impl<T: Write> Write for Hashing<'_, T> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let n = self.inner.write(buf)?;
@@ -1186,6 +1576,9 @@ pub fn sha1_file(path: &Path) -> Result<String> {
     }
     Ok(hex::encode(hasher.finalize()))
 }
+
+#[cfg(test)]
+mod resilience_tests;
 
 #[cfg(test)]
 mod tests {
@@ -1302,40 +1695,12 @@ mod tests {
         let on = |n: u64| seen.set(seen.get() + n);
         let mut r = Hashing::new(std::io::Cursor::new(b"abc".to_vec()), &on);
         let mut sink = Hashing::new(Vec::new(), &|_| {});
-        copy(&mut r, &mut sink).unwrap();
+        copy(&mut r, &mut sink, Path::new("sink")).unwrap();
         assert_eq!((r.count, sink.count, seen.get()), (3, 3, 3));
         assert_eq!(
             sink.hex_digest(),
             "a9993e364706816aba3e25717850c26c9cd0d89d"
         );
-    }
-
-    #[test]
-    fn lzma_roundtrip_verifies_both_hashes() {
-        let raw = b"arctic ".repeat(1000);
-        let mut compressed = Vec::new();
-        lzma_rs::lzma_compress(&mut std::io::Cursor::new(&raw), &mut compressed).unwrap();
-        let mut input = Hashing::new(std::io::Cursor::new(compressed.clone()), &|_| {});
-        let mut output = Hashing::new(Vec::new(), &|_| {});
-        let mut buffered = BufReader::new(&mut input);
-        lzma_rs::lzma_decompress(&mut buffered, &mut output).unwrap();
-        drop(buffered);
-        let job = DownloadJob {
-            sha1: Some(hex::encode(Sha1::digest(&raw))),
-            size: Some(raw.len() as u64),
-            lzma: Some(Compressed {
-                url: String::new(),
-                sha1: hex::encode(Sha1::digest(&compressed)),
-                size: compressed.len() as u64,
-            }),
-            ..job("x", None)
-        };
-        assert!(verify(&job, &input, &output).is_ok());
-        let wrong = DownloadJob {
-            sha1: Some("00".into()),
-            ..job
-        };
-        assert!(verify(&wrong, &input, &output).is_err());
     }
 
     #[test]
@@ -1664,7 +2029,10 @@ mod tests {
             delays: vec![Duration::from_millis(5)],
         };
         let dest = job.dest.clone();
-        (download_with_mirror(&job, &reporter, mirror, &policy), dest)
+        (
+            download_with_alternates(&job, &reporter, mirror, &policy),
+            dest,
+        )
     }
 
     #[test]

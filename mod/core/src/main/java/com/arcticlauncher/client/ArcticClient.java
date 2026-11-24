@@ -96,7 +96,7 @@ public final class ArcticClient {
 		looks.start();
 		social = new com.arcticlauncher.client.social.Social(p, looks);
 		social.start();
-		accounts = new com.arcticlauncher.client.account.AccountSwitcher(p, session.bridgePort, session.bridgeSecret);
+		accounts = new com.arcticlauncher.client.account.AccountSwitcher(p, session.bridgePort, session.bridgeSecret, session.minecraftRefreshAt);
 		launcherSkins = new com.arcticlauncher.client.looks.LauncherSkins(p, session.bridgePort, session.bridgeSecret);
 		voice = new com.arcticlauncher.client.voice.VoiceLink(p, session.bridgePort, session.bridgeSecret);
 		voice.start();

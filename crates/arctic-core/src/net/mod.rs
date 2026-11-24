@@ -6,8 +6,9 @@ mod resolver;
 
 pub use download::{Compressed, DownloadJob, download_all, set_gentle, sha1_file};
 pub(crate) use download::{
-    Policy, body_timeout, download_all_with_replacements, download_before, download_single,
-    fetch_text, is_not_found, mirror_for, part_path,
+    DownloadAlternates, Policy, body_timeout, download_all_with_alternates,
+    download_all_with_replacements, download_before, download_single, fetch_text, is_not_found,
+    mirror_for, part_path,
 };
 
 use std::sync::{PoisonError, RwLock};
@@ -113,12 +114,27 @@ fn build_agent(proxy: Option<ureq::Proxy>) -> ureq::Agent {
 
 /// GET a URL and deserialize its JSON body.
 pub fn get_json<T: DeserializeOwned>(url: &str) -> Result<T> {
-    let mut resp = agent().get(url).call()?;
-    Ok(resp
-        .body_mut()
+    let mut resp = agent().get(url).call().map_err(download::request_error)?;
+    resp.body_mut()
         .with_config()
         .limit(MAX_JSON_BYTES)
-        .read_json()?)
+        .read_json()
+        .map_err(download::request_error)
+}
+
+/// Try the official equivalent when a Java runtime document cannot be read.
+pub(crate) fn get_mojang_json<T: DeserializeOwned>(url: &str) -> Result<T> {
+    let fetch = |url: &str| {
+        download::with_download_idle(|| get_json(url))
+            .map_err(|e| download::metadata_error(url, e))
+            .inspect_err(|e| log::warn!("{e}"))
+    };
+    fetch(url).or_else(|primary| {
+        let Some(alternate) = download::mojang_alternate(url) else {
+            return Err(primary);
+        };
+        fetch(&alternate).map_err(|_| primary)
+    })
 }
 
 pub(crate) fn time_remaining(deadline: Instant) -> Result<Duration> {

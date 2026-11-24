@@ -1701,6 +1701,22 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public boolean offlineSession() {
+		net.minecraft.client.util.Session session = mc().getSession();
+		//#if MC == 1.8.9
+		return "0".equals(session.getAccessToken())
+				|| session.getAccountType() == net.minecraft.client.util.Session.AccountType.LEGACY;
+		//#else
+		return "0".equals(session.getAccessToken());
+		//#endif
+	}
+
+	@Override
+	public boolean isCurrentSessionToken(String token) {
+		return token.equals(mc().getSession().getAccessToken());
+	}
+
+	@Override
 	public String playerName() {
 		return mc().getSession().getUsername();
 	}

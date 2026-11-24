@@ -1181,6 +1181,7 @@ pub struct ModSession<'a> {
     pub proxy: &'a crate::proxy::ProxySettings,
     /// In-game account switching, while the launcher runs.
     pub bridge: Option<&'a crate::bridge::BridgeInfo>,
+    pub minecraft_refresh_at: Option<u64>,
     /// The game may tell the Arctic server (for friends) which server it's on.
     pub share_server: bool,
     /// A duel to start from the title screen (see `QuickPlay::Duel`).
@@ -1201,6 +1202,7 @@ pub fn write_mod_session(game_dir: &Path, session: &ModSession) -> Result<()> {
         style_set,
         proxy,
         bridge,
+        minecraft_refresh_at,
         share_server,
         duel,
         replay,
@@ -1228,6 +1230,7 @@ pub fn write_mod_session(game_dir: &Path, session: &ModSession) -> Result<()> {
             "set": proxy.set,
         },
         "bridge": bridge,
+        "minecraft_refresh_at": minecraft_refresh_at,
         "share_server": share_server,
         "duel": duel,
         "replay": replay,

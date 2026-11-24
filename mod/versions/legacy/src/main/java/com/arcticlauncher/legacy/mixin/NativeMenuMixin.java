@@ -1,6 +1,8 @@
 package com.arcticlauncher.legacy.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.legacy.LegacyDisconnectText;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.gui.screen.DisconnectedScreen;
@@ -28,7 +30,10 @@ abstract class NativeMenuMixin extends Screen {
 			arctic$add(Lang.t("platform.arctic_servers"), () -> com.arcticlauncher.legacy.ServerMenus.open((Screen) (Object) this));
 		} else if ((Object) this instanceof DisconnectedScreen) {
 			arctic$add(Lang.t("platform.arctic_disconnect"), () -> com.arcticlauncher.legacy.ServerMenus.open((Screen) (Object) this));
-			arctic$reconnect = new com.arcticlauncher.client.servers.DisconnectedPage("", "");
+			Screen screen = (Screen) (Object) this;
+			String[] text = LegacyDisconnectText.read(screen);
+			arctic$reconnect = new com.arcticlauncher.client.servers.DisconnectedPage(text[0], text[1],
+					() -> MinecraftClient.getInstance().currentScreen == screen);
 			if (arctic$reconnect.canReconnect()) {
 				arctic$add(Lang.t("platform.reconnect"), arctic$reconnect::reconnect);
 				arctic$cancel = arctic$add(Lang.t("platform.cancel_auto"), arctic$reconnect::cancelReconnect);

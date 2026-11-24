@@ -63,7 +63,11 @@ events because of the official logging config; these are collapsed into
 `[thread/LEVEL] message` lines, with stack traces kept. Parsing runs on the tee threads,
 which stream `GameEvent::Output` to the UI (capped at 20k lines). The launcher's own
 `log` output goes to stderr, `logs/launcher.log` and an in-memory ring buffer
-(`arctic-app/src/logbook.rs`). Both are shown on the Logs tab.
+(`arctic-app/src/logbook.rs`). Previous launcher runs are archived as
+`logs/launcher-YYYYMMDD-HHMMSS.log` using UTC, with a suffix for timestamps that
+collide. Archives expire after 14 days and the oldest are removed first to keep
+launcher logs within 50 MB. The current run is always kept. The Logs tab shows
+live game and launcher output and lets users open retained launcher runs.
 
 ## UI notes
 

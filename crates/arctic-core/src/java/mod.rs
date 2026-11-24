@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::IoContext;
 use crate::net::{
-    Compressed, DownloadJob, download_all_with_replacements, get_json, part_path, sha1_file,
+    Compressed, DownloadJob, download_all_with_replacements, get_mojang_json, part_path, sha1_file,
 };
 use crate::storage::{DataDirs, load_json, save_json};
 use crate::versions::VersionJson;
@@ -295,7 +295,7 @@ pub fn plan_runtime_for(dirs: &DataDirs, component: &str, rosetta: bool) -> Resu
         "verifying Java runtime {component} {}: {reason}",
         build.version.name
     );
-    let manifest: RuntimeManifest = get_json(&build.manifest.url)?;
+    let manifest: RuntimeManifest = get_mojang_json(&build.manifest.url)?;
     // An interrupted install must no longer qualify for warm or offline reuse.
     write_marker(&marker, "")?;
     (plan.jobs, plan.executables) = collect_files(&plan.dir, manifest)?;
@@ -505,7 +505,7 @@ fn fetch_index(dirs: &DataDirs) -> Result<RuntimeIndex> {
     {
         return Ok(index);
     }
-    match get_json::<RuntimeIndex>(RUNTIME_INDEX_URL) {
+    match get_mojang_json::<RuntimeIndex>(RUNTIME_INDEX_URL) {
         Ok(index) => {
             let _ = save_json(&cache, &index);
             Ok(index)

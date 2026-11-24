@@ -26,6 +26,8 @@
   "servers.duels_sumo": "Duels Sumo",
   "servers.duels_uhc": "Duels UHC",
   "servers.edit": "Изменить",
+  "servers.invalid_session_offline": "Для этого сервера нужна учётная запись Microsoft. Смените её в меню и нажмите «Переподключиться».",
+  "servers.invalid_session_refresh_failed": "Не удалось обновить сеанс. Войдите снова в Arctic Launcher.",
   "servers.join_server": "Подключиться",
   "servers.lan_world": "Мир в локальной сети",
   "servers.loading": "Загрузка…",

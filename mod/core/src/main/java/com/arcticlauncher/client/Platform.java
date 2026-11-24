@@ -200,6 +200,16 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		r.run();
 	}
 
+	/** True if the game is using a local offline session. */
+	default boolean offlineSession() {
+		return false;
+	}
+
+	/** True if this token is already in use by the game. */
+	default boolean isCurrentSessionToken(String token) {
+		return false;
+	}
+
 	/**
 	 * Play as another account from now on (outside a world). Returns why it
 	 * couldn't, or null when done.

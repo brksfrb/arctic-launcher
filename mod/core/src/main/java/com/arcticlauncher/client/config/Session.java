@@ -25,6 +25,8 @@ public final class Session {
 	/** Friends may see which server we're on. */
 	public boolean shareServer;
 	public String bridgeSecret;
+	/** Unix seconds when the launched Minecraft session should be refreshed. */
+	public long minecraftRefreshAt;
 	/** This launch's own token for the launcher's join queue (null = none). */
 	public String launchToken;
 	/** When the style was picked in the launcher (seconds), 0 if unknown. */
@@ -88,6 +90,7 @@ public final class Session {
 			Boolean share = bool(o, "share_server");
 			session.shareServer = share != null && share;
 			session.language = string(o, "language");
+			session.minecraftRefreshAt = number(o, "minecraft_refresh_at");
 			JsonElement b = o.get("bridge");
 			if (b != null && b.isJsonObject()) {
 				long port = number(b.getAsJsonObject(), "port");

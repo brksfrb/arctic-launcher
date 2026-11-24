@@ -45,7 +45,8 @@ public final class ArcticButton {
 			add.accept(create(Lang.t("platform.arctic_servers"), () -> ServerMenus.open(screen)));
 		} else if (screen instanceof net.minecraft.client.gui.screens.DisconnectedScreen) {
 			add.accept(create(Lang.t("platform.arctic_disconnect"), () -> ServerMenus.open(screen)));
-			com.arcticlauncher.client.servers.DisconnectedPage reconnect = new com.arcticlauncher.client.servers.DisconnectedPage("", "");
+			com.arcticlauncher.client.servers.DisconnectedPage reconnect = new com.arcticlauncher.client.servers.DisconnectedPage(
+					"", DisconnectText.reason(screen), () -> Compat.screen() == screen);
 			if (reconnect.canReconnect()) {
 				Button join = create(Lang.t("platform.reconnect"), reconnect::reconnect); add.accept(join);
 				Button cancel = create(Lang.t("platform.cancel_auto"), reconnect::cancelReconnect); add.accept(cancel);
