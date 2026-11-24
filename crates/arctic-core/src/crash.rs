@@ -2253,6 +2253,49 @@ fn iris_shader_loading_frame(snapshot: &str) -> Option<&str> {
     })
 }
 
+const JEI_RECIPE_LOADING_TITLE: &str = "JEI was still loading recipes";
+
+fn jei_recipe_loading_frame<'a>(text: &'a str, snapshot: &'a str) -> Option<&'a str> {
+    fn loading(frame: &str) -> bool {
+        let Some((class, method)) = freeze_frame(frame)
+            .and_then(|call| call.strip_prefix("mezz.jei."))
+            .and_then(|call| call.rsplit_once('.'))
+        else {
+            return false;
+        };
+        let class = class.rsplit('.').next().unwrap_or(class);
+        class.ends_with("RecipeMaker")
+            || matches!(
+                (class, method),
+                ("JeiStarter", "start")
+                    | ("PluginLoader", "createRecipeManager")
+                    | ("ClientLifecycleHandler", "startJei")
+            )
+    }
+
+    if let Some((_, dump)) = text.rsplit_once("[Arctic diagnostics] hang begin") {
+        // The watchdog puts the client thread first in the dump.
+        let mut lines = dump.lines().skip(1);
+        let thread = lines.next()?.strip_prefix("[Arctic diagnostics] thread ")?;
+        if !matches!(
+            thread,
+            "\"Render thread\" RUNNABLE" | "\"Client thread\" RUNNABLE"
+        ) || dump.contains("[Arctic diagnostics] hang recovered")
+        {
+            return None;
+        }
+        return lines
+            .map_while(|line| line.trim_start().strip_prefix("at "))
+            .find(|frame| loading(frame));
+    }
+    if !snapshot.contains("(still frozen when written)") {
+        return None;
+    }
+    freeze_hot_frames(snapshot)
+        .find(|(percent, frame, _)| (51..=100).contains(percent) && loading(frame))
+        .map(|(_, frame, _)| frame)
+}
+
 const GRAPHICS_DRIVER_HANG_TITLE: &str = "The graphics driver stopped responding";
 
 fn graphics_wait(frame: &str) -> bool {
@@ -2388,6 +2431,16 @@ fn hang_diagnosis(full_text: &str, mods_dir: Option<&Path>) -> Option<(Diagnosis
         })
         .unwrap_or("The run contains an unrecovered watchdog freeze.");
     let snapshot = latest_freeze_snapshot(text);
+    if let Some(frame) = jei_recipe_loading_frame(text, snapshot) {
+        return Some((
+            Diagnosis::new(
+                JEI_RECIPE_LOADING_TITLE,
+                "JEI builds its recipe list when you join a world. This can take several minutes in large modpacks. Give it more time to finish, or remove or replace mods that add very large recipe sets.",
+                vec!["jei".into()],
+            ),
+            format!("{summary}\n{frame}"),
+        ));
+    }
     if !snapshot
         .lines()
         .any(|line| line.starts_with("duration: ") && !line.contains("(still frozen when written)"))
@@ -3614,6 +3667,7 @@ mod tests {
     const HANG_436: &str = include_str!("../tests/fixtures/crash-436-customrecipe-hang.log");
     const HANG_487: &str = include_str!("../tests/fixtures/crash-487-iris-shader-hang.log");
     const HANG_489: &str = include_str!("../tests/fixtures/crash-489-gl-fence-hang.log");
+    const HANG_516: &str = include_str!("../tests/fixtures/crash-516-jei-hang.log");
     const FREEZE_440: &str = include_str!("../tests/fixtures/crash-440-create-world-freeze.log");
     const SODIUM_490: &str = include_str!("../tests/fixtures/crash-490-sodium-driver.log");
 
@@ -3861,6 +3915,68 @@ mod tests {
             assert!(!report.log.contains("---- first error ----"));
             assert!(!report.log.contains("---- first exceptions ----"));
         }
+    }
+
+    #[test]
+    fn report_516_explains_the_jei_recipe_loading_freeze() {
+        let (diagnosis, matched) = diagnose_match(HANG_516, None).unwrap();
+        assert_eq!(diagnosis.title, JEI_RECIPE_LOADING_TITLE);
+        assert!(diagnosis.detail.contains("when you join a world"));
+        assert!(diagnosis.detail.contains("several minutes"));
+        assert_eq!(diagnosis.mods, ["jei"]);
+        assert!(diagnosis.fix.is_none());
+        assert!(matched.contains("AnvilRecipeMaker.getAnvilOutput"));
+
+        let mods = tempfile::tempdir().unwrap();
+        assert_eq!(
+            crate::crash_conflicts::diagnose_exit_in(HANG_516, -805306369, mods.path()),
+            Some(diagnosis)
+        );
+        let lines: Vec<_> = HANG_516.lines().collect();
+        let report = Report::build(
+            "1.20.1",
+            "Fabric",
+            "The game froze and was closed",
+            &lines,
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(report.title, JEI_RECIPE_LOADING_TITLE);
+        assert!(report.log.contains("Error: Watchdog freeze at exit"));
+        assert!(report.log.contains(&format!(
+            "---- diagnosis ----\n{JEI_RECIPE_LOADING_TITLE}\nmatched:"
+        )));
+        assert!(!report.log.contains("porting_lib_base failed"));
+        assert!(!report.log.contains("failed to change the game"));
+    }
+
+    #[test]
+    fn jei_recipe_loading_needs_an_active_client_stall() {
+        let (log, dump) = HANG_516.split_once("---- diagnostics ----").unwrap();
+        assert!(diagnose(log).is_none());
+        assert!(diagnose(&format!("{dump}\n[Arctic diagnostics] hang recovered")).is_none());
+
+        let worker_stack = dump.replace("\"Render thread\"", "\"Worker-Main-1\"");
+        let client_stack = dump.replace("\"Render thread\"", "\"Client thread\"");
+        let unrelated_frame = dump.replace("mezz.jei.", "example.not_jei.");
+        for text in [worker_stack, unrelated_frame] {
+            assert_eq!(
+                diagnose(&text).unwrap().title,
+                "The game froze and was closed"
+            );
+        }
+        assert_eq!(
+            diagnose(&client_stack).unwrap().title,
+            JEI_RECIPE_LOADING_TITLE
+        );
+
+        let sample = "---- logs/arctic-freezes/freeze.txt ----\n\
+            duration: 16.0s (still frozen when written)\n\
+            == Where the time went (frames present in the most samples) ==\n\
+            95%  mezz.jei.startup.JeiStarter.start(JeiStarter.java:42)";
+        assert_eq!(diagnose(sample).unwrap().title, JEI_RECIPE_LOADING_TITLE);
+        assert!(diagnose(&sample.replace(" (still frozen when written)", "")).is_none());
     }
 
     #[test]
@@ -5983,8 +6099,14 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
     #[test]
     fn optional_mixin_warnings_never_supply_mixin_failure_evidence() {
         for warning in [
+            HANG_516
+                .lines()
+                .find(|line| line.contains("@Mixin target "))
+                .unwrap(),
             "@Mixin target net.minecraft.Foo was not found optional.mixins.json:FooMixin",
             "@Mixin target example.InvalidMixinException was not found optional.mixins.json:FooMixin",
+            "[mixin] @Mixin target example.InvalidMixinException was not found optional.mixins.json:FooMixin from mod optional",
+            "[main/WARNING] InvalidMixinException: target not found optional.mixins.json:FooMixin",
             "[main/WARN] InvalidMixinException: target not found optional.mixins.json:FooMixin",
             "[main/WARN] Mixin [optional.mixins.json:FooMixin] from mod optional failed",
             "[main/WARN] Mixin apply for mod optional failed optional.mixins.json:FooMixin",

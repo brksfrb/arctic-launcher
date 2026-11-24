@@ -1,0 +1,72 @@
+──── Launching Fabric 1.20.1 (1.20.1) as <player> ────
+[08:02:06] [main/INFO] Loading Minecraft 1.20.1 with Fabric Loader 0.19.5
+[08:02:10] [main/WARN] @Mixin target io.vram.frex.base.renderer.context.render.EntityBlockRenderContext was not found porting_lib_base.mixins.json:client.frex.EntityBlockRenderContextMixin from mod porting_lib_base
+
+[08:02:21] [Render thread/ERROR] Failed to verify authentication
+    com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401
+        at knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:56)
+        at knot//com.mojang.authlib.yggdrasil.YggdrasilUserApiService.fetchProperties(YggdrasilUserApiService.java:156)
+        at knot//com.mojang.authlib.yggdrasil.YggdrasilUserApiService.<init>(YggdrasilUserApiService.java:55)
+        at knot//com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService.createUserApiService(YggdrasilAuthenticationService.java:124)
+        at knot//net.minecraft.class_310.method_31382(class_310.java:733)
+        at knot//net.minecraft.class_310.<init>(class_310.java:442)
+        at knot//net.minecraft.client.main.Main.main(Main.java:211)
+        at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:517)
+        at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+        at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+    Caused by: MinecraftClientHttpException[type=HTTP_ERROR, status=401, response=ErrorResponse[path='/player/attributes', error='null', details=null, errorMessage='null']]
+        at knot//com.mojang.authlib.minecraft.client.MinecraftClient.readInputStream(MinecraftClient.java:85)
+        at knot//com.mojang.authlib.minecraft.client.MinecraftClient.get(MinecraftClient.java:48)
+        at knot//com.mojang.authlib.yggdrasil.YggdrasilUserApiService.fetchProperties(YggdrasilUserApiService.java:129)
+[08:05:29] [Render thread/ERROR] Parsing error loading recipe create:crushing/compat/biomeswevegone/brimstone_nether_gold_ore
+    com.google.gson.JsonSyntaxException: Unknown item 'biomeswevegone:brimstone_nether_gold_ore'
+        at knot//net.minecraft.class_1869.method_17878(class_1869.java:272)
+        at java.base/java.util.Optional.orElseThrow(Optional.java:403)
+        at knot//net.minecraft.class_1869.method_8155(class_1869.java:272)
+
+---- memory ----
+7894 MB total, 5010 MB free
+
+---- diagnostics ----
+[Arctic diagnostics] hang begin; no render progress for 30031 ms
+[Arctic diagnostics] thread "Render thread" RUNNABLE
+    at java.base@17.0.15/java.util.stream.ReferencePipeline$7$1.accept(ReferencePipeline.java:273)
+    at knot//net.minecraft.class_1735.method_7673(class_1735.java:73)
+    at knot//mezz.jei.library.plugins.vanilla.anvil.AnvilHelper.setAnvilMenu(AnvilHelper.java:51)
+    at knot//mezz.jei.library.plugins.vanilla.anvil.AnvilRecipeMaker.getAnvilOutput(AnvilRecipeMaker.java:312)
+    at knot//mezz.jei.library.plugins.vanilla.anvil.AnvilRecipeMaker.lambda$getEnchantedIngredients$5(AnvilRecipeMaker.java:142)
+    at knot//mezz.jei.library.plugins.vanilla.anvil.AnvilRecipeMaker$$Lambda$30168/0x00000008033c86d8.apply(Unknown Source)
+    at java.base@17.0.15/java.util.stream.ReferencePipeline.toList(ReferencePipeline.java:627)
+    at knot//mezz.jei.library.plugins.vanilla.anvil.AnvilRecipeMaker.getEnchantedIngredients(AnvilRecipeMaker.java:144)
+    at knot//mezz.jei.library.plugins.vanilla.anvil.AnvilRecipeMaker.lambda$getBookEnchantmentRecipes$4(AnvilRecipeMaker.java:133)
+    at knot//mezz.jei.library.plugins.vanilla.anvil.AnvilRecipeMaker$$Lambda$30166/0x00000008033c8248.apply(Unknown Source)
+    at knot//mezz.jei.library.plugins.vanilla.anvil.AnvilRecipeMaker.getAnvilRecipes(AnvilRecipeMaker.java:70)
+    at knot//mezz.jei.library.plugins.vanilla.anvil.AnvilRecipeMaker.getAnvilRecipes(AnvilRecipeMaker.java:50)
+    at knot//mezz.jei.library.plugins.vanilla.anvil.AnvilRecipeMaker.getAnvilRecipes(AnvilRecipeMaker.java:45)
+    at knot//mezz.jei.library.plugins.vanilla.VanillaPlugin.registerRecipes(VanillaPlugin.java:282)
+    at knot//mezz.jei.library.load.PluginLoader.lambda$createRecipeManager$18(PluginLoader.java:230)
+    at knot//mezz.jei.library.load.PluginLoader$$Lambda$30013/0x0000000803399d30.accept(Unknown Source)
+    at knot//mezz.jei.library.load.PluginCaller.callOnPlugins(PluginCaller.java:26)
+    at knot//mezz.jei.library.load.PluginLoader.createRecipeManager(PluginLoader.java:230)
+    at knot//mezz.jei.library.startup.JeiStarter.start(JeiStarter.java:151)
+    at knot//mezz.jei.fabric.startup.ClientLifecycleHandler.startJei(ClientLifecycleHandler.java:91)
+    at knot//mezz.jei.fabric.startup.ClientLifecycleHandler.lambda$registerEvents$0(ClientLifecycleHandler.java:55)
+    at knot//mezz.jei.fabric.startup.ClientLifecycleHandler$$Lambda$23342/0x0000000802b75000.run(Unknown Source)
+    at knot//mezz.jei.fabric.events.JeiLifecycleEvents.lambda$static$2(JeiLifecycleEvents.java:21)
+    at knot//mezz.jei.fabric.events.JeiLifecycleEvents$$Lambda$19650/0x00000008024b9d48.run(Unknown Source)
+    at knot//net.minecraft.class_634.handler$ehd002$jei$handleUpdateRecipes(class_634.java:10231)
+    at knot//net.minecraft.class_634.method_11106(class_634.java:1445)
+    at knot//net.minecraft.class_2788.method_11997(class_2788.java:32)
+    at knot//net.minecraft.class_2788.method_11054(class_2788.java:14)
+    at knot//net.minecraft.client.main.Main.main(Main.java:250)
+    at java.base@17.0.15/java.lang.invoke.LambdaForm$DMH/0x00000008000dc400.invokeStaticInit(LambdaForm$DMH)
+    at java.base@17.0.15/java.lang.invoke.LambdaForm$MH/0x0000000800430400.invokeExact_MT(LambdaForm$MH)
+    at app//net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:517)
+    at app//net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+    at app//net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+[Arctic diagnostics] thread "Notification Thread" RUNNABLE
+[Arctic diagnostics] thread "HttpClient-1-Worker-1" TIMED_WAITING
+    at java.base@17.0.15/jdk.internal.misc.Unsafe.park(Native Method)
+    at java.base@17.0.15/java.util.concurrent.locks.LockSupport.parkNanos(LockSupport.java:252)
+    at java.base@17.0.15/java.util.concurrent.SynchronousQueue$TransferStack.transfer(SynchronousQueue.java:401)
+    at java.base@17.0.15/java.util.concurrent.SynchronousQueue.poll(SynchronousQueue.java:903)
