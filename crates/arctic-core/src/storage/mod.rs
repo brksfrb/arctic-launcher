@@ -16,7 +16,8 @@
 //! │   ├── libraries/…             maven layout
 //! │   └── assets/{indexes,objects,virtual,log_configs}
 //! ├── runtimes/<component>/       managed Java runtimes
-//! ├── logs/launcher.log           launcher log
+//! ├── logs/launcher.log           current launcher run
+//! ├── logs/launcher-*.log         retained previous launcher runs
 //! └── cache/                      avatars, downloaded updates
 //! ```
 //!
@@ -176,7 +177,7 @@ impl DataDirs {
     pub fn logs(&self) -> PathBuf {
         self.profile_root.join("logs")
     }
-    /// Launcher-wide logs (`launcher.log`).
+    /// Launcher-wide logs (`launcher.log` and timestamped previous runs).
     pub fn launcher_logs(&self) -> PathBuf {
         self.root.join("logs")
     }
