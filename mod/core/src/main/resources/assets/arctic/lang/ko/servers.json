@@ -26,6 +26,8 @@
   "servers.duels_sumo": "Duels Sumo",
   "servers.duels_uhc": "Duels UHC",
   "servers.edit": "편집",
+  "servers.invalid_session_offline": "이 서버에 접속하려면 Microsoft 계정이 필요합니다. 메뉴에서 계정을 바꾼 뒤 다시 연결을 누르세요.",
+  "servers.invalid_session_refresh_failed": "로그인을 갱신하지 못했습니다. Arctic Launcher에서 다시 로그인하세요.",
   "servers.join_server": "서버 참가",
   "servers.lan_world": "LAN 월드",
   "servers.loading": "불러오는 중…",

@@ -1168,9 +1168,10 @@ impl ArcticApp {
                     (*done, *total) = (p.bytes_done, p.bytes_total);
                 }
             }
-            Event::AccountRefreshed(account) => {
-                self.accounts.upsert(account);
-                self.save_accounts();
+            Event::AccountRefreshed { previous, fresh } => {
+                if self.accounts.replace_refreshed(&previous, fresh) {
+                    self.save_accounts();
+                }
             }
             Event::Launched(id, result) => {
                 let result = result.map(|(game, log_file, version, java)| {

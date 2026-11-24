@@ -25,6 +25,9 @@ pub enum Error {
     #[error("{0}")]
     NotConfigured(String),
 
+    #[error("offline accounts have no session to refresh")]
+    OfflineSessionRefresh,
+
     #[error("Selected version is incompatible with this instance")]
     IncompatibleContentVersion,
 
