@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::time::{Instant, SystemTime};
 
 use arctic_core::crash::{self, Diagnosis};
+use arctic_core::launch::exit_diagnostics::{DLL_NOT_FOUND, ExitDiagnostics};
 use arctic_core::launch::logparse::{Level, LogLine};
 use arctic_core::launch::startup::Stage;
 use arctic_core::launch::{GameEvent, GameHandle};
@@ -60,6 +61,7 @@ pub struct Run {
     early: Vec<GameEvent>,
     /// The crash, ready to send if the player agrees.
     crash_report: Option<crash::Report>,
+    exit_diagnostics: ExitDiagnostics,
     /// How Java was started (flags, classpath files), for the crash report.
     pub java: Option<String>,
     /// The player requested a stop; the resulting exit is not a crash.
@@ -163,14 +165,17 @@ impl Run {
             ),
             None => format!("{j}\n{}", self.run_summary(written.is_some())),
         });
-        crash::Report::build(
+        crash::Report::build_with_run(
             &self.version,
             "",
             title,
             &lines,
             &launcher,
             written.as_deref(),
-            java.as_deref(),
+            crash::ReportRun {
+                java: java.as_deref(),
+                diagnostics: Some(&self.exit_diagnostics),
+            },
         )
     }
 
@@ -190,7 +195,7 @@ impl Run {
         format!(
             "run: ended after {lived} s; {count} lines printed; logs/latest.log: {own}; crash report or hs_err: {value}", // i18n-ignore: diagnostics
             lived = lived,
-            count = self.log.len(),
+            count = self.exit_diagnostics.output.count(),
             own = own,
             value = if has_report { "yes" } else { "none" }
         )
@@ -211,6 +216,9 @@ impl Run {
 
     fn exit_diagnosis(&self, code: Option<i32>, shutdown_watchdog: bool) -> Option<Diagnosis> {
         let code = code.filter(|c| *c != 0 && !shutdown_watchdog)?;
+        if code == DLL_NOT_FOUND {
+            return Some(self.exit_diagnostics.dll_diagnosis());
+        }
         arctic_core::crash_conflicts::diagnose_exit_in_with_java(
             &self.crash_text(),
             code,
@@ -638,6 +646,7 @@ impl Runs {
             started: SystemTime::now(),
             early: Vec::new(),
             crash_report: None,
+            exit_diagnostics: ExitDiagnostics::default(),
             java: None,
             killed: false,
         });
@@ -802,11 +811,13 @@ impl ArcticApp {
                 killed,
                 played,
                 ended_at,
+                diagnostics,
             } => {
                 if run.game().is_none() {
                     return;
                 }
                 let code = run.reported_exit_code(code, killed);
+                run.exit_diagnostics = diagnostics;
                 run.state = RunState::Ended;
                 self.bridge.forget_launch(id);
                 // The game threw its unfinished recording away itself unless it crashed or

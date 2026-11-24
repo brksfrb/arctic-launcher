@@ -17,6 +17,18 @@ const STAGING: &str = ".staging-";
 /// Keep the existing copy until a complete replacement has been staged. The caller holds the
 /// runtime lock, so the source won't be updated and another launch can't publish at the same time.
 pub(super) fn prepare(runtime: &Path, java: &Path) -> io::Result<(PathBuf, bool)> {
+    #[cfg(windows)]
+    let omit_system_dlls = crate::system::windows::can_use_system_ucrt();
+    #[cfg(not(windows))]
+    let omit_system_dlls = true;
+    prepare_mirror(runtime, java, omit_system_dlls)
+}
+
+fn prepare_mirror(
+    runtime: &Path,
+    java: &Path,
+    omit_system_dlls: bool,
+) -> io::Result<(PathBuf, bool)> {
     if java.parent() != Some(runtime.join("bin").as_path()) {
         return Err(io::Error::other(
             "Java executable is outside the runtime's bin directory",
@@ -42,7 +54,7 @@ pub(super) fn prepare(runtime: &Path, java: &Path) -> io::Result<(PathBuf, bool)
     let named = parent.join(FOLDER);
     let branded = Path::new("bin").join(EXE);
     remove_control_stamps(&named);
-    match check_mirror(runtime, &named, java, &branded) {
+    match check_mirror(runtime, &named, java, &branded, omit_system_dlls) {
         Ok(()) => return Ok((named.join(branded), false)),
         Err(e) => log::info!("rebuilding named Java runtime {}: {e}", named.display()),
     }
@@ -50,10 +62,10 @@ pub(super) fn prepare(runtime: &Path, java: &Path) -> io::Result<(PathBuf, bool)
         .prefix(STAGING)
         .tempdir_in(&parent)?;
     let replacement = staging.path().join(FOLDER);
-    copy_tree(runtime, &replacement, true)?;
+    copy_tree(runtime, &replacement, true, omit_system_dlls)?;
     let source = replacement.join(java.strip_prefix(runtime).unwrap());
     copy_with_mtime(&source, &replacement.join(&branded))?;
-    check_mirror(runtime, &replacement, java, &branded)?;
+    check_mirror(runtime, &replacement, java, &branded, omit_system_dlls)?;
 
     let previous = staging.path().join("previous");
     // Renaming a junction or symlink moves the link itself. Removal of the temporary tree
@@ -97,9 +109,15 @@ fn remove_control_stamps(named: &Path) {
     }
 }
 
-fn check_mirror(src: &Path, dst: &Path, java: &Path, branded: &Path) -> io::Result<()> {
+fn check_mirror(
+    src: &Path,
+    dst: &Path,
+    java: &Path,
+    branded: &Path,
+    omit_system_dlls: bool,
+) -> io::Result<()> {
     // Validate the bin directory before accessing the branded executable.
-    check_tree(src, dst, true)?;
+    check_tree(src, dst, true, omit_system_dlls)?;
     let exe = dst.join(branded);
     if let Some(source) = file_metadata(java)?
         && same_file(java, &source, &exe)?
@@ -116,7 +134,7 @@ fn mismatch(path: &Path, reason: &str) -> io::Error {
     io::Error::other(format!("{reason}: {}", path.display()))
 }
 
-fn check_tree(src: &Path, dst: &Path, root: bool) -> io::Result<()> {
+fn check_tree(src: &Path, dst: &Path, root: bool, omit_system_dlls: bool) -> io::Result<()> {
     require_directory(src)?;
     require_directory(dst).map_err(|e| mismatch(dst, &e.to_string()))?;
     let mut remaining: HashSet<_> = fs::read_dir(dst)?
@@ -131,7 +149,7 @@ fn check_tree(src: &Path, dst: &Path, root: bool) -> io::Result<()> {
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let name = entry.file_name();
-        if excluded(src, &name, root) {
+        if excluded(src, &name, root, omit_system_dlls) {
             continue;
         }
         let to = dst.join(&name);
@@ -147,7 +165,7 @@ fn check_tree(src: &Path, dst: &Path, root: bool) -> io::Result<()> {
             return Err(mismatch(&from, "source entry is a link"));
         }
         if meta.is_dir() {
-            check_tree(&from, &to, false)?;
+            check_tree(&from, &to, false, omit_system_dlls)?;
         } else if !meta.is_file() || !same_file(&from, &meta, &to)? {
             return Err(mismatch(&to, "file size, mtime or contents changed"));
         }
@@ -272,13 +290,13 @@ fn list_files(_dir: &Path) -> Option<HashMap<OsString, Listed>> {
     None
 }
 
-fn copy_tree(src: &Path, dst: &Path, root: bool) -> io::Result<()> {
+fn copy_tree(src: &Path, dst: &Path, root: bool, omit_system_dlls: bool) -> io::Result<()> {
     require_directory(src)?;
     fs::create_dir(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let name = entry.file_name();
-        if excluded(src, &name, root) {
+        if excluded(src, &name, root, omit_system_dlls) {
             continue;
         }
         let from = entry.path();
@@ -291,7 +309,7 @@ fn copy_tree(src: &Path, dst: &Path, root: bool) -> io::Result<()> {
             )));
         }
         if meta.is_dir() {
-            copy_tree(&from, &to, false)?;
+            copy_tree(&from, &to, false, omit_system_dlls)?;
         } else if meta.is_file() {
             if fs::hard_link(&from, &to).is_err() {
                 copy_with_mtime(&from, &to)?;
@@ -318,10 +336,11 @@ fn copy_with_mtime(from: &Path, to: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn excluded(dir: &Path, name: &OsStr, root: bool) -> bool {
-    // The named copy gets a fresh branded executable. Windows supplies its own C runtime.
+fn excluded(dir: &Path, name: &OsStr, root: bool, omit_system_dlls: bool) -> bool {
+    // Older Windows can need the bundled UCRT and API-set forwarders beside the executable.
     (root && is_runtime_control_file(name))
-        || (in_bin(dir) && (name.eq_ignore_ascii_case(EXE) || is_system_dll(name)))
+        || (in_bin(dir)
+            && (name.eq_ignore_ascii_case(EXE) || (omit_system_dlls && is_system_dll(name))))
 }
 
 fn in_bin(dir: &Path) -> bool {
@@ -332,6 +351,47 @@ fn in_bin(dir: &Path) -> bool {
 pub(super) fn is_system_dll(name: &OsStr) -> bool {
     let name = name.to_string_lossy().to_ascii_lowercase();
     name == "ucrtbase.dll" || (name.starts_with("api-ms-win-") && name.ends_with(".dll"))
+}
+
+#[cfg(any(windows, test))]
+pub(super) fn missing_bin_files(source: &Path, named: &Path) -> io::Result<Vec<PathBuf>> {
+    fn collect(
+        source: &Path,
+        named: &Path,
+        relative: &Path,
+        missing: &mut Vec<PathBuf>,
+    ) -> io::Result<()> {
+        for entry in fs::read_dir(source.join(relative))? {
+            let entry = entry?;
+            let path = relative.join(entry.file_name());
+            let kind = entry.file_type()?;
+            if kind.is_dir() {
+                collect(source, named, &path, missing)?;
+            } else if kind.is_file() {
+                let present = match fs::metadata(named.join(&path)) {
+                    Ok(meta) => meta.is_file(),
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+                        ) =>
+                    {
+                        false
+                    }
+                    Err(error) => return Err(error),
+                };
+                if !present {
+                    missing.push(path);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    let mut missing = Vec::new();
+    collect(source, named, Path::new(""), &mut missing)?;
+    missing.sort_unstable();
+    Ok(missing)
 }
 
 fn matching_metadata(a: &fs::Metadata, b: &fs::Metadata) -> io::Result<bool> {
@@ -556,18 +616,59 @@ mod tests {
         fs::write(bin.join("UCRTBASE.dll"), b"source").unwrap();
         fs::write(bin.join("api-ms-win-core-file-l1-1-0.dll"), b"source").unwrap();
         fs::write(bin.join(EXE), b"old branded").unwrap();
-        let (exe, _) = prepare(&runtime, &java).unwrap();
+        let (exe, _) = prepare_mirror(&runtime, &java, true).unwrap();
         fs::write(&exe, b"copy").unwrap();
-        assert!(prepare(&runtime, &java).unwrap().1);
+        assert!(prepare_mirror(&runtime, &java, true).unwrap().1);
         assert_eq!(fs::read(&exe).unwrap(), b"java");
         fs::hard_link(bin.join("UCRTBASE.dll"), named.join("bin/UCRTBASE.dll")).unwrap();
         fs::write(named.join("bin/API-MS-WIN-core-x.DLL"), b"old").unwrap();
-        assert!(prepare(&runtime, &java).unwrap().1);
+        assert!(prepare_mirror(&runtime, &java, true).unwrap().1);
         assert_eq!(fs::read(bin.join("UCRTBASE.dll")).unwrap(), b"source");
         assert_eq!(fs::read(bin.join(EXE)).unwrap(), b"old branded");
         assert!(!named.join("bin/UCRTBASE.dll").exists());
         assert!(!named.join("bin/API-MS-WIN-core-x.DLL").exists());
         assert!(!named.join("bin/api-ms-win-core-file-l1-1-0.dll").exists());
+    }
+
+    #[test]
+    fn restores_bundled_ucrt_on_a_host_that_can_need_it() {
+        let temp = tempfile::tempdir().unwrap();
+        let (runtime, java, named) = runtime(temp.path());
+        let bundled = [
+            "UCRTBASE.dll",
+            "api-ms-win-crt-runtime-l1-1-0.dll",
+            "vcruntime140.dll",
+        ];
+        for name in bundled {
+            fs::write(runtime.join("bin").join(name), name).unwrap();
+        }
+        assert!(prepare_mirror(&runtime, &java, true).unwrap().1);
+        assert!(!named.join("bin").join(bundled[0]).exists());
+        assert!(!named.join("bin").join(bundled[1]).exists());
+        assert!(prepare_mirror(&runtime, &java, false).unwrap().1);
+        for name in bundled {
+            assert_eq!(
+                fs::read_to_string(named.join("bin").join(name)).unwrap(),
+                name
+            );
+        }
+        assert!(!prepare_mirror(&runtime, &java, false).unwrap().1);
+        let (source_bin, named_bin) = (runtime.join("bin"), named.join("bin"));
+        assert!(
+            missing_bin_files(&source_bin, &named_bin)
+                .unwrap()
+                .is_empty()
+        );
+        fs::remove_file(named_bin.join("server/jvm.dll")).unwrap();
+        fs::remove_file(named_bin.join(bundled[0])).unwrap();
+        fs::create_dir(named_bin.join(bundled[0])).unwrap();
+        assert_eq!(
+            missing_bin_files(&source_bin, &named_bin).unwrap(),
+            [
+                PathBuf::from(bundled[0]),
+                Path::new("server").join("jvm.dll")
+            ]
+        );
     }
 
     #[cfg(windows)]
