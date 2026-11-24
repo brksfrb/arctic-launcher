@@ -1,7 +1,12 @@
 package com.arcticlauncher.legacy.mixin;
 
 import com.arcticlauncher.client.replay.Replays;
+import com.arcticlauncher.legacy.replay.LegacyReplayPlayback;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.WorldRenderer;
+import net.minecraft.client.world.ClientWorld;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -13,6 +18,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(MinecraftClient.class)
 abstract class MinecraftClientReplayMixin {
+	@WrapOperation(method = "connect(Lnet/minecraft/client/world/ClientWorld;Ljava/lang/String;)V",
+			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/WorldRenderer;setWorld(Lnet/minecraft/client/world/ClientWorld;)V"))
+	private void arctic$attachReplayRendererNextFrame(WorldRenderer renderer, ClientWorld world, Operation<Void> original) {
+		if (!LegacyReplayPlayback.INSTANCE.deferRendererSetup(world, () -> original.call(renderer, world))) original.call(renderer, world);
+	}
+
+	@WrapOperation(method = "connect(Lnet/minecraft/client/world/ClientWorld;Ljava/lang/String;)V",
+			at = @At(value = "INVOKE", target = "Ljava/lang/System;gc()V"))
+	private void arctic$skipReplayJoinCollection(Operation<Void> original, ClientWorld world, String message) {
+		// Vanilla requests a full collection even when joining from the title screen.
+		if (world == null || !LegacyReplayPlayback.INSTANCE.worldTransitioning()) original.call();
+	}
+
     @Inject(method = "stop", at = @At("HEAD"), require = 0)
     private void arctic$stopStarted(CallbackInfo ci) {
         com.arcticlauncher.client.CrashDiagnostics.stopStarted();

@@ -365,6 +365,7 @@ public final class Replays {
 				if (classifier != null) data.classify(classifier);
 				long sorted = System.nanoTime();
 				backend.prepareOpen();
+				data.warmChunks(null);
 				platform.log(false, "replay: opened " + file.getName() + ": " + data.count() + " packets, unpacked in "
 						+ (unpacked - began) / 1_000_000 + " ms, sorted in " + (sorted - unpacked) / 1_000_000
 						+ " ms, prepared in " + (System.nanoTime() - sorted) / 1_000_000 + " ms");

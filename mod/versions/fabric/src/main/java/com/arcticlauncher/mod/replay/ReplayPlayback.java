@@ -85,6 +85,8 @@ public final class ReplayPlayback implements ReplayBackend {
 	private boolean applyingPacket;
 	private boolean exportSeek;
 	private net.minecraft.client.gui.screens.Screen seekScreen;
+	private Runnable rendererSetup;
+	private boolean worldTransition;
 
 	@Override
 	public int protocol() {
@@ -110,8 +112,13 @@ public final class ReplayPlayback implements ReplayBackend {
 		}
 		//#if MC >= 26.3
 		for (Class<?> type : new Class<?>[] {net.minecraft.client.multiplayer.ClientConfigurationPacketListenerImpl.class,
+				net.minecraft.client.multiplayer.MultiPlayerGameMode.class, net.minecraft.client.multiplayer.PlayerInfo.class,
 				net.minecraft.world.level.lighting.SkyLightEngine.class, net.minecraft.world.level.lighting.LevelLightEngine.class,
-				net.minecraft.world.ticks.LevelChunkTicks.class, net.minecraft.client.multiplayer.PlayerInfo.class,
+				net.minecraft.world.level.chunk.EmptyLevelChunk.class, net.minecraft.world.level.lighting.ChunkSkyLightSources.class,
+				net.minecraft.world.level.chunk.status.ChunkStep.class, net.minecraft.world.ticks.LevelChunkTicks.class,
+				net.minecraft.world.attribute.WeatherAttributes.class, net.minecraft.world.level.entity.TransientEntitySectionManager.class,
+				net.minecraft.world.entity.Avatar.class, net.minecraft.client.player.ItemActivation.class,
+				net.minecraft.client.SectionUpdateTracker.class, net.minecraft.client.renderer.chunk.SectionRenderDispatcher.class,
 				net.minecraft.client.renderer.PostPass.class}) {
 			type.getName();
 		}
@@ -121,12 +128,19 @@ public final class ReplayPlayback implements ReplayBackend {
 					"render.chunk.compile.ChunkBuildContext", "render.chunk.compile.pipeline.BlockRenderCache",
 					"render.chunk.region.RenderRegionManager", "render.chunk.DefaultChunkRenderer",
 					"render.chunk.ShaderChunkRenderer", "render.chunk.map.ChunkTracker",
-					"world.LevelSlice"}) {
+					"render.chunk.compile.estimation.MeshTaskSizeEstimator", "render.chunk.translucent_sorting.trigger.DirectTriggers",
+					"gpu.arena.staging.MappedStagingBuffer", "model.color.ColorProviderRegistry",
+					"world.LevelSlice", "world.cloned.ClonedChunkSectionCache"}) {
 				try {
 					Class.forName("net.caffeinemc.mods.sodium.client." + name, false, loader);
 				} catch (ClassNotFoundException | LinkageError ignored) {
 					// Sodium may use a different renderer on another build.
 				}
+			}
+			try {
+				Class.forName("net.caffeinemc.mods.sodium.fabric.render.FluidRendererImpl", false, loader);
+			} catch (ClassNotFoundException | LinkageError ignored) {
+				// Older Sodium builds use a different fluid renderer.
 			}
 		}
 		//#endif
@@ -148,6 +162,29 @@ public final class ReplayPlayback implements ReplayBackend {
 		// The recorded login replaces the world. A full disconnect also reloads
 		// resources, clears queued work and renders a menu in the middle of a seek.
 		return connect(mc);
+	}
+
+	/** The renderer can build its section storage on a frame of its own. */
+	public boolean deferRendererSetup(ClientLevel level, Runnable setup) {
+		if (!applyingPacket || level == null) return false;
+		rendererSetup = () -> {
+			if (Minecraft.getInstance().level == level) setup.run();
+		};
+		worldTransition = true;
+		return true;
+	}
+
+	@Override
+	public void beginFrame() {
+		Runnable setup = rendererSetup;
+		rendererSetup = null;
+		worldTransition = setup != null;
+		if (setup != null) setup.run();
+	}
+
+	@Override
+	public boolean worldTransitioning() {
+		return worldTransition;
 	}
 
 	@Override
@@ -204,6 +241,8 @@ public final class ReplayPlayback implements ReplayBackend {
 
 	/** The old connection goes quietly (its closing mustn't end the replay). */
 	private void retire() {
+		rendererSetup = null;
+		worldTransition = false;
 		if (connection != null) {
 			((ReplayConnection) connection).arctic$retire();
 		}
@@ -238,6 +277,11 @@ public final class ReplayPlayback implements ReplayBackend {
 			//#endif
 			applied++;
 			if (ReplayCodec.changesPhase(packetName)) lastSwitch = packetName + " after " + applied + " packets, now " + ReplayCodec.phaseName(phase);
+			//#if MC >= 1.20.2
+			// Finishing configuration can rebuild registries and tags. During a rewind, don't
+			// also render the outgoing terrain on that frame or start the new world's login.
+			if (seeking && selfId == -1 && "finish_configuration".equals(packetName)) worldTransition = true;
+			//#endif
 		} catch (ReplayBackend.ProtocolFailure e) {
 			throw e;
 		} catch (RuntimeException e) {

@@ -31,6 +31,8 @@ public final class ReplayData implements Closeable {
 	private static final Gson GSON = new Gson();
 	private static final int HEADER = 8;
 	private static final int PACKET_PAGE = 64 << 20;
+	private static final int CHUNK_WARM_BYTES = 32 << 20;
+	private static final int FILE_PAGE_BYTES = 4096;
 	private static final boolean WINDOWS = System.getProperty("os.name", "")
 			.toLowerCase(java.util.Locale.ROOT).contains("windows");
 
@@ -222,11 +224,36 @@ public final class ReplayData implements Closeable {
 		return time[i];
 	}
 
+	/** Warm the mapped pages of the opening or selected seek's chunk packets on the file worker. */
+	void warmChunks(int[] plan) {
+		byte[] categories = category;
+		if (pages == null || categories == null) return;
+		int remaining = CHUNK_WARM_BYTES;
+		long nextPage = 0;
+		int size = plan == null ? count : plan.length;
+		for (int j = 0; j < size && remaining > 0 && channel.isOpen(); j++) {
+			int i = plan == null ? j : plan[j];
+			byte kind = categories[i];
+			if (kind != Category.CHUNK && kind != Category.CHUNK_BULK) continue;
+			long end = packetEnd(i);
+			long start = offset[i] & -((long) FILE_PAGE_BYTES);
+			for (long at = Math.max(start, nextPage); at < end && remaining > 0; at += FILE_PAGE_BYTES) {
+				pages[(int) (at / PACKET_PAGE)].get((int) (at % PACKET_PAGE));
+				nextPage = at + FILE_PAGE_BYTES;
+				remaining -= FILE_PAGE_BYTES;
+			}
+		}
+	}
+
+	private long packetEnd(int i) {
+		return i + 1 < count ? offset[i + 1] - HEADER : lastPacketEnd;
+	}
+
 	/** Independent packet view (the decoder may keep it). */
 	public ByteBuffer packet(int i) {
 		if (!channel.isOpen()) throw new java.io.UncheckedIOException(new java.nio.channels.ClosedChannelException());
 		long at = offset[i];
-		int bytes = (int) ((i + 1 < count ? offset[i + 1] - HEADER : lastPacketEnd) - at);
+		int bytes = (int) (packetEnd(i) - at);
 		if (pages != null && bytes != 0) {
 			int within = (int) (at % PACKET_PAGE);
 			ByteBuffer page = pages[(int) (at / PACKET_PAGE)];

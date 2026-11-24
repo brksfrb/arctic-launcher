@@ -21,6 +21,8 @@ class ReplayViewerSeekTest {
 
 	private final class World implements AutoCloseable {
 		boolean ready, seeking, failRestart, nestedFrame;
+		boolean stageLogin;
+		int transitionFrames;
 		int resets, followed = -1;
 		float yaw = 37, pitch = -12;
 		final List<Integer> packets = new ArrayList<>();
@@ -43,6 +45,8 @@ class ReplayViewerSeekTest {
 			ReplayBackend backend = (ReplayBackend) Proxy.newProxyInstance(ReplayBackend.class.getClassLoader(), new Class<?>[]{ReplayBackend.class}, (p, method, args) -> {
 				switch (method.getName()) {
 					case "ready": return ready;
+					case "beginFrame": if (transitionFrames > 0) transitionFrames--; break;
+					case "worldTransitioning": return transitionFrames > 0;
 					case "beginSeek": seeking = true; events.add("begin"); break;
 					case "endSeek": seeking = false; events.add("end"); break;
 					case "restart":
@@ -52,7 +56,12 @@ class ReplayViewerSeekTest {
 							assertEquals(before, events.size(), "A nested game frame must not touch a half-rebuilt world");
 						}
 						return failRestart ? "reset failed" : null;
-					case "apply": packets.add((int) ((ByteBuffer) args[0]).get()); ready = true; break;
+					case "apply":
+						int packet = ((ByteBuffer) args[0]).get();
+						packets.add(packet);
+						ready = true;
+						if (stageLogin && packet == 1) transitionFrames = 2;
+						break;
 					case "look": return new float[]{yaw, pitch};
 					case "camera":
 						if (!Float.isNaN((Float) args[3])) { yaw = (Float) args[3]; pitch = (Float) args[4]; }
@@ -132,6 +141,23 @@ class ReplayViewerSeekTest {
 			world.viewer.seek(100); world.viewer.frame();
 			assertEquals(java.util.Arrays.asList(1, 2), world.packets);
 			assertTrue(world.viewer.ready()); assertEquals(100, world.viewer.time());
+		}
+	}
+
+	@Test void rewindWaitsForTheReplacementRendererBeforeFeedingTerrain() throws Exception {
+		try (World world = new World()) {
+			world.stageLogin = true;
+			world.viewer.seek(100);
+			for (int i = 0; i < 2; i++) {
+				world.viewer.frame();
+				assertEquals(Collections.singletonList(1), world.packets);
+				assertTrue(world.seeking);
+				assertFalse(world.viewer.ready());
+			}
+			world.viewer.frame();
+			assertEquals(java.util.Arrays.asList(1, 2), world.packets);
+			assertTrue(world.viewer.ready());
+			assertFalse(world.seeking);
 		}
 	}
 }

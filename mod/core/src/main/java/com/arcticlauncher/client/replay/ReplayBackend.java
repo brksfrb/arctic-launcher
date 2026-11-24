@@ -49,6 +49,12 @@ public interface ReplayBackend {
 	/** Begin again from an empty world (for jumping back): like {@link #start}, without menus. */
 	String restart(ReplayData data);
 
+	/** Advance a world transition before delivering more packets. A renderer setup can take this frame. */
+	default void beginFrame() {}
+
+	/** The world changed this frame. Leave the next packet and the first world draw to later frames. */
+	default boolean worldTransitioning() { return false; }
+
 	/** Keep the view/editor in place; exports still wait for Minecraft's terrain-ready signal. */
 	default void beginSeek(boolean exporting) {}
 

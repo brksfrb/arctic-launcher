@@ -76,6 +76,9 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 	private boolean jumpingPacket;
 	private boolean keepFirstPlacementScreen;
 	private boolean applyingFirstPlacement;
+	private boolean applyingPacket;
+	private Runnable rendererSetup;
+	private boolean worldTransition;
 	private net.minecraft.client.gui.screen.Screen seekScreen;
 
 	@Override
@@ -95,7 +98,11 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 		// EmbeddedChannel initializes Netty's allocator, event loop and pipeline.
 		com.arcticlauncher.client.replay.ReplayChannel.open(new io.netty.channel.ChannelInboundHandlerAdapter()).finish();
 		for (Class<?> type : new Class<?>[] {ClientLoginNetworkHandler.class, ClientPlayNetworkHandler.class,
-				ClientWorld.class, net.minecraft.client.network.ClientPlayerInteractionManager.class,
+				ClientWorld.class, ClientPlayerEntity.class, net.minecraft.client.network.ClientPlayerInteractionManager.class,
+				//#if MC < 1.9
+				net.minecraft.world.LayeredBiomeSource.class, net.minecraft.world.dimension.Dimension.class,
+				net.minecraft.world.chunk.ChunkSection.class, net.minecraft.stat.StatHandler.class,
+				//#endif
 				net.minecraft.client.render.BuiltChunkStorage.class, net.minecraft.client.world.BuiltChunk.class,
 				net.minecraft.client.render.world.ChunkRenderHelperImpl.class, net.minecraft.client.render.chunk.ChunkOcclusionDataBuilder.class}) {
 			type.getName();
@@ -113,6 +120,28 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 		retire();
 		// The recorded login replaces the world without unloading resource packs.
 		return connect();
+	}
+
+	public boolean deferRendererSetup(ClientWorld world, Runnable setup) {
+		if (!applyingPacket || world == null) return false;
+		rendererSetup = () -> {
+			if (MinecraftClient.getInstance().world == world) setup.run();
+		};
+		worldTransition = true;
+		return true;
+	}
+
+	@Override
+	public void beginFrame() {
+		Runnable setup = rendererSetup;
+		rendererSetup = null;
+		worldTransition = setup != null;
+		if (setup != null) setup.run();
+	}
+
+	@Override
+	public boolean worldTransitioning() {
+		return worldTransition;
 	}
 
 	@Override
@@ -183,6 +212,8 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 	}
 
 	private void retire() {
+		rendererSetup = null;
+		worldTransition = false;
 		if (connection != null) {
 			((LegacyReplayConnection) connection).arctic$retire();
 		}
@@ -210,10 +241,12 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 		}
 		String name = LegacyReplayCodec.name(packet);
 		jumpingPacket = jumping;
+		applyingPacket = true;
 		try {
 			channel.writeInbound(packet);
 		} finally {
 			applyingFirstPlacement = false;
+			applyingPacket = false;
 		}
 		if (!channel.isOpen()) throw new Unusable("The replay connection closed.");
 

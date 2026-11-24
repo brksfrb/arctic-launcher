@@ -104,7 +104,11 @@ public final class ReplayViewer {
 				return java.util.Arrays.copyOfRange(planned, start < 0 ? -start - 1 : start, planned.length);
 			};
 			plan = !data.classified() ? null : to - (bootstrap ? 0 : from) > ASYNC_PLAN_THRESHOLD
-					? java.util.concurrent.CompletableFuture.supplyAsync(build)
+					? java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+						int[] planned = build.get();
+						data.warmChunks(planned);
+						return planned;
+					})
 					: java.util.concurrent.CompletableFuture.completedFuture(build.get());
 		}
 	}
@@ -203,6 +207,13 @@ public final class ReplayViewer {
 		double realMs = lastFrame < 0 ? 0 : Math.min(MAX_FRAME_MS, (now - lastFrame) / 1e6);
 		lastFrame = now;
 		long deadline = now + PACKET_BUDGET_NS;
+		try {
+			backend.beginFrame();
+		} catch (RuntimeException e) {
+			stopPacketFeeding(Lang.t("platform.couldnt_start_the_replay") + e);
+			return;
+		}
+		if (backend.worldTransitioning()) return;
 		if (!joined) {
 			ReplayClock.advance(realMs);
 			join(deadline);
@@ -244,7 +255,7 @@ public final class ReplayViewer {
 			time = appliedTime;
 			if (time >= data.duration() && export == null && mode != Mode.PATH) paused = true;
 		}
-		if (failure != null) return;
+		if (failure != null || backend.worldTransitioning()) return;
 		self();
 		camera(realMs / 1000.0);
 	}
@@ -258,7 +269,7 @@ public final class ReplayViewer {
 		loadingClock += realMs;
 		while (failure == null && backend.loading() && cursor < data.count() && data.time(cursor) <= loadingClock) {
 			apply(cursor++, false);
-			if (System.nanoTime() >= deadline) break;
+			if (backend.worldTransitioning() || System.nanoTime() >= deadline) break;
 		}
 	}
 
@@ -289,9 +300,9 @@ public final class ReplayViewer {
 	private void join(long deadline) {
 		while (failure == null && !backend.ready() && cursor < data.count()) {
 			apply(cursor++, false);
-			if (System.nanoTime() >= deadline) break;
+			if (backend.worldTransitioning() || System.nanoTime() >= deadline) break;
 		}
-		if (failure != null) return;
+		if (failure != null || backend.worldTransitioning()) return;
 		if (backend.ready()) {
 			joined = true;
 			time = cursor > 0 ? data.time(cursor - 1) : 0;
@@ -309,7 +320,7 @@ public final class ReplayViewer {
 	private void feed(double until, long deadline) {
 		while (failure == null && cursor < data.count() && data.time(cursor) <= until) {
 			apply(cursor++, false);
-			if (System.nanoTime() >= deadline) break;
+			if (backend.worldTransitioning() || System.nanoTime() >= deadline) break;
 		}
 	}
 
@@ -506,6 +517,7 @@ public final class ReplayViewer {
 			while (failure == null && work.applied < total && System.nanoTime() < deadline) {
 				apply(plan == null ? work.from + work.applied : plan[work.applied], true);
 				work.applied++;
+				if (backend.worldTransitioning()) return;
 			}
 			if (failure != null) {
 				finishSeekGuard();
@@ -861,7 +873,7 @@ public final class ReplayViewer {
 		return data.classified();
 	}
 
-	public boolean ready() { return joined && seekWork == null && backend.ready() && !backend.loading(); }
+	public boolean ready() { return joined && seekWork == null && !backend.worldTransitioning() && backend.ready() && !backend.loading(); }
 
 	public double cameraSpeed() {
 		return free.speed();
