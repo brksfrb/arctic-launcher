@@ -317,10 +317,10 @@ final class LiveVideoSession {
 		// Explicit durations let the concat demuxer seek to the preceding keyframe.
 		// Keeping that preroll in MP4's edit list avoids a black first second without re-encoding.
 		for (Segment s : selected) text.append("file '").append(s.file.getAbsolutePath().replace("\\", "/").replace("'", "'\\''"))
-				.append("'\nduration ").append(s.to - s.from).append('\n');
+				.append("'\nduration ").append(secondsArgument(s.to - s.from)).append('\n');
 		Files.write(list.toPath(), text.toString().getBytes(StandardCharsets.UTF_8));
-		List<String> args = Arrays.asList(tool.getAbsolutePath(), "-y", "-loglevel", "error", "-ss", "" + Math.max(0, job.from - selected.get(0).from),
-				"-f", "concat", "-safe", "0", "-i", list.getAbsolutePath(), "-t", "" + Math.max(.04, job.to - job.from),
+		List<String> args = Arrays.asList(tool.getAbsolutePath(), "-y", "-loglevel", "error", "-ss", secondsArgument(Math.max(0, job.from - selected.get(0).from)),
+				"-f", "concat", "-safe", "0", "-i", list.getAbsolutePath(), "-t", secondsArgument(Math.max(.04, job.to - job.from)),
 				"-map", "0:v:0", "-map", "0:a:0", "-c", "copy", "-avoid_negative_ts", "disabled", "-use_editlist", "1", "-movflags", "+faststart", part.getAbsolutePath());
 		Process p = encoder.command(args).redirectOutput(ProcessBuilder.Redirect.INHERIT).redirectError(ProcessBuilder.Redirect.INHERIT).start();
 		try {
@@ -333,6 +333,11 @@ final class LiveVideoSession {
 			Files.move(part.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING);
 		} finally { list.delete(); part.delete(); }
 	}
+	/** FFmpeg duration arguments require decimal notation, even below one millisecond. */
+	static String secondsArgument(double seconds) {
+		return String.format(Locale.ROOT, "%.6f", seconds);
+	}
+
 	static void recover(File root, File videos, Ffmpeg encoder, File tool, Consumer<String> notice) {
 		File[] sessions = root.listFiles(File::isDirectory); if (sessions == null) return;
 		for (File dir : sessions) {

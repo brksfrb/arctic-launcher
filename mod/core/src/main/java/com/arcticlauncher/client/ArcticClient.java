@@ -262,8 +262,9 @@ public final class ArcticClient {
 			hud.render(g, style(), false);
 			if (config.replayEnabled) {
 				boolean recording = com.arcticlauncher.client.replay.Replays.recording();
-				String status = com.arcticlauncher.client.replay.Replays.recordingStatus();
-				g.text((recording ? Lang.t("mods.rec") : "") + status, 6, 6, recording ? 0xFFFF6767 : 0xFFE0E0E0, true);
+				String status = (recording ? Lang.t("mods.rec") : "") + com.arcticlauncher.client.replay.Replays.recordingStatus();
+				int x = Math.max(6, (g.width() - g.textWidth(status)) / 2);
+				g.text(status, x, 6, recording ? 0xFFFF6767 : 0xFFE0E0E0, true);
 			}
 		}
 		if (platform.inWorld()) {

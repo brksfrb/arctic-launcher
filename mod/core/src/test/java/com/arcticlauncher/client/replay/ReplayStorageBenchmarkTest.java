@@ -46,6 +46,13 @@ class ReplayStorageBenchmarkTest {
 					+ " rawPacketBytes=" + zip.getEntry(Recorder.PACKETS_ENTRY).getSize());
 		}
 		assertTrue(saved.get().length() < 128L << 20, "unexpected storage regression");
+		try (ReplayData data = ReplayData.open(saved.get(), dir.resolve("long-cache").toFile())) {
+			assertEquals(7_200_000, data.duration());
+			assertEquals(4_608_001, data.count());
+			data.classify((packet, key) -> packet.get(0) == 1 ? Category.CHUNK : Category.TRANSIENT);
+			assertTrue(data.classified());
+			assertEquals(2, data.packet(data.count() - 1).get(0));
+		}
 	}
 	@Test void crowdedLegacyWorldOpeningStaysTheSameSize() throws Exception {
 		AtomicLong nanos = new AtomicLong();

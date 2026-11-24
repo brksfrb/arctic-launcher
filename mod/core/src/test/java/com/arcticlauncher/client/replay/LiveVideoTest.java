@@ -15,6 +15,10 @@ import org.junit.jupiter.api.io.TempDir;
 class LiveVideoTest {
 	@TempDir Path dir;
 
+	@Test void immediateRecordingUsesAValidFfmpegSeekOffset() {
+		assertEquals("0.000565", LiveVideoSession.secondsArgument(5.65112E-4));
+	}
+
 	@Test void savesOverlappingInstantClipAndManualRecordingWithoutReplayingOrInterruptingCapture() throws Exception {
 		Ffmpeg encoder = new Ffmpeg(0, null, true); File tool = encoder.get();
 		assumeTrue(tool != null, "Native FFmpeg is required for the encoder integration test");
