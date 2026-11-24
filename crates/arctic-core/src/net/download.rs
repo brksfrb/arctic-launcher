@@ -133,7 +133,11 @@ const CONNECTIONS: usize = 6;
 /// A chunk's slowest acceptable speed (its own connection; a 1 Mbit/s line shared by
 /// [`CONNECTIONS`] gives each ~20 KB/s).
 const CHUNK_MIN_SPEED: u64 = 12 * 1024;
-/// A chunk that hasn't received anything for this long is fetched again, once the rest are out.
+/// At the tail, give a slow connection one chance to recover on another request.
+const FIRST_BODY_IDLE: Duration = Duration::from_secs(12);
+const TAIL_MIN_SPEED: u64 = 128 * 1024;
+const FAST_BATCH_SPEED: u64 = 1024 * 1024;
+/// Check for an idle or crawling transfer after this observation window.
 const CHUNK_STALL: Duration = if cfg!(test) {
     Duration::from_secs(1)
 } else {
@@ -190,6 +194,7 @@ struct Reporter<'a> {
     files_total: u64,
     bytes_done: AtomicU64,
     bytes_total: u64,
+    all_sizes_known: bool,
 }
 
 impl Reporter<'_> {
@@ -200,7 +205,18 @@ impl Reporter<'_> {
 
     /// Undo the bytes of a failed attempt so a retry doesn't double count.
     fn remove_bytes(&self, n: u64) {
-        self.bytes_done.fetch_sub(n, Ordering::Relaxed);
+        let _ = self
+            .bytes_done
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |done| {
+                Some(done.saturating_sub(n))
+            });
+    }
+
+    fn fast_tail(&self) -> bool {
+        self.files_done.load(Ordering::Relaxed) + 1 == self.files_total
+            && self.files_total > 1
+            && self.bytes_done.load(Ordering::Relaxed) as f64
+                >= FAST_BATCH_SPEED as f64 * self.start.elapsed().as_secs_f64()
     }
 
     fn file_done(&self) {
@@ -217,12 +233,17 @@ impl Reporter<'_> {
                 .compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed)
                 .is_ok();
         if force || due {
+            let bytes_total = if self.all_sizes_known {
+                self.bytes_total
+            } else {
+                0
+            };
             (self.progress)(ProgressInfo {
                 stage: self.stage,
                 done: self.files_done.load(Ordering::Relaxed),
                 total: self.files_total,
-                bytes_done: self.bytes_done.load(Ordering::Relaxed),
-                bytes_total: self.bytes_total,
+                bytes_done: self.bytes_done.load(Ordering::Relaxed).min(bytes_total),
+                bytes_total,
             });
         }
     }
@@ -258,20 +279,47 @@ pub(crate) fn download_all_with_replacements(
         files_total: pending.len() as u64,
         bytes_done: AtomicU64::new(0),
         bytes_total: pending.iter().filter_map(DownloadJob::transfer_size).sum(),
+        all_sizes_known: pending.iter().all(|job| job.transfer_size().is_some()),
     };
     reporter.report(true);
     if pending.is_empty() {
         return Ok(());
     }
 
+    if pending.len() <= 16 {
+        let names: Vec<_> = pending
+            .iter()
+            .filter_map(|job| job.dest.file_name())
+            .collect();
+        log::info!("[startup] {stage}: pending destinations {names:?}");
+    }
+    log::logger().flush();
+
     // (front, back) of the not-yet-started range of `pending`.
     let queue = Mutex::new((0usize, pending.len()));
     let first_error: Mutex<Option<Error>> = Mutex::new(None);
     std::thread::scope(|scope| {
+        let (active, finished) = std::sync::mpsc::channel::<()>();
+        let reporter = &reporter;
+        scope.spawn(move || {
+            while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
+                finished.recv_timeout(Duration::from_secs(10))
+            {
+                log::info!(
+                    "[startup] {stage}: {} of {} files, {} bytes received",
+                    reporter.files_done.load(Ordering::Relaxed),
+                    reporter.files_total,
+                    reporter.bytes_done.load(Ordering::Relaxed),
+                );
+                log::logger().flush();
+            }
+        });
         for worker in 0..workers().min(pending.len()) {
             let (queue, first_error, pending, reporter) =
-                (&queue, &first_error, &pending, &reporter);
+                (&queue, &first_error, &pending, reporter);
+            let active = active.clone();
             scope.spawn(move || {
+                let _active = active;
                 loop {
                     if first_error.lock().map(|e| e.is_some()).unwrap_or(true) {
                         return;
@@ -290,6 +338,7 @@ pub(crate) fn download_all_with_replacements(
                 }
             });
         }
+        drop(active);
     });
 
     // What a slow download looked like, for reports ("downloads take forever").
@@ -302,6 +351,7 @@ pub(crate) fn download_all_with_replacements(
         bytes as f64 / 1e6,
         bytes as f64 / 1e6 / secs.max(0.001),
     );
+    log::logger().flush();
     match first_error.into_inner() {
         Ok(Some(e)) => Err(e),
         Ok(None) => Ok(()),
@@ -387,6 +437,7 @@ pub(crate) fn download_single(
         files_total: 1,
         bytes_done: AtomicU64::new(0),
         bytes_total: job.transfer_size().unwrap_or(0),
+        all_sizes_known: job.transfer_size().is_some(),
     };
     reporter.report(true);
     download_with_mirror(job, &reporter, mirror, policy)?;
@@ -454,25 +505,28 @@ fn retry_job(job: &DownloadJob, reporter: &Reporter, policy: &Policy) -> Result<
     let mut segmented = segments(job).is_some();
     loop {
         let transferred = Cell::new(0);
+        let try_fast_recovery = attempt == 1 && policy.attempts > 1;
         let result = if segmented {
             match download_segmented(job, reporter, &transferred) {
                 Err(Segmented::NoRanges) => {
                     segmented = false;
                     reporter.remove_bytes(transferred.get());
                     transferred.set(0);
-                    download_one(job, reporter, &transferred)
+                    download_one(job, reporter, &transferred, try_fast_recovery)
                 }
                 Err(Segmented::Failed(e)) => Err(e),
                 Ok(()) => Ok(()),
             }
         } else {
-            download_one(job, reporter, &transferred)
+            download_one(job, reporter, &transferred, try_fast_recovery)
         };
+        if result.is_err() {
+            reporter.remove_bytes(transferred.get());
+        }
         match result {
             Ok(()) => return Ok(()),
             Err(e) if attempt < policy.attempts && !is_not_found(&e) => {
                 log::warn!("retrying {} (attempt {attempt}): {e}", job.url);
-                reporter.remove_bytes(transferred.get());
                 let delay = policy.delays.get(attempt as usize - 1);
                 std::thread::sleep(delay.or(policy.delays.last()).copied().unwrap_or_default());
                 attempt += 1;
@@ -492,7 +546,12 @@ pub(crate) fn body_timeout(size: Option<u64>) -> Duration {
 /// Stream into `<dest>.part` (decompressing if needed), hashing both the
 /// transferred and the final bytes, verify, then atomically rename.
 /// `transferred` tracks bytes reported so far, for retry accounting.
-fn download_one(job: &DownloadJob, reporter: &Reporter, transferred: &Cell<u64>) -> Result<()> {
+fn download_one(
+    job: &DownloadJob,
+    reporter: &Reporter,
+    transferred: &Cell<u64>,
+    retry_slow_tail: bool,
+) -> Result<()> {
     if let Some(parent) = job.dest.parent() {
         fs::create_dir_all(parent).at(parent)?;
     }
@@ -505,11 +564,21 @@ fn download_one(job: &DownloadJob, reporter: &Reporter, transferred: &Cell<u64>)
         .timeout_recv_body(Some(body_timeout(job.transfer_size())))
         .build()
         .call()?;
+    let size = job.transfer_size();
     let on_bytes = |n: u64| {
         transferred.set(transferred.get() + n);
         reporter.add_bytes(n);
     };
-    let mut input = Hashing::new(resp.body_mut().as_reader(), &on_bytes);
+    let body = resp.body_mut().as_reader();
+    let tail = TailReader {
+        body,
+        reporter,
+        retry_slow_tail,
+        window: None,
+        received: 0,
+        size,
+    };
+    let mut input = Hashing::new(tail, &on_bytes);
     let mut output =
         Hashing::new(fs::File::create(&tmp).at(&tmp)?, &|_| {}).with_md5(job.md5.is_some());
     let copied = match &job.lzma {
@@ -529,6 +598,50 @@ fn download_one(job: &DownloadJob, reporter: &Reporter, transferred: &Cell<u64>)
         return Err(e);
     }
     fs::rename(&tmp, &job.dest).at(&job.dest)
+}
+
+/// Detect a crawling final file on a batch that has already demonstrated fast throughput.
+struct TailReader<'a, 'b, R> {
+    body: R,
+    reporter: &'a Reporter<'b>,
+    retry_slow_tail: bool,
+    window: Option<(Instant, u64)>,
+    received: u64,
+    size: Option<u64>,
+}
+
+impl<R: Read> Read for TailReader<'_, '_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.retry_slow_tail && self.window.is_none() && self.reporter.fast_tail() {
+            self.window = Some((Instant::now(), self.received));
+        }
+        let idle = self.retry_slow_tail.then_some(FIRST_BODY_IDLE);
+        let n = super::download_transport::with_body_idle(idle, || self.body.read(buf))?;
+        self.received += n as u64;
+        if n > 0
+            && let Some((start, received)) = self.window
+        {
+            let elapsed = start.elapsed();
+            if elapsed >= CHUNK_STALL {
+                let remaining = self
+                    .size
+                    .map_or(u64::MAX, |size| size.saturating_sub(self.received));
+                if crawling(elapsed, self.received - received, remaining) {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "final download is crawling; retrying",
+                    ));
+                }
+                self.window = Some((Instant::now(), self.received));
+            }
+        }
+        Ok(n)
+    }
+}
+
+fn crawling(elapsed: Duration, received: u64, remaining: u64) -> bool {
+    let rate = received as f64 / elapsed.as_secs_f64();
+    rate < TAIL_MIN_SPEED as f64 && remaining as f64 > rate * 2.0
 }
 
 /// Byte ranges `[start, end)` for a large, uncompressed file of known size: chunks of
@@ -561,13 +674,54 @@ impl From<Error> for Segmented {
 struct Chunk {
     start: u64,
     end: u64,
-    /// Bytes the chunk's own fetch has reported so far.
-    got: AtomicU64,
-    done: std::sync::atomic::AtomicBool,
-    /// A second fetch was started because this one stopped moving.
-    hedged: std::sync::atomic::AtomicBool,
-    /// When the chunk's fetch last received anything (or started).
-    moved: Mutex<Option<Instant>>,
+    state: Mutex<ChunkState>,
+}
+
+#[derive(Default)]
+struct ChunkState {
+    /// Bytes reported by the primary attempt.
+    got: u64,
+    done: bool,
+    hedged: bool,
+    sample: Option<(Instant, u64)>,
+    moved: Option<Instant>,
+}
+
+impl ChunkState {
+    fn should_hedge(&mut self, len: u64, now: Instant) -> bool {
+        if self.done || self.hedged {
+            return false;
+        }
+        let Some((start, received)) = self.sample else {
+            return false;
+        };
+        let elapsed = now.duration_since(start);
+        if self
+            .moved
+            .is_some_and(|at| now.duration_since(at) >= CHUNK_STALL)
+        {
+            return true;
+        }
+        if elapsed < CHUNK_STALL {
+            return false;
+        }
+        self.sample = Some((now, self.got));
+        crawling(elapsed, self.got.saturating_sub(received), len - self.got)
+    }
+
+    fn record(&mut self, n: u64, tx: &std::sync::mpsc::Sender<ChunkNews>) {
+        if !self.done {
+            self.got += n;
+            self.moved = Some(Instant::now());
+            let _ = tx.send(ChunkNews::Bytes(n));
+        }
+    }
+
+    fn complete(&mut self, len: u64, tx: &std::sync::mpsc::Sender<ChunkNews>) {
+        self.done = true;
+        let _ = tx.send(ChunkNews::Bytes(len - self.got));
+        let _ = tx.send(ChunkNews::Done);
+    }
 }
 
 /// What the chunk fetchers tell the download.
@@ -590,8 +744,8 @@ struct Chunks {
 /// Fetch a big file in chunks into one preallocated `.part` file, then hash the whole file and
 /// rename it into place. [`CONNECTIONS`] connections take chunks in turn, each with a timeout
 /// sized for the chunk (a stalled connection costs one chunk, not the file), and a chunk that
-/// hasn't moved for [`CHUNK_STALL`] once the rest are handed out is fetched a second time on a
-/// fresh connection: whichever copy finishes first wins.
+/// stalls or crawls after the rest are handed out is fetched a second time.
+/// Whichever copy finishes first commits the range.
 fn download_segmented(
     job: &DownloadJob,
     reporter: &Reporter,
@@ -615,17 +769,14 @@ fn download_segmented(
             .map(|&(start, end)| Chunk {
                 start,
                 end,
-                got: AtomicU64::new(0),
-                done: Default::default(),
-                hedged: Default::default(),
-                moved: Mutex::new(None),
+                state: Mutex::default(),
             })
             .collect(),
         next: Default::default(),
     });
     let (tx, rx) = std::sync::mpsc::channel::<ChunkNews>();
-    // Detached: a fetch stuck in a read can't be interrupted, and the file needn't wait for it
-    // once its chunk is in (it checks before writing, and writes the same bytes anyway).
+    // A losing request can still be inside a bounded read. Only the winner opens the part
+    // file, so the batch can finish without waiting for the loser's next read.
     for _ in 0..connections().min(chunks.list.len()) {
         let (chunks, tx) = (chunks.clone(), tx.clone());
         std::thread::spawn(move || {
@@ -638,11 +789,17 @@ fn download_segmented(
         });
     }
     let mut done = 0;
+    let mut next_check = Instant::now() + CHUNK_STALL / 4;
     let result = loop {
         if done == chunks.list.len() {
             break Ok(());
         }
-        match rx.recv_timeout(CHUNK_STALL / 4) {
+        let now = Instant::now();
+        if now >= next_check {
+            hedge_stalled(&chunks, &tx);
+            next_check = now + CHUNK_STALL / 4;
+        }
+        match rx.recv_timeout(next_check.saturating_duration_since(Instant::now())) {
             Ok(ChunkNews::Bytes(n)) => {
                 transferred.set(transferred.get() + n);
                 reporter.add_bytes(n);
@@ -654,7 +811,7 @@ fn download_segmented(
             Ok(ChunkNews::Done) => done += 1,
             Ok(ChunkNews::NoRanges) => break Err(Segmented::NoRanges),
             Ok(ChunkNews::Failed(e)) => break Err(Segmented::Failed(e)),
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => hedge_stalled(&chunks, &tx),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                 break Err(Segmented::Failed(Error::Other(format!(
                     "download of {} stopped",
@@ -665,7 +822,7 @@ fn download_segmented(
     };
     // Fetches still running give up at their next read.
     for chunk in &chunks.list {
-        chunk.done.store(true, Ordering::Relaxed);
+        chunk.state.lock().unwrap().done = true;
     }
     if let Err(e) = result {
         let _ = fs::remove_file(&tmp);
@@ -684,25 +841,18 @@ fn download_segmented(
     Ok(())
 }
 
-/// Every chunk is handed out: fetch again, once, any that hasn't moved for [`CHUNK_STALL`].
+/// Every chunk is handed out: fetch again, once, any that stalls or crawls.
 fn hedge_stalled(chunks: &std::sync::Arc<Chunks>, tx: &std::sync::mpsc::Sender<ChunkNews>) {
     if chunks.next.load(Ordering::Relaxed) < chunks.list.len() {
         return;
     }
     for (i, chunk) in chunks.list.iter().enumerate() {
-        let stalled = chunk
-            .moved
-            .lock()
-            .ok()
-            .and_then(|m| *m)
-            .is_some_and(|at| at.elapsed() >= CHUNK_STALL);
-        if stalled
-            && !chunk.done.load(Ordering::Relaxed)
-            && !chunk.hedged.swap(true, Ordering::Relaxed)
-        {
-            log::info!("chunk {i} of {} stalled: fetching it again", chunks.job.url);
+        let mut state = chunk.state.lock().unwrap();
+        if state.should_hedge(chunk.end - chunk.start, Instant::now()) {
+            state.hedged = true;
+            log::info!("chunk {i} of {} is slow: fetching it again", chunks.job.url);
             let (chunks, tx) = (chunks.clone(), tx.clone());
-            std::thread::spawn(move || fetch_once(&chunks, i, &tx, false));
+            std::thread::spawn(move || fetch_once(&chunks, i, &tx, false, true));
         }
     }
 }
@@ -711,23 +861,34 @@ fn hedge_stalled(chunks: &std::sync::Arc<Chunks>, tx: &std::sync::mpsc::Sender<C
 fn fetch_chunk(chunks: &Chunks, i: usize, tx: &std::sync::mpsc::Sender<ChunkNews>) -> bool {
     let mut attempt = 1;
     loop {
-        match fetch_once(chunks, i, tx, true) {
+        match fetch_once(chunks, i, tx, true, attempt == 1) {
             Ok(()) => return true,
             Err(Segmented::NoRanges) => {
+                let mut state = chunks.list[i].state.lock().unwrap();
+                if state.done {
+                    return true;
+                }
+                state.done = true;
                 let _ = tx.send(ChunkNews::NoRanges);
                 return false;
             }
             Err(Segmented::Failed(e)) => {
                 let chunk = &chunks.list[i];
                 // The second fetch won meanwhile: it counted the rest of the bytes.
-                if chunk.done.load(Ordering::Relaxed) {
-                    return true;
-                }
-                let reported = chunk.got.swap(0, Ordering::Relaxed);
-                let _ = tx.send(ChunkNews::Unreport(reported));
-                if attempt >= ATTEMPTS {
-                    let _ = tx.send(ChunkNews::Failed(e));
-                    return false;
+                {
+                    let mut state = chunk.state.lock().unwrap();
+                    if state.done {
+                        return true;
+                    }
+                    let reported = std::mem::take(&mut state.got);
+                    state.sample = None;
+                    state.moved = None;
+                    let _ = tx.send(ChunkNews::Unreport(reported));
+                    if attempt >= ATTEMPTS {
+                        state.done = true;
+                        let _ = tx.send(ChunkNews::Failed(e));
+                        return false;
+                    }
                 }
                 log::warn!(
                     "retrying chunk {i} of {} (attempt {attempt}): {e}",
@@ -747,12 +908,21 @@ fn fetch_once(
     i: usize,
     tx: &std::sync::mpsc::Sender<ChunkNews>,
     own: bool,
+    bound_idle: bool,
 ) -> std::result::Result<(), Segmented> {
     use std::io::{Seek, SeekFrom};
     let (job, chunk) = (&chunks.job, &chunks.list[i]);
     let len = chunk.end - chunk.start;
-    if own && let Ok(mut moved) = chunk.moved.lock() {
-        *moved = Some(Instant::now());
+    {
+        let mut state = chunk.state.lock().unwrap();
+        if state.done {
+            return Ok(());
+        }
+        if own {
+            let now = Instant::now();
+            state.sample = Some((now, 0));
+            state.moved = Some(now);
+        }
     }
     let mut resp = super::agent()
         .get(&job.url)
@@ -763,51 +933,53 @@ fn fetch_once(
         .build()
         .call()
         .map_err(Error::from)?;
+    let expected_range = format!(
+        "bytes {}-{}/{}",
+        chunk.start,
+        chunk.end - 1,
+        job.size.unwrap_or_default()
+    );
     let ranged = resp.status().as_u16() == 206
         && resp
             .headers()
             .get("content-range")
             .and_then(|v| v.to_str().ok())
-            .is_some_and(|v| v.starts_with(&format!("bytes {}-", chunk.start)));
+            == Some(expected_range.as_str());
     if !ranged {
         return Err(Segmented::NoRanges);
     }
     let tmp = &chunks.tmp;
-    let mut out = fs::OpenOptions::new().write(true).open(tmp).at(tmp)?;
-    out.seek(SeekFrom::Start(chunk.start)).at(tmp)?;
     let mut body = resp.body_mut().as_reader();
-    let mut buf = vec![0u8; BUF_SIZE];
-    let mut got = 0u64;
-    while got < len {
-        let n = body.read(&mut buf).at(tmp)?;
+    let mut bytes = vec![0; len as usize];
+    let mut got = 0;
+    while got < bytes.len() {
+        let idle = bound_idle.then_some(FIRST_BODY_IDLE);
+        let n = super::download_transport::with_body_idle(idle, || body.read(&mut bytes[got..]))
+            .at(tmp)?;
         if n == 0 {
             break;
         }
-        // The other fetch of this chunk won, or the download is over.
-        if chunk.done.load(Ordering::Relaxed) {
+        let mut state = chunk.state.lock().unwrap();
+        if state.done {
             return Ok(());
         }
-        let n = n.min((len - got) as usize);
-        out.write_all(&buf[..n]).at(tmp)?;
-        got += n as u64;
+        got += n;
         if own {
-            chunk.got.fetch_add(n as u64, Ordering::Relaxed);
-            let _ = tx.send(ChunkNews::Bytes(n as u64));
-            if let Ok(mut moved) = chunk.moved.lock() {
-                *moved = Some(Instant::now());
-            }
+            state.record(n as u64, tx);
         }
     }
-    if got != len {
+    if got != bytes.len() {
         return Err(Error::Other(format!("short range read from {}", job.url)).into());
     }
-    out.flush().at(tmp)?;
-    if !chunk.done.swap(true, Ordering::Relaxed) {
-        if !own {
-            let reported = chunk.got.load(Ordering::Relaxed);
-            let _ = tx.send(ChunkNews::Bytes(len.saturating_sub(reported)));
+    let mut state = chunk.state.lock().unwrap();
+    if !state.done {
+        // Close before publishing completion, including on Windows.
+        {
+            let mut out = fs::OpenOptions::new().write(true).open(tmp).at(tmp)?;
+            out.seek(SeekFrom::Start(chunk.start)).at(tmp)?;
+            out.write_all(&bytes).at(tmp)?;
         }
-        let _ = tx.send(ChunkNews::Done);
+        state.complete(len, tx);
     }
     Ok(())
 }
@@ -1092,9 +1264,8 @@ mod tests {
         assert!(ranges.iter().all(|(a, b)| b - a <= CHUNK_SIZE));
     }
 
-    /// A local server answering byte ranges; the first request for the start of the file
-    /// never answers (a connection that stalls), every other one does.
-    fn stalling_server(data: std::sync::Arc<Vec<u8>>) -> String {
+    /// A local server that stalls or trickles on the first request for offset zero.
+    fn stalling_server(data: std::sync::Arc<Vec<u8>>, trickle: bool) -> String {
         use std::io::{BufRead, BufReader as Lines};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -1117,10 +1288,7 @@ mod tests {
                         }
                     }
                     let Some((start, end)) = range else { return };
-                    if start == 0 && !stalled.swap(true, Ordering::Relaxed) {
-                        std::thread::sleep(Duration::from_secs(60));
-                        return;
-                    }
+                    let slow = start == 0 && !stalled.swap(true, Ordering::Relaxed);
                     let body = &data[start..=end];
                     let mut out = stream;
                     let head = format!(
@@ -1128,8 +1296,26 @@ mod tests {
                         body.len(),
                         data.len()
                     );
-                    let _ = out.write_all(head.as_bytes());
-                    let _ = out.write_all(body);
+                    if out.write_all(head.as_bytes()).is_err() {
+                        return;
+                    }
+                    if slow && trickle {
+                        // Keep sending at about 40 KiB/s. A separate copy must win even
+                        // though the primary keeps generating progress notifications.
+                        for chunk in body.chunks(4096) {
+                            if out.write_all(chunk).is_err() {
+                                return;
+                            }
+                            std::thread::sleep(Duration::from_millis(100));
+                        }
+                    } else if slow {
+                        let _ = reader
+                            .get_mut()
+                            .set_read_timeout(Some(Duration::from_secs(20)));
+                        let _ = reader.get_mut().read(&mut [0]);
+                    } else {
+                        let _ = out.write_all(body);
+                    }
                 });
             }
         });
@@ -1138,10 +1324,19 @@ mod tests {
 
     #[test]
     fn a_stalled_connection_is_fetched_again_instead_of_waited_for() {
+        assert_tail_range_is_hedged(false);
+    }
+
+    #[test]
+    fn a_trickling_range_is_hedged_despite_continuous_progress() {
+        assert_tail_range_is_hedged(true);
+    }
+
+    fn assert_tail_range_is_hedged(trickle: bool) {
         let size = SEGMENT_MIN_SIZE as usize + 12345;
         let data: Vec<u8> = (0..size).map(|i| (i * 31 % 251) as u8).collect();
         let sha1 = hex::encode(Sha1::digest(&data));
-        let url = stalling_server(std::sync::Arc::new(data.clone()));
+        let url = stalling_server(std::sync::Arc::new(data.clone()), trickle);
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join("big.jar");
         let started = Instant::now();
@@ -1159,11 +1354,74 @@ mod tests {
         )
         .unwrap();
         assert!(
-            started.elapsed() < Duration::from_secs(20),
+            started.elapsed() < Duration::from_secs(5),
             "took {:?}",
             started.elapsed()
         );
         assert_eq!(fs::read(&dest).unwrap(), data);
+    }
+
+    #[test]
+    fn primary_bytes_arriving_after_hedge_completion_are_ignored() {
+        let mut state = ChunkState::default();
+        let (tx, rx) = std::sync::mpsc::channel();
+        state.record(100, &tx);
+        state.complete(200, &tx);
+        state.record(100, &tx);
+        assert!(matches!(rx.try_recv(), Ok(ChunkNews::Bytes(100))));
+        assert!(matches!(rx.try_recv(), Ok(ChunkNews::Bytes(100))));
+        assert!(matches!(rx.try_recv(), Ok(ChunkNews::Done)));
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn progress_stays_bounded_with_files_left() {
+        for all_sizes_known in [true, false] {
+            let progress = |p: ProgressInfo<'_>| {
+                assert_eq!(p.done, 7);
+                assert_eq!(p.total, 8);
+                assert_eq!(p.bytes_total, if all_sizes_known { 1000 } else { 0 });
+                assert_eq!(p.bytes_done, p.bytes_total);
+            };
+            let reporter = Reporter {
+                stage: "test",
+                progress: &progress,
+                start: Instant::now(),
+                last_ms: AtomicU64::new(0),
+                files_done: AtomicU64::new(7),
+                files_total: 8,
+                bytes_done: AtomicU64::new(1100),
+                bytes_total: 1000,
+                all_sizes_known,
+            };
+            reporter.report(true);
+        }
+    }
+
+    #[test]
+    fn a_trickling_final_file_aborts_the_first_response() {
+        let reporter = Reporter {
+            stage: "test",
+            progress: &|_| {},
+            start: Instant::now(),
+            last_ms: AtomicU64::new(0),
+            files_done: AtomicU64::new(7),
+            files_total: 8,
+            bytes_done: AtomicU64::new(8 * FAST_BATCH_SPEED),
+            bytes_total: 9 * FAST_BATCH_SPEED,
+            all_sizes_known: true,
+        };
+        assert!(reporter.fast_tail());
+        let mut tail = TailReader {
+            body: std::io::repeat(0),
+            reporter: &reporter,
+            retry_slow_tail: true,
+            window: Some((Instant::now() - CHUNK_STALL, 0)),
+            received: 40 * 1024,
+            size: Some(1024 * 1024),
+        };
+        let e = tail.read(&mut [0; 1024]).unwrap_err();
+        assert_eq!(e.kind(), std::io::ErrorKind::TimedOut);
     }
 
     #[test]
@@ -1237,6 +1495,7 @@ mod tests {
             files_total: 1,
             bytes_done: AtomicU64::new(0),
             bytes_total: 0,
+            all_sizes_known: false,
         };
         let policy = Policy {
             attempts: 3,

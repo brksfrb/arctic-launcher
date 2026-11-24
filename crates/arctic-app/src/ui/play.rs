@@ -710,7 +710,7 @@ impl ArcticApp {
                     progress.stage.clone(),
                     format!(
                         "{} of {}",
-                        format_bytes(progress.bytes_done),
+                        format_bytes(progress.bytes_done.min(progress.bytes_total)),
                         format_bytes(progress.bytes_total)
                     ),
                     tf!("play.files", done = progress.done, total = progress.total),
@@ -722,6 +722,10 @@ impl ArcticApp {
                     parts.push(tf!("play.left", format_duration = format_duration(eta)));
                 }
                 parts.join("  ·  ")
+            }
+            Some(RunState::Preparing { progress, .. }) if progress.total > 0 => {
+                let files = tf!("play.files", done = progress.done, total = progress.total);
+                format!("{}  ·  {files}", progress.stage)
             }
             Some(RunState::Preparing { progress, .. }) => format!("{}…", progress.stage),
             Some(RunState::Starting { stage, since, .. }) => {

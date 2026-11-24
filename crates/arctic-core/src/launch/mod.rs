@@ -253,7 +253,15 @@ pub fn install(
     progress: Progress,
 ) -> Result<Installation> {
     let repair = files::LibraryRepair::new(dirs)?;
-    let installed = install_with_repair(dirs, version, game_dir, java_override, progress, &repair)?;
+    let installed = install_with_repair(
+        dirs,
+        version,
+        game_dir,
+        java_override,
+        progress,
+        &repair,
+        None,
+    )?;
     repair.finish();
     Ok(installed)
 }
@@ -265,6 +273,7 @@ fn install_with_repair(
     java_override: Option<PathBuf>,
     progress: Progress,
     repair: &files::LibraryRepair,
+    vanilla_client: Option<&crate::net::DownloadJob>,
 ) -> Result<Installation> {
     let clock = std::time::Instant::now();
     fs::create_dir_all(game_dir).at(game_dir)?;
@@ -275,7 +284,16 @@ fn install_with_repair(
         let _ = fs::create_dir_all(&server_packs);
     }
     let libs = files::resolve_libraries(dirs, &version, &RuleEnv::for_version(&version));
-    let client = files::client_job(dirs, &version)?;
+    let mut client = files::client_job(dirs, &version)?;
+    // Fabric and Quilt can use the already-installed vanilla jar when their
+    // profile points at identical bytes. Keep existing profile jars usable.
+    if let Some(vanilla) = vanilla_client
+        && client.sha1 == vanilla.sha1
+        && client.size == vanilla.size
+        && !client.is_satisfied()
+    {
+        client.dest.clone_from(&vanilla.dest);
+    }
     let client_jar = client.dest.clone();
     let logging = files::logging_job(dirs, &version);
 
@@ -509,6 +527,7 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
     }
     let loader = effective_loader(dirs, req.instance, &vanilla.id, game_dir);
     timer.step("pick loader");
+    let mut vanilla_client = None;
     let version = match loader
         .as_ref()
         .map(|(k, v)| (Some(*k), Some(v.as_str())))
@@ -522,6 +541,7 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
                 java_override.clone(),
                 progress,
                 &repair,
+                None,
             )?;
             timer.step("vanilla files");
             let stage = format!("Installing {} {loader_version}", kind.label());
@@ -539,6 +559,7 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
                 kind,
                 loaders::LoaderKind::Fabric | loaders::LoaderKind::Quilt
             ) {
+                vanilla_client = Some(files::client_job(dirs, &vanilla)?);
                 // Quilt provides its own Fabric compatibility version, not its loader version.
                 let fits =
                     arctic_mod_fits(dirs, &vanilla.id, kind, loader_version, &profile, progress)?;
@@ -626,8 +647,15 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
     };
     // The Arctic sign-in (a network round trip) runs while the game files are checked.
     let session = share_session.then(|| start_cosmetics_session(req, game_dir));
-    let mut installation =
-        install_with_repair(dirs, version, game_dir, java_override, progress, &repair)?;
+    let mut installation = install_with_repair(
+        dirs,
+        version,
+        game_dir,
+        java_override,
+        progress,
+        &repair,
+        vanilla_client.as_ref(),
+    )?;
     if share_session && matches!(loader, Some((loaders::LoaderKind::Forge, _))) {
         // Make Arctic's Mixin available before Forge discovers mods that embed an
         // older version. Forge still discovers the mod at the same path.

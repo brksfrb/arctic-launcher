@@ -1,6 +1,7 @@
 //! HTTP helpers and the parallel, checksum-verified downloader.
 
 mod download;
+mod download_transport;
 mod resolver;
 
 pub use download::{Compressed, DownloadJob, download_all, set_gentle, sha1_file};
@@ -101,10 +102,11 @@ fn build_agent(proxy: Option<ureq::Proxy>) -> ureq::Agent {
         .timeout_recv_body(Some(BODY_TIMEOUT))
         .user_agent(format!("{}/{}", crate::LAUNCHER_BRAND, crate::APP_VERSION))
         .build();
+    use ureq::unversioned::transport::{Connector, DefaultConnector};
     // Names the system cannot find are looked up over HTTPS instead (see `resolver`).
     ureq::Agent::with_parts(
         config,
-        ureq::unversioned::transport::DefaultConnector::default(),
+        DefaultConnector::default().chain(download_transport::DownloadIdleConnector),
         resolver::FallbackResolver::default(),
     )
 }

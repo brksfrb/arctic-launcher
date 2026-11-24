@@ -66,9 +66,9 @@ impl log::Log for Logbook {
 
     fn flush(&self) {
         if let Some(file) = &self.file
-            && let Ok(mut f) = file.lock()
+            && let Ok(f) = file.lock()
         {
-            let _ = f.flush();
+            let _ = f.sync_data();
         }
     }
 }
