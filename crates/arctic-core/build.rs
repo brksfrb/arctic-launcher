@@ -22,11 +22,11 @@ fn main() {
     let release = std::env::var("PROFILE").as_deref() == Ok("release");
     let mut code = String::from(
         "/// (Minecraft version, build target) for every version the client covers.\n\
-         const COVERS: &[(&str, &str)] = &[\n",
+         pub(crate) const COVERS: &[(&str, &str)] = &[\n",
     );
     for target in targets.as_array().expect("a list of targets") {
         let build = target["build"].as_str().expect("build version");
-        if !packed.iter().any(|(b, _)| b == build) {
+        if !packed.iter().any(|(b, _, _)| b == build) {
             assert!(
                 !release,
                 "Arctic Client {build} isn't in {} (run python mod/build.py)",
@@ -46,10 +46,15 @@ fn main() {
         "/// (build target, oldest Fabric Loader its fabric.mod.json accepts).\n\
          const MIN_LOADER: &[(&str, &str)] = &[\n",
     );
-    for (build, loader) in &packed {
+    for (build, loader, _) in &packed {
         if let Some(loader) = loader {
             writeln!(code, "    ({build:?}, {loader:?}),").unwrap();
         }
+    }
+    code.push_str("];\n");
+    code.push_str("const BUNDLED_ENTRY_COUNTS: &[(&str, usize)] = &[\n");
+    for (build, _, count) in &packed {
+        writeln!(code, "    ({build:?}, {count}),").unwrap();
     }
     code.push_str("];\n");
     // Names this pack: an instance's jar stamped with it is already current.
@@ -74,9 +79,8 @@ fn fnv1a(bytes: &[u8]) -> u64 {
     })
 }
 
-/// The build targets inside the pack (none if there's no pack yet), each with
-/// the oldest Fabric Loader its `fabric.mod.json` asks for.
-fn packed_builds(path: &Path) -> Vec<(String, Option<String>)> {
+/// The builds in the pack, with their minimum Fabric Loader and ZIP entry count.
+fn packed_builds(path: &Path) -> Vec<(String, Option<String>, usize)> {
     let Ok(bytes) = std::fs::read(path) else {
         return Vec::new();
     };
@@ -103,10 +107,9 @@ fn packed_builds(path: &Path) -> Vec<(String, Option<String>)> {
     };
     jars.iter()
         .map(|(build, entries)| {
+            let entries = entries.as_array().expect("a list of jar entries");
             let loader = entries
-                .as_array()
-                .into_iter()
-                .flatten()
+                .iter()
                 .find(|e| e[0] == "fabric.mod.json")
                 .and_then(|e| e[1].as_u64())
                 .and_then(|n| serde_json::from_slice::<serde_json::Value>(file(n as usize)).ok())
@@ -115,7 +118,7 @@ fn packed_builds(path: &Path) -> Vec<(String, Option<String>)> {
                         .and_then(|v| v.as_str())
                         .map(|r| r.trim_start_matches(">=").trim().to_owned())
                 });
-            (build.clone(), loader)
+            (build.clone(), loader, entries.len())
         })
         .collect()
 }
