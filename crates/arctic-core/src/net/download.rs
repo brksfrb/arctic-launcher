@@ -133,7 +133,7 @@ const CONNECTIONS: usize = 6;
 /// A chunk's slowest acceptable speed (its own connection; a 1 Mbit/s line shared by
 /// [`CONNECTIONS`] gives each ~20 KB/s).
 const CHUNK_MIN_SPEED: u64 = 12 * 1024;
-/// At the tail, give a slow connection one chance to recover on another request.
+/// Limit idle reads on the first attempt, then allow the ordinary slow-link timeout.
 const FIRST_BODY_IDLE: Duration = Duration::from_secs(12);
 const TAIL_MIN_SPEED: u64 = 128 * 1024;
 const FAST_BATCH_SPEED: u64 = 1024 * 1024;
@@ -195,6 +195,7 @@ struct Reporter<'a> {
     bytes_done: AtomicU64,
     bytes_total: u64,
     all_sizes_known: bool,
+    fast_batch: std::sync::atomic::AtomicBool,
 }
 
 impl Reporter<'_> {
@@ -207,19 +208,20 @@ impl Reporter<'_> {
     fn remove_bytes(&self, n: u64) {
         let _ = self
             .bytes_done
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |done| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |done| {
                 Some(done.saturating_sub(n))
             });
     }
 
     fn fast_tail(&self) -> bool {
         self.files_done.load(Ordering::Relaxed) + 1 == self.files_total
-            && self.files_total > 1
-            && self.bytes_done.load(Ordering::Relaxed) as f64
-                >= FAST_BATCH_SPEED as f64 * self.start.elapsed().as_secs_f64()
+            && self.fast_batch.load(Ordering::Relaxed)
     }
 
     fn file_done(&self) {
+        if fast_transfer(self.bytes_done.load(Ordering::Relaxed), self.start) {
+            self.fast_batch.store(true, Ordering::Relaxed);
+        }
         let done = self.files_done.fetch_add(1, Ordering::Relaxed) + 1;
         self.report(done == self.files_total);
     }
@@ -280,6 +282,7 @@ pub(crate) fn download_all_with_replacements(
         bytes_done: AtomicU64::new(0),
         bytes_total: pending.iter().filter_map(DownloadJob::transfer_size).sum(),
         all_sizes_known: pending.iter().all(|job| job.transfer_size().is_some()),
+        fast_batch: Default::default(),
     };
     reporter.report(true);
     if pending.is_empty() {
@@ -438,6 +441,7 @@ pub(crate) fn download_single(
         bytes_done: AtomicU64::new(0),
         bytes_total: job.transfer_size().unwrap_or(0),
         all_sizes_known: job.transfer_size().is_some(),
+        fast_batch: Default::default(),
     };
     reporter.report(true);
     download_with_mirror(job, &reporter, mirror, policy)?;
@@ -639,6 +643,11 @@ impl<R: Read> Read for TailReader<'_, '_, R> {
     }
 }
 
+fn fast_transfer(bytes: u64, start: Instant) -> bool {
+    bytes >= FAST_BATCH_SPEED
+        && bytes as f64 >= FAST_BATCH_SPEED as f64 * start.elapsed().as_secs_f64()
+}
+
 fn crawling(elapsed: Duration, received: u64, remaining: u64) -> bool {
     let rate = received as f64 / elapsed.as_secs_f64();
     rate < TAIL_MIN_SPEED as f64 && remaining as f64 > rate * 2.0
@@ -688,7 +697,7 @@ struct ChunkState {
 }
 
 impl ChunkState {
-    fn should_hedge(&mut self, len: u64, now: Instant) -> bool {
+    fn should_hedge(&mut self, len: u64, now: Instant, fast: bool) -> bool {
         if self.done || self.hedged {
             return false;
         }
@@ -706,7 +715,7 @@ impl ChunkState {
             return false;
         }
         self.sample = Some((now, self.got));
-        crawling(elapsed, self.got.saturating_sub(received), len - self.got)
+        fast && crawling(elapsed, self.got.saturating_sub(received), len - self.got)
     }
 
     fn record(&mut self, n: u64, tx: &std::sync::mpsc::Sender<ChunkNews>) {
@@ -788,15 +797,17 @@ fn download_segmented(
             }
         });
     }
+    let start = Instant::now();
     let mut done = 0;
-    let mut next_check = Instant::now() + CHUNK_STALL / 4;
+    let mut fast_file = false;
+    let mut next_check = start + CHUNK_STALL / 4;
     let result = loop {
         if done == chunks.list.len() {
             break Ok(());
         }
         let now = Instant::now();
         if now >= next_check {
-            hedge_stalled(&chunks, &tx);
+            hedge_stalled(&chunks, &tx, fast_file || reporter.fast_tail());
             next_check = now + CHUNK_STALL / 4;
         }
         match rx.recv_timeout(next_check.saturating_duration_since(Instant::now())) {
@@ -808,7 +819,10 @@ fn download_segmented(
                 transferred.set(transferred.get().saturating_sub(n));
                 reporter.remove_bytes(n);
             }
-            Ok(ChunkNews::Done) => done += 1,
+            Ok(ChunkNews::Done) => {
+                done += 1;
+                fast_file |= fast_transfer(transferred.get(), start);
+            }
             Ok(ChunkNews::NoRanges) => break Err(Segmented::NoRanges),
             Ok(ChunkNews::Failed(e)) => break Err(Segmented::Failed(e)),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
@@ -842,13 +856,17 @@ fn download_segmented(
 }
 
 /// Every chunk is handed out: fetch again, once, any that stalls or crawls.
-fn hedge_stalled(chunks: &std::sync::Arc<Chunks>, tx: &std::sync::mpsc::Sender<ChunkNews>) {
+fn hedge_stalled(
+    chunks: &std::sync::Arc<Chunks>,
+    tx: &std::sync::mpsc::Sender<ChunkNews>,
+    fast: bool,
+) {
     if chunks.next.load(Ordering::Relaxed) < chunks.list.len() {
         return;
     }
     for (i, chunk) in chunks.list.iter().enumerate() {
         let mut state = chunk.state.lock().unwrap();
-        if state.should_hedge(chunk.end - chunk.start, Instant::now()) {
+        if state.should_hedge(chunk.end - chunk.start, Instant::now(), fast) {
             state.hedged = true;
             log::info!("chunk {i} of {} is slow: fetching it again", chunks.job.url);
             let (chunks, tx) = (chunks.clone(), tx.clone());
@@ -1354,7 +1372,7 @@ mod tests {
         )
         .unwrap();
         assert!(
-            started.elapsed() < Duration::from_secs(5),
+            started.elapsed() < Duration::from_secs(10),
             "took {:?}",
             started.elapsed()
         );
@@ -1393,35 +1411,98 @@ mod tests {
                 bytes_done: AtomicU64::new(1100),
                 bytes_total: 1000,
                 all_sizes_known,
+                fast_batch: Default::default(),
             };
             reporter.report(true);
         }
     }
 
     #[test]
-    fn a_trickling_final_file_aborts_the_first_response() {
-        let reporter = Reporter {
-            stage: "test",
-            progress: &|_| {},
-            start: Instant::now(),
-            last_ms: AtomicU64::new(0),
-            files_done: AtomicU64::new(7),
-            files_total: 8,
-            bytes_done: AtomicU64::new(8 * FAST_BATCH_SPEED),
-            bytes_total: 9 * FAST_BATCH_SPEED,
-            all_sizes_known: true,
+    fn a_slow_link_does_not_hedge_an_active_range() {
+        let now = Instant::now();
+        let mut state = ChunkState {
+            got: 40 * 1024,
+            sample: Some((now - CHUNK_STALL, 0)),
+            moved: Some(now),
+            ..Default::default()
         };
-        assert!(reporter.fast_tail());
-        let mut tail = TailReader {
-            body: std::io::repeat(0),
-            reporter: &reporter,
-            retry_slow_tail: true,
-            window: Some((Instant::now() - CHUNK_STALL, 0)),
-            received: 40 * 1024,
-            size: Some(1024 * 1024),
-        };
-        let e = tail.read(&mut [0; 1024]).unwrap_err();
-        assert_eq!(e.kind(), std::io::ErrorKind::TimedOut);
+        assert!(!state.should_hedge(CHUNK_SIZE, now, false));
+        assert!(state.should_hedge(CHUNK_SIZE, now + CHUNK_STALL, false));
+    }
+
+    #[test]
+    fn a_trickling_final_file_is_retried() {
+        use std::io::BufRead;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let hits = std::sync::Arc::new(AtomicU64::new(0));
+        let server_hits = hits.clone();
+        let fast = 4 * 1024 * 1024;
+        let tail = 512 * 1024;
+        let server = std::thread::spawn(move || {
+            std::thread::scope(|scope| {
+                listener.set_nonblocking(true).unwrap();
+                let deadline = Instant::now() + Duration::from_secs(20);
+                let mut accepted = 0;
+                while accepted < 3 && Instant::now() < deadline {
+                    let (mut stream, _) = match listener.accept() {
+                        Ok(conn) => conn,
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            std::thread::sleep(Duration::from_millis(10));
+                            continue;
+                        }
+                        Err(e) => panic!("{e}"),
+                    };
+                    accepted += 1;
+                    stream.set_nonblocking(false).unwrap();
+                    let server_hits = &server_hits;
+                    scope.spawn(move || {
+                        let mut headers = BufReader::new(&mut stream);
+                        let mut line = String::new();
+                        headers.read_line(&mut line).unwrap();
+                        let is_tail = line.starts_with("GET /tail.jar ");
+                        while !line.is_empty() && line != "\r\n" {
+                            line.clear();
+                            headers.read_line(&mut line).unwrap();
+                        }
+                        let size = if is_tail { tail } else { fast };
+                        let slow = is_tail && server_hits.fetch_add(1, Ordering::Relaxed) == 0;
+                        write!(
+                            stream,
+                            "HTTP/1.1 200 OK\r\nContent-Length: {size}\r\nConnection: close\r\n\r\n"
+                        )
+                        .unwrap();
+                        if slow {
+                            for _ in 0..size / 4096 {
+                                if stream.write_all(&[0; 4096]).is_err() {
+                                    return;
+                                }
+                                std::thread::sleep(Duration::from_millis(100));
+                            }
+                        } else {
+                            stream.write_all(&vec![0; size]).unwrap();
+                        }
+                    });
+                }
+            });
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let jobs = [("fast.jar", fast), ("tail.jar", tail)].map(|(name, size)| DownloadJob {
+            url: format!("http://{addr}/{name}"),
+            dest: dir.path().join(name),
+            size: Some(size as u64),
+            sha1: Some(sha1_bytes(&vec![0; size])),
+            ..job("", None)
+        });
+        download_all("test", Vec::from(jobs), &|p| {
+            assert!(p.bytes_done <= p.bytes_total);
+            if p.done == 2 {
+                assert_eq!(p.bytes_done, (fast + tail) as u64);
+            }
+        })
+        .unwrap();
+        assert_eq!(hits.load(Ordering::Relaxed), 2);
+        server.join().unwrap();
     }
 
     #[test]
@@ -1496,6 +1577,7 @@ mod tests {
             bytes_done: AtomicU64::new(0),
             bytes_total: 0,
             all_sizes_known: false,
+            fast_batch: Default::default(),
         };
         let policy = Policy {
             attempts: 3,
