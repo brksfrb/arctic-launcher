@@ -3765,6 +3765,110 @@ pub fn scrubbed_tail(text: &str, max: usize) -> String {
     scrub(tail_of(text, max), &Own::this_pc())
 }
 
+/// A scrubbed log for staff, with repeated messages collapsed and both ends kept.
+pub fn scrubbed_shared_log(text: &str, max: usize) -> String {
+    shared_log(text, max, &Own::this_pc())
+}
+
+fn shared_log(text: &str, max: usize, own: &Own) -> String {
+    // Redact before adding markers or cutting, while multiline secrets are still intact.
+    let clean = scrub(text, own);
+    let text = collapse_log_repeats(text, clean);
+    if text.len() <= max {
+        return text;
+    }
+
+    let cut_marker =
+        |bytes: usize| format!("--- {} KB cut from the middle ---\n", bytes.div_ceil(1024));
+    let marker_budget = cut_marker(text.len()).len();
+    if max < marker_budget {
+        return tail_of(&text, max).to_owned();
+    }
+
+    let head_limit = (60 * 1024).min(max / 5).min(max - marker_budget);
+    let head_end = head_of(&text, head_limit).rfind('\n').map_or(0, |i| i + 1);
+    let mut tail = tail_of(&text, max - marker_budget - head_end);
+    let tail_start = text.len() - tail.len();
+    // Keep complete tail lines when they fit, or the end of an oversized last line.
+    if text.as_bytes()[tail_start - 1] != b'\n'
+        && let Some((_, rest)) = tail.split_once('\n')
+        && !rest.is_empty()
+    {
+        tail = rest;
+    }
+    let marker = cut_marker(text.len() - head_end - tail.len());
+    format!("{}{marker}{tail}", &text[..head_end])
+}
+
+fn collapse_log_repeats(text: &str, clean: String) -> String {
+    let lines: Vec<_> = clean.split_inclusive('\n').collect();
+    // Different messages can become identical after redaction.
+    let keys: Vec<_> = text
+        .lines()
+        .map(|line| {
+            let (time, message) = log_timestamp(line);
+            (time.is_some(), message)
+        })
+        .collect();
+    if lines.len() != keys.len() {
+        return clean;
+    }
+    let mut out = String::new();
+    let mut start = 0;
+    while start < lines.len() {
+        // Try the shortest period first. A repeat must match the whole block.
+        let width = (1..=4)
+            .find(|&width| {
+                start + 2 * width <= keys.len()
+                    && keys[start..start + width] == keys[start + width..start + 2 * width]
+            })
+            .unwrap_or(1);
+        let first_end = start + width;
+        for line in &lines[start..first_end] {
+            out.push_str(line);
+        }
+        let mut end = first_end;
+        while end + width <= keys.len() && keys[start..first_end] == keys[end..end + width] {
+            end += width;
+        }
+        if end > first_end {
+            let last = lines[end - 1];
+            let count = (end - first_end) / width;
+            let (time, _) = log_timestamp(last);
+            let ending = if last.ends_with("\r\n") {
+                "\r\n"
+            } else if last.ends_with('\n') {
+                "\n"
+            } else {
+                ""
+            };
+            if width == 1 {
+                out.push_str(&format!("... repeated {count} more times"));
+            } else {
+                out.push_str(&format!(
+                    "... preceding {width} lines repeated {count} more times"
+                ));
+            }
+            if let Some(time) = time {
+                out.push_str(&format!(" (until {time})"));
+            }
+            out.push_str(ending);
+        }
+        start = end;
+    }
+    out
+}
+
+fn log_timestamp(line: &str) -> (Option<&str>, &str) {
+    if let [b'[', h1, h2, b':', m1, m2, b':', s1, s2, b']', ..] = line.as_bytes()
+        && [h1, h2, m1, m2, s1, s2].into_iter().all(u8::is_ascii_digit)
+    {
+        (Some(&line[1..9]), &line[10..])
+    } else {
+        (None, line)
+    }
+}
+
 /// The part of Java's `hs_err_pid` file worth sending: the header, the summary (without the command line,
 /// which holds the game's arguments) and the thread that died. The process section onward (VM arguments,
 /// environment variables, loaded libraries, system details) is left out: it describes the PC, not the crash.
@@ -6541,6 +6645,112 @@ Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Crit
         let mut log = "é".repeat(MAX_TEXT);
         log.push_str("java.lang.OutOfMemoryError");
         assert_eq!(title(&log), "Minecraft ran out of memory");
+    }
+
+    const SHARED_LOG_LIMIT: usize = 300 * 1024;
+    const ANONYMOUS_PC: Own = Own {
+        home: None,
+        user: None,
+    };
+
+    #[test]
+    fn shared_log_collapses_tick_spam_before_applying_the_cap() {
+        let mods: String = (0..187)
+            .map(|i| format!("  mod_{i}: A long mod display name with its version and entrypoint information\n"))
+            .collect();
+        let startup = format!("[16:35:00] Java 21, GL renderer loaded, 187 mods\n{mods}");
+        let error = "[16:35:01] [Render thread/ERROR]: Shader failed\n";
+        let message = " [Server thread/INFO] [STDOUT/]: [net.thebrokenscript.plus.procedures.BrokenSunEventProcedure:tryAdvanceDay:33]: [TBS PLUS] Initialized day tracker: 0\n";
+        let log = format!(
+            "{startup}{error}[16:35:02]{message}{}",
+            format!("[16:37:25]{message}").repeat(1907)
+        );
+        assert!(log.len() > SHARED_LOG_LIMIT);
+        assert_eq!(
+            shared_log(&log, SHARED_LOG_LIMIT, &ANONYMOUS_PC),
+            format!(
+                "{startup}{error}[16:35:02]{message}... repeated 1907 more times (until 16:37:25)\n"
+            )
+        );
+    }
+
+    #[test]
+    fn shared_log_collapses_short_blocks_and_preserves_a_partial_repeat() {
+        for width in 2..=4 {
+            let block: String = (0..width).map(|i| format!("message {i}\r\n")).collect();
+            let first = block.replace("message", "[16:35:02] message");
+            let later = block.replace("message", "[16:35:03] message");
+            let partial = "[16:35:04] message 0";
+            let log = format!("{first}{later}{later}{partial}");
+            assert_eq!(
+                shared_log(&log, SHARED_LOG_LIMIT, &ANONYMOUS_PC),
+                format!(
+                    "{first}... preceding {width} lines repeated 2 more times (until 16:35:03)\r\n{partial}"
+                )
+            );
+        }
+        assert_eq!(
+            shared_log("same\nsame", SHARED_LOG_LIMIT, &ANONYMOUS_PC),
+            "same\n... repeated 1 more times"
+        );
+    }
+
+    #[test]
+    fn shared_log_keeps_complete_head_and_tail_lines_within_the_cap() {
+        let log: String = (0..8_000)
+            .map(|i| format!("{i:04} {}\n", "line content ".repeat(5)))
+            .collect();
+        let sent = shared_log(&log, SHARED_LOG_LIMIT, &ANONYMOUS_PC);
+        let (head, rest) = sent.split_once("--- ").unwrap();
+        let (size, tail) = rest.split_once(" KB cut from the middle ---\n").unwrap();
+        assert!(sent.len() <= SHARED_LOG_LIMIT);
+        assert!((59 * 1024..=60 * 1024).contains(&head.len()));
+        assert!(head.ends_with('\n') && log.starts_with(head));
+        assert!(log.ends_with(tail));
+        assert_eq!(log.as_bytes()[log.len() - tail.len() - 1], b'\n');
+        assert_eq!(
+            size.parse::<usize>().unwrap(),
+            (log.len() - head.len() - tail.len()).div_ceil(1024)
+        );
+    }
+
+    #[test]
+    fn shared_log_preserves_small_logs_without_repeats() {
+        let log = "[16:35:00] Java 21\r\n[16:35:01] GL renderer loaded\r\n[bad time] An error";
+        assert_eq!(shared_log(log, log.len(), &ANONYMOUS_PC), log);
+        assert_eq!(scrubbed_shared_log("", SHARED_LOG_LIMIT), "");
+    }
+
+    #[test]
+    fn shared_log_scrubs_both_ends_before_cutting_and_keeps_distinct_lines() {
+        let own = Own {
+            home: Some(r"C:\Users\PlayerName".into()),
+            user: Some("PlayerName".into()),
+        };
+        let startup = "Started at C:\\Users\\PlayerName\\games\n";
+        let middle: String = (0..100).map(|i| format!("Loading mod {i}\n")).collect();
+        let tail = "--accessToken\nfirst_private_access_token\n--accessToken\nsecond_private_access_token\nPlayerName left";
+        let sent = shared_log(&format!("{startup}{middle}{tail}"), 240, &own);
+        assert!(sent.starts_with("Started at <home>\\games\n"));
+        assert!(sent.contains("cut from the middle"));
+        assert!(sent.ends_with("--accessToken\n<hidden>\n--accessToken\n<hidden>\n<user> left"));
+    }
+
+    #[test]
+    fn shared_log_is_utf8_safe_even_for_tiny_caps_and_long_lines() {
+        let log = format!("起動\n{}\nエラー", "界".repeat(100));
+        for max in 0..=log.len() {
+            let sent = shared_log(&log, max, &ANONYMOUS_PC);
+            assert!(sent.len() <= max);
+            assert!(!sent.contains('\u{fffd}'));
+        }
+        let sent = shared_log(&log, 60, &ANONYMOUS_PC);
+        assert!(sent.starts_with("起動\n"));
+        assert!(sent.ends_with("エラー"));
+        let single_line = "界".repeat(100);
+        let sent = shared_log(&single_line, 42, &ANONYMOUS_PC);
+        assert!(sent.ends_with('界'));
+        assert!(sent.len() <= 42);
     }
 
     #[test]
