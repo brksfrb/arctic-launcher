@@ -1,6 +1,7 @@
 //! Application state and event handling. Layout lives in `ui/`.
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
@@ -190,6 +191,7 @@ pub struct ArcticApp {
     pub(crate) runs: crate::runs::Runs,
     pub(crate) launcher_log: Vec<LogLine>,
     pub(crate) launcher_log_seen: u64,
+    pub(crate) launcher_archive: Option<(PathBuf, Vec<LogLine>)>,
     /// Filtered line indices for the Logs tab, and what they were built for.
     pub(crate) log_cache: Option<(crate::ui::LogViewKey, Vec<usize>)>,
     pub(crate) log_source: LogSource,
@@ -402,6 +404,7 @@ impl ArcticApp {
             runs: crate::runs::Runs::default(),
             launcher_log: Vec::new(),
             launcher_log_seen: 0,
+            launcher_archive: None,
             log_cache: None,
             log_source: LogSource::Launcher,
             log_min_level: Level::Debug,
