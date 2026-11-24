@@ -7,6 +7,8 @@ use std::io::{Cursor, Read, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use sha2::{Digest, Sha256};
+
 use crate::Result;
 use crate::error::IoContext;
 
@@ -21,7 +23,7 @@ include!(concat!(env!("OUT_DIR"), "/arctic_jars.rs"));
 
 /// The Forge build (remapped to Forge's names: mod/forge/build_forge.py) is in the pack under
 /// `forge-<game version>`; only 1.8.9 has one so far.
-const FORGE_BUILDS: &[(&str, &str)] = &[("1.8.9", "forge-1.8.9")];
+pub(crate) const FORGE_BUILDS: &[(&str, &str)] = &[("1.8.9", "forge-1.8.9")];
 
 /// The Forge build for `game_version`, if there is one.
 fn forge_build_for(game_version: &str) -> Option<&'static str> {
@@ -147,14 +149,11 @@ impl Pack {
     }
 }
 
-/// Unpacked on first use (a fraction of a second), then kept.
-fn pack() -> Option<&'static Pack> {
+/// The embedded pack, unpacked on first use.
+fn bundled_pack() -> Option<&'static Pack> {
     static PACKED: OnceLock<Option<Pack>> = OnceLock::new();
     PACKED
         .get_or_init(|| {
-            if let Some(dev) = dev_pack() {
-                return Some(dev);
-            }
             let pack = Pack::unpack(PACK);
             if pack.is_none() && !PACK.is_empty() {
                 log::error!("the bundled Arctic Client is damaged");
@@ -162,6 +161,40 @@ fn pack() -> Option<&'static Pack> {
             pack
         })
         .as_ref()
+}
+
+fn pack() -> Option<&'static Pack> {
+    static DEV: OnceLock<Option<Pack>> = OnceLock::new();
+    DEV.get_or_init(dev_pack).as_ref().or_else(bundled_pack)
+}
+
+/// Match the exact ZIP bytes the installer rebuilds from the embedded pack.
+pub(crate) fn matches_bundled_sha256(entries: usize, sha256: &str) -> bool {
+    // The entry count narrows the candidates so a scan needn't rebuild the whole pack.
+    let candidates = BUNDLED_ENTRY_COUNTS
+        .iter()
+        .filter(|(_, count)| *count == entries);
+    if candidates.clone().next().is_none() {
+        return false;
+    }
+    type HashesByEntryCount = Mutex<HashMap<usize, Vec<String>>>;
+    static HASHES: OnceLock<HashesByEntryCount> = OnceLock::new();
+    HASHES
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(|err| err.into_inner())
+        .entry(entries)
+        .or_insert_with(|| {
+            let Some(pack) = bundled_pack() else {
+                return Vec::new();
+            };
+            candidates
+                .filter_map(|(build, _)| pack.jar(build))
+                .map(|jar| hex::encode(Sha256::digest(jar)))
+                .collect()
+        })
+        .iter()
+        .any(|hash| hash == sha256)
 }
 
 /// A hash of the developer pack in use, so its jars replace ones from

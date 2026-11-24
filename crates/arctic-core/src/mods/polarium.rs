@@ -20,7 +20,7 @@ pub const NAME: &str = "Polarium";
 const MOD_ID: &str = "polarium";
 
 /// (Minecraft version, jar) for every version Polarium has a build for.
-const JARS: &[(&str, &[u8])] = &[
+pub(super) const JARS: &[(&str, &[u8])] = &[
     (
         "26.3",
         include_bytes!("../../../../mod/dist/polarium/polarium-26.3.jar"),
