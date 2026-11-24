@@ -9,8 +9,8 @@
 //! changes on its own is the weekly look at Modrinth, so a record ends when that is due.
 //!
 //! Jars count as the same by name, size and modification time (to the nanosecond), which is
-//! what the launcher already goes by for the Fabric API choice; the small records are compared
-//! by content.
+//! what the launcher already goes by for the Fabric API choice; the small records, and
+//! Polarium's jar (which every start compares with the launcher's own), by content.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -85,7 +85,9 @@ impl<'a> Settled<'a> {
         listing(&mods_dir, &mut text)?;
         listing(&super::super::slim_api::stash_dir(&mods_dir), &mut text)?;
         let state = state_path(self.game_dir);
-        for record in [&index_path(self.game_dir), &state] {
+        // Polarium's jar is compared with the launcher's own byte for byte at every start.
+        let polarium = mods_dir.join(super::super::polarium::FILE_NAME);
+        for record in [&index_path(self.game_dir), &state, &polarium] {
             content(record, &mut text)?;
         }
         text.push_str(&format!("{}\n", pending_path(self.game_dir).exists()));
@@ -192,7 +194,7 @@ fn listing(dir: &Path, out: &mut String) -> Option<()> {
     Some(())
 }
 
-/// A small record's content (a missing one is told apart from an empty one).
+/// A file's content (a missing one is told apart from an empty one).
 fn content(file: &Path, out: &mut String) -> Option<()> {
     match fs::read(file) {
         Ok(bytes) => out.push_str(&format!("{}\n", hex::encode(Sha1::digest(&bytes)))),

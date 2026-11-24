@@ -168,6 +168,10 @@ struct Listed {
 /// Names that are the same regular file (one file with two names) in both folders. A name
 /// left out is not known to differ: it is compared the long way. Empty where the listing can't
 /// tell (other systems than Windows, file systems without file IDs).
+///
+/// "Regular" is as the folders' entries say (not a folder, not a reparse point). An entry can
+/// be behind the file itself for a file changed under its other name; the two names are the
+/// one file all the same, which is all the mirror needs of them.
 fn hard_links(src: &Path, dst: &Path) -> HashSet<OsString> {
     let (Some(src), Some(dst)) = (list_files(src), list_files(dst)) else {
         return HashSet::new();

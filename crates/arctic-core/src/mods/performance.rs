@@ -428,12 +428,17 @@ fn stash(game_dir: &Path, state: &State) -> Result<()> {
         return Ok(());
     }
     let to = stash_dir(game_dir, &state.game_version, state.shaders, &state.extras);
-    // Keep files already moved if an earlier attempt was interrupted.
-    fs::create_dir_all(&to).at(&to)?;
     if !index.exists() {
-        // Nothing was installed: only that Modrinth was asked.
+        // Nothing was installed: only that Modrinth was asked. A set left here from before
+        // (too old to be used again, or incomplete) must not pass for this one's.
+        if to.exists() {
+            fs::remove_dir_all(&to).at(&to)?;
+        }
+        fs::create_dir_all(&to).at(&to)?;
         return save_json(&to.join("arctic-performance-state.json"), state);
     }
+    // Keep files already moved if an earlier attempt was interrupted.
+    fs::create_dir_all(&to).at(&to)?;
     let mods_dir = game_dir.join("mods");
     for m in ModIndex::load(&index)?.mods {
         super::files::check_file_name(&m.file_name)?;
@@ -1677,6 +1682,23 @@ mod tests {
         assert!(!run("1.8.9", false, must_not_ask).unwrap());
         assert!(!stash_dir(game, "1.8.9", false, "").exists());
         assert!(run("1.8.9", false, must_not_ask).unwrap());
+
+        // A set left in the stash from long ago is not taken for the "no build" answer's.
+        run("0.0-other", false, no_build).unwrap();
+        let stale = stash_dir(game, "1.8.9", false, "");
+        fs::write(stale.join("old-sodium.jar"), b"old").unwrap();
+        ModIndex::default()
+            .with(tracked("old-sodium.jar"))
+            .save(&stale.join("arctic-performance.json"))
+            .unwrap();
+        // (As when it was found too old on the way to 1.8.9: left there, and Modrinth asked.)
+        fs::remove_file(stale.join("arctic-performance-state.json")).unwrap();
+        assert!(!run("1.8.9", false, no_build).unwrap());
+        assert!(stale.join("old-sodium.jar").is_file());
+        run("0.0-other", false, no_build).unwrap();
+        assert!(!stale.join("old-sodium.jar").exists());
+        assert!(!run("1.8.9", false, must_not_ask).unwrap());
+        assert!(!game.join("mods/old-sodium.jar").exists());
 
         // Another set of mods (Iris too) was never asked about.
         let asked = std::cell::Cell::new(false);

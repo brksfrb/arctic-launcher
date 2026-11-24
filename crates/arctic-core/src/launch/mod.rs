@@ -580,6 +580,7 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
         game_dir,
         vanilla: &vanilla,
         launcher_owned_vanilla,
+        vanilla_failed: std::sync::atomic::AtomicBool::new(false),
     };
     let install_vanilla = |timer: &mut StepTimer| {
         let base = install_with_repair(
@@ -647,7 +648,13 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
                 Ok::<_, Error>((loader, done, timer.steps))
             });
             let base = install_vanilla(&mut timer);
-            held.release();
+            if base.is_ok() {
+                held.release();
+            } else {
+                // Its error is the launch's: nothing more is shown or started for the loader.
+                side.vanilla_failed
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+            }
             let alongside = alongside
                 .join()
                 .unwrap_or_else(|_| Err(Error::Other("preparing the loader crashed".into())));
@@ -787,6 +794,9 @@ struct LoaderSide<'a> {
     game_dir: &'a Path,
     vanilla: &'a VersionJson,
     launcher_owned_vanilla: bool,
+    /// Set when the vanilla installation running alongside has failed: the launch is over,
+    /// and what has not been started for it is left alone.
+    vanilla_failed: std::sync::atomic::AtomicBool,
 }
 
 /// A Fabric or Quilt profile with the instance's mods folder made ready for it.
@@ -810,6 +820,20 @@ impl LoaderSide<'_> {
             log::warn!("vanilla performance cleanup: {e}");
         }
         loader
+    }
+
+    /// An error once the vanilla installation alongside has failed (its error is the one
+    /// reported; this one only stops the work here).
+    fn still_wanted(&self) -> Result<()> {
+        if self
+            .vanilla_failed
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            return Err(Error::Other(
+                "the vanilla files could not be installed".into(),
+            ));
+        }
+        Ok(())
     }
 
     /// Fetch the libraries `profile` adds to the vanilla ones (which the vanilla installation is
@@ -857,6 +881,7 @@ impl LoaderSide<'_> {
             progress,
         )?;
         timer.step("loader profile");
+        self.still_wanted()?;
         on_profile(&profile);
         let vanilla_client = files::client_job(dirs, vanilla)?;
         // Quilt provides its own Fabric compatibility version, not its loader version.
@@ -875,6 +900,7 @@ impl LoaderSide<'_> {
             &dirs.cache().join(arctic_mod::JAR_CACHE),
         )?;
         timer.step("arctic client");
+        self.still_wanted()?;
         // Vanilla instances (on Fabric underneath) and Fabric/Quilt
         // instances alike; in those, mods the player already has stay theirs.
         progress(ProgressInfo::stage("Checking performance mods"));

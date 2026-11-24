@@ -347,17 +347,22 @@ fn jar_key(name: &str, meta: &fs::Metadata) -> Option<String> {
     Some(format!("{name}:{}:{time}", meta.len()))
 }
 
-fn read_use(path: &Path, key: String) -> JarUse {
+/// `opened`: the jar could be read (one that couldn't, held by another program for a moment,
+/// is not remembered as using nothing).
+fn read_use(path: &Path, key: String) -> (JarUse, bool) {
     let mut classes = BTreeSet::new();
-    if let Ok(file) = fs::File::open(path) {
+    let file = fs::File::open(path);
+    let opened = file.is_ok();
+    if let Ok(file) = file {
         referenced_classes(file, &mut classes);
     }
     let (_, requires) = deps::fabric_ids(path, LoaderKind::Fabric);
-    JarUse {
+    let jar = JarUse {
         key,
         classes,
         requires: requires.into_iter().collect(),
-    }
+    };
+    (jar, opened)
 }
 
 /// The modules (ids) to keep: those the other jars refer to or declare, and what those need.
@@ -388,8 +393,8 @@ fn keep(mods_dir: &Path, umbrella: &str, modules: &[Module]) -> BTreeSet<String>
             (Some(jar), _) => used.push(jar.clone()),
             (None, key) => {
                 // A file whose size or time can't be told is read every time.
-                let jar = read_use(&entry.path(), key.clone().unwrap_or_default());
-                if key.is_some() {
+                let (jar, opened) = read_use(&entry.path(), key.clone().unwrap_or_default());
+                if key.is_some() && opened {
                     known.jars.push(jar.clone());
                     learned = true;
                 }

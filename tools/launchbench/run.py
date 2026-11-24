@@ -54,7 +54,7 @@ def launch(bench, root, version, profile, window):
     # Every launch's log is kept next to the roots, to look into an odd timing afterwards.
     logs = os.path.join(os.path.dirname(os.path.abspath(root)), "logs")
     os.makedirs(logs, exist_ok=True)
-    name = f"{time.strftime('%H%M%S')}-{version}-{profile}.log"
+    name = f"{time.strftime('%H%M%S')}-{len(os.listdir(logs)):04}-{version}-{profile}.log"
     with open(os.path.join(logs, name), "w") as f:
         # Not the command line: it holds the (offline) session.
         f.write("\n".join(l for l in done.stderr.splitlines() if "launching:" not in l))
@@ -188,14 +188,16 @@ def compare(before_files, after_files):
 
     print(f"Platform: {after['platform']}. Times in ms, before -> after.\n")
     print("Steps under \"vanilla files\" may overlap it (see the pipeline), so they need not add up.\n")
-    print("| case | Play to Java | download batches, summed (s) | Java start | Java to window |")
-    print("|---|---|---|---|---|")
+    print("| case | Play to Java | download batches, summed (s) | Java start | Java to window "
+          "| Play to window |")
+    print("|---|---|---|---|---|---|")
     for name, b in before["cases"].items():
         a = after["cases"].get(name)
         print(f"| {name} | {cell(b, 'play_to_java_ms')} -> {cell(a, 'play_to_java_ms')} "
               f"| {cell(b, 'download_s')} -> {cell(a, 'download_s')} "
               f"| {cell(b, 'spawn_ms')} -> {cell(a, 'spawn_ms')} "
-              f"| {cell(b, 'window_ms')} -> {cell(a, 'window_ms')} |")
+              f"| {cell(b, 'window_ms')} -> {cell(a, 'window_ms')} "
+              f"| {cell(b, 'play_to_window_ms')} -> {cell(a, 'play_to_window_ms')} |")
     print("\nSteps (ms, before -> after):\n")
     names = []
     for case in list(before["cases"].values()) + list(after["cases"].values()):
