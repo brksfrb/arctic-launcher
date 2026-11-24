@@ -96,9 +96,13 @@ abstract class ChatComponentMixin implements PersistentChat.Hud {
 
 	/** Scrolled near the top of what is loaded: read the next older page from the log and put it above. */
 	@Inject(method = "scrollChat", at = @At("RETURN"))
-	private void arctic$older(CallbackInfo ci) {
+	//#if MC >= 1.18
+	private void arctic$older(int amount, CallbackInfo ci) {
+	//#else
+	private void arctic$older(double amount, CallbackInfo ci) {
+	//#endif
 		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
-		if (history == null || arctic$loading || history.restoring() || !history.hasOlder()
+		if (amount <= 0 || history == null || arctic$loading || history.restoring() || !history.hasOlder()
 				|| trimmedMessages.size() - chatScrollbarPos > getLinesPerPage() * 3) {
 			return;
 		}
@@ -226,10 +230,17 @@ abstract class ChatComponentMixin implements PersistentChat.Hud {
 		ClientConfig c = ArcticClient.config();
 		if (c != null && c.chatKeep) {
 			ci.cancel();
-		} else if (ArcticClient.persistentChat() != null) {
-			// The lines are gone for good: the log is not scrolled back into an emptied chat.
-			arctic$loadedLines = 0;
-			ArcticClient.persistentChat().stopPaging();
+		}
+	}
+
+	@Inject(method = "clearMessages", at = @At("RETURN"))
+	private void arctic$resetHistoryAfterClear(CallbackInfo ci) {
+		arctic$loadedLines = 0;
+		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
+		if (history != null) {
+			history.resetAfterGameClear();
+			// A stale scroll offset lets incoming messages trigger vanilla's scroll adjustment.
+			((ChatComponent) (Object) this).resetChatScroll();
 		}
 	}
 
