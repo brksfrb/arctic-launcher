@@ -286,7 +286,8 @@ fn install_with_repair(
     let libs = files::resolve_libraries(dirs, &version, &RuleEnv::for_version(&version));
     let mut client = files::client_job(dirs, &version)?;
     // Fabric and Quilt can use the already-installed vanilla jar when their
-    // profile points at identical bytes. Keep existing profile jars usable.
+    // profile declares the same size and hash. client_job requires both fields.
+    // Keep existing profile jars usable.
     if let Some(vanilla) = vanilla_client
         && client.sha1 == vanilla.sha1
         && client.size == vanilla.size

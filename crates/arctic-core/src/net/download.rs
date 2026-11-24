@@ -951,18 +951,16 @@ fn fetch_once(
         .build()
         .call()
         .map_err(Error::from)?;
-    let expected_range = format!(
-        "bytes {}-{}/{}",
-        chunk.start,
-        chunk.end - 1,
-        job.size.unwrap_or_default()
-    );
+    let expected_range = format!("bytes {}-{}", chunk.start, chunk.end - 1);
     let ranged = resp.status().as_u16() == 206
         && resp
             .headers()
             .get("content-range")
             .and_then(|v| v.to_str().ok())
-            == Some(expected_range.as_str());
+            .and_then(|v| v.split_once('/'))
+            .is_some_and(|(range, total)| {
+                range == expected_range && (total == "*" || total.parse::<u64>().ok() == job.size)
+            });
     if !ranged {
         return Err(Segmented::NoRanges);
     }
