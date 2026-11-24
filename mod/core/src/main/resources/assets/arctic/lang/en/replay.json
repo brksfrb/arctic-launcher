@@ -94,7 +94,7 @@
   "replay.replay": "Replay",
   "replay.rejoin_to_restore_replay": "Rejoin the world to restore replay buffering.",
   "replay.timeline_controls": "Timeline controls",
-  "replay.timeline_hint": "%s · Timeline controls",
+  "replay.timeline_hint": "{0} · Timeline controls",
   "replay.play_pause": "Play or pause",
   "replay.jump_back": "Jump back",
   "replay.jump_forward": "Jump forward",

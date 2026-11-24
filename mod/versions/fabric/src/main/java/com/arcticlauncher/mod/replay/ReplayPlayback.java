@@ -213,13 +213,23 @@ public final class ReplayPlayback implements ReplayBackend {
 		packetName = ReplayCodec.name(packet);
 		//#if MC >= 1.19.4
 		if (packet instanceof net.minecraft.network.protocol.game.ClientboundBundlePacket bundle) {
+			//#if MC >= 1.20.5
 			List<Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener>> rewritten = new ArrayList<>();
+			//#else
+			List<Packet<net.minecraft.network.protocol.game.ClientGamePacketListener>> rewritten = new ArrayList<>();
+			//#endif
 			for (Packet<?> child : bundle.subPackets()) {
 				Packet<?> updated = filterOne(child, ReplayCodec.name(child));
 				if (updated != null) {
+					//#if MC >= 1.20.5
 					@SuppressWarnings("unchecked")
 					Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener> gamePacket =
 							(Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener>) updated;
+					//#else
+					@SuppressWarnings("unchecked")
+					Packet<net.minecraft.network.protocol.game.ClientGamePacketListener> gamePacket =
+							(Packet<net.minecraft.network.protocol.game.ClientGamePacketListener>) updated;
+					//#endif
 					rewritten.add(gamePacket);
 				}
 			}
