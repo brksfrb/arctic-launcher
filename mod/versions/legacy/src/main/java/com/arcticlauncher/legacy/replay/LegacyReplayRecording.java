@@ -15,6 +15,7 @@ import com.arcticlauncher.client.Lang;
 /** Recording on old versions: every connection that logs in, plus where you are each tick. */
 public final class LegacyReplayRecording {
 	private static volatile boolean swung;
+	private static final com.arcticlauncher.client.replay.SnapshotGate SNAPSHOT = new com.arcticlauncher.client.replay.SnapshotGate();
 
 	private LegacyReplayRecording() {}
 
@@ -62,10 +63,19 @@ public final class LegacyReplayRecording {
 		if (take == null) {
 			return false;
 		}
-		((LegacyReplayConnection) connection).arctic$attach(take);
 		//#if MC < 1.9
-		int packets = LegacyReplaySnapshot.write(take);
+		// Packets arriving while the world is written out go after it: the recording must open with its login.
+		SNAPSHOT.begin(take);
+		int packets;
+		try {
+			((LegacyReplayConnection) connection).arctic$attach(take);
+			packets = LegacyReplaySnapshot.write(take);
+		} finally {
+			SNAPSHOT.end(take::packet);
+		}
 		com.arcticlauncher.legacy.ArcticLegacy.LOG.info("replay: no buffer from the join; started one in the world with " + packets + " opening packets");
+		//#else
+		((LegacyReplayConnection) connection).arctic$attach(take);
 		//#endif
 		return true;
 	}
@@ -74,7 +84,7 @@ public final class LegacyReplayRecording {
 	public static void record(Recorder.Take take, Packet<?> packet) {
 		byte[] bytes = LegacyReplayCodec.encode(packet);
 		if (bytes != null) {
-			take.packet(bytes);
+			SNAPSHOT.live(take, bytes, take::packet);
 		}
 	}
 

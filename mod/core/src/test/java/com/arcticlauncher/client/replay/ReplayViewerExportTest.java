@@ -60,4 +60,51 @@ class ReplayViewerExportTest {
 			} finally { viewer.end(); }
 		}
 	}
+
+	/**
+	 * A clip saved seconds after joining keeps its real timing: nothing before the login, then (a moment
+	 * later) the position that ends the terrain screen. "Render" exports it from its first moment and asks
+	 * for that before the world is up; the export must still get its first frame.
+	 */
+	@Test void renderingAClipFromItsFirstMomentLeavesTheTerrainScreen() throws Exception {
+		Path file = dir.resolve("early.mcpr");
+		try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(file))) {
+			zip.putNextEntry(new ZipEntry(Recorder.META_ENTRY));
+			zip.write("{\"duration\":1000}".getBytes(StandardCharsets.UTF_8)); zip.closeEntry();
+			zip.putNextEntry(new ZipEntry(Recorder.PACKETS_ENTRY));
+			DataOutputStream packets = new DataOutputStream(zip);
+			packets.writeInt(70); packets.writeInt(1); packets.write(1);  // the login: the world exists from here
+			packets.writeInt(110); packets.writeInt(1); packets.write(2); // the position, 40 ms later
+			packets.writeInt(900); packets.writeInt(1); packets.write(3); // much later: not needed to load
+			packets.flush(); zip.closeEntry();
+		}
+		AtomicInteger applied = new AtomicInteger();
+		AtomicInteger restarts = new AtomicInteger();
+		AtomicInteger captures = new AtomicInteger();
+		ReplayBackend backend = (ReplayBackend) Proxy.newProxyInstance(ReplayBackend.class.getClassLoader(), new Class<?>[] {ReplayBackend.class},
+				(proxy, method, args) -> {
+					if (method.getName().equals("apply")) applied.incrementAndGet();
+					// Like the game: a restart is an empty connection until the login is applied again.
+					if (method.getName().equals("restart")) { restarts.incrementAndGet(); applied.set(0); }
+					if (method.getName().equals("ready")) return applied.get() >= 1;
+					// The terrain screen: up from the login until the position arrives.
+					if (method.getName().equals("loading")) return applied.get() == 1;
+					if (method.getName().equals("capture")) captures.incrementAndGet();
+					if (method.getName().equals("look")) return new float[] {0, 0};
+					return method.getReturnType() == boolean.class ? false : null;
+				});
+		Platform platform = (Platform) Proxy.newProxyInstance(Platform.class.getClassLoader(), new Class<?>[] {Platform.class}, (proxy, method, args) -> null);
+		try (ReplayData data = ReplayData.open(file.toFile(), dir.resolve("cache-early").toFile())) {
+			ReplayViewer viewer = new ReplayViewer(data, backend, platform, Collections.emptyList(), () -> {});
+			try {
+				assertNull(viewer.begin());
+				VideoExport job = new VideoExport(null, dir.resolve("early.mp4").toFile(), 0, 1000, 30, null);
+				viewer.export(job, ReplayViewer.Mode.FIRST_PERSON); // as the Replays tab does: with the open
+				for (int i = 0; i < 120 && captures.get() == 0; i++) { viewer.frame(); viewer.afterFrame(); } // 30 a second
+				assertEquals(0, restarts.get(), "nothing precedes the login to rebuild the world from");
+				assertEquals(1, captures.get(), "the export stayed on the terrain screen");
+				assertEquals(2, applied.get(), "waiting for terrain must not run ahead through the recording");
+			} finally { viewer.end(); }
+		}
+	}
 }
