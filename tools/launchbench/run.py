@@ -17,6 +17,8 @@ downloads, the time to the Java process, and with --window the time to the game 
   tools/launchbench/run.py --bench target/release/examples/startup_bench \\
       --work <scratch dir> --out results.json [--window] [--label before]
   tools/launchbench/run.py --compare before.json after.json    # markdown table
+  (several files per side, comma separated, give the median of each number: first installs
+  depend on the network, so run them more than once)
 
 The scratch dir holds full game installs (about 1 GB each while it runs): keep it off tmpfs.
 """
@@ -147,11 +149,30 @@ def measure(args):
     save()
 
 
-def compare(before_file, after_file):
-    with open(before_file) as f:
-        before = json.load(f)
-    with open(after_file) as f:
-        after = json.load(f)
+def merged(files):
+    """Several result files (comma separated) as one: the median of each number."""
+    results = []
+    for name in files.split(","):
+        with open(name) as f:
+            results.append(json.load(f))
+    out = {"platform": results[0]["platform"], "cases": {}}
+    for name in results[0]["cases"]:
+        cases = [r["cases"][name] for r in results if name in r["cases"]]
+        case = {"steps": {}, "runs": len(cases)}
+        for key in cases[0]:
+            values = [c[key] for c in cases if isinstance(c.get(key), (int, float))]
+            if key not in ("steps", "runs") and values:
+                value = statistics.median(values)
+                case[key] = round(value, 1) if key.startswith("download") else round(value)
+        for step in cases[0]["steps"]:
+            case["steps"][step] = round(statistics.median(c["steps"].get(step, 0) for c in cases))
+        out["cases"][name] = case
+    return out
+
+
+def compare(before_files, after_files):
+    before = merged(before_files)
+    after = merged(after_files)
 
     def cell(case, key):
         value = case.get(key) if case else None
@@ -159,7 +180,7 @@ def compare(before_file, after_file):
 
     print(f"Platform: {after['platform']}. Times in ms, before -> after.\n")
     print("Steps under \"vanilla files\" may overlap it (see the pipeline), so they need not add up.\n")
-    print("| case | Play to Java | of which downloading (s) | Java start | Java to window |")
+    print("| case | Play to Java | download batches, summed (s) | Java start | Java to window |")
     print("|---|---|---|---|---|")
     for name, b in before["cases"].items():
         a = after["cases"].get(name)
