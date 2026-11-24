@@ -321,29 +321,6 @@ const RULES: &[Rule] = &[
         },
     },
     Rule {
-        // NeoForge/Forge: "Mod ID: 'jei', Requested by: 'x', Expected range: '[...]', Actual version: '[MISSING]'"
-        pattern: r"Mod ID: '([^']+)', Requested by: '([^']+)', Expected range: '([^']*)', Actual version: '([^']*)'",
-        explain: |c, _| {
-            let missing = &c[4] == "[MISSING]";
-            Diagnosis::new(
-                if missing {
-                    format!("A mod needs {}", &c[1])
-                } else {
-                    format!("{} is the wrong version", &c[1])
-                },
-                if missing {
-                    format!("{} needs {}, which isn't installed.", &c[2], &c[1])
-                } else {
-                    format!(
-                        "{} needs {} {}, but {} is installed.",
-                        &c[2], &c[1], &c[3], &c[4]
-                    )
-                },
-                vec![c[1].to_owned(), c[2].to_owned()],
-            )
-        },
-    },
-    Rule {
         pattern: r"(?i)found (?:\d+ )?duplicate(?:d)? mods?|Duplicate mods? found|is provided by (?:both|multiple)",
         explain: |_, _| {
             Diagnosis::new(
@@ -1357,6 +1334,92 @@ pub(crate) fn secondary_stack(stack: &str) -> bool {
     })
 }
 
+/// Forge can already have rejected the mod list before the client throws its fatal exception.
+pub(crate) fn forge_dependency_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    const MANDATORY: &str = "Missing or unsupported mandatory dependencies";
+    static PROVIDER: OnceLock<Regex> = OnceLock::new();
+    static DEPENDENCY: OnceLock<Regex> = OnceLock::new();
+    let provider_pattern = PROVIDER.get_or_init(|| {
+        Regex::new(
+            r"\bMod File (.+?) needs language provider ([\w.-]+)(?::(\S+) or above)? to load\b",
+        )
+        .unwrap()
+    });
+    let dependency_pattern = DEPENDENCY.get_or_init(|| {
+        Regex::new(r"Mod ID: '([^']+)', Requested by: '([^']+)', Expected range: '([^']*)', Actual version: '([^']*)'").unwrap()
+    });
+    let mut summary = None;
+    let mut dependency = None;
+    for line in tail_of(text, MAX_TEXT).lines().map(str::trim_start) {
+        if line.contains(" needs language provider ")
+            && !warning_log_line(line.trim_start_matches("matched: "))
+            && let Some(c) = provider_pattern.captures(line)
+        {
+            let file = c[1].trim().rsplit(['/', '\\']).next().unwrap_or(&c[1]);
+            let provider = match &c[2] {
+                "kotlinforforge" => "Kotlin for Forge",
+                id => id,
+            };
+            let required = c.get(3).map_or_else(
+                || provider.to_owned(),
+                |version| format!("{provider} {} or newer", version.as_str()),
+            );
+            return Some((
+                Diagnosis::new(
+                    format!("{file} needs {required}"),
+                    format!("Install or update {required} in this instance."),
+                    vec![file.to_owned(), c[2].to_owned()],
+                ),
+                head_of(line, 2048).to_owned(),
+            ));
+        }
+        if dependency.is_none()
+            && line.contains("Mod ID: ")
+            && !warning_log_line(line.trim_start_matches("matched: "))
+        {
+            dependency = dependency_pattern.captures(line).map(|c| (c, line));
+        }
+        if line.trim_end().trim_end_matches(':').ends_with(MANDATORY)
+            && !warning_log_line(line.trim_start_matches("matched: "))
+        {
+            summary.get_or_insert(line);
+        }
+    }
+    let (diagnosis, line) = if let Some((c, line)) = dependency {
+        let (id, requested_by, expected, actual) = (&c[1], &c[2], &c[3], &c[4]);
+        let (title, detail) = if actual == "[MISSING]" {
+            (
+                format!("A mod needs {id}"),
+                format!("{requested_by} needs {id}, which isn't installed."),
+            )
+        } else {
+            (
+                format!("{id} is the wrong version"),
+                format!("{requested_by} needs {id} {expected}, but {actual} is installed."),
+            )
+        };
+        (
+            Diagnosis::new(title, detail, vec![id.to_owned(), requested_by.to_owned()]),
+            line,
+        )
+    } else {
+        (
+            Diagnosis::new(
+                "A required mod dependency is missing or incompatible",
+                "Check the instance log for the required mods and versions, then install or update them.",
+                Vec::new(),
+            ),
+            summary?,
+        )
+    };
+    Some((diagnosis, head_of(line, 2048).to_owned()))
+}
+
+fn class_loading_warning(line: &str) -> bool {
+    line.contains("Error loading class:")
+        && warning_log_line(line.trim_start().trim_start_matches("matched: "))
+}
+
 /// Forge reports the failed entries separately from the exception. Only those explicit
 /// registry records can identify affected namespaces; applied mixins do not identify a culprit.
 pub(crate) fn registry_sync_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
@@ -1412,7 +1475,7 @@ fn fatal_linkage(text: &str, at: usize) -> bool {
     let before = &text[..at];
     let line_prefix = before.rsplit('\n').next().unwrap_or(before);
     // A Mixin class probe stays a warning even when logs are copied after a crash report.
-    if line_prefix.contains("/WARN]") && line_prefix.contains("Error loading class:") {
+    if class_loading_warning(line_prefix) {
         return false;
     }
     if line_prefix.starts_with(VANILLA_CRASH_TRACE) {
@@ -1979,6 +2042,9 @@ fn diagnose_rules(
     if let Some(native) = native_diagnosis(text) {
         return Some(native);
     }
+    if let Some(dependency) = forge_dependency_diagnosis(text) {
+        return Some(dependency);
+    }
     if let Some(damaged) = damaged_jar_diagnosis(tail_of(text, MAX_TEXT), mods_dir) {
         return Some(damaged);
     }
@@ -2048,7 +2114,8 @@ fn diagnose_log_rules(
                 .find('\n')
                 .map_or(text.len(), |n| matched.start() + n);
             let line = &text[start..end];
-            if secondary_mod_failure(line)
+            if class_loading_warning(line)
+                || secondary_mod_failure(line)
                 || (secondary_report && line.trim_start().starts_with("Suspected Mod"))
             {
                 continue;
@@ -3118,7 +3185,9 @@ impl Report {
         let title = if title == crate::crash_suspect::THREADING_TITLE {
             title
         } else {
-            registry_sync_diagnosis(&diagnosis_text).map_or(title, |(d, _)| d.title)
+            forge_dependency_diagnosis(&diagnosis_text)
+                .or_else(|| registry_sync_diagnosis(&diagnosis_text))
+                .map_or(title, |(d, _)| d.title)
         };
         let title = java_fatal_diagnosis(&diagnosis_text)
             .or_else(|| runtime_diagnosis(&diagnosis_text))
@@ -5054,6 +5123,117 @@ J  7821 c2 net.vulkanmod.vulkan.Renderer.drawIndexed(I)V (74 bytes) @ 0x000001f9
         assert!(
             diagnose("[main/WARN] java.lang.NoClassDefFoundError: org/lwjgl/Optional").is_none()
         );
+    }
+
+    const CLASS_PROBE_522: &str = "[16:29:43] [main/WARN]: Error loading class: com/firemerald/additionalplacements/common/ConfigCommon (java.lang.ClassNotFoundException: com.firemerald.additionalplacements.common.ConfigCommon)";
+    const PROVIDER_ERROR_522: &str = "net.minecraftforge.fml.ModLoadingException: Mod File Resourcify (1.20.1-forge)-1.8.7.jar needs language provider kotlinforforge:4.11 or above to load";
+    const FOLLOW_ON_522: &str = r#"---- Minecraft Crash Report ----
+Description: Initializing game
+
+java.lang.ExceptionInInitializerError: null
+    at net.minecraft.client.gui.Gui.<clinit>(Gui.java:81)
+Caused by: java.lang.NullPointerException: Cannot invoke "net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext.getModEventBus()" because the return value of "net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext.get()" is null
+    at com.tterrag.registrate.AbstractRegistrate.getModEventBus(AbstractRegistrate.java:222)
+    at com.petrolpark.destroy.Destroy.<clinit>(Destroy.java:97)"#;
+
+    #[test]
+    fn crash_522_prefers_the_language_provider_error() {
+        let log = format!(
+            "{CLASS_PROBE_522}\n\
+             [16:29:50] [Render thread/ERROR] Error during pre-loading phase\n    \
+             {PROVIDER_ERROR_522}\n    §7We have found 4.10.0\n\
+             [16:29:50] [Render thread/ERROR]: Cowardly refusing to send event net.minecraftforge.client.event.sound.SoundEngineLoadEvent to a broken mod state"
+        );
+        let text = format!("{log}\n{FOLLOW_ON_522}");
+        let title = "Resourcify (1.20.1-forge)-1.8.7.jar needs Kotlin for Forge 4.11 or newer";
+        let (diagnosis, matched) = diagnose_match(&text, None).unwrap();
+        assert_eq!(diagnosis.title, title);
+        assert!(
+            diagnosis
+                .detail
+                .contains("Install or update Kotlin for Forge")
+        );
+        assert!(!diagnosis.repair);
+        assert!(diagnosis.fix.is_none());
+        assert_eq!(matched.trim(), PROVIDER_ERROR_522);
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            crate::crash_conflicts::diagnose_exit_in(&text, -1, dir.path()),
+            Some(diagnosis)
+        );
+        let report = Report::build(
+            "1.20.1",
+            "Forge",
+            "A mod is for a different version",
+            &log.lines().collect::<Vec<_>>(),
+            &[],
+            Some(FOLLOW_ON_522),
+            None,
+        );
+        assert_eq!(report.title, title);
+        assert!(
+            report
+                .log
+                .contains(&format!("{title}\nmatched: {PROVIDER_ERROR_522}"))
+        );
+    }
+
+    #[test]
+    fn crash_522_class_probe_does_not_supply_a_diagnosis() {
+        for warning in [
+            CLASS_PROBE_522.to_owned(),
+            CLASS_PROBE_522.replace("[main/WARN]", "[WARNING]"),
+            CLASS_PROBE_522.replace(
+                "com.firemerald.additionalplacements.common.ConfigCommon",
+                "cpw.mods.bootstraplauncher.BootstrapLauncher",
+            ),
+        ] {
+            assert!(diagnose(&warning).is_none(), "{warning}");
+            let text = format!("{FOLLOW_ON_522}\n\n{warning}");
+            assert!(diagnose_match(&text, None).is_none(), "{warning}");
+        }
+    }
+
+    #[test]
+    fn early_forge_dependency_errors_outrank_follow_on_linkage_errors() {
+        let linkage =
+            "---- Minecraft Crash Report ----\njava.lang.NoSuchMethodError: example.missing()";
+        assert_eq!(
+            diagnose(linkage).unwrap().title,
+            "A mod is for a different version"
+        );
+        let mandatory = "Missing or unsupported mandatory dependencies";
+        let row = "Mod ID: 'jei', Requested by: 'example', Expected range: '[15,)', Actual version: '[MISSING]'";
+        for (error, title, matched) in [
+            (
+                r"net.neoforged.fml.ModLoadingException: Loading errors encountered:
+    - Mod File mods\Example Mod.jar needs language provider example_fml:2.3-beta or above to load",
+                "Example Mod.jar needs example_fml 2.3-beta or newer",
+                "Mod File",
+            ),
+            (
+                "Failure message: Mod File mods/example.jar needs language provider example_fml to load",
+                "example.jar needs example_fml",
+                "Mod File",
+            ),
+            (
+                "    net.minecraftforge.fml.ModLoadingException: Missing or unsupported mandatory dependencies",
+                "A required mod dependency is missing or incompatible",
+                mandatory,
+            ),
+            (
+                &format!(
+                    "[main/ERROR] [net.minecraftforge.fml.loading.ModSorter/LOADING]: {mandatory}:\n    {row}"
+                ),
+                "A mod needs jei",
+                row,
+            ),
+        ] {
+            let text = format!("{error}\n{linkage}");
+            let (d, evidence) = diagnose_match(&text, None).unwrap();
+            assert_eq!(d.title, title);
+            assert!(evidence.contains(matched), "{evidence}");
+        }
     }
 
     #[test]

@@ -589,6 +589,9 @@ pub fn refine(base: Option<Diagnosis>, text: &str, mods: &[InstalledMod]) -> Opt
     if let Some((runtime, _)) = crate::crash::runtime_diagnosis(text) {
         return Some(runtime);
     }
+    if let Some((dependency, _)) = crate::crash::forge_dependency_diagnosis(text) {
+        return Some(dependency);
+    }
     if let Some((registry, _)) = crate::crash::registry_sync_diagnosis(text) {
         return Some(registry);
     }
