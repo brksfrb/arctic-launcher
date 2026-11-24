@@ -279,9 +279,9 @@ impl ArcticApp {
                             .and_then(|text| text.split_once("] ["))
                             .and_then(|(_, text)| text.split_once(']'))
                         {
-                            Some(("ERROR", _)) => Level::Error,
-                            Some(("WARN", _)) => Level::Warn,
-                            Some(("INFO", _)) => Level::Info,
+                            Some((/* i18n-ignore */ "ERROR", _)) => Level::Error,
+                            Some((/* i18n-ignore */ "WARN", _)) => Level::Warn,
+                            Some((/* i18n-ignore */ "INFO", _)) => Level::Info,
                             _ => Level::Debug,
                         };
                         LogLine {

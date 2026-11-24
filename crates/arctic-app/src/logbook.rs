@@ -84,7 +84,7 @@ pub fn init(file: PathBuf) {
         file: match LogFile::start(&file, SystemTime::now()) {
             Ok(file) => Some(Mutex::new(file)),
             Err(e) => {
-                eprintln!("could not start launcher log {}: {e}", file.display());
+                eprintln!("could not start launcher log {}: {e}", file.display()); // i18n-ignore: diagnostics
                 None
             }
         },
@@ -123,7 +123,7 @@ impl LogFile {
                 .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
             if is_numbered && let Err(e) = archive(&entry.path()) {
                 eprintln!(
-                    "could not migrate launcher log {}: {e}",
+                    "could not migrate launcher log {}: {e}", // i18n-ignore: diagnostics
                     entry.path().display()
                 );
             }
@@ -240,7 +240,7 @@ pub fn archive_label(path: &Path) -> Option<String> {
     }
     let suffix = suffix.map_or_else(String::new, |n| format!(" ({n})"));
     Some(format!(
-        "{}-{}-{} {}:{}:{} UTC{suffix}",
+        "{}-{}-{} {}:{}:{} UTC{suffix}", // i18n-ignore: archive timestamp
         &date[..4],
         &date[4..6],
         &date[6..],
