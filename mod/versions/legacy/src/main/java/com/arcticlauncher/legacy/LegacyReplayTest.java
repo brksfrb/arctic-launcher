@@ -34,10 +34,14 @@ final class LegacyReplayTest {
 
 	static boolean requested() {
 		String mode = System.getProperty("arctic.selftest");
-		return "replay".equals(mode) || "replayfile".equals(mode) || "replayperf".equals(mode) || "replayperfopen".equals(mode) || "replaymid".equals(mode);
+		return "replay".equals(mode) || "replayfile".equals(mode) || "replayperf".equals(mode) || "replayperfopen".equals(mode) || "replaymid".equals(mode) || "replayaudit".equals(mode);
 	}
 
 	static void start() {
+		if ("replayaudit".equals(System.getProperty("arctic.selftest"))) {
+			auditStart();
+			return;
+		}
 		if ("replayperf".equals(System.getProperty("arctic.selftest"))) {
 			log("perf: scheduled");
 			TIMER.schedule(() -> run(() -> LegacyWorldTest.createTestWorld(LegacyReplayTest::perfSession)), 10, TimeUnit.SECONDS);
@@ -473,4 +477,192 @@ final class LegacyReplayTest {
 			});
 		});
 	}
+
+	// ---- Audit phases (-Darctic.selftest=replayaudit; see mod/tools/replayaudit) ---------------------
+	// Timed phases with nothing else going on, so an outside sampler can attribute cost to each:
+	// off | buffer -> manual -> video -> open -> playback -> seeks -> paused. Lines are "audit: ... @epochMs".
+
+	private static void alog(String message) {
+		log("audit: " + message + " @" + System.currentTimeMillis());
+	}
+
+	private static void phase(final String name, int seconds, final Runnable then) {
+		alog("PHASE " + name + " BEGIN");
+		after(seconds, () -> {
+			alog("PHASE " + name + " END");
+			then.run();
+		});
+	}
+
+	private static File newestReplay(String kind) {
+		File[] files = Replays.folder().listFiles((d, n) -> n.endsWith(".mcpr") && n.contains(kind));
+		File best = null;
+		if (files != null) for (File f : files) if (best == null || f.lastModified() > best.lastModified()) best = f;
+		return best;
+	}
+
+	private static void auditStart() {
+		final boolean off = Boolean.getBoolean("arctic.audit.off");
+		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
+		c.replayEnabled = !off;
+		c.replayVideoEnabled = false;
+		c.replayAutoExport = false;
+		c.clipSeconds = 30;
+		alog("scheduled off=" + off);
+		final Runnable go = Boolean.getBoolean("arctic.audit.render") ? () -> after(6, AUDIT_RENDER) : () -> after(15, off ? AUDIT_OFF : AUDIT_ON);
+		if (Boolean.getBoolean("arctic.audit.server")) {
+			TIMER.schedule(() -> run(() -> when("audit: joined the server", AUDIT_IN_WORLD, go)), 5, TimeUnit.SECONDS);
+		} else {
+			TIMER.schedule(() -> run(() -> AUDIT_CREATE.accept(go)), 10, TimeUnit.SECONDS);
+		}
+	}
+
+	/** Replay off at the join: the baseline, then switching it on and recording inside the world. */
+	private static void auditOff() {
+		final int seconds = Integer.getInteger("arctic.audit.phase", 40);
+		alog("in world; take=" + (Replays.recorder().current() != null));
+		phase("off", seconds, () -> {
+			AUDIT_SHOT.accept("audit live");
+			com.arcticlauncher.client.ArcticClient.config().replayEnabled = true;
+			after(2, () -> {
+				alog("switched on in world; take=" + (Replays.recorder().current() != null) + " bufferReady=" + Replays.recorder().bufferReady());
+				Replays.toggleRecording();
+				alog("INWORLD recording=" + Replays.recording() + " bufferReady=" + Replays.recorder().bufferReady());
+				after(3, () -> {
+					alog("INWORLD 3 s later recording=" + Replays.recording() + " bufferReady=" + Replays.recorder().bufferReady()
+							+ " status=" + Replays.recordingStatus());
+					Replays.saveMoment();
+					after(10, () -> {
+						if (Replays.recording()) Replays.toggleRecording();
+						when("audit: in-world saves settled", () -> Replays.pendingSaves() == 0, () -> after(2, () -> {
+							File clip = newestReplay("Clip");
+							File rec = newestReplay("Recording");
+							alog("INWORLD files clip=" + (clip == null ? "none" : clip.length() / 1024 + "KB") + " recording="
+									+ (rec == null ? "none" : rec.length() / 1024 + "KB"));
+							auditOpen(rec != null ? rec : clip, 8, false);
+						}));
+					});
+				});
+			});
+		});
+	}
+
+	/** Replay on from the join: buffer only, then a manual recording, then gameplay video on top. */
+	private static void auditOn() {
+		final int seconds = Integer.getInteger("arctic.audit.phase", 40);
+		final com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
+		alog("in world; take=" + (Replays.recorder().current() != null) + " bufferReady=" + Replays.recorder().bufferReady());
+		phase("buffer", seconds, () -> {
+			AUDIT_SHOT.accept("audit live");
+			Replays.toggleRecording();
+			alog("manual recording=" + Replays.recording());
+			// An instant clip (F9) in the middle of the manual recording: its hitch shows in the frame log.
+			after(seconds / 2, () -> { alog("MARK clip"); Replays.saveMoment(); });
+			phase("manual", seconds, () -> {
+				final Runnable finish = () -> {
+					c.replayVideoEnabled = false;
+					if (Replays.recording()) Replays.toggleRecording();
+					final long asked = System.currentTimeMillis();
+					when("audit: recording saved", () -> Replays.pendingSaves() == 0 && newestReplay("Recording") != null, () -> {
+						File rec = newestReplay("Recording");
+						alog("SAVED recording " + rec.length() / 1024 + "KB within " + (System.currentTimeMillis() - asked) + " ms");
+						auditOpen(rec, Math.min(seconds, 40), true);
+					});
+				};
+				if (Boolean.getBoolean("arctic.audit.novideo")) { finish.run(); return; }
+				c.replayVideoEnabled = true;
+				final long deadline = System.currentTimeMillis() + 25_000;
+				when("audit: video capture decided", () -> Replays.liveVideo().capturing() || System.currentTimeMillis() > deadline, () -> {
+					alog("video capturing=" + Replays.liveVideo().capturing() + " status=" + Replays.liveVideo().status());
+					if (!Replays.liveVideo().capturing()) { finish.run(); return; }
+					phase("video", seconds, finish);
+				});
+			});
+		});
+	}
+
+	private static void auditOpen(final File file, final int seconds, final boolean seeks) {
+		if (file == null) { alog("OPEN nothing to open"); AUDIT_QUIT.run(); return; }
+		com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
+		when("audit: left the world", AUDIT_NO_WORLD, () -> after(3, () -> {
+			final long begun = System.currentTimeMillis();
+			alog("OPEN BEGIN " + file.getName() + " " + file.length() / 1024 + "KB");
+			Replays.watch(file);
+			final long deadline = System.currentTimeMillis() + 60_000;
+			when("audit: open decided", () -> (Replays.viewer() != null && Replays.viewer().ready() && Replays.viewer().status() == null)
+					|| System.currentTimeMillis() > deadline, () -> {
+				final ReplayViewer v = Replays.viewer();
+				alog("OPEN END ready=" + (v != null && v.ready()) + " status=" + (v == null ? "no viewer" : v.status()) + " screen=" + AUDIT_SCREEN.get()
+						+ " ms=" + (System.currentTimeMillis() - begun) + " duration=" + (v == null ? -1 : v.duration()));
+				if (v == null || !v.ready()) {
+					AUDIT_SHOT.accept("audit open stuck");
+					after(2, AUDIT_QUIT);
+					return;
+				}
+				phase("playback", seconds, () -> {
+					AUDIT_SHOT.accept("audit playback");
+					if (!seeks) { after(2, AUDIT_QUIT); return; }
+					auditSeek(v, new double[] {0.9, 0.0, 0.5, 0.1, 0.95, 0.0}, 0, () -> {
+						if (!v.paused()) v.togglePause();
+						phase("paused", 10, () -> after(1, AUDIT_QUIT));
+					});
+				});
+			});
+		}));
+	}
+
+	/**
+	 * "Render" from the Replays tab on a clip saved seconds after joining: the export window starts at the
+	 * replay's first moment, before the recorded position packet that ends the terrain screen.
+	 */
+	private static void auditRender() {
+		alog("RENDER in world; take=" + (Replays.recorder().current() != null));
+		Replays.saveMoment();
+		when("audit: early clip saved", () -> Replays.pendingSaves() == 0 && newestReplay("Clip") != null, () -> {
+			final File clip = newestReplay("Clip");
+			com.arcticlauncher.client.ArcticClient.platform().leaveWorld();
+			when("audit: left the world", AUDIT_NO_WORLD, () -> after(3, () -> {
+				final boolean render = !Boolean.getBoolean("arctic.audit.watchonly");
+				alog("RENDER opening " + clip.getName() + " render=" + render);
+				if (render) Replays.watch(clip, v -> ReplayMenu.exportClip(v, -1));
+				else Replays.watch(clip);
+				auditRenderPoll(0);
+			}));
+		});
+	}
+
+	private static void auditRenderPoll(final int n) {
+		after(2, () -> {
+			ReplayViewer v = Replays.viewer();
+			alog("RENDER t+" + (n * 2 + 2) + "s viewer=" + (v != null) + " ready=" + (v != null && v.ready()) + " screen=" + AUDIT_SCREEN.get()
+					+ " exporting=" + (v != null && v.exporting() != null) + " time=" + (v == null ? -1 : (long) v.time())
+					+ " start=" + (v == null ? -1 : v.start()));
+			if (n >= 14) {
+				AUDIT_SHOT.accept("audit render end");
+				alog("RENDER RESULT " + (v != null && !v.ready() ? "STUCK on " + AUDIT_SCREEN.get() : "not stuck"));
+				after(1, AUDIT_QUIT);
+			} else auditRenderPoll(n + 1);
+		});
+	}
+
+	private static void auditSeek(final ReplayViewer v, final double[] targets, final int i, final Runnable then) {
+		if (i >= targets.length) { then.run(); return; }
+		final double target = v.start() + (v.duration() - v.start()) * targets[i];
+		alog("SEEK BEGIN to=" + targets[i] + " from_ms=" + (long) v.time() + " to_ms=" + (long) target);
+		v.seek(target);
+		when("audit: seek settled", () -> v.status() == null && v.ready(), () -> {
+			alog("SEEK END to=" + targets[i]);
+			after(3, () -> auditSeek(v, targets, i + 1, then));
+		});
+	}
+
+	private static final Runnable AUDIT_RENDER = LegacyReplayTest::auditRender;
+	private static final Runnable AUDIT_OFF = LegacyReplayTest::auditOff;
+	private static final Runnable AUDIT_ON = LegacyReplayTest::auditOn;
+	private static final Check AUDIT_IN_WORLD = () -> MinecraftClient.getInstance().world != null && MinecraftClient.getInstance().player != null;
+	private static final Check AUDIT_NO_WORLD = () -> MinecraftClient.getInstance().world == null;
+	private static final java.util.function.Consumer<Runnable> AUDIT_CREATE = LegacyWorldTest::createTestWorld;
+	private static final java.util.function.Consumer<String> AUDIT_SHOT = LegacyWorldTest::shot;
+	private static final java.util.function.Supplier<String> AUDIT_SCREEN = LegacyReplayTest::screenName;
+	private static final Runnable AUDIT_QUIT = () -> { alog("DONE"); MinecraftClient.getInstance().scheduleStop(); };
 }

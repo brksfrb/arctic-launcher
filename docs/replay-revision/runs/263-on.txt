@@ -1,0 +1,74 @@
+== buffer: 40.0 s
+   frames 1221 (30.5/s)  frame ms mean 32.8 p50 32.5 p99 38.2 max 50  render-thread CPU ms/frame 28.53  CPU ms/s 871
+   CPU ms/s by thread: Render thread 872, Polarium Worker 45, Chunk Render Task Executor 21, CullThread 12, Sodium Async Cull Thread 10, arctic-replay-compact 10, auditagent-sampler 6, Netty Epoll IO 6
+   GC 85 ms (2.1 ms/s), heap 596-1786 MB
+   render-thread samples 7815, inside replay code 6 (0.1%)
+        0.0%  replay.ReplayRecording.tick <- replay.ReplayRecording.tick
+        0.0%  replay.Recorder$Take.sample <- replay.ReplayRecording.tick
+        0.0%  replay.Replays.tick <- replay.Replays.tick
+        0.0%  replay.Replays.afterFrame <- replay.Replays.afterFrame
+        0.0%  replay.SoundCapture.end <- replay.SoundCapture.end
+      leaf   0.0%  net.minecraft.world.entity.LivingEntity.isFallFlying
+      leaf   0.0%  java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject.signal
+      leaf   0.0%  org.lwjgl.system.JNI.invokePP
+      leaf   0.0%  com.arcticlauncher.client.replay.Replays.afterFrame
+      leaf   0.0%  com.arcticlauncher.client.replay.SoundCapture.end
+   arctic-replay-compact: 75 runnable samples in replay code (~9 ms/s): replay.Recorder.copyRange 42, replay.Recorder$Snapshot$1.read 31, replay.PacketSorter.blockKey 1, replay.Recorder$Index.before 1
+   arctic-replay-writer: 7 runnable samples in replay code (~1 ms/s): replay.Recorder$Stream.flush 3, replay.Recorder.lambda$new$2 2, replay.ReplayCodec.names 1, replay.Recorder$Take.lambda$packet$1 1
+   Netty Epoll IO: 5 runnable samples in replay code (~1 ms/s): replay.ReplayCodec.encode 5
+== manual: 40.0 s
+   frames 1229 (30.7/s)  frame ms mean 32.6 p50 32.3 p99 39.0 max 66  render-thread CPU ms/frame 28.35  CPU ms/s 870
+   CPU ms/s by thread: Render thread 849, Polarium Worker 43, arctic-replay-compact 20, Chunk Render Task Executor 15, CullThread 12, arctic-replay-writer 7, Sodium Async Cull Thread 6, auditagent-sampler 5
+   GC 561 ms (14.0 ms/s), heap 578-1646 MB
+   render-thread samples 7778, inside replay code 10 (0.1%)
+        0.1%  replay.Thumbnail.png <- replay.ReplayFrames.lambda$capture$1
+        0.0%  replay.Replays.bufferStatus <- replay.Replays.recordingStatus
+        0.0%  replay.Replays.tick <- replay.Replays.tick
+        0.0%  replay.Thumbnail.average <- replay.ReplayFrames.lambda$capture$1
+        0.0%  replay.Recorder$Take.sample <- replay.ReplayRecording.tick
+      leaf   0.0%  java.lang.ThreadLocal$ThreadLocalMap.getEntryAfterMiss
+      leaf   0.0%  java.awt.color.ColorSpace$BuiltInSpace.<clinit>
+      leaf   0.0%  com.arcticlauncher.client.replay.Thumbnail.png
+      leaf   0.0%  com.arcticlauncher.client.replay.Thumbnail.average
+      leaf   0.0%  java.lang.ClassLoader.findBootstrapClass
+   arctic-replay-compact: 150 runnable samples in replay code (~19 ms/s): replay.Recorder.copyRange 89, replay.Recorder$Snapshot$1.read 58, replay.Recorder$Stream.flush 2, replay.Recorder$Snapshot.reader 1
+   arctic-replay-writer: 39 runnable samples in replay code (~5 ms/s): replay.Recorder.copyRange 22, replay.Recorder$Snapshot$1.read 13, replay.Recorder$Stream.flush 4
+   Netty Epoll IO: 9 runnable samples in replay code (~1 ms/s): replay.ReplayCodec.encode 6, replay.Recorder$Take.packet 2, replay.ReplayCodec.name 1
+== video: 40.0 s
+   frames 1154 (28.8/s)  frame ms mean 34.7 p50 34.0 p99 56.2 max 104  render-thread CPU ms/frame 29.82  CPU ms/s 860
+   CPU ms/s by thread: Render thread 862, Polarium Worker 42, arctic-replay-compact 20, arctic-gameplay-video 15, CullThread 13, Chunk Render Task Executor 12, Sodium Async Cull Thread 8, auditagent-sampler 7
+   GC 0 ms (0.0 ms/s), heap 920-1846 MB
+   render-thread samples 7633, inside replay code 279 (3.7%)
+        2.7%  replay.LiveVideoSession.offer <- replay.ReplayFrames.lambda$capture$1
+        0.9%  replay.ReplayFrames.capture <- replay.Replays.afterFrame
+        0.0%  replay.Replays.bufferStatus <- replay.Replays.recordingStatus
+        0.0%  replay.LiveVideo.frame <- replay.Replays.afterFrame
+        0.0%  replay.LiveVideoSession.hasRoom <- replay.Replays.afterFrame
+        0.0%  replay.ReplayFrames.lambda$capture$1 <- replay.ReplayFrames.lambda$capture$1
+        0.0%  replay.Replays.afterFrame <- replay.Replays.afterFrame
+      leaf   2.7%  com.arcticlauncher.client.replay.LiveVideoSession.offer
+      leaf   0.8%  org.lwjgl.opengl.GL11C.nglReadPixels
+      leaf   0.1%  org.lwjgl.opengl.GL45C.nglNamedBufferStorage
+      leaf   0.0%  com.arcticlauncher.mod.replay.ReplayFrames.capture
+      leaf   0.0%  java.util.Formatter$FormatSpecifier.precision
+   arctic-capture-log: 7593 runnable samples in replay code (~949 ms/s): replay.LiveVideoSession.lambda$write$0 7593
+   arctic-gameplay-video: 260 runnable samples in replay code (~32 ms/s): replay.LiveVideoSession.write 258, replay.LiveVideoSession.parseSegment 1, replay.LiveVideoSession.prune 1
+   arctic-replay-compact: 147 runnable samples in replay code (~18 ms/s): replay.Recorder.copyRange 86, replay.Recorder$Snapshot$1.read 57, replay.Recorder$Stream.flush 1, replay.Recorder$Snapshot.reader 1
+   arctic-capture-audio: 16 runnable samples in replay code (~2 ms/s): replay.LiveVideoSession.writeAudio 11, replay.AudioMix.block 3, replay.AudioMix.advanceLive 2
+   Netty Epoll IO: 11 runnable samples in replay code (~1 ms/s): replay.ReplayCodec.encode 6, replay.Recorder$Take.packet 4, replay.ReplayCodec.name 1
+   arctic-replay-writer: 4 runnable samples in replay code (~0 ms/s): replay.Recorder$Stream.flush 3, replay.Recorder$Take.lambda$packet$1 1
+== open: 60.2 s
+   frames 3612 (60.0/s)  frame ms mean 16.7 p50 16.7 p99 17.6 max 37  render-thread CPU ms/frame 2.72  CPU ms/s 163
+   CPU ms/s by thread: Render thread 163, auditagent-sampler 4, CullThread 0, arctic-looks-lookup 0
+   GC 906 ms (15.0 ms/s), heap 514-1554 MB
+   render-thread samples 11875, inside replay code 9 (0.1%)
+        0.0%  replay.ReplayPlayback.apply <- replay.Replays.frame
+        0.0%  replay.ReplayCompat.disconnect <- replay.Replays.frame
+        0.0%  replay.ReplayTransport.open <- replay.Replays.lambda$watch$2
+        0.0%  replay.ReplayTransport$1.initChannel <- replay.Replays.lambda$watch$2
+        0.0%  replay.ReplayViewer.evidence <- replay.Replays.frame
+      leaf   0.0%  java.lang.ClassLoader.defineClass1
+      leaf   0.0%  java.lang.Object.getClass
+      leaf   0.0%  org.apache.logging.log4j.core.Logger$PrivateConfig.filter
+      leaf   0.0%  net.minecraft.resources.RegistryDataLoader.modify$bgn000$fabric-registry-sync-v0$supplyAsync
+      leaf   0.0%  jdk.internal.misc.Unsafe.park
