@@ -731,7 +731,7 @@ impl ArcticApp {
             Some(RunState::Starting { stage, since, .. }) => {
                 format!("{}…  ·  {} s", stage.label(), since.elapsed().as_secs())
             }
-            Some(RunState::Running { .. }) => "Minecraft is running. Have fun!".into(),
+            Some(RunState::Running { .. }) => t!("play.minecraft_is_running").into(),
             _ => match self.blocked_reason() {
                 Some(reason) => reason.into(),
                 None if self.selected_installed() => t!("play.ready_to_play").into(),
