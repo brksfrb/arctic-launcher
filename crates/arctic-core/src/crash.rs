@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 
 use crate::launch::args::{CUSTOM_MAX_HEAP_SOURCE, heap_size_mb};
 use crate::launch::exit_diagnostics::ExitDiagnostics;
+use crate::loaders::util::compare_versions;
 
 /// A fix the launcher can do for the player in one click (see `crash_fix`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -207,12 +208,13 @@ const RULES: &[Rule] = &[
                     names.push(m[1].to_owned());
                 }
             }
+            let also = also_update(text, &resolver_updates(text), Some("fabricloader"));
             Diagnosis {
                 fix: Some(Fix::UpdateLoader),
                 ..Diagnosis::new(
                     "Fabric Loader is too old for these mods",
                     format!(
-                        "{} need {} of Fabric Loader, but this instance has {}. Update Fabric Loader in the instance's settings (Loader), or remove those mods.",
+                        "{} need {} of Fabric Loader, but this instance has {}. Update Fabric Loader in the instance's settings (Loader), or remove those mods.{also}",
                         names.join(", "),
                         &c[2],
                         &c[3]
@@ -953,22 +955,63 @@ const MAX_TEXT: usize = 2 * 1024 * 1024;
 fn resolver_updates(text: &str) -> Vec<(String, String)> {
     let re = Regex::new(r"\[([^\s\[\]]+) [^\s\]]+\] -> add:(\S+) (\S+) (\S+)")
         .expect("resolver update pattern is valid");
-    re.captures_iter(text)
-        .filter(|m| {
-            let version = &m[3];
-            let lower = m[4]
-                .trim_start_matches(['(', '['])
-                .split(',')
-                .next()
-                .unwrap_or_default();
-            // Fabric can suggest a bare number (e.g. "1") instead of a concrete version.
-            // Keep actual single-component versions, whose lower bound agrees with the hint.
-            !(version.chars().all(|c| c.is_ascii_digit())
-                && lower != version
-                && lower.chars().any(|c| !c.is_ascii_digit()))
-        })
-        .map(|m| (m[1].to_owned(), m[3].to_owned()))
-        .collect()
+    let mut updates: Vec<(String, String)> = Vec::new();
+    for m in re.captures_iter(text) {
+        let version = &m[3];
+        let lower = m[4]
+            .trim_start_matches(['(', '['])
+            .split(',')
+            .next()
+            .unwrap_or_default();
+        // Fabric can suggest a bare number (e.g. "1") instead of a concrete version.
+        // Keep actual single-component versions, whose lower bound agrees with the hint.
+        if version.chars().all(|c| c.is_ascii_digit())
+            && lower != version
+            && lower.chars().any(|c| !c.is_ascii_digit())
+        {
+            continue;
+        }
+        let id = &m[1];
+        if let Some((_, required)) = updates.iter_mut().find(|(updated, _)| updated == id) {
+            // Build metadata doesn't affect version precedence.
+            let candidate = version.split_once('+').map_or(version, |(base, _)| base);
+            let current = required
+                .split_once('+')
+                .map_or(required.as_str(), |(base, _)| base);
+            if compare_versions(candidate, current).is_gt() {
+                *required = version.to_owned();
+            }
+        } else {
+            updates.push((id.to_owned(), version.to_owned()));
+        }
+    }
+    updates
+}
+
+fn resolver_update_name<'a>(text: &'a str, id: &'a str) -> &'a str {
+    static NAMES: OnceLock<Regex> = OnceLock::new();
+    if id == "fabricloader" {
+        return "Fabric Loader";
+    }
+    NAMES
+        .get_or_init(|| Regex::new(r"(?:Mod|mod) '([^\r\n]+?)' \(([^)\s]+)\)").unwrap())
+        .captures_iter(text)
+        .find(|c| &c[2] == id)
+        .and_then(|c| c.get(1))
+        .map_or(id, |name| name.as_str())
+}
+
+fn also_update(text: &str, updates: &[(String, String)], skip: Option<&str>) -> String {
+    let entries: Vec<String> = updates
+        .iter()
+        .filter(|(id, _)| Some(id.as_str()) != skip)
+        .map(|(id, version)| format!("{} to {version}", resolver_update_name(text, id)))
+        .collect();
+    if entries.is_empty() {
+        String::new()
+    } else {
+        format!(" Also update {}.", entries.join(", "))
+    }
 }
 
 /// The loader's own suggestion from its English "Fix:" line: "update sodium to 0.8.12".
@@ -1052,16 +1095,8 @@ fn resolution_log(text: &str) -> Diagnosis {
         .ok()
         .and_then(|re| re.captures(text).map(|c| c[1].to_owned()))
         .unwrap_or_else(|| "this one".to_owned());
-    let also = if updates.is_empty() {
-        String::new()
-    } else {
-        let updates: Vec<String> = updates
-            .iter()
-            .map(|(id, version)| format!("{id} to {version}"))
-            .collect();
-        format!(" Also update {}.", updates.join(", "))
-    };
     if !for_other_minecraft.is_empty() {
+        let also = also_update(text, &updates, None);
         return Diagnosis {
             fix: Some(Fix::DisableMods(for_other_minecraft.clone())),
             ..Diagnosis::new(
@@ -1078,6 +1113,7 @@ fn resolution_log(text: &str) -> Diagnosis {
         };
     }
     if needs_newer_loader {
+        let also = also_update(text, &updates, Some("fabricloader"));
         return Diagnosis {
             fix: Some(Fix::UpdateLoader),
             ..Diagnosis::new(
@@ -1093,6 +1129,7 @@ fn resolution_log(text: &str) -> Diagnosis {
         return Diagnosis::new("A mod dependency is missing", missing.join(" "), involved);
     }
     if !updates.is_empty() {
+        let also = also_update(text, &updates, None);
         return Diagnosis::new(
             "Some mods need updating together",
             format!("Mods in this instance don't match each other's versions:{also}"),
@@ -6283,6 +6320,51 @@ Caused by: java.lang.ClassNotFoundException: net.fabricmc.fabric.api.client.even
             .unwrap();
             assert_eq!(d.title, expected_title);
             assert!(!d.detail.contains("update betterend to 1"));
+        }
+    }
+
+    #[test]
+    fn crash_525_does_not_repeat_the_loader_update() {
+        assert_eq!(
+            resolver_updates(CRASH_525),
+            [("fabricloader".into(), "0.20.1".into())]
+        );
+        let d = diagnose(CRASH_525).unwrap();
+        assert_eq!(d.title, "Fabric Loader is too old for these mods");
+        assert_eq!(d.fix, Some(Fix::UpdateLoader));
+        assert_eq!(
+            d.detail,
+            "Some mods need a newer Fabric Loader. Update it in the instance's settings (Loader), or remove those mods."
+        );
+    }
+
+    // Trimmed from the report's latest.log and initial output sections.
+    const CRASH_525: &str = "[17:06:59] [main/INFO]: Loading Minecraft 26.3 with Fabric Loader 0.19.5
+[17:07:00] [main/INFO]: Reason: [HARD_DEP rights_flying_discs 1.2 {depends fabricloader @ [>=0.20.1]}]
+[17:07:00] [main/INFO]: Fix: add [], remove [], replace [[fabricloader 0.19.5] -> add:fabricloader 0.20.1 ([[0.20.1,∞)])]
+[17:07:00] [main/ERROR]: Incompatible mods found!
+ - Replace mod 'Fabric Loader' (fabricloader) 0.19.5 with version 0.20.1 or later.
+ - Mod 'Right's Throwing Discs' (rights_flying_discs) 1.2 requires version 0.20.1 or later of mod 'Fabric Loader' (fabricloader), but only the wrong version is present: 0.19.5!
+[17:07:00] [main/INFO] Fix: add [], remove [], replace [[fabricloader 0.19.5] -> add:fabricloader 0.20.1 ([[0.20.1,∞)])]
+[17:07:00] [main/ERROR] Incompatible mods found!
+ - Replace mod 'Fabric Loader' (fabricloader) 0.19.5 with version 0.20.1 or later.";
+
+    #[test]
+    fn crash_525_keeps_the_highest_other_mod_update_once() {
+        let log = format!(
+            "{CRASH_525}
+Fix: add [], remove [], replace [[example 0.8.0] -> add:example 0.9.0 ([[0.9.0,∞)])]
+Fix: add [], remove [], replace [[example 0.8.0] -> add:example 0.10.0 ([[0.10.0,∞)])]
+Fix: add [], remove [], replace [[example 0.8.0] -> add:example 0.10.0 ([[0.10.0,∞)])]
+Fix: add [], remove [], replace [[example 0.8.0] -> add:example 0.9.0 ([[0.9.0,∞)])]
+ - Replace mod 'Example Lib' (example) 0.8.0 with version 0.10.0 or later."
+        );
+        // Both the resolver fallback and the explicit loader rule preserve other updates.
+        for log in [log.clone(), log.replace("Right's", "Rights")] {
+            let d = diagnose(&log).unwrap();
+            assert_eq!(d.title, "Fabric Loader is too old for these mods");
+            let (_, suffix) = d.detail.split_once(" Also update ").unwrap();
+            assert_eq!(suffix, "Example Lib to 0.10.0.");
         }
     }
 
