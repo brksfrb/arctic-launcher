@@ -33,6 +33,9 @@ impl Server {
                 };
                 let (requests, serve) = (server_requests.clone(), serve.clone());
                 thread::spawn(move || {
+                    // macOS keeps sockets accepted from a non-blocking listener
+                    // non-blocking, so a 2 MiB write_all can return WouldBlock.
+                    stream.set_nonblocking(false).unwrap();
                     stream
                         .set_read_timeout(Some(Duration::from_secs(10)))
                         .unwrap();
