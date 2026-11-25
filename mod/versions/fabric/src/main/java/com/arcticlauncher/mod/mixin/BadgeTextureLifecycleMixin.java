@@ -12,35 +12,34 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(Minecraft.class)
 abstract class BadgeTextureLifecycleMixin {
 	//#if MC >= 1.14
-	@Inject(method = "reloadResourcePacks()Ljava/util/concurrent/CompletableFuture;", at = @At("HEAD"))
+	@Inject(method = "reloadResourcePacks()Ljava/util/concurrent/CompletableFuture;", at = @At("HEAD"), require = 0)
 	private void arctic$badgeReload(CallbackInfoReturnable<?> ci) {
 		BadgeTexture.releaseAll();
 	}
 	//#else
-	@Inject(method = "reloadResources()V", at = @At("HEAD"))
+	@Inject(method = "reloadResources()V", at = @At("HEAD"), require = 0)
 	private void arctic$badgeReload(CallbackInfo ci) {
 		BadgeTexture.releaseAll();
 	}
 	//#endif
 
+	// Every leave (pause menu, server kick, leaveWorld) funnels into one disconnect overload per version.
 	//#if MC >= 1.21.11
-	@Inject(method = "disconnectFromWorld", at = @At("HEAD"))
-	private void arctic$badgeLeave(CallbackInfo ci) {
-		BadgeTexture.releaseAll();
-	}
+	@Inject(method = "disconnect(Lnet/minecraft/client/gui/screens/Screen;ZZ)V", at = @At("HEAD"), require = 0)
+	//#elif MC >= 1.20.6
+	@Inject(method = "disconnect(Lnet/minecraft/client/gui/screens/Screen;Z)V", at = @At("HEAD"), require = 0)
 	//#elif MC >= 1.20.2
-	@Inject(method = "disconnect()V", at = @At("HEAD"))
-	private void arctic$badgeLeave(CallbackInfo ci) {
-		BadgeTexture.releaseAll();
-	}
+	@Inject(method = "disconnect(Lnet/minecraft/client/gui/screens/Screen;)V", at = @At("HEAD"), require = 0)
 	//#elif MC >= 1.14
-	@Inject(method = "clearLevel()V", at = @At("HEAD"))
+	@Inject(method = "clearLevel()V", at = @At("HEAD"), require = 0)
+	//#endif
+	//#if MC >= 1.14
 	private void arctic$badgeLeave(CallbackInfo ci) {
 		BadgeTexture.releaseAll();
 	}
 	//#else
 	// 1.13 mappings name this MultiPlayerLevel; common.gradle rewrites ClientLevel for MC < 1.15.
-	@Inject(method = "connect(Lnet/minecraft/client/multiplayer/ClientLevel;)V", at = @At("HEAD"))
+	@Inject(method = "connect(Lnet/minecraft/client/multiplayer/ClientLevel;)V", at = @At("HEAD"), require = 0)
 	private void arctic$badgeLeave13(net.minecraft.client.multiplayer.ClientLevel world, CallbackInfo ci) {
 		if (world == null) {
 			BadgeTexture.releaseAll();
