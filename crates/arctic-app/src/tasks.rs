@@ -84,6 +84,7 @@ pub struct Retargeted {
 
 pub(crate) enum MalwareAction {
     Disable(usize),
+    Dismiss(usize),
     Proceed,
     Cancel,
 }
@@ -92,6 +93,7 @@ pub(crate) struct ModMalwareWarning {
     pub instance: String,
     pub findings: Vec<malware::Finding>,
     pub disable_error: Option<String>,
+    pub dismiss_error: Option<String>,
     pub respond: Sender<MalwareAction>,
 }
 
@@ -590,8 +592,9 @@ impl Tasks {
             progress(ProgressInfo::stage(t!("tasks.checking_mods_for_malware")));
             let mods = prepared.plan.game_dir.join("mods");
             let instance_mods = instance.game_dir(&self.dirs).join("mods");
-            let mut findings = malware::scan(&self.dirs, &mods);
+            let mut findings = malware::scan_for_launch(&self.dirs, &mods);
             let mut disable_error = None;
+            let mut dismiss_error = None;
             if !findings.is_empty() {
                 loop {
                     let (respond, decision) = std::sync::mpsc::channel();
@@ -599,6 +602,7 @@ impl Tasks {
                         instance: instance.name.clone(),
                         findings: findings.clone(),
                         disable_error: disable_error.take(),
+                        dismiss_error: dismiss_error.take(),
                         respond,
                     }));
                     // Keep the game directory reserved while the dialog is open,
@@ -616,7 +620,18 @@ impl Tasks {
                             .err()
                             .map(|err| err.to_string());
                     }
-                    let current = malware::scan(&self.dirs, &mods);
+                    if let MalwareAction::Dismiss(index) = action
+                        && let Some(finding) = findings.get(index)
+                    {
+                        // Failing to save a dismissal must not abort the launch.
+                        dismiss_error = malware::dismiss(&self.dirs, finding)
+                            .err()
+                            .map(|err| err.to_string());
+                    }
+                    let current = malware::scan_for_launch(&self.dirs, &mods);
+                    if matches!(action, MalwareAction::Dismiss(_)) && current.is_empty() {
+                        break;
+                    }
                     if matches!(action, MalwareAction::Proceed)
                         && current.iter().all(|finding| findings.contains(finding))
                     {

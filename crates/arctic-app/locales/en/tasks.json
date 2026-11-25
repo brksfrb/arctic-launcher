@@ -187,7 +187,9 @@
   "tasks.malware_download": "Can download and execute external code",
   "tasks.malware_undeclared_jar": "Loads code from an undeclared embedded JAR",
   "tasks.malware_disable": "Disable mod",
+  "tasks.malware_dismiss": "Don't warn about this mod again",
   "tasks.malware_disable_failed": "Could not disable mod",
+  "tasks.malware_dismiss_failed": "Could not remember this warning",
   "tasks.malware_launch": "Launch",
   "tasks.malware_launch_anyway": "Launch anyway"
 }

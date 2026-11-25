@@ -187,7 +187,9 @@
   "tasks.malware_download": "외부 코드를 다운로드하고 실행할 수 있습니다",
   "tasks.malware_undeclared_jar": "선언되지 않은 내장 JAR에서 코드를 불러옵니다",
   "tasks.malware_disable": "모드 비활성화",
+  "tasks.malware_dismiss": "이 모드에 대해 다시 경고하지 않기",
   "tasks.malware_disable_failed": "모드를 비활성화하지 못했습니다",
+  "tasks.malware_dismiss_failed": "이 경고를 저장하지 못했습니다",
   "tasks.malware_launch": "실행",
   "tasks.malware_launch_anyway": "그래도 실행"
 }
