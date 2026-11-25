@@ -191,6 +191,7 @@
   "tasks.malware_disable": "Отключить мод",
   "tasks.malware_dismiss": "Больше не предупреждать об этом моде",
   "tasks.malware_disable_failed": "Не удалось отключить мод",
+  "tasks.malware_dismiss_failed": "Не удалось запомнить это предупреждение",
   "tasks.malware_launch": "Запустить",
   "tasks.malware_launch_anyway": "Всё равно запустить"
 }

@@ -189,6 +189,7 @@
   "tasks.malware_disable": "Disattiva mod",
   "tasks.malware_dismiss": "Non mostrare più avvisi per questa mod",
   "tasks.malware_disable_failed": "Impossibile disattivare la mod",
+  "tasks.malware_dismiss_failed": "Impossibile ricordare questo avviso",
   "tasks.malware_launch": "Avvia",
   "tasks.malware_launch_anyway": "Avvia comunque"
 }

@@ -189,6 +189,7 @@
   "tasks.malware_disable": "Désactiver le mod",
   "tasks.malware_dismiss": "Ne plus afficher d’avertissement pour ce mod",
   "tasks.malware_disable_failed": "Impossible de désactiver le mod",
+  "tasks.malware_dismiss_failed": "Impossible d’enregistrer cet avertissement",
   "tasks.malware_launch": "Lancer",
   "tasks.malware_launch_anyway": "Lancer quand même"
 }

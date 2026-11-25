@@ -189,6 +189,7 @@
   "tasks.malware_disable": "Mod uitschakelen",
   "tasks.malware_dismiss": "Niet meer waarschuwen voor deze mod",
   "tasks.malware_disable_failed": "Mod kon niet worden uitgeschakeld",
+  "tasks.malware_dismiss_failed": "Deze waarschuwing kon niet worden onthouden",
   "tasks.malware_launch": "Starten",
   "tasks.malware_launch_anyway": "Toch starten"
 }

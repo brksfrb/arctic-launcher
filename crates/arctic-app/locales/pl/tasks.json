@@ -191,6 +191,7 @@
   "tasks.malware_disable": "Wyłącz mod",
   "tasks.malware_dismiss": "Nie ostrzegaj ponownie o tym modzie",
   "tasks.malware_disable_failed": "Nie udało się wyłączyć modu",
+  "tasks.malware_dismiss_failed": "Nie udało się zapamiętać tego ostrzeżenia",
   "tasks.malware_launch": "Uruchom",
   "tasks.malware_launch_anyway": "Uruchom mimo to"
 }
