@@ -4,6 +4,17 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
 
 class ScrollTest {
+	@Test void wheelPreservesCombinedAndPartialNotches() {
+		Scroll scroll = new Scroll(0, 0, 100, 100, 100);
+		scroll.extendTo(500); scroll.settle();
+		assertTrue(scroll.wheel(50, 50, -3)); scroll.finishGlide();
+		assertEquals(160, scroll.offset());
+		assertTrue(scroll.wheel(50, 50, 0.5)); scroll.finishGlide();
+		assertEquals(150, scroll.offset());
+		assertFalse(scroll.wheel(50, 50, 0));
+		assertFalse(scroll.wheel(150, 50, -1));
+		assertEquals(150, scroll.offset());
+	}
 	@Test void draggingKeepsGrabPointAndClampsOutsideTrack() {
 		Scroll scroll = new Scroll(10, 20, 110, 120, 0); scroll.extendTo(420); scroll.settle();
 		Widget bar = scroll.bar();
