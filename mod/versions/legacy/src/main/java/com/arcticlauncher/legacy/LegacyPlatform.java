@@ -274,7 +274,7 @@ public final class LegacyPlatform implements Platform {
 	public void scrollScreen(double amount) {
 		// Only Arctic's screens: the game's read the wheel straight from LWJGL.
 		if (mc().currentScreen instanceof LegacyPageScreen) {
-			((LegacyPageScreen) mc().currentScreen).scrollBy(amount > 0 ? 1 : -1);
+			((LegacyPageScreen) mc().currentScreen).scrollBy(amount);
 		}
 	}
 

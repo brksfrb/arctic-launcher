@@ -59,10 +59,10 @@ public final class LegacyPageScreen extends Screen {
 	}
 
 	/** A controller's scroll, where the pointer is. */
-	void scrollBy(int direction) {
+	void scrollBy(double amount) {
 		int x = Mouse.getX() * width / client.width;
 		int y = height - Mouse.getY() * height / client.height - 1;
-		page.mouseScrolled(x, y, direction);
+		page.mouseScrolled(x, y, amount);
 	}
 
 	@Override
@@ -72,7 +72,7 @@ public final class LegacyPageScreen extends Screen {
 		if (wheel != 0) {
 			int x = Mouse.getEventX() * width / client.width;
 			int y = height - Mouse.getEventY() * height / client.height - 1;
-			page.mouseScrolled(x, y, wheel > 0 ? 1 : -1);
+			page.mouseScrolled(x, y, LegacyScroll.amount(wheel));
 		}
 	}
 

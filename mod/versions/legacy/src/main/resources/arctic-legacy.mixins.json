@@ -51,6 +51,7 @@
 		"MobSizeLegacyMixin",
 		"FogLegacyMixin",
 		"TooltipScrollLegacyMixin",
+		"ListWheelLegacyMixin",
 		"EnchantTooltipMixin",
 		"EnchantedBookTooltipMixin",
 		"ArmorHiderMixin",
