@@ -23,12 +23,13 @@ abstract class BadgeTextureLifecycleMixin {
 	}
 	//#endif
 
-	//#if MC >= 1.21.9
-	@Inject(method = "disconnectFromWorld(Lnet/minecraft/network/chat/Component;)V", at = @At("HEAD"), require = 0)
-	//#elif MC >= 1.21.6
-	@Inject(method = "disconnectWithSavingScreen()V", at = @At("HEAD"), require = 0)
+	// Every leave (pause menu, server kick, leaveWorld) funnels into one disconnect overload per version.
+	//#if MC >= 1.21.11
+	@Inject(method = "disconnect(Lnet/minecraft/client/gui/screens/Screen;ZZ)V", at = @At("HEAD"), require = 0)
+	//#elif MC >= 1.20.6
+	@Inject(method = "disconnect(Lnet/minecraft/client/gui/screens/Screen;Z)V", at = @At("HEAD"), require = 0)
 	//#elif MC >= 1.20.2
-	@Inject(method = "disconnect()V", at = @At("HEAD"), require = 0)
+	@Inject(method = "disconnect(Lnet/minecraft/client/gui/screens/Screen;)V", at = @At("HEAD"), require = 0)
 	//#elif MC >= 1.14
 	@Inject(method = "clearLevel()V", at = @At("HEAD"), require = 0)
 	//#endif
