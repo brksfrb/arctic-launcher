@@ -77,10 +77,6 @@ pub fn run(ctx: &Ctx, args: &LaunchArgs) -> Result<i32> {
                     Reason::KnownMalware => "file hash matches the blocklist",
                     Reason::Filename(reason) => reason,
                     Reason::Fractureiser => "Fractureiser indicators",
-                    Reason::ShellCommand => "launches a shell command",
-                    Reason::CredentialAccess => "accesses credential storage",
-                    Reason::DownloadAndExecute => "downloads and executes external code",
-                    Reason::UndeclaredJar => "loads code from an undeclared embedded JAR",
                 };
                 ctx.out.emit(
                     json!({"event": "mod_malware_warning", "file": path, "severity": severity, "reason": reason}),
