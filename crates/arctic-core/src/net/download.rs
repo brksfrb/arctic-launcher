@@ -846,6 +846,7 @@ fn retry_job(
 ) -> Result<()> {
     let mut attempt = 1;
     let mut validator = None;
+    let mut interruption = None;
     loop {
         let slot = limits.enter()?;
         if !limits.allows_ranges() {
@@ -900,7 +901,13 @@ fn retry_job(
             host(job.source())
         );
         if attempt >= policy.attempts || is_not_found(&e) {
-            return Err(e);
+            return Err(match e {
+                Error::Http(_) => interruption.unwrap_or(e),
+                _ => e,
+            });
+        }
+        if matches!(e, Error::DownloadInterrupted(_)) {
+            interruption = Some(e);
         }
         drop(slot);
         let delay = policy.delays.get(attempt as usize - 1);

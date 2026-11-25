@@ -600,6 +600,29 @@ fn not_found_primary_reports_repeated_alternate_timeouts() {
 }
 
 #[test]
+fn not_found_primary_reports_alternate_timeouts_before_final_503() {
+    let primary = Server::start(|_, _, stream| respond(stream, 404, 0, "", b""));
+    let alternate = Server::start(|n, _, stream| {
+        if n < 2 {
+            respond(stream, 200, DATA.len(), "", b"");
+            let _ = stream.read(&mut [0]);
+        } else {
+            respond(stream, 503, 0, "", b"");
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let job = primary.job(dir.path(), DATA);
+    let error =
+        download_single(&job, Some(alternate.base.clone()), &policy(3), &|_| {}).unwrap_err();
+    assert_eq!(primary.requests.lock().unwrap().len(), 1);
+    assert_eq!(alternate.requests.lock().unwrap().len(), 3);
+    assert!(
+        matches!(error, Error::DownloadConnectionDropping),
+        "{error}"
+    );
+}
+
+#[test]
 fn final_error_includes_file_host_and_reason_without_url_secrets() {
     let server = Server::start(|_, _, stream| respond(stream, 503, 0, "", b""));
     let dir = tempfile::tempdir().unwrap();
