@@ -634,7 +634,6 @@ impl ArcticApp {
         let game = self.pack_game(target);
         let mut open = false;
         widgets::row(ui, |ui| {
-            super::content_install::select_content(ui, &mut self.inst.search.selected, hit);
             open |= ui
                 .scope(|ui| mod_icon(ui, self, hit.icon_url.as_deref()))
                 .response
@@ -642,7 +641,8 @@ impl ArcticApp {
                 .on_hover_text(t!("instances.preview_project"))
                 .clicked();
             ui.vertical(|ui| {
-                ui.set_max_width(ui.available_width() - 130.0);
+                // Room for the install button and the select checkbox on the right.
+                ui.set_max_width(ui.available_width() - 160.0);
                 ui.horizontal(|ui| {
                     open |= ui
                         .add(
@@ -677,6 +677,7 @@ impl ArcticApp {
                 ui.label(RichText::new(stats_line(hit)).small().color(p.muted));
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                super::content_install::select_content(ui, &mut self.inst.search.selected, hit);
                 self.hub_install_button(
                     ui,
                     section.project_type(),

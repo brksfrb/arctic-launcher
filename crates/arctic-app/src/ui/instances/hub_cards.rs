@@ -263,25 +263,35 @@ impl ArcticApp {
     fn hub_card_heading(&mut self, ui: &mut egui::Ui, hit: &ProjectHit) -> bool {
         let p = self.palette();
         ui.horizontal(|ui| {
-            super::content_install::select_content(ui, &mut self.inst.search.selected, hit);
             let icon = ui.scope(|ui| mod_icon(ui, self, hit.icon_url.as_deref()));
             let icon_clicked = preview_click(icon.response.interact(Sense::click()));
+            // Keep the title clear of the select checkbox pinned to the card's right edge.
+            let reserved = ui.spacing().icon_width + 2.0 * ui.spacing().item_spacing.x;
+            let title_width = (ui.available_width() - reserved).max(0.0);
             let title_clicked = ui
-                .vertical(|ui| {
-                    let title = egui::Label::new(RichText::new(&hit.title).strong().color(p.text))
-                        .truncate()
-                        .sense(Sense::click());
-                    let clicked = preview_click(ui.add(title));
-                    short_label(
-                        ui,
-                        &tf!("common.by_author", author = hit.author),
-                        egui::TextStyle::Small,
-                        p.muted,
-                        1,
-                    );
-                    clicked
+                .scope(|ui| {
+                    ui.set_max_width(title_width);
+                    ui.vertical(|ui| {
+                        let title =
+                            egui::Label::new(RichText::new(&hit.title).strong().color(p.text))
+                                .truncate()
+                                .sense(Sense::click());
+                        let clicked = preview_click(ui.add(title));
+                        short_label(
+                            ui,
+                            &tf!("common.by_author", author = hit.author),
+                            egui::TextStyle::Small,
+                            p.muted,
+                            1,
+                        );
+                        clicked
+                    })
+                    .inner
                 })
                 .inner;
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                super::content_install::select_content(ui, &mut self.inst.search.selected, hit);
+            });
             icon_clicked || title_clicked
         })
         .inner
