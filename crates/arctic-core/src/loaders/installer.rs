@@ -137,9 +137,18 @@ fn download_verified(
     }
     let mirror = mirror_of(&job);
     match download_single(&job, mirror, policy, progress) {
-        Err(e) if checksum.is_none() && !is_not_found(&e) => Err(Error::Other(format!(
-            "no checksum is available to verify a mirror copy ({e})"
-        ))),
+        Err(e)
+            if checksum.is_none()
+                && !is_not_found(&e)
+                && !matches!(
+                    e,
+                    Error::DownloadInterrupted(_) | Error::DownloadConnectionDropping
+                ) =>
+        {
+            Err(Error::Other(format!(
+                "no checksum is available to verify a mirror copy ({e})"
+            )))
+        }
         done => done,
     }
 }

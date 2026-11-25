@@ -108,6 +108,118 @@ fn has_header(request: &str, header: &str) -> bool {
 }
 
 #[test]
+fn typical_assets_and_files_just_under_eight_mib_use_one_request() {
+    for size in [10 * 1024, SEGMENT_MIN_SIZE as usize - 1] {
+        let data = vec![42; size];
+        let server = Server::start(move |_, _, stream| {
+            respond(stream, 200, size, "", &vec![42; size]);
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let job = server.job(dir.path(), &data);
+        download_all("assets", vec![job.clone()], &|_| {}).unwrap();
+        let requests = server.requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert!(!requests[0].contains("range:"));
+        assert_eq!(fs::read(job.dest).unwrap(), data);
+    }
+}
+
+#[test]
+fn repeated_body_timeouts_reduce_admission_and_clean_downloads_restore_it() {
+    let server = Server::start(|n, _, stream| {
+        if n < 3 {
+            respond(stream, 200, DATA.len(), "", b"");
+            let _ = stream.read(&mut [0]);
+        } else {
+            respond(stream, 200, DATA.len(), "", DATA);
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let job = server.job(dir.path(), DATA);
+    let reporter = Reporter {
+        stage: "test",
+        progress: &|_| {},
+        start: Instant::now(),
+        last_ms: AtomicU64::new(0),
+        files_done: AtomicU64::new(0),
+        files_total: 1,
+        bytes_done: AtomicU64::new(0),
+        bytes_total: DATA.len() as u64,
+        all_sizes_known: true,
+        fast_batch: Default::default(),
+    };
+    let limits = Arc::new(TransferLimits::new(4));
+    let error = download_with_alternates(&job, &reporter, &limits, None, &policy(3)).unwrap_err();
+    assert!(error.to_string().contains("client.jar from 127.0.0.1"));
+    let message = limits.user_error(error).to_string();
+    assert!(message.contains("connection keeps dropping"));
+    assert!(message.contains("Check your network or try a VPN"));
+    assert_eq!(limits.state.lock().unwrap().limit, 1);
+    assert!(!limits.allows_ranges());
+
+    // While one attempt holds a slot, the next successful fetch must wait.
+    let held = limits.enter().unwrap();
+    let (starting, ready) = std::sync::mpsc::channel();
+    thread::scope(|scope| {
+        let (job, reporter, limits) = (&job, &reporter, &limits);
+        scope.spawn(move || {
+            starting.send(()).unwrap();
+            download_with_alternates(job, reporter, limits, None, &policy(1)).unwrap();
+        });
+        ready.recv().unwrap();
+        thread::sleep(Duration::from_millis(50));
+        assert_eq!(server.requests.lock().unwrap().len(), 3);
+        drop(held);
+    });
+    for _ in 1..SUCCESSES_TO_RECOVER {
+        download_with_alternates(&job, &reporter, &limits, None, &policy(1)).unwrap();
+    }
+    assert_eq!(limits.state.lock().unwrap().limit, 2);
+    assert!(!limits.allows_ranges());
+    for _ in 0..SUCCESSES_TO_RECOVER * 2 {
+        download_with_alternates(&job, &reporter, &limits, None, &policy(1)).unwrap();
+    }
+    assert!(limits.allows_ranges());
+}
+
+#[test]
+fn multiple_idle_ranges_share_one_hedge_and_resume_as_one_stream() {
+    let size = SEGMENT_MIN_SIZE as usize;
+    let data = vec![42; size];
+    let server = Server::start(move |_, request, stream| {
+        let range = request
+            .lines()
+            .find_map(|line| line.strip_prefix("range: bytes="))
+            .unwrap_or("0-");
+        let (start, end) = range.split_once('-').unwrap();
+        let start = start.parse::<usize>().unwrap();
+        let end = end.parse::<usize>().unwrap_or(size - 1);
+        let len = end - start + 1;
+        let headers = format!("Content-Range: bytes {start}-{end}/{size}\r\n");
+        if [CHUNK_SIZE as usize, 2 * CHUNK_SIZE as usize].contains(&start)
+            && len == CHUNK_SIZE as usize
+        {
+            respond(stream, 206, len, &headers, b"");
+            let _ = stream.read(&mut [0]);
+        } else {
+            respond(stream, 206, len, &headers, &vec![42; len]);
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let job = server.job(dir.path(), &data);
+    download_single(&job, None, &policy(2), &|_| {}).unwrap();
+    let requests = server.requests.lock().unwrap();
+    let (last, ranges) = requests.split_last().unwrap();
+    assert!(has_header(last, &format!("range: bytes={CHUNK_SIZE}-")));
+    assert_eq!(ranges.len(), 5);
+    for start in [0, 3 * CHUNK_SIZE] {
+        let header = format!("range: bytes={start}-{}", start + CHUNK_SIZE - 1);
+        assert_eq!(ranges.iter().filter(|r| has_header(r, &header)).count(), 1);
+    }
+    assert_eq!(fs::read(job.dest).unwrap(), data);
+}
+
+#[test]
 fn stalls_on_first_and_later_attempts_resume_within_idle_limit() {
     let server = Server::start(|n, _, stream| match n {
         0 => {

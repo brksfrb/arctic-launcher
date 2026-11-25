@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::LoaderKind;
 use super::forge_meta::InstallerSource;
 use super::installer::{self, Installer};
 use super::legacy_forge;
@@ -69,6 +70,7 @@ fn installed(dirs: &DataDirs, source: &InstallerSource) -> Option<VersionJson> {
 /// Install from the first installer in `sources` that can be downloaded.
 pub fn install(
     dirs: &DataDirs,
+    kind: LoaderKind,
     sources: &[InstallerSource],
     vanilla: &VersionJson,
     java: &Path,
@@ -77,23 +79,36 @@ pub fn install(
     if let Some(profile) = sources.iter().find_map(|s| installed(dirs, s)) {
         return Ok(merge(vanilla.clone(), profile));
     }
-    let mut last_err = Error::Other("no installer to download".into());
+    let mut last_err = None;
     for source in sources {
         match installer::fetch(dirs, source, progress) {
             Ok(inst) => return install_from(dirs, source, inst, vanilla, java, progress),
             Err(e) => {
                 log::info!("installer {} unavailable: {e}", source.url);
-                last_err = e;
+                // A missing alternate version does not explain an earlier failed transfer.
+                if last_err.as_ref().is_none_or(is_not_found) || !is_not_found(&e) {
+                    last_err = Some(e);
+                }
             }
         }
     }
-    Err(Error::Other(if is_not_found(&last_err) {
-        format!("the installer could not be downloaded (is this version available?): {last_err}")
+    Err(installer_download_error(kind, last_err))
+}
+
+fn installer_download_error(kind: LoaderKind, error: Option<Error>) -> Error {
+    let loader = kind.label();
+    let message = if let Some(error) = error {
+        if is_not_found(&error) {
+            format!(
+                "Could not download the {loader} installer. Check that this version is available. ({error})"
+            )
+        } else {
+            format!("Could not download the {loader} installer. {error}")
+        }
     } else {
-        format!(
-            "Forge's download server is not responding right now. Try again in a few minutes. ({last_err})"
-        )
-    }))
+        format!("No installer is available for this {loader} version.")
+    };
+    Error::Other(message)
 }
 
 fn install_from(
@@ -302,6 +317,19 @@ fn produced_files(dirs: &DataDirs, profile: &InstallProfile) -> Result<Vec<PathB
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn installer_errors_name_the_requested_loader() {
+        for (kind, loader) in [
+            (LoaderKind::NeoForge, "NeoForge"),
+            (LoaderKind::Forge, "Forge"),
+        ] {
+            let error =
+                installer_download_error(kind, Some(Error::DownloadConnectionDropping)).to_string();
+            assert!(error.starts_with(&format!("Could not download the {loader} installer.")));
+            assert!(error.contains("Check your network or try a VPN"));
+        }
+    }
 
     const PROFILE: &str = r#"{
         "spec": 1, "profile": "NeoForge", "version": "neoforge-21.1.251", "minecraft": "1.21.1",

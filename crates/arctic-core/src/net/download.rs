@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use md5::Md5;
@@ -321,7 +321,144 @@ impl Reporter<'_> {
     }
 }
 
-/// Download every job that is not already present, `WORKERS` at a time.
+/// Admission limits for one batch. Already admitted requests can drain after a
+/// reduction, while new requests (including retries) wait for the lower limit.
+struct TransferLimits {
+    ceiling: usize,
+    state: Mutex<TransferState>,
+    available: Condvar,
+}
+
+struct TransferState {
+    limit: usize,
+    active: usize,
+    interruptions: u64,
+    recent_interruptions: u64,
+    successes: usize,
+    hedging: bool,
+    stopped: bool,
+}
+
+const SUCCESSES_TO_RECOVER: usize = 8;
+
+impl TransferLimits {
+    fn new(ceiling: usize) -> Self {
+        Self {
+            ceiling,
+            state: Mutex::new(TransferState {
+                limit: ceiling,
+                active: 0,
+                interruptions: 0,
+                recent_interruptions: 0,
+                successes: 0,
+                hedging: false,
+                stopped: false,
+            }),
+            available: Condvar::new(),
+        }
+    }
+
+    fn enter(&self) -> Result<TransferSlot<'_>> {
+        let state = self.state.lock().unwrap();
+        let mut state = self
+            .available
+            .wait_while(state, |s| !s.stopped && s.active >= s.limit)
+            .unwrap();
+        if state.stopped {
+            return Err(Error::Other("download batch stopped".into()));
+        }
+        state.active += 1;
+        Ok(TransferSlot {
+            limits: self,
+            interruptions: state.interruptions,
+        })
+    }
+
+    fn stop(&self) {
+        self.state.lock().unwrap().stopped = true;
+        self.available.notify_all();
+    }
+
+    fn interrupted(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.interruptions += 1;
+        state.recent_interruptions += 1;
+        state.successes = 0;
+        if state.recent_interruptions >= 2 {
+            let limit = (state.limit / 2).max(1);
+            if limit != state.limit {
+                log::info!("download interruptions reduced concurrency to {limit}");
+                state.limit = limit;
+            }
+        }
+    }
+
+    fn success(&self, interruptions_at_start: u64) {
+        let mut state = self.state.lock().unwrap();
+        if state.interruptions == interruptions_at_start {
+            state.successes += 1;
+            if state.successes == SUCCESSES_TO_RECOVER {
+                state.successes = 0;
+                state.recent_interruptions = 0;
+                if state.limit < self.ceiling {
+                    state.limit += 1;
+                    log::info!("successful downloads raised concurrency to {}", state.limit);
+                    self.available.notify_all();
+                }
+            }
+        }
+    }
+
+    fn allows_ranges(&self) -> bool {
+        let state = self.state.lock().unwrap();
+        !state.stopped && state.limit == self.ceiling && state.recent_interruptions < 2
+    }
+
+    fn try_hedge(self: &Arc<Self>) -> Option<HedgeSlot> {
+        let mut state = self.state.lock().unwrap();
+        if state.hedging
+            || state.stopped
+            || state.recent_interruptions >= 2
+            || state.limit < self.ceiling
+        {
+            return None;
+        }
+        state.hedging = true;
+        Some(HedgeSlot(self.clone()))
+    }
+
+    fn user_error(&self, error: Error) -> Error {
+        if matches!(error, Error::DownloadInterrupted(_))
+            && self.state.lock().unwrap().interruptions >= 2
+        {
+            Error::DownloadConnectionDropping
+        } else {
+            error
+        }
+    }
+}
+
+struct TransferSlot<'a> {
+    limits: &'a TransferLimits,
+    interruptions: u64,
+}
+
+impl Drop for TransferSlot<'_> {
+    fn drop(&mut self) {
+        self.limits.state.lock().unwrap().active -= 1;
+        self.limits.available.notify_all();
+    }
+}
+
+struct HedgeSlot(Arc<TransferLimits>);
+
+impl Drop for HedgeSlot {
+    fn drop(&mut self) {
+        self.0.state.lock().unwrap().hedging = false;
+    }
+}
+
+/// Download every job that is not already present, with up to `WORKERS` active files.
 /// Returns the first error encountered (remaining jobs are abandoned).
 pub fn download_all(stage: &str, jobs: Vec<DownloadJob>, progress: Progress) -> Result<()> {
     download_all_with_replacements(stage, jobs, Vec::new(), progress)
@@ -390,6 +527,8 @@ fn download_batch(
     // (front, back) of the not-yet-started range of `pending`.
     let queue = Mutex::new((0usize, pending.len()));
     let first_error: Mutex<Option<Error>> = Mutex::new(None);
+    let worker_count = workers().min(pending.len());
+    let limits = Arc::new(TransferLimits::new(worker_count));
     std::thread::scope(|scope| {
         let (active, finished) = std::sync::mpsc::channel::<()>();
         let reporter = &reporter;
@@ -406,9 +545,8 @@ fn download_batch(
                 log::logger().flush();
             }
         });
-        for worker in 0..workers().min(pending.len()) {
-            let (queue, first_error, pending, reporter) =
-                (&queue, &first_error, &pending, reporter);
+        for worker in 0..worker_count {
+            let (queue, first_error, pending, limits) = (&queue, &first_error, &pending, &limits);
             let active = active.clone();
             scope.spawn(move || {
                 let _active = active;
@@ -426,12 +564,14 @@ fn download_batch(
                     if let Err(e) = download_with_alternates(
                         job,
                         reporter,
+                        limits,
                         urls,
                         &Policy::for_url(job.source()),
                     ) {
                         if let Ok(mut slot) = first_error.lock() {
                             slot.get_or_insert(e);
                         }
+                        limits.stop();
                         return;
                     }
                     reporter.file_done();
@@ -453,7 +593,7 @@ fn download_batch(
     );
     log::logger().flush();
     match first_error.into_inner() {
-        Ok(Some(e)) => Err(e),
+        Ok(Some(e)) => Err(limits.user_error(e)),
         Ok(None) => Ok(()),
         Err(_) => Err(Error::Other("download worker panicked".into())),
     }
@@ -535,7 +675,9 @@ pub(crate) fn download_single(
         fast_batch: Default::default(),
     };
     reporter.report(true);
-    download_with_alternates(job, &reporter, mirror, policy)?;
+    let limits = Arc::new(TransferLimits::new(1));
+    download_with_alternates(job, &reporter, &limits, mirror, policy)
+        .map_err(|e| limits.user_error(e))?;
     reporter.file_done();
     Ok(())
 }
@@ -590,6 +732,29 @@ pub(super) fn request_error(e: ureq::Error) -> Error {
     }
 }
 
+fn transfer_error(e: ureq::Error) -> Error {
+    use std::io::ErrorKind;
+    match &e {
+        ureq::Error::Timeout(_) | ureq::Error::BodyStalled | ureq::Error::ConnectionFailed => {
+            Error::DownloadInterrupted(e.to_string())
+        }
+        ureq::Error::Io(io)
+            if matches!(
+                io.kind(),
+                ErrorKind::TimedOut
+                    | ErrorKind::WouldBlock
+                    | ErrorKind::UnexpectedEof
+                    | ErrorKind::ConnectionAborted
+                    | ErrorKind::ConnectionReset
+                    | ErrorKind::BrokenPipe
+            ) =>
+        {
+            Error::DownloadInterrupted(e.to_string())
+        }
+        _ => request_error(e),
+    }
+}
+
 pub(super) fn metadata_error(url: &str, error: Error) -> Error {
     let uri = url.parse::<Uri>().ok();
     let file = uri
@@ -615,6 +780,9 @@ fn download_error(job: &DownloadJob, error: Error) -> Error {
     let source = || format!("{} from {}", job.file_name(), host(job.source()));
     match error {
         Error::Http(reason) => Error::Http(format!("could not download {}: {reason}", source())),
+        Error::DownloadInterrupted(reason) => {
+            Error::DownloadInterrupted(format!("could not download {}: {reason}", source()))
+        }
         Error::Checksum(_) => Error::Checksum(source()),
         other => other,
     }
@@ -625,11 +793,15 @@ fn download_error(job: &DownloadJob, error: Error) -> Error {
 fn download_with_alternates(
     job: &DownloadJob,
     reporter: &Reporter,
+    limits: &Arc<TransferLimits>,
     alternates: impl IntoIterator<Item = String>,
     policy: &Policy,
 ) -> Result<()> {
     let mut segmented = SegmentedPart::new(job);
-    let Err(primary) = retry_job(job, reporter, policy, &mut segmented) else {
+    if segmented.is_some() && job.has_hash() && partial_len(&part_path(&job.dest))? > 0 {
+        segmented = None;
+    }
+    let Err(primary) = retry_job(job, reporter, limits, policy, &mut segmented) else {
         return Ok(());
     };
     if job.has_hash() {
@@ -640,7 +812,7 @@ fn download_with_alternates(
             }
             log::warn!("trying {} from alternate {}", job.file_name(), host(&url));
             let alternate = job.with_source(url);
-            if retry_job(&alternate, reporter, policy, &mut segmented).is_ok() {
+            if retry_job(&alternate, reporter, limits, policy, &mut segmented).is_ok() {
                 return Ok(());
             }
         }
@@ -657,16 +829,26 @@ fn download_with_alternates(
 fn retry_job(
     job: &DownloadJob,
     reporter: &Reporter,
+    limits: &Arc<TransferLimits>,
     policy: &Policy,
     segmented: &mut Option<SegmentedPart>,
 ) -> Result<()> {
     let mut attempt = 1;
     let mut validator = None;
     loop {
+        let slot = limits.enter()?;
+        if !limits.allows_ranges() {
+            switch_to_stream(job, segmented)?;
+        }
         let transferred = Cell::new(0);
         let try_fast_recovery = attempt == 1 && policy.attempts > 1;
         let result = if let Some(part) = segmented {
-            match download_segmented(job, reporter, &transferred, part) {
+            match download_segmented(job, reporter, limits, &transferred, part) {
+                Err(Segmented::UseStream) => {
+                    reporter.remove_bytes(transferred.get());
+                    switch_to_stream(job, segmented)?;
+                    continue;
+                }
                 Err(Segmented::NoRanges) => {
                     *segmented = None;
                     reporter.remove_bytes(transferred.replace(0));
@@ -692,7 +874,13 @@ fn retry_job(
                 &mut validator,
             )
         };
-        let Err(e) = result else { return Ok(()) };
+        let Err(e) = result else {
+            limits.success(slot.interruptions);
+            return Ok(());
+        };
+        if segmented.is_none() && matches!(e, Error::DownloadInterrupted(_)) {
+            limits.interrupted();
+        }
         reporter.remove_bytes(transferred.get());
         let e = download_error(job, e);
         log::warn!(
@@ -703,10 +891,31 @@ fn retry_job(
         if attempt >= policy.attempts || is_not_found(&e) {
             return Err(e);
         }
+        drop(slot);
         let delay = policy.delays.get(attempt as usize - 1);
         std::thread::sleep(delay.or(policy.delays.last()).copied().unwrap_or_default());
         attempt += 1;
     }
+}
+
+/// Resume a preallocated range file as a stream from its contiguous prefix of
+/// completed ranges. The completed file still gets its usual hash check.
+fn switch_to_stream(job: &DownloadJob, segmented: &mut Option<SegmentedPart>) -> Result<()> {
+    if let Some(part) = segmented.take().filter(|p| p.initialized) {
+        let tmp = part_path(&job.dest);
+        let prefix = part.remaining.first().map_or(0, |range| range.0);
+        if job.has_hash() && prefix > 0 {
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&tmp)
+                .at(&tmp)?
+                .set_len(prefix)
+                .at(&tmp)?;
+        } else {
+            fs::remove_file(&tmp).at(&tmp)?;
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn body_timeout(size: Option<u64>) -> Duration {
@@ -817,7 +1026,7 @@ fn download_one(
         fs::remove_file(&tmp).at(&tmp)?;
         *validator = None;
     }
-    let mut resp = response.map_err(request_error)?;
+    let mut resp = response.map_err(transfer_error)?;
     let identity = identity_body(&resp);
     let mut size = job.transfer_size();
     let mut response_end = None;
@@ -902,7 +1111,7 @@ fn download_one(
                 return Err(Error::Checksum(job.file_name().into_owned()));
             }
             if size.is_some_and(|size| output.count < size) {
-                return Err(Error::Http(
+                return Err(Error::DownloadInterrupted(
                     "response ended before the file was complete".into(),
                 ));
             }
@@ -918,7 +1127,7 @@ fn download_one(
         });
     drop(output);
     if let Err(e) = result {
-        if !preserve || !matches!(e, Error::Http(_)) {
+        if !preserve || !matches!(e, Error::Http(_) | Error::DownloadInterrupted(_)) {
             fs::remove_file(&tmp).at(&tmp)?;
             *validator = None;
         }
@@ -1062,6 +1271,8 @@ fn segments(job: &DownloadJob) -> Option<Vec<(u64, u64)>> {
 enum Segmented {
     /// The server ignored the Range header; download the usual way.
     NoRanges,
+    /// The batch reduced concurrency while this file was segmented.
+    UseStream,
     Failed(Error),
 }
 
@@ -1134,6 +1345,7 @@ enum ChunkNews {
     Unreport(u64),
     Done,
     NoRanges,
+    UseStream,
     Failed(Error),
 }
 
@@ -1142,6 +1354,7 @@ struct Chunks {
     tmp: PathBuf,
     list: Vec<Chunk>,
     next: std::sync::atomic::AtomicUsize,
+    limits: Arc<TransferLimits>,
 }
 
 struct SegmentedPart {
@@ -1172,6 +1385,7 @@ impl SegmentedPart {
 fn download_segmented(
     job: &DownloadJob,
     reporter: &Reporter,
+    limits: &Arc<TransferLimits>,
     transferred: &Cell<u64>,
     part: &mut SegmentedPart,
 ) -> std::result::Result<(), Segmented> {
@@ -1193,7 +1407,7 @@ fn download_segmented(
             .sum::<u64>();
     transferred.set(retained);
     reporter.add_bytes(retained);
-    let chunks = std::sync::Arc::new(Chunks {
+    let chunks = Arc::new(Chunks {
         job: job.clone(),
         tmp: tmp.clone(),
         list: part
@@ -1206,21 +1420,24 @@ fn download_segmented(
             })
             .collect(),
         next: Default::default(),
+        limits: limits.clone(),
     });
     let (tx, rx) = std::sync::mpsc::channel::<ChunkNews>();
     // A losing request can still be inside a bounded read. Only the winner opens the part
     // file, so the batch can finish without waiting for the loser's next read.
-    for _ in 0..connections().min(chunks.list.len()) {
-        let (chunks, tx) = (chunks.clone(), tx.clone());
-        std::thread::spawn(move || {
-            loop {
-                let i = chunks.next.fetch_add(1, Ordering::Relaxed);
-                if i >= chunks.list.len() || !fetch_chunk(&chunks, i, &tx) {
-                    return;
+    let workers: Vec<_> = (0..connections().min(chunks.list.len()))
+        .map(|_| {
+            let (chunks, tx) = (chunks.clone(), tx.clone());
+            std::thread::spawn(move || {
+                loop {
+                    let i = chunks.next.fetch_add(1, Ordering::Relaxed);
+                    if i >= chunks.list.len() || !fetch_chunk(&chunks, i, &tx) {
+                        return;
+                    }
                 }
-            }
-        });
-    }
+            })
+        })
+        .collect();
     let start = Instant::now();
     let mut done = 0;
     let mut fast_file = false;
@@ -1228,6 +1445,9 @@ fn download_segmented(
     let result = loop {
         if done == chunks.list.len() {
             break Ok(());
+        }
+        if !limits.allows_ranges() {
+            break Err(Segmented::UseStream);
         }
         let now = Instant::now();
         if now >= next_check {
@@ -1248,6 +1468,7 @@ fn download_segmented(
                 fast_file |= fast_transfer(transferred.get() - retained, start);
             }
             Ok(ChunkNews::NoRanges) => break Err(Segmented::NoRanges),
+            Ok(ChunkNews::UseStream) => break Err(Segmented::UseStream),
             Ok(ChunkNews::Failed(e)) => break Err(Segmented::Failed(e)),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
@@ -1266,6 +1487,12 @@ fn download_segmented(
         !state.committed
     });
     if let Err(e) = result {
+        if matches!(e, Segmented::UseStream) {
+            // Drain the primary range requests before releasing this batch slot.
+            for worker in workers {
+                worker.join().expect("range worker panicked");
+            }
+        }
         if matches!(e, Segmented::NoRanges) || job.sha1.is_none() {
             part.discard(job, &tmp)?;
         }
@@ -1284,18 +1511,18 @@ fn download_segmented(
     Ok(())
 }
 
-/// Every chunk is handed out: fetch again, once, any that stalls or crawls.
-fn hedge_stalled(
-    chunks: &std::sync::Arc<Chunks>,
-    tx: &std::sync::mpsc::Sender<ChunkNews>,
-    fast: bool,
-) {
+/// Once every chunk is handed out, allow one extra request across the batch.
+fn hedge_stalled(chunks: &Arc<Chunks>, tx: &std::sync::mpsc::Sender<ChunkNews>, fast: bool) {
     if chunks.next.load(Ordering::Relaxed) < chunks.list.len() {
         return;
     }
+    let Some(hedge) = chunks.limits.try_hedge() else {
+        return;
+    };
+    let now = Instant::now();
     for (i, chunk) in chunks.list.iter().enumerate() {
         let mut state = chunk.state.lock().unwrap();
-        if state.should_hedge(chunk.end - chunk.start, Instant::now(), fast) {
+        if state.should_hedge(chunk.end - chunk.start, now, fast) {
             state.hedged = true;
             log::info!(
                 "chunk {i} of {} from {} is slow: fetching it again",
@@ -1304,6 +1531,7 @@ fn hedge_stalled(
             );
             let (chunks, tx) = (chunks.clone(), tx.clone());
             std::thread::spawn(move || {
+                let _hedge = hedge;
                 if let Err(Segmented::Failed(e)) = fetch_once(&chunks, i, &tx, false) {
                     let job = &chunks.job;
                     let e = download_error(job, e);
@@ -1314,6 +1542,7 @@ fn hedge_stalled(
                     );
                 }
             });
+            return;
         }
     }
 }
@@ -1322,6 +1551,10 @@ fn hedge_stalled(
 fn fetch_chunk(chunks: &Chunks, i: usize, tx: &std::sync::mpsc::Sender<ChunkNews>) -> bool {
     let mut attempt = 1;
     loop {
+        if !chunks.limits.allows_ranges() {
+            let _ = tx.send(ChunkNews::UseStream);
+            return false;
+        }
         match fetch_once(chunks, i, tx, true) {
             Ok(()) => return true,
             Err(Segmented::NoRanges) => {
@@ -1351,6 +1584,13 @@ fn fetch_chunk(chunks: &Chunks, i: usize, tx: &std::sync::mpsc::Sender<ChunkNews
                         job.file_name(),
                         host(job.source())
                     );
+                    if matches!(e, Error::DownloadInterrupted(_)) {
+                        chunks.limits.interrupted();
+                        if !chunks.limits.allows_ranges() {
+                            let _ = tx.send(ChunkNews::UseStream);
+                            return false;
+                        }
+                    }
                     if attempt >= ATTEMPTS || is_not_found(&e) {
                         state.done = true;
                         let _ = tx.send(ChunkNews::Failed(e));
@@ -1360,6 +1600,7 @@ fn fetch_chunk(chunks: &Chunks, i: usize, tx: &std::sync::mpsc::Sender<ChunkNews
                 std::thread::sleep(RETRY_BACKOFF * attempt);
                 attempt += 1;
             }
+            Err(Segmented::UseStream) => unreachable!("only the coordinator switches streams"),
         }
     }
 }
@@ -1395,7 +1636,7 @@ fn fetch_once(
         .timeout_recv_body(Some(chunk_timeout(len)))
         .build()
         .call()
-        .map_err(request_error)?;
+        .map_err(transfer_error)?;
     if resp.status().as_u16() != 206 {
         return Err(Segmented::NoRanges);
     }
@@ -1419,7 +1660,7 @@ fn fetch_once(
     let mut got = 0;
     while got < bytes.len() {
         let n = with_download_idle(|| body.read(&mut bytes[got..]))
-            .map_err(|e| request_error(e.into()))?;
+            .map_err(|e| transfer_error(e.into()))?;
         if n == 0 {
             break;
         }
@@ -1433,7 +1674,10 @@ fn fetch_once(
         }
     }
     if got != bytes.len() {
-        return Err(Error::Http("response ended before the range was complete".into()).into());
+        return Err(Error::DownloadInterrupted(
+            "response ended before the range was complete".into(),
+        )
+        .into());
     }
     let mut state = chunk.state.lock().unwrap();
     if !state.done {
@@ -1470,7 +1714,7 @@ fn raw_matches<T>(job: &DownloadJob, output: &Hashing<T>) -> bool {
 fn copy(input: &mut impl Read, output: &mut impl Write, path: &Path) -> Result<()> {
     let mut buf = vec![0u8; BUF_SIZE];
     loop {
-        let n = input.read(&mut buf).map_err(|e| request_error(e.into()))?;
+        let n = input.read(&mut buf).map_err(|e| transfer_error(e.into()))?;
         if n == 0 {
             return Ok(());
         }
@@ -2030,7 +2274,13 @@ mod tests {
         };
         let dest = job.dest.clone();
         (
-            download_with_alternates(&job, &reporter, mirror, &policy),
+            download_with_alternates(
+                &job,
+                &reporter,
+                &Arc::new(TransferLimits::new(1)),
+                mirror,
+                &policy,
+            ),
             dest,
         )
     }
