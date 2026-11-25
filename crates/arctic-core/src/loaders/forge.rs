@@ -85,8 +85,10 @@ pub fn install(
             Ok(inst) => return install_from(dirs, source, inst, vanilla, java, progress),
             Err(e) => {
                 log::info!("installer {} unavailable: {e}", source.url);
-                // A missing alternate version does not explain an earlier failed transfer.
-                if last_err.as_ref().is_none_or(is_not_found) || !is_not_found(&e) {
+                // Preserve a diagnosed connection problem across later candidates.
+                if !matches!(last_err, Some(Error::DownloadConnectionDropping))
+                    && (last_err.as_ref().is_none_or(is_not_found) || !is_not_found(&e))
+                {
                     last_err = Some(e);
                 }
             }
@@ -329,6 +331,66 @@ mod tests {
             assert!(error.starts_with(&format!("Could not download the {loader} installer.")));
             assert!(error.contains("Check your network or try a VPN"));
         }
+    }
+
+    #[test]
+    fn installer_candidates_preserve_connection_dropping_after_a_503() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (seen, requests) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().take(12).map(|stream| stream.unwrap()) {
+                let mut reader = BufReader::new(&mut stream);
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                let path = line.split_whitespace().nth(1).unwrap().to_owned();
+                loop {
+                    line.clear();
+                    reader.read_line(&mut line).unwrap();
+                    if line == "\r\n" || line.is_empty() {
+                        break;
+                    }
+                }
+                let (status, len) = if path.ends_with(".sha1") {
+                    (404, 0)
+                } else if path == "/drops.jar" {
+                    (200, 10)
+                } else {
+                    (503, 0)
+                };
+                seen.send(status).unwrap();
+                write!(
+                    stream,
+                    "HTTP/1.1 {status} X\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n"
+                )
+                .unwrap();
+            }
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let sources = ["drops.jar", "unavailable.jar"].map(|file_name| InstallerSource {
+            url: format!("http://{addr}/{file_name}"),
+            file_name: file_name.into(),
+        });
+        let vanilla =
+            parse_profile(&serde_json::json!({"id": "test", "mainClass": "Test"})).unwrap();
+        let error = install(
+            &DataDirs::new(dir.path()),
+            LoaderKind::Forge,
+            &sources,
+            &vanilla,
+            Path::new("java"),
+            &|_| {},
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("Check your network or try a VPN"), "{error}");
+        assert_eq!(
+            requests.try_iter().collect::<Vec<_>>(),
+            [404, 200, 200, 200, 200, 200, 404, 503, 503, 503, 503, 503]
+        );
     }
 
     const PROFILE: &str = r#"{

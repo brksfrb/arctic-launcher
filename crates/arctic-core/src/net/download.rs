@@ -108,11 +108,16 @@ pub(crate) fn is_not_found(e: &Error) -> bool {
 /// The mirror URL for a Forge maven file, if `job` may be fetched from there. Nothing from the
 /// mirror is accepted unless its bytes are checked against a hash that did not come from the
 /// mirror, so a job without one never goes there (the installer jar included).
-pub(crate) fn mirror_for(job: &DownloadJob) -> Option<String> {
+fn mirror_for(job: &DownloadJob) -> Option<String> {
     if job.sha1.is_none() && job.md5.is_none() {
         return None;
     }
-    let path = job.url.strip_prefix(FORGE_MAVEN)?;
+    forge_mirror_url(&job.url)
+}
+
+/// The existing Forge mirror's URL, before checking whether the job has a hash.
+pub(crate) fn forge_mirror_url(url: &str) -> Option<String> {
+    let path = url.strip_prefix(FORGE_MAVEN)?;
     Some(format!("{FORGE_MIRROR}{path}"))
 }
 
@@ -788,8 +793,8 @@ fn download_error(job: &DownloadJob, error: Error) -> Error {
     }
 }
 
-/// Retry the primary, then the supplied alternates in order. Keep the primary's
-/// error if all sources fail so callers can still distinguish a missing file.
+/// Retry the primary, then the supplied alternates in order. Prefer a transfer
+/// interruption over the primary's error if all sources fail.
 fn download_with_alternates(
     job: &DownloadJob,
     reporter: &Reporter,
@@ -801,7 +806,7 @@ fn download_with_alternates(
     if segmented.is_some() && job.has_hash() && partial_len(&part_path(&job.dest))? > 0 {
         segmented = None;
     }
-    let Err(primary) = retry_job(job, reporter, limits, policy, &mut segmented) else {
+    let Err(mut error) = retry_job(job, reporter, limits, policy, &mut segmented) else {
         return Ok(());
     };
     if job.has_hash() {
@@ -812,8 +817,14 @@ fn download_with_alternates(
             }
             log::warn!("trying {} from alternate {}", job.file_name(), host(&url));
             let alternate = job.with_source(url);
-            if retry_job(&alternate, reporter, limits, policy, &mut segmented).is_ok() {
-                return Ok(());
+            match retry_job(&alternate, reporter, limits, policy, &mut segmented) {
+                Ok(()) => return Ok(()),
+                Err(e @ Error::DownloadInterrupted(_))
+                    if !matches!(error, Error::DownloadInterrupted(_)) =>
+                {
+                    error = e;
+                }
+                Err(_) => {}
             }
         }
     }
@@ -823,7 +834,7 @@ fn download_with_alternates(
         let tmp = part_path(&job.dest);
         fs::remove_file(&tmp).at(&tmp)?;
     }
-    Err(primary)
+    Err(error)
 }
 
 fn retry_job(
@@ -1423,9 +1434,7 @@ fn download_segmented(
         limits: limits.clone(),
     });
     let (tx, rx) = std::sync::mpsc::channel::<ChunkNews>();
-    // A losing request can still be inside a bounded read. Only the winner opens the part
-    // file, so the batch can finish without waiting for the loser's next read.
-    let workers: Vec<_> = (0..connections().min(chunks.list.len()))
+    let mut workers: Vec<_> = (0..connections().min(chunks.list.len()))
         .map(|_| {
             let (chunks, tx) = (chunks.clone(), tx.clone());
             std::thread::spawn(move || {
@@ -1451,7 +1460,11 @@ fn download_segmented(
         }
         let now = Instant::now();
         if now >= next_check {
-            hedge_stalled(&chunks, &tx, fast_file || reporter.fast_tail());
+            workers.extend(hedge_stalled(
+                &chunks,
+                &tx,
+                fast_file || reporter.fast_tail(),
+            ));
             next_check = now + CHUNK_STALL / 4;
         }
         match rx.recv_timeout(next_check.saturating_duration_since(Instant::now())) {
@@ -1486,13 +1499,12 @@ fn download_segmented(
         state.done = true;
         !state.committed
     });
+    // Keep the file's admission slot until all range requests have drained.
+    // This also prevents a fallback stream from overlapping the old requests.
+    for worker in workers {
+        worker.join().expect("range worker panicked");
+    }
     if let Err(e) = result {
-        if matches!(e, Segmented::UseStream) {
-            // Drain the primary range requests before releasing this batch slot.
-            for worker in workers {
-                worker.join().expect("range worker panicked");
-            }
-        }
         if matches!(e, Segmented::NoRanges) || job.sha1.is_none() {
             part.discard(job, &tmp)?;
         }
@@ -1512,13 +1524,15 @@ fn download_segmented(
 }
 
 /// Once every chunk is handed out, allow one extra request across the batch.
-fn hedge_stalled(chunks: &Arc<Chunks>, tx: &std::sync::mpsc::Sender<ChunkNews>, fast: bool) {
+fn hedge_stalled(
+    chunks: &Arc<Chunks>,
+    tx: &std::sync::mpsc::Sender<ChunkNews>,
+    fast: bool,
+) -> Option<std::thread::JoinHandle<()>> {
     if chunks.next.load(Ordering::Relaxed) < chunks.list.len() {
-        return;
+        return None;
     }
-    let Some(hedge) = chunks.limits.try_hedge() else {
-        return;
-    };
+    let hedge = chunks.limits.try_hedge()?;
     let now = Instant::now();
     for (i, chunk) in chunks.list.iter().enumerate() {
         let mut state = chunk.state.lock().unwrap();
@@ -1530,7 +1544,7 @@ fn hedge_stalled(chunks: &Arc<Chunks>, tx: &std::sync::mpsc::Sender<ChunkNews>, 
                 host(chunks.job.source())
             );
             let (chunks, tx) = (chunks.clone(), tx.clone());
-            std::thread::spawn(move || {
+            return Some(std::thread::spawn(move || {
                 let _hedge = hedge;
                 if let Err(Segmented::Failed(e)) = fetch_once(&chunks, i, &tx, false) {
                     let job = &chunks.job;
@@ -1541,10 +1555,10 @@ fn hedge_stalled(chunks: &Arc<Chunks>, tx: &std::sync::mpsc::Sender<ChunkNews>, 
                         host(job.source())
                     );
                 }
-            });
-            return;
+            }));
         }
     }
+    None
 }
 
 /// Fetch chunk `i`, retrying a few times. False: the download is over (failed, or no ranges).
