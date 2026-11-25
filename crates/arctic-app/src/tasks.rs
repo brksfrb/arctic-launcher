@@ -84,6 +84,7 @@ pub struct Retargeted {
 
 pub(crate) enum MalwareAction {
     Disable(usize),
+    Dismiss(usize),
     Proceed,
     Cancel,
 }
@@ -590,7 +591,7 @@ impl Tasks {
             progress(ProgressInfo::stage(t!("tasks.checking_mods_for_malware")));
             let mods = prepared.plan.game_dir.join("mods");
             let instance_mods = instance.game_dir(&self.dirs).join("mods");
-            let mut findings = malware::scan(&self.dirs, &mods);
+            let mut findings = malware::scan_for_launch(&self.dirs, &mods);
             let mut disable_error = None;
             if !findings.is_empty() {
                 loop {
@@ -616,7 +617,20 @@ impl Tasks {
                             .err()
                             .map(|err| err.to_string());
                     }
-                    let current = malware::scan(&self.dirs, &mods);
+                    if let MalwareAction::Dismiss(index) = action
+                        && let Some(finding) = findings.get(index)
+                        && let Err(err) = malware::dismiss(&self.dirs, finding)
+                    {
+                        // Failing to save a dismissal must not abort the launch.
+                        log::warn!(
+                            "could not dismiss the malware warning for {}: {err}",
+                            finding.path.display()
+                        );
+                    }
+                    let current = malware::scan_for_launch(&self.dirs, &mods);
+                    if matches!(action, MalwareAction::Dismiss(_)) && current.is_empty() {
+                        break;
+                    }
                     if matches!(action, MalwareAction::Proceed)
                         && current.iter().all(|finding| findings.contains(finding))
                     {

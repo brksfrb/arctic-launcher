@@ -187,6 +187,7 @@
   "tasks.malware_download": "外部コードをダウンロードして実行する可能性があります",
   "tasks.malware_undeclared_jar": "宣言されていない内蔵 JAR からコードを読み込みます",
   "tasks.malware_disable": "Mod を無効にする",
+  "tasks.malware_dismiss": "このModの警告を今後表示しない",
   "tasks.malware_disable_failed": "Mod を無効にできませんでした",
   "tasks.malware_launch": "起動",
   "tasks.malware_launch_anyway": "そのまま起動"

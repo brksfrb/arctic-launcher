@@ -187,6 +187,7 @@
   "tasks.malware_download": "Puede descargar y ejecutar código externo",
   "tasks.malware_undeclared_jar": "Carga código de un JAR integrado no declarado",
   "tasks.malware_disable": "Desactivar mod",
+  "tasks.malware_dismiss": "No volver a advertir sobre este mod",
   "tasks.malware_disable_failed": "No se pudo desactivar el mod",
   "tasks.malware_launch": "Iniciar",
   "tasks.malware_launch_anyway": "Iniciar de todos modos"

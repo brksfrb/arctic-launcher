@@ -189,6 +189,7 @@
   "tasks.malware_download": "Może pobierać i wykonywać zewnętrzny kod",
   "tasks.malware_undeclared_jar": "Wczytuje kod z niezadeklarowanego osadzonego pliku JAR",
   "tasks.malware_disable": "Wyłącz mod",
+  "tasks.malware_dismiss": "Nie ostrzegaj ponownie o tym modzie",
   "tasks.malware_disable_failed": "Nie udało się wyłączyć modu",
   "tasks.malware_launch": "Uruchom",
   "tasks.malware_launch_anyway": "Uruchom mimo to"

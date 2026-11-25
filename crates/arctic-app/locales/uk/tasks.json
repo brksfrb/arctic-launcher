@@ -189,6 +189,7 @@
   "tasks.malware_download": "Може завантажувати й виконувати зовнішній код",
   "tasks.malware_undeclared_jar": "Завантажує код із незадекларованого вкладеного JAR-файла",
   "tasks.malware_disable": "Вимкнути мод",
+  "tasks.malware_dismiss": "Більше не попереджати про цей мод",
   "tasks.malware_disable_failed": "Не вдалося вимкнути мод",
   "tasks.malware_launch": "Запустити",
   "tasks.malware_launch_anyway": "Усе одно запустити"
