@@ -7,8 +7,8 @@ mod resolver;
 pub use download::{Compressed, DownloadJob, download_all, set_gentle, sha1_file};
 pub(crate) use download::{
     DownloadAlternates, Policy, body_timeout, download_all_with_alternates,
-    download_all_with_replacements, download_before, download_single, fetch_text, is_not_found,
-    mirror_for, part_path,
+    download_all_with_replacements, download_before, download_single, fetch_text, forge_mirror_url,
+    is_not_found, part_path,
 };
 
 use std::sync::{PoisonError, RwLock};

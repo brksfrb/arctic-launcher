@@ -107,6 +107,261 @@ fn has_header(request: &str, header: &str) -> bool {
     request.lines().any(|line| line == header)
 }
 
+fn requested_range(request: &str) -> Option<(usize, usize)> {
+    let (start, end) = request
+        .lines()
+        .find_map(|line| line.strip_prefix("range: bytes="))?
+        .split_once('-')
+        .unwrap();
+    Some((start.parse().unwrap(), end.parse().unwrap()))
+}
+
+#[test]
+fn typical_assets_and_files_just_under_eight_mib_use_one_request() {
+    for size in [10 * 1024, SEGMENT_MIN_SIZE as usize - 1] {
+        let data = vec![42; size];
+        let server = Server::start(move |_, _, stream| {
+            respond(stream, 200, size, "", &vec![42; size]);
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let job = server.job(dir.path(), &data);
+        download_all("assets", vec![job.clone()], &|_| {}).unwrap();
+        let requests = server.requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert!(!requests[0].contains("range:"));
+        assert_eq!(fs::read(job.dest).unwrap(), data);
+    }
+}
+
+#[test]
+fn repeated_body_timeouts_reduce_admission_and_clean_downloads_restore_it() {
+    let server = Server::start(|n, _, stream| {
+        if n < 3 {
+            respond(stream, 200, DATA.len(), "", b"");
+            let _ = stream.read(&mut [0]);
+        } else {
+            respond(stream, 200, DATA.len(), "", DATA);
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let job = server.job(dir.path(), DATA);
+    let reporter = Reporter {
+        stage: "test",
+        progress: &|_| {},
+        start: Instant::now(),
+        last_ms: AtomicU64::new(0),
+        files_done: AtomicU64::new(0),
+        files_total: 1,
+        bytes_done: AtomicU64::new(0),
+        bytes_total: DATA.len() as u64,
+        all_sizes_known: true,
+        fast_batch: Default::default(),
+    };
+    let limits = Arc::new(TransferLimits::new(4));
+    let error = download_with_alternates(&job, &reporter, &limits, None, &policy(3)).unwrap_err();
+    assert!(error.to_string().contains("client.jar from 127.0.0.1"));
+    let message = limits.user_error(error).to_string();
+    assert!(message.contains("connection keeps dropping"));
+    assert!(message.contains("Check your network or try a VPN"));
+    assert_eq!(limits.state.lock().unwrap().limit, 1);
+    assert!(!limits.allows_ranges());
+
+    // While one attempt holds a slot, the next successful fetch must wait.
+    let held = limits.enter().unwrap();
+    let (starting, ready) = std::sync::mpsc::channel();
+    thread::scope(|scope| {
+        let (job, reporter, limits) = (&job, &reporter, &limits);
+        scope.spawn(move || {
+            starting.send(()).unwrap();
+            download_with_alternates(job, reporter, limits, None, &policy(1)).unwrap();
+        });
+        ready.recv().unwrap();
+        thread::sleep(Duration::from_millis(50));
+        assert_eq!(server.requests.lock().unwrap().len(), 3);
+        drop(held);
+    });
+    for _ in 1..SUCCESSES_TO_RECOVER {
+        download_with_alternates(&job, &reporter, &limits, None, &policy(1)).unwrap();
+    }
+    assert_eq!(limits.state.lock().unwrap().limit, 2);
+    assert!(!limits.allows_ranges());
+    for _ in 0..SUCCESSES_TO_RECOVER * 2 {
+        download_with_alternates(&job, &reporter, &limits, None, &policy(1)).unwrap();
+    }
+    assert!(limits.allows_ranges());
+}
+
+#[test]
+fn multiple_idle_ranges_share_one_hedge_and_resume_as_one_stream() {
+    let size = SEGMENT_MIN_SIZE as usize;
+    let data = vec![42; size];
+    let server = Server::start(move |_, request, stream| {
+        let range = request
+            .lines()
+            .find_map(|line| line.strip_prefix("range: bytes="))
+            .unwrap_or("0-");
+        let (start, end) = range.split_once('-').unwrap();
+        let start = start.parse::<usize>().unwrap();
+        let end = end.parse::<usize>().unwrap_or(size - 1);
+        let len = end - start + 1;
+        let headers = format!("Content-Range: bytes {start}-{end}/{size}\r\n");
+        if [CHUNK_SIZE as usize, 2 * CHUNK_SIZE as usize].contains(&start)
+            && len == CHUNK_SIZE as usize
+        {
+            respond(stream, 206, len, &headers, b"");
+            let _ = stream.read(&mut [0]);
+        } else {
+            respond(stream, 206, len, &headers, &vec![42; len]);
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let job = server.job(dir.path(), &data);
+    download_single(&job, None, &policy(2), &|_| {}).unwrap();
+    let requests = server.requests.lock().unwrap();
+    let (last, ranges) = requests.split_last().unwrap();
+    assert!(has_header(last, &format!("range: bytes={CHUNK_SIZE}-")));
+    assert_eq!(ranges.len(), 5);
+    for start in [0, 3 * CHUNK_SIZE] {
+        let header = format!("range: bytes={start}-{}", start + CHUNK_SIZE - 1);
+        assert_eq!(ranges.iter().filter(|r| has_header(r, &header)).count(), 1);
+    }
+    assert_eq!(fs::read(job.dest).unwrap(), data);
+}
+
+#[test]
+fn trickling_ranges_in_two_files_share_one_hedge() {
+    let hedge_delay = Duration::from_millis(750);
+    let size = SEGMENT_MIN_SIZE as usize;
+    let first_ranges = Mutex::new(HashSet::new());
+    let hedge_starts = Arc::new(Mutex::new(Vec::new()));
+    let starts = hedge_starts.clone();
+    let server = Server::start(move |_, request, stream| {
+        let (start, end) = requested_range(request).unwrap();
+        let len = end - start + 1;
+        let headers = format!("Content-Range: bytes {start}-{end}/{size}\r\n");
+        let slow = start == 0
+            && first_ranges
+                .lock()
+                .unwrap()
+                .insert(request.split_whitespace().nth(1).unwrap().to_owned());
+        if slow {
+            respond(stream, 206, len, &headers, b"");
+            for _ in 0..len / 4096 {
+                if stream.write_all(&[42; 4096]).is_err() {
+                    return;
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+        } else {
+            if start == 0 {
+                starts.lock().unwrap().push(Instant::now());
+                // Keep this hedge open through several of the other file's checks.
+                thread::sleep(hedge_delay);
+            }
+            respond(stream, 206, len, &headers, &vec![42; len]);
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let data = vec![42; size];
+    let jobs = ["first.jar", "second.jar"].map(|name| DownloadJob {
+        url: format!("{}/{name}", server.base),
+        dest: dir.path().join(name),
+        ..server.job(dir.path(), &data)
+    });
+    let started = Instant::now();
+    download_all("test", jobs.to_vec(), &|_| {}).unwrap();
+    assert!(started.elapsed() < Duration::from_secs(10));
+    let starts = hedge_starts.lock().unwrap();
+    assert_eq!(starts.len(), 2);
+    assert!(starts[1] - starts[0] >= hedge_delay);
+    for job in jobs {
+        assert_eq!(fs::read(job.dest).unwrap(), data);
+    }
+}
+
+#[test]
+fn no_ranges_fallback_waits_for_stalled_siblings() {
+    assert_stalled_range_drains(true);
+}
+
+#[test]
+fn a_hedge_winner_keeps_its_slot_until_the_primary_drains() {
+    assert_stalled_range_drains(false);
+}
+
+fn assert_stalled_range_drains(fallback: bool) {
+    let size = SEGMENT_MIN_SIZE as usize;
+    let (started, range_started) = std::sync::mpsc::sync_channel(1);
+    let (observed, streams) = std::sync::mpsc::channel();
+    let primary = std::sync::OnceLock::new();
+    let first_range = AtomicBool::new(true);
+    let server = Server::start(move |_, request, stream| {
+        if let Some((start, end)) = requested_range(request) {
+            let len = end - start + 1;
+            let headers = format!("Content-Range: bytes {start}-{end}/{size}\r\n");
+            if start == 0 && first_range.swap(false, Ordering::Relaxed) {
+                respond(stream, 206, len, &headers, b"");
+                primary.set(stream.try_clone().unwrap()).unwrap();
+                started.send(()).unwrap();
+            } else if fallback {
+                primary.wait();
+                respond(stream, 200, 0, "", b"");
+            } else {
+                respond(stream, 206, len, &headers, &vec![42; len]);
+            }
+        } else {
+            let socket = primary.wait();
+            socket.set_nonblocking(true).unwrap();
+            let drained = matches!(socket.peek(&mut [0]), Ok(0));
+            let is_next_file = request.starts_with("get /next.jar ");
+            observed.send((is_next_file, drained)).unwrap();
+            let len = if is_next_file { DATA.len() } else { size };
+            respond(stream, 200, len, "", &vec![42; len]);
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let big = server.job(dir.path(), &vec![42; size]);
+    let next = DownloadJob {
+        url: format!("{}/next.jar", server.base),
+        dest: dir.path().join("next.jar"),
+        size: Some(DATA.len() as u64),
+        sha1: None,
+        ..big.clone()
+    };
+    let reporter = Reporter {
+        stage: "test",
+        progress: &|_| {},
+        start: Instant::now(),
+        last_ms: AtomicU64::new(0),
+        files_done: AtomicU64::new(0),
+        files_total: 2,
+        bytes_done: AtomicU64::new(0),
+        bytes_total: size as u64 + DATA.len() as u64,
+        all_sizes_known: true,
+        fast_batch: Default::default(),
+    };
+    let limits = Arc::new(TransferLimits::new(1));
+    let attempt = policy(1);
+    thread::scope(|scope| {
+        let run = |job: &DownloadJob| {
+            download_with_alternates(job, &reporter, &limits, None, &attempt).unwrap();
+        };
+        scope.spawn(move || run(&big));
+        range_started.recv_timeout(Duration::from_secs(5)).unwrap();
+        run(&next);
+    });
+    let expected: &[_] = if fallback {
+        &[(false, true), (true, true)]
+    } else {
+        &[(true, true)]
+    };
+    assert_eq!(
+        streams.try_iter().collect::<Vec<_>>(),
+        expected,
+        "a stream started before the stalled primary closed"
+    );
+}
+
 #[test]
 fn stalls_on_first_and_later_attempts_resume_within_idle_limit() {
     let server = Server::start(|n, _, stream| match n {
@@ -323,6 +578,48 @@ fn hashed_batch_tries_supplied_alternates_in_order() {
     assert_eq!(unavailable.requests.lock().unwrap().len(), 1);
     assert_eq!(mirror.requests.lock().unwrap().len(), 1);
     assert_eq!(fs::read(&job.dest).unwrap(), DATA);
+}
+
+#[test]
+fn not_found_primary_reports_repeated_alternate_timeouts() {
+    let primary = Server::start(|_, _, stream| respond(stream, 404, 0, "", b""));
+    let alternate = Server::start(|_, _, stream| {
+        respond(stream, 200, DATA.len(), "", b"");
+        let _ = stream.read(&mut [0]);
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let job = primary.job(dir.path(), DATA);
+    let error =
+        download_single(&job, Some(alternate.base.clone()), &policy(2), &|_| {}).unwrap_err();
+    assert!(
+        matches!(error, Error::DownloadConnectionDropping),
+        "{error}"
+    );
+    assert_eq!(primary.requests.lock().unwrap().len(), 1);
+    assert_eq!(alternate.requests.lock().unwrap().len(), 2);
+}
+
+#[test]
+fn not_found_primary_reports_alternate_timeouts_before_final_503() {
+    let primary = Server::start(|_, _, stream| respond(stream, 404, 0, "", b""));
+    let alternate = Server::start(|n, _, stream| {
+        if n < 2 {
+            respond(stream, 200, DATA.len(), "", b"");
+            let _ = stream.read(&mut [0]);
+        } else {
+            respond(stream, 503, 0, "", b"");
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let job = primary.job(dir.path(), DATA);
+    let error =
+        download_single(&job, Some(alternate.base.clone()), &policy(3), &|_| {}).unwrap_err();
+    assert_eq!(primary.requests.lock().unwrap().len(), 1);
+    assert_eq!(alternate.requests.lock().unwrap().len(), 3);
+    assert!(
+        matches!(error, Error::DownloadConnectionDropping),
+        "{error}"
+    );
 }
 
 #[test]

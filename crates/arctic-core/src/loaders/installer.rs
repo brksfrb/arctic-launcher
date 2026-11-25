@@ -9,7 +9,9 @@ use zip::ZipArchive;
 
 use super::forge_meta::InstallerSource;
 use crate::error::IoContext;
-use crate::net::{DownloadJob, Policy, download_single, fetch_text, is_not_found, mirror_for};
+use crate::net::{
+    DownloadJob, Policy, download_single, fetch_text, forge_mirror_url, is_not_found,
+};
 use crate::storage::DataDirs;
 use crate::{Error, Progress, Result};
 
@@ -96,7 +98,7 @@ pub fn fetch(dirs: &DataDirs, source: &InstallerSource, progress: Progress) -> R
         &dest,
         meta_url(&source.url).as_deref(),
         &policy,
-        &mirror_for,
+        forge_mirror_url(&source.url),
         progress,
     )?;
     Installer::open(&dest)
@@ -111,13 +113,13 @@ enum Checksum {
 
 /// Download `url` to `dest`. The Forge mirror is used only when a hash from the primary side
 /// (the primary's `.sha1`, else Forge's meta.json at `meta`) can verify its bytes; without one
-/// only the primary is tried, and a primary that fails then is reported as unresponsive.
+/// only the primary is tried.
 fn download_verified(
     url: &str,
     dest: &Path,
     meta: Option<&str>,
     policy: &Policy,
-    mirror_of: &dyn Fn(&DownloadJob) -> Option<String>,
+    mirror: Option<String>,
     progress: Progress,
 ) -> Result<()> {
     // Fetched on its own, so a jar download that fails never skips the checksum.
@@ -130,16 +132,27 @@ fn download_verified(
         size: None,
         lzma: None,
     };
-    match &checksum {
-        Some(Checksum::Sha1(h)) => job.sha1 = Some(h.clone()),
-        Some(Checksum::Md5(h)) => job.md5 = Some(h.clone()),
+    let mirror_blocked = checksum.is_none() && mirror.is_some();
+    match checksum {
+        Some(Checksum::Sha1(h)) => job.sha1 = Some(h),
+        Some(Checksum::Md5(h)) => job.md5 = Some(h),
+        None if !mirror_blocked => log::warn!("no checksum for {url}"),
         None => log::warn!("no checksum for {url}: the mirror will not be used"),
     }
-    let mirror = mirror_of(&job);
+    let mirror = mirror.filter(|_| !mirror_blocked);
     match download_single(&job, mirror, policy, progress) {
-        Err(e) if checksum.is_none() && !is_not_found(&e) => Err(Error::Other(format!(
-            "no checksum is available to verify a mirror copy ({e})"
-        ))),
+        Err(e)
+            if mirror_blocked
+                && !is_not_found(&e)
+                && !matches!(
+                    e,
+                    Error::DownloadInterrupted(_) | Error::DownloadConnectionDropping
+                ) =>
+        {
+            Err(Error::Other(format!(
+                "no checksum is available to verify a mirror copy ({e})"
+            )))
+        }
         done => done,
     }
 }
@@ -286,13 +299,12 @@ mod tests {
     fn run(primary: &str, mirror: &str) -> (Result<()>, PathBuf) {
         let dest = tempfile::tempdir().unwrap().keep().join("i.jar");
         let meta = format!("{primary}/meta.json");
-        let mirror = mirror.to_string();
         let result = download_verified(
             &format!("{primary}/p/forge-1-installer.jar"),
             &dest,
             Some(&meta),
             &policy(),
-            &|_| Some(format!("{mirror}/p/forge-1-installer.jar")),
+            Some(format!("{mirror}/p/forge-1-installer.jar")),
             &|_| {},
         );
         (result, dest)
@@ -339,10 +351,41 @@ mod tests {
         let (primary, _) = serve(vec![(INSTALLER, vec![503], vec![])]);
         let (mirror, mirror_log) = serve(vec![(INSTALLER, vec![200], JAR.to_vec())]);
         let (res, dest) = run(&primary, &mirror);
-        let err = res.unwrap_err();
-        assert!(!is_not_found(&err));
+        assert!(
+            res.unwrap_err()
+                .to_string()
+                .contains("verify a mirror copy")
+        );
         assert!(mirror_log.lock().unwrap().is_empty());
         assert!(!dest.exists());
+    }
+
+    #[test]
+    fn neoforge_without_a_checksum_reports_the_primary_http_error() {
+        const NEOFORGE: &str =
+            "/releases/net/neoforged/neoforge/21.1.251/neoforge-21.1.251-installer.jar";
+        let (primary, log) = serve(vec![(NEOFORGE, vec![503], vec![])]);
+        let dir = tempfile::tempdir().unwrap();
+        let url = format!("{primary}{NEOFORGE}");
+        let error = download_verified(
+            &url,
+            &dir.path().join("installer.jar"),
+            None,
+            &policy(),
+            forge_mirror_url(&url),
+            &|_| {},
+        )
+        .unwrap_err();
+        assert!(matches!(error, Error::Http(reason) if reason.ends_with("http status: 503")));
+        assert_eq!(
+            *log.lock().unwrap(),
+            [
+                format!("{NEOFORGE}.sha1"),
+                NEOFORGE.into(),
+                NEOFORGE.into(),
+                NEOFORGE.into()
+            ]
+        );
     }
 
     #[test]

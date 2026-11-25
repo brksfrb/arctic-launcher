@@ -129,7 +129,7 @@ pub fn install_profile(
         LoaderKind::NeoForge => {
             check_neoforge_target(loader_version, &vanilla.id)?;
             let sources = [forge_meta::neoforge_installer(loader_version)];
-            forge::install(dirs, &sources, vanilla, java, progress)
+            forge::install(dirs, kind, &sources, vanilla, java, progress)
         }
         LoaderKind::Forge => {
             if !forge_meta::is_supported_forge_game(&vanilla.id) {
@@ -140,7 +140,7 @@ pub fn install_profile(
                 )));
             }
             let sources = forge_meta::forge_installers(&vanilla.id, loader_version);
-            forge::install(dirs, &sources, vanilla, java, progress)
+            forge::install(dirs, kind, &sources, vanilla, java, progress)
         }
     }
 }
