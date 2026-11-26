@@ -191,6 +191,8 @@ pub enum Event {
     ArcticCatalog(Outcome<crate::skin_tasks::LoadedArcticState>),
     /// A picked cape image, or `None` if cancelled.
     CapeFile(Outcome<Option<Vec<u8>>>),
+    /// A GIF chosen as a cape, already converted to the cape strip (shown as a preview first).
+    CapeGif(Outcome<Option<Vec<u8>>>),
     /// The OptiFine cape of a player name (a Minecraft-layout PNG), `None` when there is none.
     OptifineCape(String, Outcome<Option<Vec<u8>>>),
     /// A picked skin file (name, bytes), or `None` if cancelled.

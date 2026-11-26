@@ -144,5 +144,9 @@
   "skins.your_cape": "あなたのマント {i}",
   "skins.your_cape_2": "あなたのマント",
   "skins.your_own": "自分の…",
-  "skins.your_own_minecraft_skin_for_arctic_players": "自分のMinecraftスキンを、Arcticプレイヤーにも"
+  "skins.your_own_minecraft_skin_for_arctic_players": "自分のMinecraftスキンを、Arcticプレイヤーにも",
+  "skins.gif_cape_preview_failed": "変換したGIFを表示できませんでした",
+  "skins.gif_cape_preview_note": "ケープ形式に変換した後、プレイヤーに表示される見た目です(フレーム数と速度はケープで扱える範囲に制限されます)。",
+  "skins.gif_cape_preview_title": "アニメーションケープのプレビュー",
+  "skins.use_this_cape": "このケープを使う"
 }

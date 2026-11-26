@@ -146,5 +146,9 @@
   "skins.your_cape": "Twoja peleryna {i}",
   "skins.your_cape_2": "Twoja peleryna",
   "skins.your_own": "Własny…",
-  "skins.your_own_minecraft_skin_for_arctic_players": "Twój własny skin z Minecrafta, także dla graczy Arctic"
+  "skins.your_own_minecraft_skin_for_arctic_players": "Twój własny skin z Minecrafta, także dla graczy Arctic",
+  "skins.gif_cape_preview_failed": "Nie można wyświetlić przekonwertowanego GIF-a",
+  "skins.gif_cape_preview_note": "Tak gracze zobaczą pelerynę po konwersji do formatu peleryn (klatki i szybkość są ograniczone do tego, na co pozwalają peleryny).",
+  "skins.gif_cape_preview_title": "Podgląd animowanej peleryny",
+  "skins.use_this_cape": "Użyj tej peleryny"
 }

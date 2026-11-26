@@ -144,5 +144,9 @@
   "skins.your_cape": "Jouw cape {i}",
   "skins.your_cape_2": "Jouw cape",
   "skins.your_own": "Je eigen…",
-  "skins.your_own_minecraft_skin_for_arctic_players": "Je eigen Minecraft-skin, ook voor Arctic-spelers"
+  "skins.your_own_minecraft_skin_for_arctic_players": "Je eigen Minecraft-skin, ook voor Arctic-spelers",
+  "skins.gif_cape_preview_failed": "De omgezette GIF kon niet worden getoond",
+  "skins.gif_cape_preview_note": "Zo zien spelers de cape na omzetting naar het capeformaat (beelden en snelheid zijn beperkt tot wat capes toestaan).",
+  "skins.gif_cape_preview_title": "Voorbeeld van de geanimeerde cape",
+  "skins.use_this_cape": "Deze cape gebruiken"
 }

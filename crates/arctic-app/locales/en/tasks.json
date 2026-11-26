@@ -14,7 +14,7 @@
   "tasks.cant_switch_servers_in_this_game": "Can't switch servers in this game",
   "tasks.cape": "Cape",
   "tasks.choose_a_background_picture": "Choose a background picture",
-  "tasks.choose_a_cape_image_64_32_up_to_1024_512_or": "Choose a cape image (64×32 up to 1024×512, or up to 32 frames stacked for an animated cape)",
+  "tasks.choose_a_cape_image_64_32_up_to_1024_512_or": "Choose a cape image (a PNG from 64×32 up to 1024×512, up to 32 frames stacked for an animated cape, or a 2:1 GIF)",
   "tasks.choose_a_modpack": "Choose a modpack",
   "tasks.choose_a_skin": "Choose a skin",
   "tasks.choose_a_world_archive": "Choose a world archive",

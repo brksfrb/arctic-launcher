@@ -144,5 +144,9 @@
   "skins.your_cape": "Il tuo mantello {i}",
   "skins.your_cape_2": "Il tuo mantello",
   "skins.your_own": "Il tuo…",
-  "skins.your_own_minecraft_skin_for_arctic_players": "La tua skin Minecraft, anche per i giocatori Arctic"
+  "skins.your_own_minecraft_skin_for_arctic_players": "La tua skin Minecraft, anche per i giocatori Arctic",
+  "skins.gif_cape_preview_failed": "Impossibile mostrare la GIF convertita",
+  "skins.gif_cape_preview_note": "Ecco il mantello come lo vedranno i giocatori dopo la conversione nel formato dei mantelli (fotogrammi e velocità sono limitati a ciò che i mantelli consentono).",
+  "skins.gif_cape_preview_title": "Anteprima del mantello animato",
+  "skins.use_this_cape": "Usa questo mantello"
 }

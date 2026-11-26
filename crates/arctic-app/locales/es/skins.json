@@ -144,5 +144,9 @@
   "skins.your_cape": "Tu capa {i}",
   "skins.your_cape_2": "Tu capa",
   "skins.your_own": "La tuya…",
-  "skins.your_own_minecraft_skin_for_arctic_players": "Tu propia skin de Minecraft, también para jugadores de Arctic"
+  "skins.your_own_minecraft_skin_for_arctic_players": "Tu propia skin de Minecraft, también para jugadores de Arctic",
+  "skins.gif_cape_preview_failed": "No se pudo mostrar el GIF convertido",
+  "skins.gif_cape_preview_note": "Así verán la capa los jugadores tras convertirla al formato de capas (los fotogramas y la velocidad se limitan a lo que permiten las capas).",
+  "skins.gif_cape_preview_title": "Vista previa de la capa animada",
+  "skins.use_this_cape": "Usar esta capa"
 }

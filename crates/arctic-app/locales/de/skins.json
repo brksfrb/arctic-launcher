@@ -144,5 +144,9 @@
   "skins.your_cape": "Dein Umhang {i}",
   "skins.your_cape_2": "Dein Umhang",
   "skins.your_own": "Dein eigener…",
-  "skins.your_own_minecraft_skin_for_arctic_players": "Dein eigener Minecraft-Skin, auch für Arctic-Spieler"
+  "skins.your_own_minecraft_skin_for_arctic_players": "Dein eigener Minecraft-Skin, auch für Arctic-Spieler",
+  "skins.gif_cape_preview_failed": "Das konvertierte GIF konnte nicht angezeigt werden",
+  "skins.gif_cape_preview_note": "So sehen Spieler den Umhang nach der Umwandlung ins Umhang-Format (Bilder und Tempo sind auf das begrenzt, was Umhänge erlauben).",
+  "skins.gif_cape_preview_title": "Vorschau des animierten Umhangs",
+  "skins.use_this_cape": "Diesen Umhang verwenden"
 }
