@@ -6,6 +6,7 @@
 //! mods are never touched.
 
 mod dependencies;
+mod retired;
 mod settled;
 
 use std::fs::{self, File, OpenOptions};
@@ -142,16 +143,13 @@ fn leave_players_mods(game_dir: &Path, wanted: &mut Vec<(&str, &str)>) -> Result
 }
 
 /// Forge 1.8.9, where Sodium and friends don't exist: the FPS mods that do (Modrinth project, name, and
-/// words of a jar's file name that mean the player already has it). Patcher also fixes bugs and adds
-/// quality-of-life tweaks; Entity Culling stops drawing what can't be seen.
-pub const FORGE_189: &[(&str, &str, &[&str])] = &[
-    ("YknNc5nN", "Patcher", &["patcher"]),
-    (
-        ENTITY_CULLING,
-        "EntityCulling",
-        &["entityculling", "entity_culling", "entity-culling"],
-    ),
-];
+/// words of a jar's file name that mean the player already has it). Entity Culling stops drawing what
+/// can't be seen. (Patcher was here until the launcher stopped installing it: see `retired`.)
+pub const FORGE_189: &[(&str, &str, &[&str])] = &[(
+    ENTITY_CULLING,
+    "EntityCulling",
+    &["entityculling", "entity_culling", "entity-culling"],
+)];
 
 /// The only Forge game version with these mods (and with the Arctic Client for Forge).
 pub fn forge_supported(game_version: &str) -> bool {
@@ -178,8 +176,8 @@ pub fn sync_forge(
 ) -> Result<()> {
     let mods_dir = game_dir.join("mods");
     let index = forge_index_path(game_dir);
+    retired::remove_installed_patcher(game_dir);
     let ours = ModIndex::load(&index)?;
-    restore_offline_patcher(game_dir, &ours)?;
     if !enabled || !forge_supported(game_version) {
         if ours.mods.is_empty() {
             return Ok(());
@@ -212,8 +210,6 @@ pub fn sync_forge(
         wanted.push(*project);
     }
     if !wanted.is_empty() {
-        // A failed EntityCulling install must not bypass OneConfig preparation for
-        // an already-installed Patcher (the caller otherwise logs and launches).
         match super::install_many(
             &wanted,
             game_version,
@@ -229,132 +225,6 @@ pub fn sync_forge(
             }
             Err(e) => log::warn!("Forge performance mod installation failed: {e}"),
         }
-    }
-    if ForgeIndex(&index).has(PATCHER) {
-        prepare_patcher(game_dir, || super::oneconfig::prepare(game_dir))?;
-        tame_patcher(game_dir);
-    }
-    Ok(())
-}
-
-// Keep a skipped jar outside mods, separately from the player's .disabled choice.
-fn offline_patcher(game_dir: &Path, file: &str) -> PathBuf {
-    game_dir.join("arctic-patcher-offline").join(file)
-}
-
-fn restore_offline_patcher(game_dir: &Path, index: &ModIndex) -> Result<()> {
-    use crate::error::IoContext;
-    if let Some(m) = index.by_project(PATCHER) {
-        super::files::check_file_name(&m.file_name)?;
-        let parked = offline_patcher(game_dir, &m.file_name);
-        let mods = game_dir.join("mods");
-        if parked.is_file() && !super::files::exists(&mods, &m.file_name) {
-            std::fs::create_dir_all(&mods).at(&mods)?;
-            std::fs::rename(&parked, mods.join(&m.file_name)).at(&parked)?;
-        }
-    }
-    Ok(())
-}
-
-fn prepare_patcher(game_dir: &Path, fetch: impl FnOnce() -> Result<()>) -> Result<()> {
-    use crate::error::IoContext;
-    let index = ModIndex::load(&forge_index_path(game_dir))?;
-    let Some(m) = index.by_project(PATCHER) else {
-        return Ok(());
-    };
-    super::files::check_file_name(&m.file_name)?;
-    let jar = game_dir.join("mods").join(&m.file_name);
-    if !jar.is_file() {
-        return Ok(()); // Respect a Patcher the player disabled.
-    }
-    if let Err(e) = fetch() {
-        let parked = offline_patcher(game_dir, &m.file_name);
-        std::fs::create_dir_all(parked.parent().unwrap()).at(&parked)?;
-        std::fs::rename(&jar, &parked).at(&jar)?;
-        log::warn!(
-            "Patcher: OneConfig preparation failed ({e}); launching without Arctic's Patcher this run; will retry next launch"
-        );
-    }
-    Ok(())
-}
-
-/// Modrinth project of Patcher.
-const PATCHER: &str = "YknNc5nN";
-
-/// Is a project in our Forge index?
-struct ForgeIndex<'a>(&'a Path);
-
-impl ForgeIndex<'_> {
-    fn has(&self, project: &str) -> bool {
-        ModIndex::load(self.0).is_ok_and(|i| i.by_project(project).is_some())
-    }
-}
-
-/// OneConfig's key for its menu (LWJGL 2 key code) when nothing changed it: Right Shift, which is also
-/// Arctic's menu key (both opened, one after the other); and the key it is given here: Insert.
-const ONECONFIG_KEY: u64 = 54;
-const ONECONFIG_KEY_INSTEAD: u64 = 210;
-
-/// Patcher brings OneConfig, and two of their defaults clash with the Arctic Client: OneConfig's menu
-/// opens on Right Shift (Arctic's too), and Patcher's own font renderer replaces the game's, so
-/// Arctic's fancy font never draws. Moved aside once, as soon as the game has written both files
-/// (its first start); after that the player's choices stay.
-fn tame_patcher(game_dir: &Path) {
-    let marker = game_dir.join("arctic-patcher-settings.json");
-    if marker.exists() {
-        return;
-    }
-    let one_config = game_dir.join("OneConfig");
-    let preferences = one_config.join("Preferences.json");
-    let patcher = one_config
-        .join("profiles")
-        .join("Default Profile")
-        .join("patcher.json");
-    if !preferences.exists() || !patcher.exists() {
-        return;
-    }
-    let done = (|| -> Result<()> {
-        edit_json(&preferences, |json| {
-            let keys = json.pointer_mut("/oneConfigKeyBind/keyBinds")?;
-            let only_shift = keys
-                .as_array()
-                .is_some_and(|k| k.len() == 1 && k[0] == ONECONFIG_KEY);
-            only_shift.then(|| *keys = serde_json::json!([ONECONFIG_KEY_INSTEAD]))
-        })?;
-        edit_json(&patcher, |json| {
-            let object = json.as_object_mut()?;
-            let mut changed = false;
-            for key in ["optimizedFontRenderer", "cacheFontData"] {
-                if object
-                    .get(key)
-                    .is_some_and(|v| v == &serde_json::Value::Bool(true))
-                {
-                    object.insert(key.to_owned(), serde_json::Value::Bool(false));
-                    changed = true;
-                }
-            }
-            changed.then_some(())
-        })?;
-        save_json(
-            &marker,
-            &serde_json::json!({"menu_key": "Insert", "font_renderer": false}),
-        )
-    })();
-    if let Err(e) = done {
-        log::warn!("couldn't adjust Patcher's settings: {e}");
-    }
-}
-
-/// Read a JSON file, let `change` edit it (returning `Some` when it did), write it back if so.
-fn edit_json<T>(
-    path: &Path,
-    change: impl FnOnce(&mut serde_json::Value) -> Option<T>,
-) -> Result<()> {
-    let text = std::fs::read_to_string(path).map_err(|e| crate::Error::io(path, e))?;
-    let mut json: serde_json::Value = serde_json::from_str(&text)?;
-    if change(&mut json).is_some() {
-        let out = serde_json::to_string_pretty(&json)?;
-        std::fs::write(path, out).map_err(|e| crate::Error::io(path, e))?;
     }
     Ok(())
 }
@@ -1133,54 +1003,16 @@ fn incompatible_jars(game_dir: &Path, game_version: &str) -> Result<Vec<PathBuf>
 #[cfg(test)]
 mod tests {
     #[test]
-    fn patchers_clashing_defaults_are_changed_once() {
-        let dir = tempfile::tempdir().unwrap();
-        let one = dir.path().join("OneConfig");
-        let profile = one.join("profiles").join("Default Profile");
-        std::fs::create_dir_all(&profile).unwrap();
-        std::fs::write(
-            one.join("Preferences.json"),
-            r#"{"oneConfigKeyBind":{"keyBinds":[54]},"enableBlur":true}"#,
-        )
-        .unwrap();
-        std::fs::write(
-            profile.join("patcher.json"),
-            r#"{"optimizedFontRenderer":true,"cacheFontData":true,"shiftChat":false}"#,
-        )
-        .unwrap();
-        super::tame_patcher(dir.path());
-        let prefs: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(one.join("Preferences.json")).unwrap())
-                .unwrap();
-        assert_eq!(prefs["oneConfigKeyBind"]["keyBinds"][0], 210);
-        assert_eq!(prefs["enableBlur"], true);
-        let patcher: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(profile.join("patcher.json")).unwrap())
-                .unwrap();
-        assert_eq!(patcher["optimizedFontRenderer"], false);
-        assert_eq!(patcher["cacheFontData"], false);
-        assert_eq!(patcher["shiftChat"], false);
-        // The player turns the font renderer back on: it stays that way.
-        std::fs::write(
-            profile.join("patcher.json"),
-            r#"{"optimizedFontRenderer":true}"#,
-        )
-        .unwrap();
-        super::tame_patcher(dir.path());
-        assert!(
-            std::fs::read_to_string(profile.join("patcher.json"))
-                .unwrap()
-                .contains("true")
-        );
-    }
-
-    #[test]
     fn forge_jars_are_told_by_their_names() {
-        let words: &[&str] = &["patcher"];
-        assert!(super::named_like("Patcher-1.8.9-1.8.2.jar", words));
-        assert!(super::named_like("polypatcher-1.10.4.jar", words));
+        let words: &[&str] = &["entityculling", "entity-culling"];
+        assert!(super::named_like("EntityCulling-Forge-1.8.9.jar", words));
+        assert!(super::named_like("entity-culling-1.6.jar", words));
         assert!(!super::named_like("OptiFine_1.8.9_HD_U_M5.jar", words));
-        assert!(!super::named_like("patcher-notes.txt", words));
+        assert!(!super::named_like("entityculling-notes.txt", words));
+        assert!(
+            !FORGE_189.iter().any(|(_, name, _)| *name == "Patcher"),
+            "Patcher is no longer installed"
+        );
         assert!(super::forge_supported("1.8.9"));
         assert!(!super::forge_supported("1.12.2"));
     }
@@ -1198,43 +1030,6 @@ mod tests {
             icon_url: None,
             dependency: false,
         }
-    }
-
-    #[test]
-    fn offline_patcher_is_skipped_then_retried_without_touching_player_mods() {
-        let dir = tempfile::tempdir().unwrap();
-        let game = dir.path();
-        let mods = game.join("mods");
-        std::fs::create_dir_all(&mods).unwrap();
-        for file in ["patcher.jar", "my-patcher.jar", "entityculling.jar"] {
-            std::fs::write(mods.join(file), file.as_bytes()).unwrap();
-        }
-        let mut patcher = tracked("patcher.jar");
-        patcher.project_id = PATCHER.into();
-        let index = ModIndex::default().with(patcher);
-        index.save(&forge_index_path(game)).unwrap();
-        prepare_patcher(game, || Err(crate::Error::Http("mock timeout".into()))).unwrap();
-        assert!(!mods.join("patcher.jar").exists());
-        assert!(offline_patcher(game, "patcher.jar").is_file());
-        assert!(mods.join("my-patcher.jar").is_file());
-        assert!(mods.join("entityculling.jar").is_file());
-        assert_eq!(ModIndex::load(&forge_index_path(game)).unwrap(), index);
-        restore_offline_patcher(game, &index).unwrap();
-        let mut retried = false;
-        prepare_patcher(game, || {
-            retried = true;
-            Ok(())
-        })
-        .unwrap();
-        assert!(retried);
-        assert!(mods.join("patcher.jar").is_file());
-        assert!(!offline_patcher(game, "patcher.jar").exists());
-        super::super::files::set_enabled(&mods, "patcher.jar", false).unwrap();
-        prepare_patcher(game, || panic!("respect player's disabled mod")).unwrap();
-        assert!(mods.join("patcher.jar.disabled").is_file());
-        ModIndex::default().save(&forge_index_path(game)).unwrap();
-        prepare_patcher(game, || panic!("never prepare a player-owned Patcher")).unwrap();
-        assert!(mods.join("my-patcher.jar").is_file());
     }
 
     #[test]

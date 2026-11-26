@@ -10,7 +10,7 @@
   "instances.add_to_your_server_list": "添加到服务器列表",
   "instances.added": "已添加 {name}",
   "instances.address": "地址",
-  "instances.adds_patcher_performance_and_bug_fixes_and": "添加 Patcher（性能与错误修复）和 Entity Culling（不渲染看不见的东西）以提高 FPS。从 Modrinth 下载；已有的保持不变。",
+  "instances.adds_entity_culling_for_higher_fps": "添加 Entity Culling（不渲染看不见的东西）以提高 FPS。从 Modrinth 下载；如果你已经有了，则保持不变。",
   "instances.adds_sodium_lithium_ferritecore_2": "添加 Sodium、Lithium、FerriteCore、ImmediatelyFast、EntityCulling、Particle Core、BadOptimizations、ModernFix 和 Polarium，大幅提高 FPS 并加快启动。按你的版本从 Modrinth 下载（Polarium 随 Arctic 提供）；尚未更新的会跳过。",
   "instances.all": "全部",
   "instances.all_fixed": "全部已修复",

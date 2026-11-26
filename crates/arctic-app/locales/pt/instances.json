@@ -10,7 +10,7 @@
   "instances.add_to_your_server_list": "Adicionar à sua lista de servidores",
   "instances.added": "{name} adicionado",
   "instances.address": "Endereço",
-  "instances.adds_patcher_performance_and_bug_fixes_and": "Adiciona Patcher (desempenho e correções) e Entity Culling (não desenha o que você não vê) para mais FPS. Baixados do Modrinth; os que você já tem ficam como estão.",
+  "instances.adds_entity_culling_for_higher_fps": "Adiciona Entity Culling (não desenha o que você não vê) para mais FPS. Baixado do Modrinth; se você já tem, o seu fica como está.",
   "instances.adds_sodium_lithium_ferritecore_2": "Adiciona Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix e Polarium para muito mais FPS e inícios mais rápidos. Baixados do Modrinth para sua versão (o Polarium vem com o Arctic); os ainda não atualizados são pulados.",
   "instances.all": "Tudo",
   "instances.all_fixed": "Tudo corrigido",

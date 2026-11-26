@@ -10,7 +10,7 @@
   "instances.add_to_your_server_list": "サーバーリストに追加",
   "instances.added": "{name} を追加しました",
   "instances.address": "アドレス",
-  "instances.adds_patcher_performance_and_bug_fixes_and": "FPS を上げるために Patcher（パフォーマンスとバグ修正）と Entity Culling（見えないものを描画しない）を追加します。Modrinth からダウンロードし、すでにあるものはそのままにします。",
+  "instances.adds_entity_culling_for_higher_fps": "FPS を上げるために Entity Culling（見えないものを描画しない）を追加します。Modrinth からダウンロードし、すでにある場合はそのままにします。",
   "instances.adds_sodium_lithium_ferritecore_2": "Sodium、Lithium、FerriteCore、ImmediatelyFast、EntityCulling、Particle Core、BadOptimizations、ModernFix、Polarium を追加し、FPS を大きく上げて起動も速くします。お使いのバージョン用を Modrinth からダウンロードします（Polarium は Arctic に同梱）。まだ更新されていないものはスキップします。",
   "instances.all": "すべて",
   "instances.all_fixed": "すべて修正済み",

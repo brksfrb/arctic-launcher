@@ -2367,8 +2367,8 @@ fn diagnose_rules(
     if let Some(matched) = oneconfig_failure.find(text) {
         return Some((
             Diagnosis::new(
-                "Patcher couldn't download OneConfig (network)",
-                "Patcher needs OneConfig from Polyfrost's servers. Arctic will retry preparing it on the next launch and skip its auto-installed Patcher if the download fails. Check your connection, or turn Patcher off in instance settings.",
+                "A Polyfrost mod couldn't download OneConfig (network)",
+                "Patcher and other Polyfrost mods download OneConfig from Polyfrost's servers at startup, and the game stops when that fails. Arctic no longer installs Patcher or OneConfig, and removes the copies it installed earlier when the game starts. If you added Patcher or another OneConfig mod yourself, check your connection or take it out of the instance's mods folder.",
                 vec!["Patcher".into(), "OneConfig".into()],
             ),
             head_of(matched.as_str(), 2048).to_owned(),
@@ -5496,8 +5496,14 @@ J  7821 c2 net.vulkanmod.vulkan.Renderer.drawIndexed(I)V (74 bytes) @ 0x000001f9
     fn oneconfig_download_failure_317() {
         let text = include_str!("../tests/fixtures/crash-317-oneconfig.log");
         let (d, matched) = diagnose_match(text, None).unwrap();
-        assert_eq!(d.title, "Patcher couldn't download OneConfig (network)");
-        assert!(d.detail.contains("Arctic will retry"));
+        assert_eq!(
+            d.title,
+            "A Polyfrost mod couldn't download OneConfig (network)"
+        );
+        assert!(d.detail.contains("no longer installs Patcher"));
+        assert!(!d.detail.contains("instance settings"));
+        assert!(!d.detail.contains("next launch"));
+        assert_eq!(d.mods, vec!["Patcher".to_owned(), "OneConfig".to_owned()]);
         assert!(matched.contains("failed to download"));
         assert!(diagnose("OneConfig loaded successfully\nexit code 1").is_none());
         assert!(diagnose("Unrelated mod failed to download texture").is_none());
