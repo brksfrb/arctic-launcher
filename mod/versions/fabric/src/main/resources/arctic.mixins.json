@@ -13,6 +13,9 @@
 		"CheckboxMixin",
 		"EditBoxMixin",<% } %>
 <% if (widgets13) { %>		"ScreenButtonsAccess",
+		"ButtonWidget13Mixin",
+		"OptionSliderWidget13Mixin",
+		"SoundSliderWidget13Mixin",
 <% } %>		"AbstractClientPlayerMixin",
 		"FontMaskMixin",
 		"ServerFontDefinitionMixin",
