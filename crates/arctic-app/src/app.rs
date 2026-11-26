@@ -384,7 +384,7 @@ impl ArcticApp {
             tab_history: Vec::new(),
             accounts: AccountStore::default(),
             faces: HashMap::new(),
-            instance: Instance::vanilla_default(),
+            instance: Instance::arctic_default(),
             manifest: ManifestState::Loading,
             add_account: AddAccount::Closed,
             remove_confirm: None,
@@ -831,9 +831,10 @@ impl ArcticApp {
         let ManifestState::Ready(manifest) = &self.manifest else {
             return;
         };
-        // Vanilla follows the Play-tab version; custom instances pin theirs.
+        // Arctic follows the Play-tab version; custom instances pin theirs (one without, a
+        // pure-vanilla default kept from before Arctic with no version picked yet, follows it too).
         let instance = self.selected_instance().clone();
-        let version_id = if instance.is_default() {
+        let version_id = if instance.is_default() || instance.version.is_none() {
             self.settings.last_version.clone()
         } else {
             instance.version.clone()

@@ -12,7 +12,7 @@
   "play.add_another_account": "Add another account",
   "play.add_your_account": "Add your account",
   "play.added": "Added {username}",
-  "play.adds_sodium_lithium_and_friends_to_vanilla": "Adds Sodium, Lithium and friends to Vanilla for much higher FPS. Your worlds aren't changed.",
+  "play.adds_sodium_lithium_and_friends_to_vanilla": "Adds Sodium, Lithium and friends for much higher FPS. Your worlds aren't changed.",
   "play.all": "All",
   "play.also_running": "ALSO RUNNING",
   "play.animated_background": "Animated background",
@@ -165,7 +165,6 @@
   "play.plus_more_keys_video_chat": "Plus {count} more (keys, video, chat…)",
   "play.profile_name_hint": "e.g. Speedruns, Family, Testing",
   "play.profiles": "Profiles",
-  "play.pure_vanilla_no_cosmetics_or_capes_no": "Pure vanilla: no cosmetics or capes, no playing together with friends, no Arctic menu or HUD in game. Turn it back on any time in Instances → Vanilla.",
   "play.pure_vanilla_no_cosmetics_or_capes_no_2": "Pure vanilla: no cosmetics or capes, no playing together with friends, no Arctic menu or HUD in game. Turn it back on any time in Settings → Arctic Client.",
   "play.puts_these_settings_into_that_instance_now": "Puts these settings into that instance now (the rest of its settings stay)",
   "play.quit_the_launcher": "Quit the launcher",
@@ -257,5 +256,6 @@
   "play.you_can_change_this_any_time_in_settings": "You can change this any time in Settings.",
   "play.you_can_turn_this_off_in_settings_updates": "You can turn this off in Settings → Updates → \"Show what's new after updating\".",
   "play.you_wont_see_other_players_arctic_looks": "You won't see other players' Arctic looks (skins and capes) or the Arctic menu in game. Your Arctic settings are kept. You can turn it back on any time.",
-  "play.your_sign_in_stays_on_this_pc_encrypted": "Your sign-in stays on this PC, encrypted. Arctic never sees your password."
+  "play.your_sign_in_stays_on_this_pc_encrypted": "Your sign-in stays on this PC, encrypted. Arctic never sees your password.",
+  "play.arctic": "Arctic"
 }

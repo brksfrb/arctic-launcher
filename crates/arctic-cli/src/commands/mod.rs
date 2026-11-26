@@ -42,7 +42,7 @@ pub struct Ctx {
     pub out: Out,
 }
 
-/// The instance matching `query`, or Vanilla.
+/// The instance matching `query`, or the Arctic instance.
 pub fn instance_or_default(ctx: &Ctx, query: Option<&str>) -> Result<Instance> {
     match query {
         Some(q) => arctic_core::instances::find(&ctx.dirs, q),

@@ -18,7 +18,7 @@ const WORLDS: &str = "saves";
 pub fn duplicate(dirs: &DataDirs, source: &Instance, with_worlds: bool) -> Result<Instance> {
     if source.is_default() || source.version.is_none() {
         return Err(Error::Other(
-            "the Vanilla instance follows the newest release: make a new instance instead".into(),
+            "the Arctic instance follows the version picked on the Play tab and can't be copied: make a new instance instead".into(),
         ));
     }
     let name = free_name(dirs, &format!("{} copy", source.name))?;

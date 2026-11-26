@@ -228,9 +228,10 @@ mod tests {
 
     #[test]
     fn only_installed_fabric_and_arctic_instances_supply_games() {
-        let default = Instance::vanilla_default();
+        let default = Instance::arctic_default();
         let mut fabric = default.clone();
         fabric.id = "fabric".into();
+        fabric.builtin = false;
         fabric.version = Some("26.3".into());
         fabric.loader = Loader::Fabric {
             version: "0.20.1".into(),
@@ -258,7 +259,7 @@ mod tests {
     fn stale_loader_remains_available_until_everything_is_staged() {
         let temp = tempfile::tempdir().unwrap();
         let dirs = DataDirs::new(temp.path());
-        let instance = Instance::vanilla_default();
+        let instance = Instance::arctic_default();
         let game = "26.3";
         let old = "0.19.0";
         let new = "0.20.1";

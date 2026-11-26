@@ -241,7 +241,7 @@ impl ArcticApp {
         self.custom_instances.iter_mut().find(|i| i.id == id)
     }
 
-    /// Instance chosen on the Play tab (falls back to Vanilla).
+    /// Instance chosen on the Play tab (falls back to Arctic).
     pub(crate) fn selected_instance(&self) -> &Instance {
         self.settings
             .last_instance

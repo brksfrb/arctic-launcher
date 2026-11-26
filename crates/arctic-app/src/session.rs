@@ -40,6 +40,13 @@ impl ProfileData {
         if let Err(e) = arctic_core::net::set_proxy(proxy.enabled.then_some(&proxy)) {
             note(t!("tasks.the_proxy_settings_cant_be_used_so_the"), e);
         }
+        // Before the settings are read: moving a pure-vanilla default over keeps it the selected
+        // instance, which is written to the settings.
+        match instances::ensure_default(dirs) {
+            Ok((_, Some(done))) => log::info!("instances: Arctic instance set up: {done:?}"),
+            Ok((_, None)) => {}
+            Err(e) => log::warn!("instances: couldn't set up the Arctic instance: {e}"),
+        }
         let settings = Settings::load(dirs).unwrap_or_else(|e| {
             note(t!("tasks.settings_were_unreadable_using_defaults"), e);
             Settings::default()
@@ -50,7 +57,7 @@ impl ProfileData {
         });
         let instance = instances::load_default(dirs).unwrap_or_else(|e| {
             note(t!("tasks.could_not_load_the_vanilla_instance"), e);
-            Instance::vanilla_default()
+            Instance::arctic_default()
         });
         let custom_instances = instances::list_custom(dirs).unwrap_or_default();
         let faces = load_faces(dirs, &accounts, tasks);

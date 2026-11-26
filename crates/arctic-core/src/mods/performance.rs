@@ -1813,7 +1813,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let game = dir.path();
         installed_set(game, "0.0-test", "sodium.jar");
-        let mut instance = crate::instances::Instance::vanilla_default();
+        let mut instance = crate::instances::Instance::arctic_default();
         let holds = |instance: &crate::instances::Instance, version: &str| {
             let settled = settled::Settled::new(game, version, instance, true);
             settled.holds(settled.inputs().as_ref())

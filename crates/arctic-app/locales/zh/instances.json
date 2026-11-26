@@ -20,7 +20,6 @@
   "instances.arctic": "ARCTIC",
   "instances.arctic_downloads_the_right_java_for_each": "Arctic 会为每个 Minecraft 版本下载合适的 Java。",
   "instances.arctic_mod": "Arctic 模组",
-  "instances.arctics_menus_hud_and_looks_in_game": "游戏内的 Arctic 菜单、HUD 和外观。底层通过 Fabric 运行 Minecraft；关闭此项和性能即可得到纯原版。",
   "instances.back": "返回",
   "instances.back_to_preview_esc": "返回预览 · Esc",
   "instances.back_to_results": "返回结果",
@@ -307,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "该文件不存在；将使用托管的 Java。",
   "instances.that_instance_is_gone": "该实例已不存在。",
   "instances.the_arctic_client_is_off_for_every_instance": "所有实例都已关闭 Arctic Client",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic 客户端可在原版、Fabric 和 Quilt 实例以及 Forge 1.8.9 上运行。此加载器或版本暂不支持：创建同版本的原版或 Fabric 实例即可使用。",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic 客户端可在 Arctic 实例、Fabric 和 Quilt 实例以及 Forge 1.8.9 上运行。此加载器或版本暂不支持：游玩 Arctic 实例，或创建同版本的 Fabric 实例即可使用。",
   "instances.the_default_instance_plays_whichever_release": "默认实例运行你在“开始游戏”页选择的版本。",
   "instances.the_folder_worlds_and_mods_included_is_moved": "文件夹（含世界和模组）会移到 instances/.trash，不会删除。",
   "instances.the_game_would_stop_while_loading_fix_them": "游戏会在加载 {name} 时停止。在这里修复，或仍然游玩。",
@@ -320,7 +319,7 @@
   "instances.this_project_has_no_gallery_screenshots_yet": "此项目还没有图库截图。",
   "instances.trash": "回收站（{removed}）",
   "instances.trash_2": "回收站",
-  "instances.turn_it_off_for_pure_vanilla_or_just_your": "关闭它即可使用纯原版或仅你自己的模组。之后可以在实例页面中更改。",
+  "instances.turn_it_off_for_pure_vanilla_or_just_your": "关闭它即可只使用你自己的模组。之后可以在实例页面中更改。",
   "instances.turned_off": "，已关闭：{join}",
   "instances.update_all": "全部更新",
   "instances.update_available.one": "有 1 个更新",
@@ -384,7 +383,7 @@
   "instances.hub.nothing_matches": "没有符合这些筛选条件的内容。",
   "instances.hub.filters_failed": "无法加载筛选列表：{e}",
   "instances.hub.follows": "{compact} 关注",
-  "instances.hub.vanilla_has_no_mods": "原版实例无法加载模组。请在上方选择带模组的实例。",
+  "instances.hub.vanilla_has_no_mods": "Arctic 和原版实例无法从这里加载模组。请在上方选择带模组的实例。",
   "instances.hub.shader_loader_missing": "此实例未安装 {name}，将随光影包一并添加。",
   "instances.hub.shaders_switched_on": "将为此实例启用光影。",
   "instances.hub.versions": "版本",
@@ -418,5 +417,7 @@
   "instances.hub.partial_install": "所选项目中有 {count} 项无法安装到此实例。详情将显示在结果摘要中。",
   "instances.hub.install_compatible": "安装兼容的项目",
   "instances.hub.partially_compatible": "部分兼容",
-  "instances.hub.modpacks_create_instances": "每个整合包都会创建独立的实例。"
+  "instances.hub.modpacks_create_instances": "每个整合包都会创建独立的实例。",
+  "instances.vanilla_stays_vanilla": "原版保持原版，不带 Arctic 客户端。装饰、徽章和 Play Together 需要它：请游玩 Arctic 实例，或开启了 Arctic 客户端的 Fabric 实例。",
+  "instances.the_arctic_instance_always_plays_with_the_client": "在 Arctic 实例中始终开启：游戏内的 Arctic 菜单、HUD 和外观。如需使用自己的模组，请创建 Fabric 实例。"
 }

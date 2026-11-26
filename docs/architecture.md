@@ -162,8 +162,10 @@ picked in the launcher) so cape changes made in game publish as that player.
 
 ## The Arctic Client (`mod/`)
 
-Vanilla instances run the Arctic Client on supported versions: Fabric plus the Arctic mod,
-installed quietly (`launch::effective_loader`); Fabric and Quilt instances get the mod too.
+The built-in Arctic instance (`instances::builtin`; every profile has one, and older
+profiles' "Vanilla" default is moved over to it once) runs the Arctic Client on supported
+versions: Fabric plus the Arctic mod, installed quietly (`launch::effective_loader`). Fabric
+and Quilt instances get the mod too when their switch is on; plain Vanilla instances never do.
 The launcher embeds `mod/dist/arctic-client.pack`: every target's jar, with each file
 stored once and LZMA-compressed together (about 1 MB for all versions, against about 24 MB
 of jars; most files are the same in every version). Before launch it rebuilds the jar the

@@ -156,16 +156,25 @@ impl ArcticApp {
                 );
                 ui.add_space(10.0);
                 ui.label(RichText::new(t!("instances.arctic")).small().color(p.muted));
-                let mut arctic = !form.arctic_off;
-                if ui
-                    .checkbox(
-                        &mut arctic,
-                        t!("instances.play_with_the_arctic_client_menus_hud_looks"),
-                    )
-                    .on_hover_text(t!("instances.turn_it_off_for_pure_vanilla_or_just_your"))
-                    .changed()
-                {
-                    form.arctic_off = !arctic;
+                if form.loader.is_some() {
+                    let mut arctic = !form.arctic_off;
+                    if ui
+                        .checkbox(
+                            &mut arctic,
+                            t!("instances.play_with_the_arctic_client_menus_hud_looks"),
+                        )
+                        .on_hover_text(t!("instances.turn_it_off_for_pure_vanilla_or_just_your"))
+                        .changed()
+                    {
+                        form.arctic_off = !arctic;
+                    }
+                } else {
+                    // Vanilla stays vanilla: no hidden switch that would run it on Fabric.
+                    ui.label(
+                        RichText::new(t!("instances.vanilla_stays_vanilla"))
+                            .small()
+                            .color(p.muted),
+                    );
                 }
                 ui.add_space(14.0);
                 crate::widgets::row(ui, |ui| {
@@ -291,7 +300,9 @@ impl ArcticApp {
         let loader = Loader::new(form.loader, form.loader_version.clone().unwrap_or_default());
         match instances::create(&self.dirs, &name, &game, loader).and_then(|mut i| {
             i.own_settings = form.own_settings;
-            i.arctic_mod = !form.arctic_off;
+            if i.has_arctic_switch() {
+                i.arctic_mod = !form.arctic_off;
+            }
             i.save(&self.dirs).map(|()| i)
         }) {
             Ok(instance) => {

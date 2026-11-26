@@ -12,7 +12,7 @@
   "play.add_another_account": "再添加一个账户",
   "play.add_your_account": "添加你的账户",
   "play.added": "已添加 {username}",
-  "play.adds_sodium_lithium_and_friends_to_vanilla": "为原版加入 Sodium、Lithium 等优化模组，大幅提高 FPS。你的世界不会被改动。",
+  "play.adds_sodium_lithium_and_friends_to_vanilla": "添加 Sodium、Lithium 等模组，大幅提升 FPS。你的世界不会被改动。",
   "play.all": "全部",
   "play.also_running": "同时运行中",
   "play.animated_background": "动态背景",
@@ -165,7 +165,6 @@
   "play.plus_more_keys_video_chat": "还有 {count} 项（按键、视频、聊天…）",
   "play.profile_name_hint": "例如 速通、家庭、测试",
   "play.profiles": "配置文件",
-  "play.pure_vanilla_no_cosmetics_or_capes_no": "纯原版：没有装扮和披风，不能和好友联机，游戏里没有 Arctic 菜单和 HUD。随时可在“实例 → 原版”中重新开启。",
   "play.pure_vanilla_no_cosmetics_or_capes_no_2": "纯原版：没有装饰和披风，不能和好友一起玩，游戏中没有 Arctic 菜单和 HUD。随时可在“设置 → Arctic Client”中重新开启。",
   "play.puts_these_settings_into_that_instance_now": "立即把这些设置写入那个实例（其余设置保持不变）",
   "play.quit_the_launcher": "退出启动器",
@@ -257,5 +256,6 @@
   "play.you_can_change_this_any_time_in_settings": "这个随时可在设置中更改。",
   "play.you_can_turn_this_off_in_settings_updates": "可在“设置 → 更新 → 更新后显示新变化”中关闭。",
   "play.you_wont_see_other_players_arctic_looks": "你将看不到其他玩家的 Arctic 外观（皮肤和披风），游戏里也没有 Arctic 菜单。你的 Arctic 设置会保留。随时可以重新开启。",
-  "play.your_sign_in_stays_on_this_pc_encrypted": "登录信息加密保存在这台电脑上。Arctic 绝不会看到你的密码。"
+  "play.your_sign_in_stays_on_this_pc_encrypted": "登录信息加密保存在这台电脑上。Arctic 绝不会看到你的密码。",
+  "play.arctic": "Arctic"
 }

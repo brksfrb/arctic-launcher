@@ -453,15 +453,14 @@ impl ArcticApp {
             t!("play.the_arctic_client_restyles_minecrafts_menus"),
         );
         ui.add_space(10.0);
-        let mut client = self.settings.play_with_client && self.instance.arctic_mod;
+        // The Arctic instance always has the client; this is the launcher-wide switch
+        // (Settings → Arctic Client has the same one).
+        let mut client = self.settings.play_with_client;
         if ui
             .checkbox(&mut client, t!("play.play_with_the_arctic_client"))
             .changed()
         {
-            // For every instance (Settings → Arctic Client has the same switch), and this first one.
             self.settings.play_with_client = client;
-            let id = self.instance.id.clone();
-            self.update_instance(&id, |i| i.arctic_mod = client);
         }
         if !client {
             ui.label(
@@ -566,7 +565,7 @@ impl ArcticApp {
             ),
             [] => String::new(),
         };
-        let vanilla = if self.instance.arctic_mod {
+        let vanilla = if self.settings.play_with_client {
             t!("play.the_latest_minecraft_release_with_the_arctic")
         } else {
             t!("play.the_latest_minecraft_release_pure_vanilla")
@@ -581,7 +580,7 @@ impl ArcticApp {
             ));
         }
         choices.extend([
-            (FirstPlay::Vanilla, Icon::Play, t!("play.vanilla"), vanilla),
+            (FirstPlay::Vanilla, Icon::Play, t!("play.arctic"), vanilla),
             (
                 FirstPlay::Modded,
                 Icon::Layers,

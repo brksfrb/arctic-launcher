@@ -20,7 +20,6 @@
   "instances.arctic": "ARCTIC",
   "instances.arctic_downloads_the_right_java_for_each": "ArcticはMinecraftのバージョンごとに適切なJavaをダウンロードします。",
   "instances.arctic_mod": "Arctic Mod",
-  "instances.arctics_menus_hud_and_looks_in_game": "ゲーム内のArcticのメニュー、HUD、見た目。内部ではFabric上でMinecraftが動きます。純粋なバニラにするにはこれとパフォーマンスをオフにしてください。",
   "instances.back": "戻る",
   "instances.back_to_preview_esc": "プレビューに戻る · Esc",
   "instances.back_to_results": "結果に戻る",
@@ -307,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "そのファイルは存在しません。管理されたJavaを使用します。",
   "instances.that_instance_is_gone": "そのインスタンスはもうありません。",
   "instances.the_arctic_client_is_off_for_every_instance": "すべてのインスタンスで Arctic Client がオフです",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Clientはバニラ、Fabric、QuiltのインスタンスとForge 1.8.9で動作します。このローダーやバージョンにはまだ対応していません。同じバージョンのバニラかFabricのインスタンスを作成して使ってください。",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic ClientはArcticインスタンス、FabricとQuiltのインスタンス、Forge 1.8.9で動作します。このローダーやバージョンにはまだ対応していません。Arcticインスタンスで遊ぶか、同じバージョンのFabricインスタンスを作成して使ってください。",
   "instances.the_default_instance_plays_whichever_release": "デフォルトのインスタンスは、プレイタブで選んだバージョンを起動します。",
   "instances.the_folder_worlds_and_mods_included_is_moved": "フォルダー（ワールドとModを含む）はinstances/.trashに移動され、消去はされません。",
   "instances.the_game_would_stop_while_loading_fix_them": "{name} の読み込み中にゲームが止まります。ここで修正するか、それでもプレイしてください。",
@@ -320,7 +319,7 @@
   "instances.this_project_has_no_gallery_screenshots_yet": "このプロジェクトにはまだギャラリーのスクリーンショットがありません。",
   "instances.trash": "ゴミ箱（{removed}）",
   "instances.trash_2": "ゴミ箱",
-  "instances.turn_it_off_for_pure_vanilla_or_just_your": "純粋なバニラや自分の MOD だけで遊ぶならオフにします。あとでインスタンスのページで変更できます。",
+  "instances.turn_it_off_for_pure_vanilla_or_just_your": "自分の MOD だけで遊ぶならオフにします。あとでインスタンスのページで変更できます。",
   "instances.turned_off": "、オフ: {join}",
   "instances.update_all": "すべて更新",
   "instances.update_available.one": "1 件のアップデートがあります",
@@ -384,7 +383,7 @@
   "instances.hub.nothing_matches": "これらのフィルターに一致するものはありません。",
   "instances.hub.filters_failed": "フィルター一覧を読み込めませんでした: {e}",
   "instances.hub.follows": "フォロー {compact}",
-  "instances.hub.vanilla_has_no_mods": "Vanilla インスタンスでは Mod を読み込めません。上で Mod 付きのインスタンスを選んでください。",
+  "instances.hub.vanilla_has_no_mods": "Arctic とバニラのインスタンスにはここから Mod を読み込めません。上で Mod 付きのインスタンスを選んでください。",
   "instances.hub.shader_loader_missing": "{name} はこのインスタンスに入っていません。シェーダーパックと一緒に追加されます。",
   "instances.hub.shaders_switched_on": "このインスタンスではシェーダーが有効になります。",
   "instances.hub.versions": "バージョン",
@@ -418,5 +417,7 @@
   "instances.hub.partial_install": "選択したプロジェクトのうち {count} 件はこのインスタンスにインストールできません。詳細は結果に表示されます。",
   "instances.hub.install_compatible": "互換性のあるプロジェクトをインストール",
   "instances.hub.partially_compatible": "一部に互換性あり",
-  "instances.hub.modpacks_create_instances": "Modpack ごとに新しいインスタンスを作成します。"
+  "instances.hub.modpacks_create_instances": "Modpack ごとに新しいインスタンスを作成します。",
+  "instances.vanilla_stays_vanilla": "バニラはバニラのまま、Arctic Client なしで動きます。コスメ、バッジ、Play Together には Arctic Client が必要です。Arctic インスタンスか、Arctic Client をオンにした Fabric インスタンスで遊んでください。",
+  "instances.the_arctic_instance_always_plays_with_the_client": "Arctic インスタンスでは常にオン：ゲーム内で Arctic のメニュー、HUD、見た目が使えます。自分の MOD を使うなら Fabric インスタンスを作成してください。"
 }

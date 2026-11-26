@@ -12,7 +12,7 @@
   "play.add_another_account": "Başka bir hesap ekle",
   "play.add_your_account": "Hesabını ekle",
   "play.added": "{username} eklendi",
-  "play.adds_sodium_lithium_and_friends_to_vanilla": "Çok daha yüksek FPS için Vanilla'ya Sodium, Lithium ve arkadaşlarını ekler. Dünyaların değişmez.",
+  "play.adds_sodium_lithium_and_friends_to_vanilla": "Çok daha yüksek FPS için Sodium, Lithium ve benzerlerini ekler. Dünyaların değişmez.",
   "play.all": "Tümü",
   "play.also_running": "AYRICA ÇALIŞIYOR",
   "play.animated_background": "Hareketli arka plan",
@@ -165,7 +165,6 @@
   "play.plus_more_keys_video_chat": "Artı {count} tane daha (tuşlar, video, sohbet…)",
   "play.profile_name_hint": "ör. Speedrun, Aile, Test",
   "play.profiles": "Profiller",
-  "play.pure_vanilla_no_cosmetics_or_capes_no": "Saf vanilla: kozmetik ya da pelerin yok, arkadaşlarla birlikte oynama yok, oyunda Arctic menüsü ya da HUD yok. İstediğin zaman Örnekler → Vanilla'dan tekrar açabilirsin.",
   "play.pure_vanilla_no_cosmetics_or_capes_no_2": "Saf vanilla: kozmetik ya da pelerin yok, arkadaşlarla birlikte oynama yok, oyunda Arctic menüsü ya da HUD yok. İstediğin zaman Ayarlar → Arctic Client'tan yeniden aç.",
   "play.puts_these_settings_into_that_instance_now": "Bu ayarları şimdi o örneğe koyar (diğer ayarları kalır)",
   "play.quit_the_launcher": "Başlatıcıdan çık",
@@ -257,5 +256,6 @@
   "play.you_can_change_this_any_time_in_settings": "Bunu istediğin zaman Ayarlar'dan değiştirebilirsin.",
   "play.you_can_turn_this_off_in_settings_updates": "Bunu Ayarlar → Güncellemeler → \"Güncelledikten sonra yenilikleri göster\" ile kapatabilirsin.",
   "play.you_wont_see_other_players_arctic_looks": "Diğer oyuncuların Arctic görünümlerini (skin ve pelerinler) ya da oyunda Arctic menüsünü görmezsin. Arctic ayarların korunur. İstediğin zaman tekrar açabilirsin.",
-  "play.your_sign_in_stays_on_this_pc_encrypted": "Oturumun bu bilgisayarda şifreli olarak kalır. Arctic şifreni asla görmez."
+  "play.your_sign_in_stays_on_this_pc_encrypted": "Oturumun bu bilgisayarda şifreli olarak kalır. Arctic şifreni asla görmez.",
+  "play.arctic": "Arctic"
 }

@@ -20,7 +20,6 @@
   "instances.arctic": "ARCTIC",
   "instances.arctic_downloads_the_right_java_for_each": "Arctic pobiera właściwą Javę dla każdej wersji Minecrafta.",
   "instances.arctic_mod": "Mod Arctic",
-  "instances.arctics_menus_hud_and_looks_in_game": "Menu, HUD i wyglądy Arctic w grze. Minecraft działa pod spodem na Fabric; wyłącz to i Wydajność dla czystej vanilli.",
   "instances.back": "Wstecz",
   "instances.back_to_preview_esc": "Wróć do podglądu · Esc",
   "instances.back_to_results": "Wróć do wyników",
@@ -307,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Ten plik nie istnieje; zostanie użyta zarządzana Java.",
   "instances.that_instance_is_gone": "Tej instancji już nie ma.",
   "instances.the_arctic_client_is_off_for_every_instance": "Arctic Client jest wyłączony we wszystkich instancjach",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client działa na instancjach Vanilla, Fabric i Quilt oraz na Forge 1.8.9. Na tym loaderze lub wersji jeszcze nie: utwórz instancję Vanilla lub Fabric tej samej wersji, aby z niego korzystać.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client działa na instancji Arctic, na instancjach Fabric i Quilt oraz na Forge 1.8.9. Na tym loaderze lub wersji jeszcze nie: graj na instancji Arctic lub utwórz instancję Fabric tej samej wersji, aby z niego korzystać.",
   "instances.the_default_instance_plays_whichever_release": "Domyślna instancja uruchamia wersję wybraną w zakładce Graj.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "Folder (ze światami i modami) trafia do instances/.trash, nie jest kasowany.",
   "instances.the_game_would_stop_while_loading_fix_them": "Gra zatrzymałaby się przy wczytywaniu {name}. Napraw to tutaj albo graj mimo to.",
@@ -320,7 +319,7 @@
   "instances.this_project_has_no_gallery_screenshots_yet": "Ten projekt nie ma jeszcze zrzutów ekranu w galerii.",
   "instances.trash": "Kosz ({removed})",
   "instances.trash_2": "Kosz",
-  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Wyłącz dla czystego vanilla lub tylko własnych modów. Możesz to zmienić później na stronie instancji.",
+  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Wyłącz, aby grać tylko z własnymi modami. Możesz to zmienić później na stronie instancji.",
   "instances.turned_off": ", wyłączone: {join}",
   "instances.update_all": "Zaktualizuj wszystko",
   "instances.update_available.few": "Dostępne {n} aktualizacje",
@@ -388,7 +387,7 @@
   "instances.hub.nothing_matches": "Nic nie pasuje do tych filtrów.",
   "instances.hub.filters_failed": "Nie udało się wczytać list filtrów: {e}",
   "instances.hub.follows": "{compact} obserwujących",
-  "instances.hub.vanilla_has_no_mods": "Instancje Vanilla nie wczytują modów. Wybierz wyżej instancję z modami.",
+  "instances.hub.vanilla_has_no_mods": "Instancje Arctic i Vanilla nie wczytują stąd modów. Wybierz wyżej instancję z modami.",
   "instances.hub.shader_loader_missing": "{name} nie jest zainstalowany w tej instancji; zostanie dodany razem z paczką shaderów.",
   "instances.hub.shaders_switched_on": "Shadery zostaną włączone dla tej instancji.",
   "instances.hub.versions": "Wersje",
@@ -422,5 +421,7 @@
   "instances.hub.partial_install": "Nie można zainstalować {count} wybranych projektów w tej instancji. Zostaną wymienione w podsumowaniu.",
   "instances.hub.install_compatible": "Zainstaluj zgodne projekty",
   "instances.hub.partially_compatible": "Częściowo zgodne",
-  "instances.hub.modpacks_create_instances": "Każda paczka modów tworzy osobną instancję."
+  "instances.hub.modpacks_create_instances": "Każda paczka modów tworzy osobną instancję.",
+  "instances.vanilla_stays_vanilla": "Vanilla zostaje vanilla, bez Arctic Client. Kosmetyki, odznaki i Play Together go potrzebują: graj na instancji Arctic lub na instancji Fabric z włączonym Arctic Client.",
+  "instances.the_arctic_instance_always_plays_with_the_client": "W instancji Arctic zawsze włączony: menu, HUD i wygląd Arctic w grze. Do własnych modów utwórz instancję Fabric."
 }

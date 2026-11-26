@@ -41,7 +41,7 @@ const SETTINGS: &[&str] = &[
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProfilePack {
     pub settings: Map<String, Value>,
-    /// The built-in Vanilla instance (its options and client settings).
+    /// The built-in Arctic instance (its options and client settings).
     #[serde(default)]
     pub vanilla: Option<InstancePack>,
     #[serde(default)]
@@ -130,7 +130,7 @@ impl ProfilePack {
         })
     }
 
-    /// Apply to this PC's profile: settings, the Vanilla instance's options,
+    /// Apply to this PC's profile: settings, the Arctic instance's options,
     /// and new instances (downloading their mods).
     pub fn import(&self, dirs: &DataDirs, progress: Progress) -> Result<ProfileReport> {
         let vanilla_dir = instances::load_default(dirs)?.game_dir(dirs);
@@ -138,7 +138,7 @@ impl ProfilePack {
             && super::client::in_use(&vanilla_dir)
         {
             return Err(Error::Other(
-                "Minecraft is running from the Vanilla instance; close it first".into(),
+                "Minecraft is running from the Arctic instance; close it first".into(),
             ));
         }
         let current = Settings::load(dirs)?;

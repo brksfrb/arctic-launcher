@@ -12,7 +12,7 @@
   "play.add_another_account": "Добавить ещё аккаунт",
   "play.add_your_account": "Добавьте свой аккаунт",
   "play.added": "Добавлен {username}",
-  "play.adds_sodium_lithium_and_friends_to_vanilla": "Добавляет в Vanilla Sodium, Lithium и компанию для намного большего FPS. Ваши миры не меняются.",
+  "play.adds_sodium_lithium_and_friends_to_vanilla": "Добавляет Sodium, Lithium и другие моды для гораздо более высокого FPS. Ваши миры не меняются.",
   "play.all": "Все",
   "play.also_running": "ТАКЖЕ ЗАПУЩЕНО",
   "play.animated_background": "Анимированный фон",
@@ -167,7 +167,6 @@
   "play.plus_more_keys_video_chat": "И ещё {count} (клавиши, видео, чат…)",
   "play.profile_name_hint": "например, Спидраны, Семья, Тесты",
   "play.profiles": "Профили",
-  "play.pure_vanilla_no_cosmetics_or_capes_no": "Чистая vanilla: без косметики и плащей, без совместной игры с друзьями, без меню и HUD Arctic в игре. Включить обратно можно в любой момент: Сборки → Vanilla.",
   "play.pure_vanilla_no_cosmetics_or_capes_no_2": "Чистая ваниль: без косметики и плащей, без совместной игры с друзьями, без меню и HUD Arctic в игре. Включить обратно можно в любой момент в Настройки → Arctic Client.",
   "play.puts_these_settings_into_that_instance_now": "Сразу записывает эти настройки в ту сборку (остальные её настройки сохраняются)",
   "play.quit_the_launcher": "Выйти из лаунчера",
@@ -259,5 +258,6 @@
   "play.you_can_change_this_any_time_in_settings": "Это можно изменить в любой момент в настройках.",
   "play.you_can_turn_this_off_in_settings_updates": "Это можно отключить: Настройки → Обновления → «Показывать, что нового, после обновления».",
   "play.you_wont_see_other_players_arctic_looks": "Вы не увидите образы Arctic других игроков (скины и плащи) и меню Arctic в игре. Ваши настройки Arctic сохраняются. Включить обратно можно в любой момент.",
-  "play.your_sign_in_stays_on_this_pc_encrypted": "Данные входа остаются на этом ПК в зашифрованном виде. Arctic никогда не видит ваш пароль."
+  "play.your_sign_in_stays_on_this_pc_encrypted": "Данные входа остаются на этом ПК в зашифрованном виде. Arctic никогда не видит ваш пароль.",
+  "play.arctic": "Arctic"
 }
