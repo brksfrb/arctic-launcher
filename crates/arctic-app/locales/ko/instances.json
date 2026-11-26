@@ -189,6 +189,7 @@
   "instances.no_loader_builds_for_this_version": "이 버전용 로더 빌드가 없습니다.",
   "instances.no_modpacks_found": "모드팩을 찾지 못했습니다.",
   "instances.no_mods_found": "모드를 찾지 못했습니다.",
+  "instances.restart_to_apply_mod_changes": "모드 변경 사항을 적용하려면 게임을 다시 시작하세요.",
   "instances.no_mods_yet": "아직 모드가 없습니다",
   "instances.no_other_loader_has_a_build_for_minecraft": "Minecraft {game}용 빌드가 있는 다른 로더가 없습니다.",
   "instances.no_replays_yet": "아직 리플레이가 없습니다",

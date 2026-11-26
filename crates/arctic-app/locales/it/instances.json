@@ -189,6 +189,7 @@
   "instances.no_loader_builds_for_this_version": "Nessuna build del loader per questa versione.",
   "instances.no_modpacks_found": "Nessun modpack trovato.",
   "instances.no_mods_found": "Nessuna mod trovata.",
+  "instances.restart_to_apply_mod_changes": "Riavvia il gioco per applicare le modifiche alle mod.",
   "instances.no_mods_yet": "Ancora nessuna mod",
   "instances.no_other_loader_has_a_build_for_minecraft": "Nessun altro loader ha una build per Minecraft {game}.",
   "instances.no_replays_yet": "Ancora nessun replay",

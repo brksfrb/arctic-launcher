@@ -189,6 +189,7 @@
   "instances.no_loader_builds_for_this_version": "Bu sürüm için yükleyici derlemesi yok.",
   "instances.no_modpacks_found": "Mod paketi bulunamadı.",
   "instances.no_mods_found": "Mod bulunamadı.",
+  "instances.restart_to_apply_mod_changes": "Mod değişikliklerini uygulamak için oyunu yeniden başlatın.",
   "instances.no_mods_yet": "Henüz mod yok",
   "instances.no_other_loader_has_a_build_for_minecraft": "Başka hiçbir yükleyicinin Minecraft {game} için sürümü yok.",
   "instances.no_replays_yet": "Henüz tekrar yok",
