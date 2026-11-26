@@ -378,6 +378,7 @@ dependencies = [
  "env_logger",
  "flate2",
  "getrandom 0.3.4",
+ "gif",
  "hex",
  "junction",
  "log",
