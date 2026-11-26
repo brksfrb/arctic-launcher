@@ -1062,9 +1062,16 @@ pub enum ShutdownHook {
 impl ShutdownHook {
     pub fn from_log(text: &str) -> Self {
         let has = |marker: &str| text.lines().any(|l| l.starts_with(marker));
-        if has(HOOK_RAN) {
+        // The launcher's exit line is written from the full log, so it survives a trimmed tail.
+        let ended = |verdict: &str| {
+            text.lines().any(|l| {
+                l.starts_with("[Arctic diagnostics] process ended")
+                    && l.contains(&format!("; shutdown hook: {verdict}"))
+            })
+        };
+        if has(HOOK_RAN) || ended("ran;") {
             Self::Ran
-        } else if has(TRACE_INSTALLED) {
+        } else if has(TRACE_INSTALLED) || ended("did not run") {
             Self::DidNotRun
         } else {
             Self::NotInstalled
@@ -3300,6 +3307,8 @@ impl Report {
         }
         let unclear_exit = reported_exit_code(&diagnosis_text)
             .and_then(|code| unexplained_exit(&diagnosis_text, code));
+        let tracer_saw_no_shutdown =
+            ShutdownHook::from_log(&diagnosis_text) == ShutdownHook::DidNotRun;
         // Keep the exact triggering line even when it falls outside the uploaded log tail.
         let crash = diagnose_crash_match(&diagnosis_text, java);
         let diagnosis_tail = tail_of(&diagnosis_text, MAX_TEXT);
@@ -3540,10 +3549,12 @@ impl Report {
                     .is_some_and(|(d, _)| d.title == DISK_FULL_TITLE)
                 {
                     DISK_FULL_TITLE
-                } else if let Some(unclear) = unclear_exit
-                    .as_ref()
-                    .filter(|_| crash_report.is_none() && !failed_save && sodium_driver.is_none())
-                {
+                } else if let Some(unclear) = unclear_exit.as_ref().filter(|_| {
+                    crash_report.is_none()
+                        && !failed_save
+                        && sodium_driver.is_none()
+                        && (tracer_saw_no_shutdown || diagnosis.is_none())
+                }) {
                     &unclear.title
                 } else if failed_save {
                     SAVE_FAILED_TITLE
@@ -5985,6 +5996,18 @@ Caused by: java.lang.NullPointerException: Cannot invoke "net.minecraftforge.fml
         assert!(report.log.contains("pid 4242, launch id 18f-1a-0"));
         assert!(report.log.contains("shutdown hook: did not run"));
         assert!(report.log.contains("none recorded"));
+    }
+
+    #[test]
+    fn unclear_77_without_the_tracer_yields_to_a_real_diagnosis_and_trimmed_logs_keep_the_verdict()
+    {
+        let dir = tempfile::tempdir().unwrap();
+        let oom = "java.lang.OutOfMemoryError: Java heap space\nexit code 77";
+        let d = crate::crash_conflicts::diagnose_exit_in(oom, 77, dir.path()).unwrap();
+        assert!(!d.title.contains("unclear"), "{}", d.title);
+        let tail = "[Arctic diagnostics] process ended after 8100 ms; exit code 77 (0x0000004D); pid=1 launch=a; shutdown hook: did not run (x); window not opened";
+        assert_eq!(ShutdownHook::from_log(tail), ShutdownHook::DidNotRun);
+        assert!(unexplained_exit(tail, 77).is_some());
     }
 
     #[test]

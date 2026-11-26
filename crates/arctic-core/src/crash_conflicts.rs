@@ -1095,8 +1095,13 @@ pub fn diagnose_exit_in_with_java(
     if let Some((disk_full, _)) = crate::crash::disk_full_diagnosis(text) {
         return Some(disk_full);
     }
-    if let Some(unclear) = crate::crash::unexplained_exit(text, code) {
-        return Some(unclear);
+    // The hook never ran: the JVM did not exit through Java, so a logged mod error is not the cause.
+    // Without the tracer that proves nothing, so a real diagnosis outranks "unclear" then.
+    let unclear = crate::crash::unexplained_exit(text, code);
+    if unclear.is_some()
+        && crate::crash::ShutdownHook::from_log(text) == crate::crash::ShutdownHook::DidNotRun
+    {
+        return unclear;
     }
     let mods = scan(mods_dir);
     let diagnosis = if crate::crash::vanilla_crash_save_failed(text, code).is_some() {
@@ -1109,6 +1114,7 @@ pub fn diagnose_exit_in_with_java(
             crate::crash::exit_description(code)
         );
         diagnose_with_mods(&with_exit, mods_dir, &mods, java)
+            .or_else(|| unclear.clone())
             .or_else(|| crate::crash::silent_exit(text, code))
     };
     let diagnosis = match diagnosis {
