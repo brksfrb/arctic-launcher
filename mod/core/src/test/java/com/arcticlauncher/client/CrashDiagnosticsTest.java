@@ -32,6 +32,43 @@ class CrashDiagnosticsTest {
         }
     }
 
+    @Test
+    void installLineTagsPidAndLaunchAndHookLineOnlyAppearsOnNormalShutdown(@TempDir Path directory) throws Exception {
+        String normal = run(directory, "exit");
+        String halted = run(directory, "halt");
+        assertTrue(normal.contains("exit trace installed; pid="), normal);
+        assertTrue(normal.contains(" launch=test-launch.1;"), normal);
+        assertTrue(normal.contains("shutdown hook ran; pid="), normal);
+        assertTrue(halted.contains("exit trace installed; pid="), halted);
+        assertTrue(halted.contains(" launch=test-launch.1;"), halted);
+        assertFalse(halted.contains("shutdown hook ran"), halted);
+        assertTrue(halted.matches("(?s).*installed; pid=\\d+ .*"), halted);
+    }
+
+    private static String run(Path directory, String mode) throws Exception {
+        String classpath = new File(CrashDiagnostics.class.getProtectionDomain().getCodeSource().getLocation().toURI())
+                + File.pathSeparator
+                + new File(Probe.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        Path output = directory.resolve(mode + ".log");
+        Process child = new ProcessBuilder(new File(System.getProperty("java.home"), "bin/java").toString(),
+                "-Darctic.launch.id=test-launch.1", "-cp", classpath, ExitProbe.class.getName(), mode)
+                .directory(directory.toFile()).redirectErrorStream(true).redirectOutput(output.toFile()).start();
+        try {
+            assertTrue(child.waitFor(10, TimeUnit.SECONDS), "probe did not finish");
+            return new String(Files.readAllBytes(output), StandardCharsets.UTF_8);
+        } finally {
+            child.destroyForcibly();
+        }
+    }
+
+    public static class ExitProbe {
+        public static void main(String[] args) {
+            CrashDiagnostics.install();
+            if (args[0].equals("halt")) Runtime.getRuntime().halt(77);
+            System.exit(77);
+        }
+    }
+
     /** The simulated stall stays in test sources, never in the production jar. */
     public static class Probe {
         public static void main(String[] args) throws Exception {

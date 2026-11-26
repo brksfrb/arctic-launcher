@@ -117,7 +117,9 @@ pub(super) fn spawn_with_session(
     }
     rotate_game_log(&plan.log_file);
     let log = Arc::new(Mutex::new(File::create(&plan.log_file).at(&plan.log_file)?));
-    let (args, argfile) = command_args(plan)?;
+    let launch_id = super::instance_probe::new_launch_id();
+    let (args, argfile) = command_args(plan, &launch_id)?;
+    let other_instance = super::instance_probe::running_on(&plan.game_dir);
     let start = |exe: &Path| {
         let mut cmd = Command::new(exe);
         cmd.args(&args)
@@ -168,6 +170,13 @@ pub(super) fn spawn_with_session(
         spawn_started.elapsed().as_millis(),
         child.id()
     );
+    super::instance_probe::record(&plan.game_dir, child.id(), &launch_id);
+    let ids = launch_ids_line(&launch_id, child.id(), &plan.args, other_instance.as_ref());
+    writeln!(log.lock().unwrap(), "{ids}").ok();
+    on_event(GameEvent::Output(vec![LogLine {
+        level: super::logparse::Level::Info,
+        text: ids,
+    }]));
     let launch_context = format!(
         "[Arctic diagnostics] runtime: agent={}; executable={}; high_performance_gpu={}",
         plan.args
@@ -222,6 +231,7 @@ pub(super) fn spawn_with_session(
     let game_dir = plan.game_dir.clone();
     let managed_runtime = plan.managed_runtime.clone();
     let log_path = plan.log_file.clone();
+    let (game_pid, watcher_window) = (child.id(), window_seen.clone());
     #[cfg(windows)]
     let (source, high_performance_gpu) = (plan.java.clone(), plan.high_performance_gpu);
     std::thread::spawn(move || {
@@ -257,10 +267,16 @@ pub(super) fn spawn_with_session(
         drain_readers([out_reader, err_reader].into_iter().flatten().collect());
         killed |= kill.load(Ordering::Relaxed);
         if let Some(c) = code {
-            let summary = format!(
-                "[Arctic diagnostics] process ended after {} ms; exit code {}",
+            let hook = std::fs::read_to_string(&log_path)
+                .map(|log| crate::crash::ShutdownHook::from_log(&log))
+                .unwrap_or(crate::crash::ShutdownHook::NotInstalled);
+            let summary = ended_line(
                 runtime.as_millis(),
-                crate::crash::exit_description(c)
+                c,
+                game_pid,
+                &launch_id,
+                hook,
+                watcher_window.load(Ordering::Relaxed),
             );
             writeln!(log.lock().unwrap(), "{summary}").ok();
             on_event(GameEvent::Output(vec![LogLine {
@@ -327,6 +343,7 @@ pub(super) fn spawn_with_session(
                 }]));
             }
         }
+        super::instance_probe::clear(&game_dir, &launch_id);
         if let Some(file) = argfile {
             // It holds the access token: gone with the game.
             let _ = std::fs::remove_file(file);
@@ -529,7 +546,9 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     }
     writeln!(log, "{versions}").at(&plan.log_file)?;
     let log_err = log.try_clone().at(&plan.log_file)?;
-    let (args, argfile) = command_args(plan)?;
+    let launch_id = super::instance_probe::new_launch_id();
+    let (args, argfile) = command_args(plan, &launch_id)?;
+    let other_instance = super::instance_probe::running_on(&plan.game_dir);
     let start = |exe: &Path| {
         Command::new(exe)
             .args(&args)
@@ -554,6 +573,9 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     });
     drop(runtime_lock);
     if let Ok(child) = &spawned {
+        super::instance_probe::record(&plan.game_dir, child.id(), &launch_id);
+        let ids = launch_ids_line(&launch_id, child.id(), &plan.args, other_instance.as_ref());
+        writeln!(log, "{ids}").ok();
         // Grant foreground permission before waiting for Java to read its argument file.
         super::game_window::on_spawn(child.id(), plan.maximize_window);
     }
@@ -618,13 +640,66 @@ const ARGFILE_READ_TIME: Duration = Duration::from_secs(5);
 /// The arguments to start Java with, and the `@argfile` that holds them when the command line would be too
 /// long for Windows (a Forge or NeoForge classpath of 100+ libraries under a long data folder). Java 9+ reads
 /// `@file`; Java 8 can't, and gets a message about moving the data folder instead of an obscure spawn error.
-fn command_args(plan: &LaunchPlan) -> Result<(Vec<String>, Option<PathBuf>)> {
+/// The ids and launch-time signals: which game this is, its heap, and whether another game was
+/// still running on the same directory. No account data.
+fn launch_ids_line(
+    launch_id: &str,
+    pid: u32,
+    args: &[String],
+    other: Option<&super::instance_probe::OtherInstance>,
+) -> String {
+    let heap = args
+        .iter()
+        .rev()
+        .find_map(|a| a.strip_prefix("-Xmx"))
+        .map_or_else(
+            || "JVM default".to_owned(),
+            |size| match super::args::heap_size_mb(size) {
+                Some(mb) => format!("{mb} MB"),
+                None => size.to_owned(),
+            },
+        );
+    let other = other.map_or_else(
+        || "none".to_owned(),
+        |o| format!("pid {} (launch {})", o.pid, o.launch),
+    );
+    format!(
+        "[Arctic diagnostics] launch id={launch_id} pid={pid} heap={}; other game instance on this directory: {other}",
+        heap.replace(' ', "_")
+    )
+}
+
+/// The exit summary, tagged with the game pid and launch id and the shutdown-hook verdict.
+fn ended_line(
+    ms: u128,
+    code: i32,
+    pid: u32,
+    launch_id: &str,
+    hook: crate::crash::ShutdownHook,
+    window_opened: bool,
+) -> String {
+    format!(
+        "[Arctic diagnostics] process ended after {ms} ms; exit code {}; pid={pid} launch={launch_id}; shutdown hook: {}; window {}",
+        crate::crash::exit_description(code),
+        hook.describe(),
+        if window_opened {
+            "opened"
+        } else {
+            "not opened"
+        }
+    )
+}
+
+fn command_args(plan: &LaunchPlan, launch_id: &str) -> Result<(Vec<String>, Option<PathBuf>)> {
     // Portal instances run with home as cwd; keep diagnostics in the instance.
     let dir = std::path::absolute(&plan.game_dir).at(&plan.game_dir)?;
-    let mut args = vec![format!(
-        "-Darctic.diagnostics.hangFile={}",
-        dir.join("arctic-hang.txt").display()
-    )];
+    let mut args = vec![
+        format!(
+            "-Darctic.diagnostics.hangFile={}",
+            dir.join("arctic-hang.txt").display()
+        ),
+        format!("-Darctic.launch.id={launch_id}"),
+    ];
     if !plan.args.iter().any(|a| a.starts_with("-XX:ErrorFile=")) {
         args.push(format!(
             "-XX:ErrorFile={}",
@@ -889,6 +964,36 @@ fn is_window_marker(line: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn exit_and_launch_lines_carry_ids_heap_and_other_instance() {
+        use crate::crash::ShutdownHook;
+        let other = super::super::instance_probe::OtherInstance {
+            pid: 99,
+            launch: "old-1".into(),
+        };
+        let ids = launch_ids_line(
+            "new-2",
+            100,
+            &[
+                "-Xms256M".into(),
+                "-Xmx512M".into(),
+                "--accessToken=SECRET".into(),
+            ],
+            Some(&other),
+        );
+        assert!(ids.contains("launch id=new-2 pid=100 heap=512_MB"), "{ids}");
+        assert!(ids.contains("other game instance on this directory: pid 99 (launch old-1)"));
+        assert!(!ids.contains("SECRET"));
+        assert!(launch_ids_line("a", 1, &[], None).contains("directory: none"));
+        let ended = ended_line(8000, 77, 100, "new-2", ShutdownHook::DidNotRun, false);
+        assert!(ended.contains("exit code 77"), "{ended}");
+        assert!(ended.contains("pid=100 launch=new-2"));
+        assert!(ended.contains("shutdown hook: did not run"));
+        assert!(ended.contains("window not opened"));
+        let ran = ended_line(8000, 0, 100, "new-2", ShutdownHook::Ran, true);
+        assert!(ran.contains("shutdown hook: ran;") && ran.contains("window opened"));
+    }
+
+    #[test]
     fn parses_java_major_versions() {
         use super::parse_java_major_version;
 
@@ -1110,7 +1215,7 @@ mod tests {
             custom_max_heap: false,
             secrets: Vec::new(),
         };
-        let (args, file) = command_args(&plan).unwrap();
+        let (args, file) = command_args(&plan, "test-launch").unwrap();
         assert!(file.is_none());
         assert_eq!(
             args[0],
@@ -1119,20 +1224,21 @@ mod tests {
                 game_dir.join("arctic-hang.txt").display()
             )
         );
+        assert_eq!(args[1], "-Darctic.launch.id=test-launch");
         assert_eq!(
-            args[1],
+            args[2],
             format!(
                 "-XX:ErrorFile={}",
                 game_dir.join("hs_err_pid%p.log").display()
             )
         );
-        assert_eq!(args[2], "net.minecraft.client.Main");
+        assert_eq!(args[3], "net.minecraft.client.Main");
 
         plan.args
             .insert(0, "-XX:ErrorFile=custom file-%p.log".into());
-        let (args, _) = command_args(&plan).unwrap();
+        let (args, _) = command_args(&plan, "test-launch").unwrap();
         assert_eq!(
-            &args[1..],
+            &args[2..],
             [
                 "-XX:ErrorFile=custom file-%p.log",
                 "net.minecraft.client.Main"

@@ -1045,6 +1045,142 @@ pub fn silent_exit(text: &str, code: i32) -> Option<Diagnosis> {
     ))
 }
 
+const TRACE_INSTALLED: &str = "[Arctic diagnostics] exit trace installed";
+const HOOK_RAN: &str = "[Arctic diagnostics] shutdown hook ran";
+const LAUNCH_LINE: &str = "[Arctic diagnostics] launch id=";
+
+/// Whether the game's own shutdown hook (armed by Arctic's exit tracer) printed its line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShutdownHook {
+    Ran,
+    /// Armed, but the JVM ended without running shutdown hooks.
+    DidNotRun,
+    /// The tracer never started (Arctic's mod or agent was not loaded before the exit).
+    NotInstalled,
+}
+
+impl ShutdownHook {
+    pub fn from_log(text: &str) -> Self {
+        let has = |marker: &str| text.lines().any(|l| l.starts_with(marker));
+        // The launcher's exit line is written from the full log, so it survives a trimmed tail.
+        let ended = |verdict: &str| {
+            text.lines().any(|l| {
+                l.starts_with("[Arctic diagnostics] process ended")
+                    && l.contains(&format!("; shutdown hook: {verdict}"))
+            })
+        };
+        if has(HOOK_RAN) || ended("ran;") {
+            Self::Ran
+        } else if has(TRACE_INSTALLED) || ended("did not run") {
+            Self::DidNotRun
+        } else {
+            Self::NotInstalled
+        }
+    }
+
+    pub fn describe(self) -> &'static str {
+        match self {
+            Self::Ran => "ran",
+            Self::DidNotRun => {
+                "did not run (the process did not go through a normal Java shutdown: native exit or an external kill)"
+            }
+            Self::NotInstalled => "exit tracer was not running, so this is unknown",
+        }
+    }
+}
+
+/// The exit code the launcher reported ("exit code 77 (0x..)" or "status: 77").
+fn reported_exit_code(text: &str) -> Option<i32> {
+    static CODE: OnceLock<Regex> = OnceLock::new();
+    CODE.get_or_init(|| Regex::new(r"(?:exit code |status: )(-?\d+)").unwrap())
+        .captures_iter(text)
+        .last()
+        .and_then(|c| c[1].parse().ok())
+}
+
+fn has_exit_caller(text: &str) -> bool {
+    text.lines()
+        .any(|l| l.starts_with("[Arctic diagnostics] exit caller "))
+}
+
+fn field<'a>(text: &'a str, line_start: &str, key: &str) -> Option<&'a str> {
+    let line = text.lines().rev().find(|l| l.starts_with(line_start))?;
+    let rest = line.split_once(key)?.1;
+    rest.split([';', ' ']).next().filter(|v| !v.is_empty())
+}
+
+/// The ids and launch-time signals, as one block for the top of a crash report.
+pub fn exit_signals_summary(text: &str) -> Option<String> {
+    let launch_line = text.lines().rev().find(|l| l.starts_with(LAUNCH_LINE));
+    let hook = ShutdownHook::from_log(text);
+    if launch_line.is_none() && hook == ShutdownHook::NotInstalled {
+        return None;
+    }
+    let mut out = String::from("Exit signals:\n");
+    if let Some(line) = launch_line {
+        out.push_str(&format!(
+            "  {}\n",
+            line.trim_start_matches("[Arctic diagnostics] ")
+        ));
+    }
+    if let Some(pid) = field(text, "[Arctic diagnostics] process ended", "pid=") {
+        let launch = field(text, "[Arctic diagnostics] process ended", "launch=").unwrap_or("?");
+        out.push_str(&format!("  game pid {pid}, launch id {launch}\n"));
+    }
+    out.push_str(&format!("  shutdown hook: {}\n", hook.describe()));
+    out.push_str(&format!(
+        "  exit trace (System.exit/Runtime.halt caller): {}\n",
+        if has_exit_caller(text) {
+            "recorded"
+        } else {
+            "none recorded"
+        }
+    ));
+    Some(out)
+}
+
+/// Exit code 77 with no recorded exit caller and no shutdown hook: the JVM did not exit through
+/// `System.exit`, so no mod, mixin warning or Arctic code can be named from this log.
+pub fn unexplained_exit(text: &str, code: i32) -> Option<Diagnosis> {
+    if code != 77
+        || has_exit_caller(text)
+        || ShutdownHook::from_log(text) == ShutdownHook::Ran
+        || text.contains("[Arctic diagnostics] vanilla crash")
+    {
+        return None;
+    }
+    let hook = ShutdownHook::from_log(text);
+    let mut detail = String::from(
+        "The game ended with exit code 77, but the cause is unclear. No System.exit or Runtime.halt caller was recorded",
+    );
+    detail.push_str(match hook {
+        ShutdownHook::DidNotRun => " and Arctic's shutdown hook did not run, so the Java process did not shut down normally. This points to a native crash or an outside kill (antivirus, a task killer, the system running out of memory, or a driver fault), not to a particular mod.",
+        _ => " and Arctic's exit tracer was not running, so it is unknown how the process ended. A native crash or an outside kill is likely.",
+    });
+    if text.contains("[Arctic diagnostics] process ended after")
+        && text.contains("window not opened")
+    {
+        detail.push_str(" It ended before the game window opened.");
+    }
+    if let Some(other) = text.lines().rev().find(|l| {
+        l.starts_with(LAUNCH_LINE) && l.contains("other game instance on this directory: pid ")
+    }) {
+        let who = other.split_once("directory: ").map_or("", |(_, w)| w);
+        detail.push_str(&format!(
+            " Another game was still running on the same game folder when this one started ({who}); closing one launch can end the other's files or session, so check that only one copy was open."
+        ));
+    }
+    if let Some(heap) = field(text, LAUNCH_LINE, "heap=") {
+        detail.push_str(&format!(" Heap size: {heap}."));
+    }
+    detail.push_str(" Share this crash report with Arctic support; it has the launch id and process id to match against.");
+    Some(Diagnosis::new(
+        "The game exited with code 77 and the cause is unclear (likely native or external)",
+        detail,
+        Vec::new(),
+    ))
+}
+
 /// The final Reason lists failed constraints; Immediate reason can also include satisfied ones.
 /// Keep standalone constraints usable when the final Reason wasn't captured in the log.
 fn resolver_causes(text: &str) -> impl Iterator<Item = &str> {
@@ -3165,6 +3301,14 @@ impl Report {
             launcher_lines.join("\n"),
             java.unwrap_or("")
         );
+        if let Some(summary) = exit_signals_summary(&diagnosis_text) {
+            priority.push_str(&summary);
+            priority.push('\n');
+        }
+        let unclear_exit = reported_exit_code(&diagnosis_text)
+            .and_then(|code| unexplained_exit(&diagnosis_text, code));
+        let tracer_saw_no_shutdown =
+            ShutdownHook::from_log(&diagnosis_text) == ShutdownHook::DidNotRun;
         // Keep the exact triggering line even when it falls outside the uploaded log tail.
         let crash = diagnose_crash_match(&diagnosis_text, java);
         let diagnosis_tail = tail_of(&diagnosis_text, MAX_TEXT);
@@ -3405,6 +3549,13 @@ impl Report {
                     .is_some_and(|(d, _)| d.title == DISK_FULL_TITLE)
                 {
                     DISK_FULL_TITLE
+                } else if let Some(unclear) = unclear_exit.as_ref().filter(|_| {
+                    crash_report.is_none()
+                        && !failed_save
+                        && sodium_driver.is_none()
+                        && (tracer_saw_no_shutdown || diagnosis.is_none())
+                }) {
+                    &unclear.title
                 } else if failed_save {
                     SAVE_FAILED_TITLE
                 } else if sodium_driver.is_some() {
@@ -5811,6 +5962,72 @@ Caused by: java.lang.NullPointerException: Cannot invoke "net.minecraftforge.fml
             report.title,
             "Game exited with code 77: mod.Example.quit(Example.java:12)"
         );
+    }
+
+    const NATIVE_77: &str = "[Arctic diagnostics] launch id=18f-1a-0 pid=4242 heap=512_MB; other game instance on this directory: pid 4100 (launch 18e-1a-0)
+[Arctic diagnostics] exit trace installed; pid=4242 launch=18f-1a-0; max heap=512 MB
+[main/WARN] [mixin/]: @Inject(@At(\"HEAD\")) Method foo in randommod.mixins.json from mod randommod was not found
+[Arctic diagnostics] process ended after 8100 ms; exit code 77 (0x0000004D; no known NTSTATUS name); pid=4242 launch=18f-1a-0; shutdown hook: did not run; window not opened";
+
+    #[test]
+    fn exit_77_without_hook_or_caller_is_unclear_not_a_mod() {
+        let d = unexplained_exit(NATIVE_77, 77).unwrap();
+        assert!(d.title.contains("cause is unclear"), "{}", d.title);
+        assert!(d.detail.contains("did not run"), "{}", d.detail);
+        assert!(d.detail.contains("before the game window opened"));
+        assert!(d.detail.contains("pid 4100"), "{}", d.detail);
+        assert!(d.detail.contains("512_MB"));
+        assert!(d.mods.is_empty());
+        assert!(!d.detail.contains("randommod"));
+        let dir = tempfile::tempdir().unwrap();
+        let routed = crate::crash_conflicts::diagnose_exit_in(NATIVE_77, 77, dir.path()).unwrap();
+        assert_eq!(routed.title, d.title);
+        let report = Report::build(
+            "26.2",
+            "fabric",
+            "",
+            &NATIVE_77.lines().collect::<Vec<_>>(),
+            &[],
+            None,
+            Some("exit code 77 (0x0000004D)"),
+        );
+        assert_eq!(report.title, d.title);
+        assert!(report.log.contains("Exit signals:"), "{}", report.log);
+        assert!(report.log.contains("pid 4242, launch id 18f-1a-0"));
+        assert!(report.log.contains("shutdown hook: did not run"));
+        assert!(report.log.contains("none recorded"));
+    }
+
+    #[test]
+    fn unclear_77_without_the_tracer_yields_to_a_real_diagnosis_and_trimmed_logs_keep_the_verdict()
+    {
+        let dir = tempfile::tempdir().unwrap();
+        let oom = "java.lang.OutOfMemoryError: Java heap space\nexit code 77";
+        let d = crate::crash_conflicts::diagnose_exit_in(oom, 77, dir.path()).unwrap();
+        assert!(!d.title.contains("unclear"), "{}", d.title);
+        let tail = "[Arctic diagnostics] process ended after 8100 ms; exit code 77 (0x0000004D); pid=1 launch=a; shutdown hook: did not run (x); window not opened";
+        assert_eq!(ShutdownHook::from_log(tail), ShutdownHook::DidNotRun);
+        assert!(unexplained_exit(tail, 77).is_some());
+    }
+
+    #[test]
+    fn exit_77_needs_the_missing_hook_and_caller_to_be_unclear() {
+        let ran = NATIVE_77.replace(
+            "[main/WARN]",
+            "[Arctic diagnostics] shutdown hook ran; pid=4242 launch=18f-1a-0\n[main/WARN]",
+        );
+        assert_eq!(ShutdownHook::from_log(&ran), ShutdownHook::Ran);
+        assert!(unexplained_exit(&ran, 77).is_none());
+        let caller = format!(
+            "{NATIVE_77}\n[Arctic diagnostics] exit caller other mod.Example.quit(Example.java:12)"
+        );
+        assert!(unexplained_exit(&caller, 77).is_none());
+        assert!(unexplained_exit(NATIVE_77, 1).is_none());
+        let bare = "exit code 77";
+        assert_eq!(ShutdownHook::from_log(bare), ShutdownHook::NotInstalled);
+        let d = unexplained_exit(bare, 77).unwrap();
+        assert!(d.detail.contains("tracer was not running"), "{}", d.detail);
+        assert!(!d.detail.contains("shutdown hook did not run"));
     }
 
     #[test]
