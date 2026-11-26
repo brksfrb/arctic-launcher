@@ -9,6 +9,7 @@ pub mod exit_diagnostics;
 pub(crate) mod fabric_refresh;
 pub mod files;
 mod game_window;
+mod instance_probe;
 mod language;
 pub mod logparse;
 #[cfg(any(windows, test))]

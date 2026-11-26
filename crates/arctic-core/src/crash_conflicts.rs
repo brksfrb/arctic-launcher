@@ -1095,6 +1095,9 @@ pub fn diagnose_exit_in_with_java(
     if let Some((disk_full, _)) = crate::crash::disk_full_diagnosis(text) {
         return Some(disk_full);
     }
+    if let Some(unclear) = crate::crash::unexplained_exit(text, code) {
+        return Some(unclear);
+    }
     let mods = scan(mods_dir);
     let diagnosis = if crate::crash::vanilla_crash_save_failed(text, code).is_some() {
         let cause = crate::crash::captured_vanilla_crash(text)

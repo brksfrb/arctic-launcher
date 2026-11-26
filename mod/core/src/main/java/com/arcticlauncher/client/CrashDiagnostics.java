@@ -21,9 +21,14 @@ public final class CrashDiagnostics {
         // A javaagent and Fabric can see separate copies of core classes.
         if (System.getProperty("arctic.diagnostics.installed") != null) return;
         System.setProperty("arctic.diagnostics.installed", "true");
+        final String identity = identity();
+        // Written at install so a missing "shutdown hook ran" line later means the hook was armed
+        // and the JVM ended without a normal shutdown (native abort or an external kill).
+        OUT.println(PREFIX + "exit trace installed; " + identity + "; max heap=" + (Runtime.getRuntime().maxMemory() / (1024 * 1024)) + " MB"); // i18n-ignore
+        OUT.flush();
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
             public void run() {
-                OUT.println(PREFIX + "shutdown; minecraft stop started=" + System.getProperty("arctic.diagnostics.stopping", "false") + "; minecraft stop complete=" + System.getProperty("arctic.diagnostics.stopped", "false")); // i18n-ignore
+                OUT.println(PREFIX + "shutdown hook ran; " + identity + "; minecraft stop started=" + System.getProperty("arctic.diagnostics.stopping", "false") + "; minecraft stop complete=" + System.getProperty("arctic.diagnostics.stopped", "false")); // i18n-ignore
                 for (Map.Entry<Thread, StackTraceElement[]> entry : Thread.getAllStackTraces().entrySet()) {
                     boolean exiting = false;
                     for (StackTraceElement frame : entry.getValue()) {
@@ -52,6 +57,25 @@ public final class CrashDiagnostics {
                 public void close() {}
             });
         } catch (RuntimeException ignored) { }
+    }
+
+    /** "pid=N launch=ID": which process and which launch printed a line. Never contains account data. */
+    static String identity() {
+        String launch = System.getProperty("arctic.launch.id", "unknown");
+        return "pid=" + pid() + " launch=" + launch.replaceAll("[^A-Za-z0-9_.-]", "_");
+    }
+
+    private static String pid() {
+        try {
+            Object handle = Class.forName("java.lang.ProcessHandle").getMethod("current").invoke(null);
+            return String.valueOf(handle.getClass().getMethod("pid").invoke(handle));
+        } catch (Throwable ignored) { }
+        try {
+            String name = java.lang.management.ManagementFactory.getRuntimeMXBean().getName();
+            int at = name.indexOf('@');
+            if (at > 0) return name.substring(0, at);
+        } catch (Throwable ignored) { }
+        return "unknown";
     }
 
     private static void printStack(String label, StackTraceElement[] stack) {
