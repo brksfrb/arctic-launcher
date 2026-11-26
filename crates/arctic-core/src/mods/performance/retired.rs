@@ -8,7 +8,7 @@
 //! OneConfig jars it needs stay too. OneConfig's settings folder is the player's and stays.
 
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -50,7 +50,9 @@ struct Record {
 /// logged and tried again next time.
 pub(super) fn remove_installed_patcher(game_dir: &Path) {
     if let Err(e) = remove_patcher_jar(game_dir) {
+        // Our Patcher may still be there and need OneConfig: leave its jars until it is gone.
         log::warn!("couldn't remove the Patcher Arctic installed: {e}");
+        return;
     }
     if let Err(e) = remove_oneconfig_jars(game_dir) {
         log::warn!("couldn't remove the OneConfig jars Arctic installed: {e}");
@@ -114,8 +116,9 @@ fn remove_oneconfig_jars(game_dir: &Path) -> Result<()> {
     std::fs::remove_file(&record_path).at(&record_path)
 }
 
-/// A jar in `mods` (on or turned off, not the launcher's) that is Patcher, OneConfig or another mod
-/// loading OneConfig: by its name, or by the OneConfig tweaker its manifest names.
+/// A jar in `mods` or a folder right inside it (Forge also loads `mods/1.8.9/`), on or turned off
+/// and not the launcher's, that is Patcher, OneConfig or another mod loading OneConfig: by its name,
+/// or by the OneConfig tweaker its manifest names.
 fn players_oneconfig_mod(mods_dir: &Path, game_dir: &Path) -> Result<Option<String>> {
     let ours: Vec<String> = ModIndex::load(&forge_index_path(game_dir))?
         .mods
@@ -125,17 +128,30 @@ fn players_oneconfig_mod(mods_dir: &Path, game_dir: &Path) -> Result<Option<Stri
     let Ok(entries) = std::fs::read_dir(mods_dir) else {
         return Ok(None);
     };
+    let mut files = Vec::new();
     for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
+        if entry.file_type().is_ok_and(|t| t.is_dir()) {
+            let inner = std::fs::read_dir(entry.path())
+                .into_iter()
+                .flatten()
+                .flatten();
+            files.extend(inner.map(|e| (e.path(), e.file_name(), false)));
+        } else {
+            files.push((entry.path(), entry.file_name(), true));
+        }
+    }
+    for (path, file_name, top) in files {
+        let name = file_name.to_string_lossy().into_owned();
         let lower = name.to_ascii_lowercase();
         let base = lower.strip_suffix(".disabled").unwrap_or(&lower);
-        if !base.ends_with(".jar") || ours.iter().any(|o| o.eq_ignore_ascii_case(base)) {
+        let launchers = top && ours.iter().any(|o| o.eq_ignore_ascii_case(base));
+        if !base.ends_with(".jar") || launchers {
             continue;
         }
         if ["patcher", "oneconfig", "polyfrost"]
             .iter()
             .any(|w| base.contains(w))
-            || loads_oneconfig(&entry.path())
+            || loads_oneconfig(&path)
         {
             return Ok(Some(name));
         }
@@ -143,7 +159,7 @@ fn players_oneconfig_mod(mods_dir: &Path, game_dir: &Path) -> Result<Option<Stri
     Ok(None)
 }
 
-fn loads_oneconfig(jar: &PathBuf) -> bool {
+fn loads_oneconfig(jar: &Path) -> bool {
     let Ok(file) = std::fs::File::open(jar) else {
         return false;
     };
@@ -268,6 +284,20 @@ mod tests {
                 "{jar} is needed by the player's Patcher"
             );
         }
+    }
+
+    #[test]
+    fn a_players_patcher_in_the_version_folder_keeps_the_jars() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        old_launcher_dir(game);
+        let nested = game.join("mods").join("1.8.9");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("Patcher-1.8.9.jar"), b"theirs").unwrap();
+        remove_installed_patcher(game);
+        assert!(!game.join("mods").join("Patcher-1.10.4.jar").exists());
+        assert!(nested.join("Patcher-1.8.9.jar").is_file());
+        assert!(game.join(ONECONFIG_DIR).join(ONECONFIG_JARS[0]).is_file());
     }
 
     #[test]
