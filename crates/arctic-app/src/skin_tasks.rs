@@ -338,12 +338,16 @@ impl Tasks {
     /// Ask for a cape image; `None` when the dialog was cancelled.
     pub fn pick_cape_file(&self) {
         self.run(|t| {
-            let result = pick_png(
+            let result = pick_cape_image(
                 t!("tasks.choose_a_cape_image_64_32_up_to_1024_512_or"),
                 t!("tasks.cape"),
-            )
-            .map(|f| f.map(|(_, b)| b));
-            t.send(Event::CapeFile(result));
+            );
+            t.send(match result {
+                Ok(Some((bytes, true))) => Event::CapeGif(Ok(Some(bytes))),
+                Ok(Some((bytes, false))) => Event::CapeFile(Ok(Some(bytes))),
+                Ok(None) => Event::CapeFile(Ok(None)),
+                Err(e) => Event::CapeFile(Err(e)),
+            });
         });
     }
 }
@@ -411,6 +415,26 @@ fn pick_png(title: &str, filter: &str) -> Picked {
         Some(path) => std::fs::read(&path)
             .map(|bytes| Some((file_stem(&path), bytes)))
             .map_err(|e| tf!("tasks.could_not_read", path = path.display(), e = e)),
+    }
+}
+
+/// A cape image: a PNG as it is, or a GIF converted to the cape strip exactly as the server
+/// would (so the preview shows what players get, and the server's errors show here too).
+/// The flag says the file was a GIF.
+fn pick_cape_image(title: &str, filter: &str) -> Result<Option<(Vec<u8>, bool)>, String> {
+    let picked = rfd::FileDialog::new()
+        .set_title(title)
+        .add_filter(filter, &["png", "gif"])
+        .pick_file();
+    let Some(path) = picked else {
+        return Ok(None);
+    };
+    let bytes = std::fs::read(&path)
+        .map_err(|e| tf!("tasks.could_not_read", path = path.display(), e = e))?;
+    if arctic_core::skins::gif_cape::is_gif(&bytes) {
+        arctic_core::skins::gif_cape::to_cape_png(&bytes).map(|png| Some((png, true)))
+    } else {
+        Ok(Some((bytes, false)))
     }
 }
 

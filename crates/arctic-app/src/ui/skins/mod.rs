@@ -99,6 +99,14 @@ impl SkinTexture {
     }
 }
 
+/// A converted GIF cape shown before it is worn: the same frames and speed players will see.
+struct CapePreview {
+    png: Vec<u8>,
+    /// Uploaded on first draw (needs the egui context).
+    texture: Option<SkinTexture>,
+    since: Instant,
+}
+
 /// Texture keys: `lib:<id>` library skin, `mc` Minecraft skin,
 /// `mccape:<id>` Minecraft cape, `askin:<hash>` Arctic skin,
 /// `acape:<hash>` Arctic cape, `acos:<hash>` Arctic cosmetic texture.
@@ -119,6 +127,8 @@ pub struct SkinsUi {
     shown_at: Option<std::time::Instant>,
     pub section: Section,
     pub trying: Trying,
+    /// A GIF cape converted to its strip, playing in a dialog until it is worn or dropped.
+    cape_preview: Option<CapePreview>,
     /// The newest look asked for (sent or queued): later clicks build on it.
     intended: Option<NewLook>,
     /// Asked for while a save was still going; sent when it finishes.
@@ -309,6 +319,62 @@ impl ArcticApp {
         self.request_skin_state(refresh);
         self.skins_page(ui);
         self.accept_dropped_skins(ui.ctx());
+        self.cape_preview_dialog(ui.ctx());
+    }
+
+    /// A chosen GIF, converted, playing at the speed and with the frames players will see (and
+    /// that the cape cards show) until you wear it or drop it.
+    fn cape_preview_dialog(&mut self, ctx: &egui::Context) {
+        let Some(preview) = self.skins.cape_preview.as_mut() else {
+            return;
+        };
+        if preview.texture.is_none() {
+            preview.texture = upload_cape(ctx, "cape-preview", &preview.png);
+            if preview.texture.is_none() {
+                self.skins.cape_preview = None;
+                self.toasts.push(
+                    Kind::Error,
+                    t!("skins.could_not_read_file"),
+                    t!("skins.gif_cape_preview_failed").to_owned(),
+                );
+                return;
+            }
+        }
+        let texture = preview.texture.as_ref().expect("uploaded above");
+        let id = texture.id_at(preview.since.elapsed().as_secs_f64());
+        if texture.animated() {
+            ctx.request_repaint_after(Duration::from_secs_f64(texture.frame_secs));
+        }
+        let (mut wear, mut cancel) = (false, false);
+        egui::Modal::new(egui::Id::new("gif_cape_preview")).show(ctx, |ui| {
+            ui.set_max_width(260.0);
+            ui.heading(t!("skins.gif_cape_preview_title"));
+            ui.add_space(8.0);
+            ui.label(t!("skins.gif_cape_preview_note"));
+            ui.add_space(8.0);
+            // The back of the cape is 10×16 of the 64×32 layout (it scales with HD capes).
+            let uv = egui::Rect::from_min_max(
+                egui::pos2(1.0 / 64.0, 1.0 / 32.0),
+                egui::pos2(11.0 / 64.0, 17.0 / 32.0),
+            );
+            ui.vertical_centered(|ui| {
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(160.0, 256.0), egui::Sense::hover());
+                ui.painter().image(id, rect, uv, egui::Color32::WHITE);
+            });
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                wear = ui.button(t!("skins.use_this_cape")).clicked();
+                cancel = ui.button(t!("skins.cancel")).clicked();
+            });
+        });
+        if wear {
+            if let Some(p) = self.skins.cape_preview.take() {
+                self.wear_cape_image(p.png);
+            }
+        } else if cancel || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.skins.cape_preview = None;
+        }
     }
 
     fn catalog_refresh_due(&self, ctx: &egui::Context, opened: bool) -> bool {
@@ -1044,6 +1110,19 @@ impl ArcticApp {
             }
             Event::CapeFile(result) => match result {
                 Ok(Some(bytes)) => self.wear_cape_image(bytes),
+                Ok(None) => {}
+                Err(e) => self
+                    .toasts
+                    .push(Kind::Error, t!("skins.could_not_read_file"), e),
+            },
+            Event::CapeGif(result) => match result {
+                Ok(Some(png)) => {
+                    self.skins.cape_preview = Some(CapePreview {
+                        png,
+                        texture: None,
+                        since: Instant::now(),
+                    });
+                }
                 Ok(None) => {}
                 Err(e) => self
                     .toasts

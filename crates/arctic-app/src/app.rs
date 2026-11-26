@@ -1337,6 +1337,7 @@ impl ArcticApp {
             | Event::ArcticLookSaved(..)
             | Event::ArcticCatalog(..)
             | Event::CapeFile(..)
+            | Event::CapeGif(..)
             | Event::OptifineCape(..)
             | Event::Gallery(..)
             | Event::GalleryTaken(..)
