@@ -509,12 +509,12 @@ public final class ArcticClient {
 	/** A key went down with no screen open; true if Arctic used it. */
 	public static boolean keyPressed(int key) {
 		if (com.arcticlauncher.client.replay.Replays.watching()) {
-			if (key == Keys.RIGHT_SHIFT) {
+			if (key == Keys.MENU) {
 				return com.arcticlauncher.client.replay.Replays.key(Keys.ESCAPE);
 			}
 			return com.arcticlauncher.client.replay.Replays.key(key);
 		}
-		if (key == Keys.RIGHT_SHIFT && platform.inWorld()) {
+		if (key == Keys.MENU && platform.inWorld()) {
 			platform.openPage(Menus.home());
 			return true;
 		}
@@ -533,10 +533,10 @@ public final class ArcticClient {
 
 	/**
 	 * A key went down over one of Minecraft's own screens (not while typing);
-	 * true if Arctic used it. Right Shift opens the Arctic menu anywhere.
+	 * true if Arctic used it. The menu key opens the Arctic menu anywhere.
 	 */
 	public static boolean screenKeyPressed(int key) {
-		if (key == Keys.RIGHT_SHIFT) {
+		if (key == Keys.MENU) {
 			platform.openPage(Menus.home());
 			return true;
 		}
@@ -582,7 +582,7 @@ public final class ArcticClient {
 		return n > 0 ? Lang.t("mods.arctic") + (n > 9 ? "9+" : String.valueOf(n)) + ")" : "Arctic";
 	}
 
-	/** Right Shift: the HUD screen in a world, the Mods menu elsewhere. */
+	/** The menu key: the HUD screen in a world, the Mods menu elsewhere. */
 	public static Page arcticMenu() {
 		return Menus.home();
 	}

@@ -350,6 +350,23 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public String menuKeyBinding() {
+		return LegacyKeys.name(LegacyKeys.menuBinding().getCode());
+	}
+
+	@Override
+	public void setMenuKeyBinding(String key) {
+		KeyBinding binding = LegacyKeys.menuBinding();
+		int code = LegacyKeys.code(key);
+		if (binding.getCode() == code) {
+			return;
+		}
+		binding.setCode(code);
+		KeyBinding.updateKeysByCode();
+		mc().options.save();
+	}
+
+	@Override
 	public String keyUsedBy(String key) {
 		int code = LegacyKeys.code(key);
 		if (code == 0) {

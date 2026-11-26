@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import com.arcticlauncher.client.Keys;
+import com.arcticlauncher.client.MenuKey;
 import net.minecraft.client.option.GameOptions;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
@@ -137,14 +138,15 @@ public final class LegacyKeys {
 
 	/** The core's key code for an LWJGL 2 key (the few it acts on). */
 	public static int core(int lwjgl) {
+		if (lwjgl > 0 && MenuKey.matches(name(lwjgl))) {
+			return Keys.MENU;
+		}
 		switch (lwjgl) {
 			case Keyboard.KEY_ESCAPE:
 				return Keys.ESCAPE;
 			case Keyboard.KEY_RETURN:
 			case Keyboard.KEY_NUMPADENTER:
 				return Keys.ENTER;
-			case Keyboard.KEY_RSHIFT:
-				return Keys.RIGHT_SHIFT;
 			case Keyboard.KEY_BACK:
 				return Keys.BACKSPACE;
 			case Keyboard.KEY_TAB:
@@ -179,6 +181,21 @@ public final class LegacyKeys {
 			default:
 				return -1;
 		}
+	}
+
+	/**
+	 * The Arctic menu key as Minecraft's own key binding (shown in Controls under
+	 * "Arctic", saved in options.txt). Right Shift until the player rebinds it.
+	 */
+	private static net.minecraft.client.option.KeyBinding menuBinding;
+
+	/** The menu key binding, made on first use (before the options file is read; see GameOptionsMixin). */
+	public static synchronized net.minecraft.client.option.KeyBinding menuBinding() {
+		if (menuBinding == null) {
+			// Minecraft shows these as they are: no translation entry for them.
+			menuBinding = new net.minecraft.client.option.KeyBinding("Arctic menu", Keyboard.KEY_RSHIFT, "Arctic"); // i18n-ignore
+		}
+		return menuBinding;
 	}
 
 	/** The core's mouse button for an LWJGL 2 button. */

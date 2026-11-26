@@ -244,7 +244,7 @@ public final class EmoteWheel extends Page {
 	}
 
 	@Override
-	protected boolean rightShift() {
+	protected boolean menuKey() {
 		close();
 		return true;
 	}

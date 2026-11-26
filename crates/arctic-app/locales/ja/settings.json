@@ -80,7 +80,7 @@
   "settings.group.game": "ゲーム",
   "settings.group.general": "一般",
   "settings.group.network_voice": "ネットワークとボイス",
-  "settings.how_minecrafts_menus_look_in_game_press": "ゲーム内のMinecraftメニューの見た目。ゲーム中に右Shiftを押すとHUDウィジェットとマントを開けます。",
+  "settings.how_minecrafts_menus_look_in_game_press": "ゲーム内のMinecraftメニューの見た目。ゲーム中にArcticメニューキーを押すとHUDウィジェットとマントを開けます。",
   "settings.hud_layouts_and_keys": "HUDレイアウトとキー",
   "settings.import": "読み込む",
   "settings.install_updates_automatically": "更新を自動でインストール",

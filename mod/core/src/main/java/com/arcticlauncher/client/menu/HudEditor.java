@@ -18,7 +18,7 @@ import java.util.Map;
 
 import com.arcticlauncher.client.Lang;
 /**
- * Right Shift in a world: your HUD, live and movable. Drag a widget to move
+ * The menu key in a world: your HUD, live and movable. Drag a widget to move
  * it (it snaps to edges and to other widgets), drag its bottom-right corner
  * or scroll on it to resize it, right-click it for its settings. The bar in the middle opens Mods and the
  * other Arctic screens; drop a widget on the bar to take it off the HUD.
@@ -370,7 +370,7 @@ public final class HudEditor extends Page {
 	}
 
 	@Override
-	protected boolean rightShift() {
+	protected boolean menuKey() {
 		close();
 		return true;
 	}

@@ -150,7 +150,7 @@
   "mods.decimals": "小数位",
   "mods.deleted_the_saved_chat_and_sent_history": "已删除保存的聊天和发送历史",
   "mods.distance": "距离",
-  "mods.drag_it_on_the_hud_screen_right_shift_to": "在 HUD 界面（右 Shift）中拖动即可移动。",
+  "mods.drag_it_on_the_hud_screen_right_shift_to": "在 HUD 界面（{0}）中拖动即可移动。",
   "mods.drag_to_move_drag_the_corner_or_scroll_to": "拖动以移动  ·  拖动角落（或滚动）以调整大小  ·  右键打开设置",
   "mods.draw_every_creature_but_the_players_bigger": "把除玩家外的所有生物画得更大或更小（碰撞箱不变）",
   "mods.drawing_a_bow_leaves_the_view_alone": "拉弓时不改变视野",
@@ -769,5 +769,8 @@
   "mods.enchant_value.feather_falling": "摔落伤害减少 {0}%",
   "mods.enchant_value.blast_protection": "爆炸伤害减少 {0}%",
   "mods.enchant_value.projectile_protection": "弹射物伤害减少 {0}%",
-  "mods.enchant_value.piercing": "最多穿透 {0} 个目标"
+  "mods.enchant_value.piercing": "最多穿透 {0} 个目标",
+  "mods.menu_key": "菜单键",
+  "mods.which_key_opens_and_closes_the_arctic_menu": "打开和关闭 Arctic 菜单的按键。",
+  "mods.also_in_minecrafts_controls_under_arctic_esc_restores": "也可在 Minecraft 的控制设置中的 Arctic 分类里修改。按 Esc 恢复默认按键。"
 }

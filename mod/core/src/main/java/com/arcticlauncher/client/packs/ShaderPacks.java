@@ -196,7 +196,7 @@ public final class ShaderPacks {
 		}
 
 		@Override
-		protected boolean rightShift() {
+		protected boolean menuKey() {
 			return true;
 		}
 

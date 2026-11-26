@@ -209,7 +209,7 @@
   "play.switch_instance": "インスタンスを切り替え",
   "play.switch_profile": "プロファイルを切り替え",
   "play.thats_over_half_your_ram_your_pc_may_slow": "RAMの半分以上です。プレイ中にPCが重くなるかもしれません。",
-  "play.the_arctic_client_restyles_minecrafts_menus": "Arctic ClientはMinecraftのメニューの見た目を変えます。ゲーム中に右Shiftを押すとHUDウィジェット、機能、マントを開けます。",
+  "play.the_arctic_client_restyles_minecrafts_menus": "Arctic ClientはMinecraftのメニューの見た目を変えます。ゲーム中にArcticメニューキーを押すとHUDウィジェット、機能、マントを開けます。",
   "play.the_code_is_copied_paste_it_in_your_ticket": "コードをコピーしました。チケットやスタッフへのメッセージに貼り付けてください。",
   "play.the_game_runs_without_arctics_menus_hud": "Arcticのメニュー、HUD、コスメ、リプレイ、およびそれに伴う高速起動なしでゲームが動きます。Arcticの設定は保持されます。いつでも戻せます。",
   "play.the_latest_minecraft_release_pure_vanilla": "最新のMinecraft正式版、純粋なバニラ。",

@@ -150,7 +150,7 @@
   "mods.decimals": "Decimals",
   "mods.deleted_the_saved_chat_and_sent_history": "Deleted the saved chat and sent history",
   "mods.distance": "Distance",
-  "mods.drag_it_on_the_hud_screen_right_shift_to": "Drag it on the HUD screen (Right Shift) to move it.",
+  "mods.drag_it_on_the_hud_screen_right_shift_to": "Drag it on the HUD screen ({0}) to move it.",
   "mods.drag_to_move_drag_the_corner_or_scroll_to": "Drag to move  ·  drag the corner (or scroll) to resize  ·  right-click for settings",
   "mods.draw_every_creature_but_the_players_bigger": "Draw every creature but the players bigger or smaller (hitboxes stay as they are)",
   "mods.drawing_a_bow_leaves_the_view_alone": "Drawing a bow leaves the view alone",
@@ -769,5 +769,8 @@
   "mods.enchant_value.feather_falling": "{0}% less fall damage",
   "mods.enchant_value.blast_protection": "{0}% less explosion damage",
   "mods.enchant_value.projectile_protection": "{0}% less projectile damage",
-  "mods.enchant_value.piercing": "Passes through up to {0} targets"
+  "mods.enchant_value.piercing": "Passes through up to {0} targets",
+  "mods.menu_key": "Menu Key",
+  "mods.which_key_opens_and_closes_the_arctic_menu": "The key that opens and closes the Arctic menu.",
+  "mods.also_in_minecrafts_controls_under_arctic_esc_restores": "Also in Minecraft's Controls, under Arctic. Esc restores the default key."
 }

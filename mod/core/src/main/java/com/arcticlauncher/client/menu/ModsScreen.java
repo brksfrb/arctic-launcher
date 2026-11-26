@@ -244,7 +244,7 @@ final class ModsScreen extends Page {
 	}
 
 	@Override
-	protected boolean rightShift() {
+	protected boolean menuKey() {
 		close();
 		return true;
 	}

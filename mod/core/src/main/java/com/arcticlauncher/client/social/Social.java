@@ -308,7 +308,7 @@ public final class Social {
 				if (seenInvites.add(id)) {
 					String from = str(inv.getAsJsonObject("from"), "name");
 					String what = "together".equals(str(inv, "kind")) ? Lang.t("social.their_world") : str(inv, "target");
-					Notices.post(from + Lang.t("social.invited_you"), Lang.t("social.to_join", what));
+					Notices.post(from + Lang.t("social.invited_you"), Lang.t("social.to_join", what, com.arcticlauncher.client.MenuKey.label()));
 				}
 			}
 		}

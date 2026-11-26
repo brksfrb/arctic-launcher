@@ -150,7 +150,7 @@
   "mods.decimals": "Decimali",
   "mods.deleted_the_saved_chat_and_sent_history": "Chat salvata e cronologia inviati eliminate",
   "mods.distance": "Distanza",
-  "mods.drag_it_on_the_hud_screen_right_shift_to": "Trascinalo nella schermata HUD (Maiusc destro) per spostarlo.",
+  "mods.drag_it_on_the_hud_screen_right_shift_to": "Trascinalo nella schermata HUD ({0}) per spostarlo.",
   "mods.drag_to_move_drag_the_corner_or_scroll_to": "Trascina per spostare  ·  trascina l'angolo (o scorri) per ridimensionare  ·  clic destro per le impostazioni",
   "mods.draw_every_creature_but_the_players_bigger": "Disegna tutte le creature tranne i giocatori più grandi o più piccole (le hitbox restano uguali)",
   "mods.drawing_a_bow_leaves_the_view_alone": "Tendere l'arco non cambia la visuale",
@@ -769,5 +769,8 @@
   "mods.enchant_value.feather_falling": "{0}% di danni da caduta in meno",
   "mods.enchant_value.blast_protection": "{0}% di danni da esplosione in meno",
   "mods.enchant_value.projectile_protection": "{0}% di danni da proiettile in meno",
-  "mods.enchant_value.piercing": "Attraversa fino a {0} bersagli"
+  "mods.enchant_value.piercing": "Attraversa fino a {0} bersagli",
+  "mods.menu_key": "Tasto del menu",
+  "mods.which_key_opens_and_closes_the_arctic_menu": "Il tasto che apre e chiude il menu di Arctic.",
+  "mods.also_in_minecrafts_controls_under_arctic_esc_restores": "Anche nei Controlli di Minecraft, sotto Arctic. Esc ripristina il tasto predefinito."
 }

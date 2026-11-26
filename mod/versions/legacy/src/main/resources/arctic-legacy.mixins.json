@@ -26,6 +26,7 @@
 <% if (!forge) { %>		"ClientBrandMixin",
 <% } %>		"DebugHudMixin",
 		"KeyBindingMixin",
+		"GameOptionsMixin",
 		"InGameHudMixin",
 		"ChatHudMixin",
 		"ChatHistoryLimitMixin",

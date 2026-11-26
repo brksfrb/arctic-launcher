@@ -150,7 +150,7 @@
   "mods.decimals": "Decimalen",
   "mods.deleted_the_saved_chat_and_sent_history": "Opgeslagen chat en verzendgeschiedenis verwijderd",
   "mods.distance": "Afstand",
-  "mods.drag_it_on_the_hud_screen_right_shift_to": "Sleep het op het HUD-scherm (rechter Shift) om het te verplaatsen.",
+  "mods.drag_it_on_the_hud_screen_right_shift_to": "Sleep het op het HUD-scherm ({0}) om het te verplaatsen.",
   "mods.drag_to_move_drag_the_corner_or_scroll_to": "Slepen om te verplaatsen  ·  hoek slepen (of scrollen) om te schalen  ·  rechtsklik voor instellingen",
   "mods.draw_every_creature_but_the_players_bigger": "Teken alle wezens behalve spelers groter of kleiner (hitboxen blijven gelijk)",
   "mods.drawing_a_bow_leaves_the_view_alone": "Een boog spannen laat het zicht met rust",
@@ -769,5 +769,8 @@
   "mods.enchant_value.feather_falling": "{0}% minder valschade",
   "mods.enchant_value.blast_protection": "{0}% minder explosieschade",
   "mods.enchant_value.projectile_protection": "{0}% minder projectielschade",
-  "mods.enchant_value.piercing": "Gaat door maximaal {0} doelwitten"
+  "mods.enchant_value.piercing": "Gaat door maximaal {0} doelwitten",
+  "mods.menu_key": "Menutoets",
+  "mods.which_key_opens_and_closes_the_arctic_menu": "De toets die het Arctic-menu opent en sluit.",
+  "mods.also_in_minecrafts_controls_under_arctic_esc_restores": "Ook in de besturing van Minecraft, onder Arctic. Esc herstelt de standaardtoets."
 }

@@ -150,7 +150,7 @@
   "mods.decimals": "Ondalıklar",
   "mods.deleted_the_saved_chat_and_sent_history": "Kayıtlı sohbet ve gönderim geçmişi silindi",
   "mods.distance": "Mesafe",
-  "mods.drag_it_on_the_hud_screen_right_shift_to": "Taşımak için HUD ekranında (Sağ Shift) sürükle.",
+  "mods.drag_it_on_the_hud_screen_right_shift_to": "Taşımak için HUD ekranında ({0}) sürükle.",
   "mods.drag_to_move_drag_the_corner_or_scroll_to": "Taşımak için sürükle  ·  boyutlandırmak için köşeyi sürükle (ya da kaydır)  ·  ayarlar için sağ tıkla",
   "mods.draw_every_creature_but_the_players_bigger": "Oyuncular dışındaki tüm canlıları daha büyük ya da küçük çiz (vuruş kutuları aynı kalır)",
   "mods.drawing_a_bow_leaves_the_view_alone": "Yay germek görüşü değiştirmez",
@@ -769,5 +769,8 @@
   "mods.enchant_value.feather_falling": "Düşme hasarı %{0} daha az",
   "mods.enchant_value.blast_protection": "Patlama hasarı %{0} daha az",
   "mods.enchant_value.projectile_protection": "Mermi hasarı %{0} daha az",
-  "mods.enchant_value.piercing": "{0} hedefe kadar delip geçer"
+  "mods.enchant_value.piercing": "{0} hedefe kadar delip geçer",
+  "mods.menu_key": "Menü tuşu",
+  "mods.which_key_opens_and_closes_the_arctic_menu": "Arctic menüsünü açıp kapatan tuş.",
+  "mods.also_in_minecrafts_controls_under_arctic_esc_restores": "Minecraft'ın Kontroller ekranında Arctic altında da var. Esc varsayılan tuşu geri getirir."
 }

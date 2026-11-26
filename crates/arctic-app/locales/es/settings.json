@@ -80,7 +80,7 @@
   "settings.group.game": "Juego",
   "settings.group.general": "General",
   "settings.group.network_voice": "Red y voz",
-  "settings.how_minecrafts_menus_look_in_game_press": "Cómo se ven los menús de Minecraft en el juego. Pulsa Mayús derecha en el juego para los widgets del HUD y las capas.",
+  "settings.how_minecrafts_menus_look_in_game_press": "Cómo se ven los menús de Minecraft en el juego. Pulsa la tecla de menú de Arctic en el juego para los widgets del HUD y las capas.",
   "settings.hud_layouts_and_keys": "Diseños de HUD y teclas",
   "settings.import": "Importar",
   "settings.install_updates_automatically": "Instalar actualizaciones automáticamente",
