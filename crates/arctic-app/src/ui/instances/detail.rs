@@ -622,7 +622,7 @@ impl ArcticApp {
             ui.set_width(ui.available_width());
             ui.label(
                 RichText::new(if forge {
-                    t!("instances.adds_patcher_performance_and_bug_fixes_and")
+                    t!("instances.adds_entity_culling_for_higher_fps")
                 } else {
                     t!("instances.adds_sodium_lithium_ferritecore_2")
                 })

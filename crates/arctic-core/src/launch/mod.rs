@@ -724,7 +724,8 @@ fn prepare_in(req: &LaunchRequest, game_dir: &Path, progress: Progress) -> Resul
                         arctic_mod::update_forge_asm(&vanilla.id, &mut profile);
                     }
                     timer.step("arctic client");
-                    // 1.8.9: Patcher and Entity Culling for FPS (the Performance switch); never stops a start.
+                    // 1.8.9: Entity Culling for FPS (the Performance switch), and the Patcher older launchers
+                    // installed taken out again; never stops a start.
                     progress(ProgressInfo::stage("Checking performance mods"));
                     if let Err(e) = crate::mods::performance::sync_forge(
                         game_dir,

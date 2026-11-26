@@ -15,7 +15,6 @@ mod index;
 pub mod malware;
 pub mod modpack;
 mod modrinth;
-mod oneconfig;
 pub mod pack_groups;
 pub mod pack_index;
 pub mod pack_preview;

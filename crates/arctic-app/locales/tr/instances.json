@@ -10,7 +10,7 @@
   "instances.add_to_your_server_list": "Sunucu listene ekle",
   "instances.added": "{name} eklendi",
   "instances.address": "Adres",
-  "instances.adds_patcher_performance_and_bug_fixes_and": "Daha yüksek FPS için Patcher (performans ve hata düzeltmeleri) ve Entity Culling (göremediğin şeyleri çizmez) ekler. Modrinth'ten indirilir; zaten sende olanlar olduğu gibi bırakılır.",
+  "instances.adds_entity_culling_for_higher_fps": "Daha yüksek FPS için Entity Culling (göremediğin şeyleri çizmez) ekler. Modrinth'ten indirilir; zaten sende varsa olduğu gibi bırakılır.",
   "instances.adds_sodium_lithium_ferritecore_2": "Çok daha yüksek FPS ve daha hızlı açılış için Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core, BadOptimizations, ModernFix ve Polarium ekler. Sürümün için Modrinth'ten indirilir (Polarium Arctic ile gelir); henüz güncellenmemiş olanlar atlanır.",
   "instances.all": "Tümü",
   "instances.all_fixed": "Hepsi düzeltildi",
