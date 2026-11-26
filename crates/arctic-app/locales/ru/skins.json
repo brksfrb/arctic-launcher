@@ -146,5 +146,9 @@
   "skins.your_cape": "Ваш плащ {i}",
   "skins.your_cape_2": "Ваш плащ",
   "skins.your_own": "Свой…",
-  "skins.your_own_minecraft_skin_for_arctic_players": "Ваш собственный скин Minecraft, и для игроков Arctic тоже"
+  "skins.your_own_minecraft_skin_for_arctic_players": "Ваш собственный скин Minecraft, и для игроков Arctic тоже",
+  "skins.gif_cape_preview_failed": "Не удалось показать преобразованный GIF",
+  "skins.gif_cape_preview_note": "Так игроки увидят плащ после преобразования в формат плащей (кадры и скорость ограничены тем, что допускают плащи).",
+  "skins.gif_cape_preview_title": "Предпросмотр анимированного плаща",
+  "skins.use_this_cape": "Использовать этот плащ"
 }

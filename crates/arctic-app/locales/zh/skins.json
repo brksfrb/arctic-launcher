@@ -144,5 +144,9 @@
   "skins.your_cape": "你的披风 {i}",
   "skins.your_cape_2": "你的披风",
   "skins.your_own": "自定义…",
-  "skins.your_own_minecraft_skin_for_arctic_players": "你自己的 Minecraft 皮肤，Arctic 玩家也能看到"
+  "skins.your_own_minecraft_skin_for_arctic_players": "你自己的 Minecraft 皮肤，Arctic 玩家也能看到",
+  "skins.gif_cape_preview_failed": "无法显示转换后的 GIF",
+  "skins.gif_cape_preview_note": "这是转换为披风格式后玩家将看到的披风(帧数和速度受披风格式限制)。",
+  "skins.gif_cape_preview_title": "动画披风预览",
+  "skins.use_this_cape": "使用此披风"
 }

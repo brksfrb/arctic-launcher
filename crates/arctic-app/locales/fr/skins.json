@@ -144,5 +144,9 @@
   "skins.your_cape": "Ta cape {i}",
   "skins.your_cape_2": "Ta cape",
   "skins.your_own": "La tienne…",
-  "skins.your_own_minecraft_skin_for_arctic_players": "Ton propre skin Minecraft, aussi pour les joueurs Arctic"
+  "skins.your_own_minecraft_skin_for_arctic_players": "Ton propre skin Minecraft, aussi pour les joueurs Arctic",
+  "skins.gif_cape_preview_failed": "Impossible d'afficher le GIF converti",
+  "skins.gif_cape_preview_note": "Voici la cape telle que les joueurs la verront après conversion au format des capes (images et vitesse limitées à ce que permettent les capes).",
+  "skins.gif_cape_preview_title": "Aperçu de la cape animée",
+  "skins.use_this_cape": "Utiliser cette cape"
 }

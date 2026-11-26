@@ -144,5 +144,9 @@
   "skins.your_cape": "Pelerinin {i}",
   "skins.your_cape_2": "Pelerinin",
   "skins.your_own": "Kendininki…",
-  "skins.your_own_minecraft_skin_for_arctic_players": "Kendi Minecraft skinin, Arctic oyuncuları için de"
+  "skins.your_own_minecraft_skin_for_arctic_players": "Kendi Minecraft skinin, Arctic oyuncuları için de",
+  "skins.gif_cape_preview_failed": "Dönüştürülen GIF gösterilemedi",
+  "skins.gif_cape_preview_note": "Pelerin, pelerin biçimine dönüştürüldükten sonra oyuncuların göreceği şekilde burada görünür (kareler ve hız, pelerinlerin izin verdiğiyle sınırlıdır).",
+  "skins.gif_cape_preview_title": "Animasyonlu pelerin önizlemesi",
+  "skins.use_this_cape": "Bu pelerini kullan"
 }
