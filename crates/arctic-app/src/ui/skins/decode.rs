@@ -187,3 +187,64 @@ pub(super) fn cape_frames(png: &[u8], max_width: u32) -> Option<Vec<ColorImage>>
             .collect(),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn strip_png(w: u32, h: u32) -> Vec<u8> {
+        // Each frame a different shade, so slicing mistakes show.
+        let frame_h = w / 2;
+        let img = image::RgbaImage::from_fn(w, h, |_, y| {
+            image::Rgba([(y / frame_h) as u8 * 8, 100, 200, 255])
+        });
+        let mut out = Vec::new();
+        img.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+            .unwrap();
+        out
+    }
+
+    /// Moon Kitsune's shape: 16 frames of 1024x512 in a 1024x8192 strip. The 3D preview
+    /// (native width) gets every frame at 1024x512, as uploaded.
+    #[test]
+    fn preview_frames_are_native_size() {
+        let native = arctic_core::cosmetics::MAX_CAPE_WIDTH;
+        let frames = cape_frames(&strip_png(1024, 8192), native).unwrap();
+        assert_eq!(frames.len(), 16);
+        for (i, f) in frames.iter().enumerate() {
+            assert_eq!(f.size, [1024, 512]);
+            assert_eq!(f.pixels[0].r() as usize, i * 8, "frame {i} sliced wrong");
+        }
+        assert_eq!(super::super::cape_width("acape:x@hd"), native);
+    }
+
+    /// Cards still use the smaller copy; only the preview key is native.
+    #[test]
+    fn cards_stay_small_preview_does_not() {
+        let png = strip_png(1024, 8192);
+        let card = cape_frames(&png, super::super::cape_width("acape:x@still")).unwrap();
+        assert_eq!(card[0].size, [512, 256]);
+        let hd = cape_frames(&png, super::super::cape_width("acape:x@hd")).unwrap();
+        assert_eq!(hd[0].size, [1024, 512]);
+        assert_eq!(super::super::full_key("acape:x@hd"), "acape:x");
+    }
+
+    /// A strip taller than the GPU's max texture side is never uploaded whole or shrunk to
+    /// fit: it is cut into per-frame images (each far below the limit) at full size.
+    #[test]
+    fn tall_strip_is_sliced_not_downscaled() {
+        const MOCK_MAX_TEXTURE: usize = 4096;
+        let (w, h) = (1024u32, 12288u32); // 24 frames, the documented maximum
+        assert!(h as usize > MOCK_MAX_TEXTURE);
+        let frames = cape_frames(&strip_png(w, h), w).unwrap();
+        assert_eq!(frames.len(), 24);
+        assert!(frames.iter().all(|f| f.size == [1024, 512]));
+        assert!(
+            frames
+                .iter()
+                .all(|f| f.size.iter().all(|&s| s <= MOCK_MAX_TEXTURE))
+        );
+        let total: usize = frames.iter().map(|f| f.width() * f.height()).sum();
+        assert_eq!(total, (w * h) as usize);
+    }
+}
