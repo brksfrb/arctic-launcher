@@ -93,6 +93,47 @@ pub fn peek_default(dirs: &DataDirs) -> Option<Instance> {
     }
 }
 
+/// What to show as the Arctic instance when [`ensure_default`] failed (an error writing, say),
+/// without writing anything. Before the move, it stands on the old default's folder, so the
+/// player sees (and plays) their own worlds, and saving it later does what the move would have.
+/// A pure-vanilla old default isn't taken over: a stand-in in `arctic` is used, which the move
+/// adopts when it next runs.
+pub fn fallback_default(dirs: &DataDirs) -> Instance {
+    if let Ok(Some(found)) = find_builtin(dirs) {
+        return found;
+    }
+    let legacy_dir = dirs.instance_dir(LEGACY_DEFAULT_ID);
+    let as_arctic = |old: Instance| {
+        Instance {
+            id: LEGACY_DEFAULT_ID.into(),
+            name: if old.name == LEGACY_NAME {
+                ARCTIC_NAME.into()
+            } else {
+                old.name.clone()
+            },
+            builtin: true,
+            ..old
+        }
+        .normalized()
+    };
+    match load_json::<Instance>(&legacy_dir.join(INSTANCE_FILE)) {
+        Ok(Some(old)) if old.arctic_mod && old.version.is_none() => as_arctic(old),
+        Ok(Some(_)) => Instance::arctic_default(),
+        // Unreadable, or only its game folder: it was the default, keep showing its worlds.
+        Err(_) => as_arctic(Instance {
+            id: LEGACY_DEFAULT_ID.into(),
+            name: LEGACY_NAME.into(),
+            ..Instance::arctic_default()
+        }),
+        Ok(None) if legacy_dir.join(super::GAME_DIR).is_dir() => as_arctic(Instance {
+            id: LEGACY_DEFAULT_ID.into(),
+            name: LEGACY_NAME.into(),
+            ..Instance::arctic_default()
+        }),
+        Ok(None) => Instance::arctic_default(),
+    }
+}
+
 /// The instance marked built-in. An unreadable `arctic` or `vanilla` is an error (it may be
 /// the built-in one, and making another would leave two); other broken folders are skipped.
 fn find_builtin(dirs: &DataDirs) -> Result<Option<Instance>> {
@@ -220,13 +261,16 @@ fn keep_vanilla_and_add(dirs: &DataDirs, old: Instance) -> Result<(Instance, Bui
     ))
 }
 
-/// A new Arctic instance in a folder nobody uses (`arctic` unless a player's instance has it).
-/// A folder it made is removed again if saving fails.
+/// A new Arctic instance in a folder no instance uses (`arctic` unless a player's instance has
+/// it). A folder without an `instance.json` is taken as it is (games played on the stand-in
+/// Arctic instance while a move failed went there). A folder it made is removed again if
+/// saving fails; one that was there is left alone.
 fn create_arctic(dirs: &DataDirs) -> Result<Instance> {
     let id = std::iter::once(ARCTIC_ID.to_owned())
         .chain((2..).map(|n| format!("{ARCTIC_ID}-{n}")))
-        .find(|id| !dirs.instance_dir(id).exists())
+        .find(|id| !dirs.instance_dir(id).join(INSTANCE_FILE).exists())
         .unwrap_or_else(|| ARCTIC_ID.to_owned());
+    let existed = dirs.instance_dir(&id).exists();
     let arctic = Instance {
         id,
         ..Instance::arctic_default()
@@ -239,7 +283,8 @@ fn create_arctic(dirs: &DataDirs) -> Result<Instance> {
             std::fs::create_dir_all(&game).map_err(|e| Error::io(&game, e))
         });
     if let Err(e) = made {
-        if dir.exists()
+        if !existed
+            && dir.exists()
             && let Err(cleanup) = std::fs::remove_dir_all(&dir)
         {
             log::warn!("instances: couldn't tidy up {}: {cleanup}", dir.display());

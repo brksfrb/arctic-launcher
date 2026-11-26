@@ -57,7 +57,7 @@ impl ProfileData {
         });
         let instance = instances::load_default(dirs).unwrap_or_else(|e| {
             note(t!("tasks.could_not_load_the_vanilla_instance"), e);
-            Instance::arctic_default()
+            instances::fallback_default(dirs)
         });
         let custom_instances = instances::list_custom(dirs).unwrap_or_default();
         let faces = load_faces(dirs, &accounts, tasks);

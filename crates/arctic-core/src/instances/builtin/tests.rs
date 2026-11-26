@@ -367,3 +367,50 @@ fn the_arctic_instance_cannot_be_copied_or_reused_by_name() {
     assert_ne!(own.id, "arctic");
     assert_eq!(load_default(&dirs).unwrap().id, "arctic");
 }
+
+#[test]
+fn the_stand_in_after_a_failed_move_keeps_the_players_worlds() {
+    // Client on: the stand-in is the old default's folder, so its worlds show and play.
+    let (_t, dirs) = data();
+    let level = legacy(&dirs, "Vanilla", true);
+    fail_at(Some("convert"));
+    assert!(ensure_default(&dirs).is_err());
+    fail_at(None);
+    let stand_in = fallback_default(&dirs);
+    assert!(stand_in.is_default());
+    assert_eq!(
+        (stand_in.id.as_str(), stand_in.name.as_str()),
+        ("vanilla", "Arctic")
+    );
+    assert_eq!(stand_in.game_dir(&dirs), level.ancestors().nth(3).unwrap());
+    assert!(builtins(&dirs).is_empty(), "nothing written");
+    // Saving it (a setting changed) does what the move would have.
+    stand_in.save(&dirs).unwrap();
+    assert_eq!(ensure_default(&dirs).unwrap(), (stand_in, None));
+    assert!(!dirs.instance_dir(ARCTIC_ID).exists());
+
+    // Client off: a stand-in in `arctic`; what was played there is adopted by the next move.
+    let (_t, dirs) = data();
+    let level = legacy(&dirs, "Vanilla", false);
+    settings(&dirs, Some("1.21.4"), None);
+    fail_at(Some("settings"));
+    assert!(ensure_default(&dirs).is_err());
+    fail_at(None);
+    let stand_in = fallback_default(&dirs);
+    assert_eq!(stand_in.id, "arctic");
+    let played = world(&stand_in.game_dir(&dirs));
+    let (arctic, _) = ensure_default(&dirs).unwrap();
+    assert_eq!(arctic.id, "arctic", "the stand-in's folder, not arctic-2");
+    assert!(played.is_file() && level.is_file());
+    assert_eq!(list_custom(&dirs).unwrap()[0].id, "vanilla");
+}
+
+#[test]
+fn other_instances_can_be_removed_while_the_move_fails() {
+    let (_t, dirs) = data();
+    let mine = instances::create(&dirs, "Mine", "1.21.4", Loader::Vanilla).unwrap();
+    legacy(&dirs, "Vanilla", true);
+    std::fs::write(dirs.instance_dir("vanilla").join(INSTANCE_FILE), b"{oops").unwrap();
+    assert!(ensure_default(&dirs).is_err());
+    instances::remove(&dirs, &mine.id).unwrap();
+}

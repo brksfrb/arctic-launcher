@@ -8,7 +8,9 @@
 mod builtin;
 mod duplicate;
 
-pub use builtin::{ARCTIC_ID, BuiltinMigration, LEGACY_DEFAULT_ID, ensure_default, peek_default};
+pub use builtin::{
+    ARCTIC_ID, BuiltinMigration, LEGACY_DEFAULT_ID, ensure_default, fallback_default, peek_default,
+};
 
 pub(crate) use duplicate::copy_entry;
 pub use duplicate::duplicate;
@@ -430,7 +432,10 @@ fn empty_folder(folder: &Path) {
 
 /// Move an instance folder (worlds and mods included) to `instances/.trash`.
 pub fn remove(dirs: &DataDirs, id: &str) -> Result<()> {
-    if id == load_default(dirs)?.id || read(dirs, id).ok().flatten().is_some_and(|i| i.builtin) {
+    // Read only: a failing move to the Arctic instance mustn't block removing other instances.
+    if peek_default(dirs).is_some_and(|d| d.id == id)
+        || read(dirs, id).ok().flatten().is_some_and(|i| i.builtin)
+    {
         return Err(Error::Other("the Arctic instance cannot be removed".into()));
     }
     let from = dirs.instance_dir(id);
