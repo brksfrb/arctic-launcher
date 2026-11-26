@@ -708,6 +708,13 @@ impl Runs {
         self.list.iter().any(|r| r.game().is_some())
     }
 
+    /// A game process of this instance is up (not just preparing).
+    pub fn game_running(&self, instance_id: &str) -> bool {
+        self.list
+            .iter()
+            .any(|r| r.instance_id == instance_id && r.game().is_some())
+    }
+
     pub fn instance_active(&self, instance_id: &str) -> bool {
         self.active_for(instance_id, None).is_some()
     }
@@ -819,11 +826,16 @@ impl ArcticApp {
                 let code = run.reported_exit_code(code, killed);
                 run.exit_diagnostics = diagnostics;
                 run.state = RunState::Ended;
+                let instance_id = run.instance_id.clone();
                 self.bridge.forget_launch(id);
                 // The game threw its unfinished recording away itself unless it crashed or
                 // was killed; either way nothing is writing it now (unless another copy of
                 // the instance still runs in the same folder).
                 let game_dir = run.game_dir.clone();
+                let still_running = self.runs.game_running(&instance_id);
+                self.inst
+                    .restart_pending
+                    .exited(&instance_id, still_running);
                 if !self
                     .runs
                     .list

@@ -461,6 +461,9 @@ impl ArcticApp {
             if report.shaders_switched_on {
                 self.update_instance(&report.target, |instance| instance.shaders = true);
             }
+            if report.kind == ProjectType::Mod && report.succeeded > 0 {
+                self.note_mod_change(&report.target);
+            }
             if matches!(report.kind, ProjectType::Mod | ProjectType::Shader) {
                 self.refresh_mods(&report.target);
             }

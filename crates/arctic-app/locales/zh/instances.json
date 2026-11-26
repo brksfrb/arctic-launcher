@@ -189,6 +189,7 @@
   "instances.no_loader_builds_for_this_version": "此版本没有加载器构建。",
   "instances.no_modpacks_found": "未找到整合包。",
   "instances.no_mods_found": "未找到模组。",
+  "instances.restart_to_apply_mod_changes": "重启游戏以应用模组更改。",
   "instances.no_mods_yet": "暂无模组",
   "instances.no_other_loader_has_a_build_for_minecraft": "没有其他加载器有适用于 Minecraft {game} 的构建版本。",
   "instances.no_replays_yet": "暂无回放",
