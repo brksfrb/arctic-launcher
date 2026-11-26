@@ -769,5 +769,7 @@
   "mods.enchant_value.feather_falling": "낙하 피해 {0}% 감소",
   "mods.enchant_value.blast_protection": "폭발 피해 {0}% 감소",
   "mods.enchant_value.projectile_protection": "발사체 피해 {0}% 감소",
-  "mods.enchant_value.piercing": "최대 {0}개의 대상을 관통함"
+  "mods.enchant_value.piercing": "최대 {0}개의 대상을 관통함",
+  "mods.recent": "최근",
+  "mods.armor_hider_detail": "내 시점에서 숨겨집니다."
 }

@@ -769,5 +769,7 @@
   "mods.enchant_value.feather_falling": "На {0}% меньше урона от падения",
   "mods.enchant_value.blast_protection": "На {0}% меньше урона от взрыва",
   "mods.enchant_value.projectile_protection": "На {0}% меньше урона от снарядов",
-  "mods.enchant_value.piercing": "Пробивает до {0} целей"
+  "mods.enchant_value.piercing": "Пробивает до {0} целей",
+  "mods.recent": "Недавние",
+  "mods.armor_hider_detail": "Скрыто из вашего вида."
 }

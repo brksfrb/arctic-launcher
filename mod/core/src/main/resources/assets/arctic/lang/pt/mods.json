@@ -769,5 +769,7 @@
   "mods.enchant_value.feather_falling": "{0}% a menos de dano de queda",
   "mods.enchant_value.blast_protection": "{0}% a menos de dano de explosão",
   "mods.enchant_value.projectile_protection": "{0}% a menos de dano de projéteis",
-  "mods.enchant_value.piercing": "Atravessa até {0} alvos"
+  "mods.enchant_value.piercing": "Atravessa até {0} alvos",
+  "mods.recent": "Recentes",
+  "mods.armor_hider_detail": "Oculto da sua visão."
 }

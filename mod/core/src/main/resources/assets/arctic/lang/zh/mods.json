@@ -769,5 +769,7 @@
   "mods.enchant_value.feather_falling": "摔落伤害减少 {0}%",
   "mods.enchant_value.blast_protection": "爆炸伤害减少 {0}%",
   "mods.enchant_value.projectile_protection": "弹射物伤害减少 {0}%",
-  "mods.enchant_value.piercing": "最多穿透 {0} 个目标"
+  "mods.enchant_value.piercing": "最多穿透 {0} 个目标",
+  "mods.recent": "最近",
+  "mods.armor_hider_detail": "在你的视角中隐藏。"
 }

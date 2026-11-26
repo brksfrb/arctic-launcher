@@ -769,5 +769,7 @@
   "mods.enchant_value.feather_falling": "Düşme hasarı %{0} daha az",
   "mods.enchant_value.blast_protection": "Patlama hasarı %{0} daha az",
   "mods.enchant_value.projectile_protection": "Mermi hasarı %{0} daha az",
-  "mods.enchant_value.piercing": "{0} hedefe kadar delip geçer"
+  "mods.enchant_value.piercing": "{0} hedefe kadar delip geçer",
+  "mods.recent": "Son kullanılanlar",
+  "mods.armor_hider_detail": "Görüşünüzden gizli."
 }

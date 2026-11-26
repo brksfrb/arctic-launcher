@@ -769,5 +769,7 @@
   "mods.enchant_value.feather_falling": "落下ダメージを{0}%軽減",
   "mods.enchant_value.blast_protection": "爆発ダメージを{0}%軽減",
   "mods.enchant_value.projectile_protection": "飛び道具のダメージを{0}%軽減",
-  "mods.enchant_value.piercing": "最大{0}体の対象を貫通"
+  "mods.enchant_value.piercing": "最大{0}体の対象を貫通",
+  "mods.recent": "最近",
+  "mods.armor_hider_detail": "自分の視点では非表示です。"
 }
