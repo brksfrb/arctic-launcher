@@ -159,6 +159,8 @@ pub struct InstancesUi {
     pub rename: Option<String>,
     /// Cached lists and background checks, retained when switching instances.
     pub(crate) mod_scans: HashMap<String, crate::mod_tasks::ModScan>,
+    /// Instances whose mods changed while their game ran; cleared when it exits.
+    pub restart_pending: RestartPending,
     /// Installed-mod filter, kept separate from the Modrinth search.
     pub mod_filter: (String, String),
     /// Mods that won't start together, and a Play they stopped.
@@ -513,6 +515,19 @@ impl ArcticApp {
     }
 
     /// Re-read after a local edit; coalesced if a scan is already running.
+    /// Remember that mods changed, if (and only if) that instance's game is running now.
+    pub(crate) fn note_mod_change(&mut self, id: &str) {
+        let running = self.runs.game_running(id);
+        self.inst.restart_pending.note(id, running);
+    }
+
+    /// The mod folder changed on a running instance and the game has not exited since.
+    pub(crate) fn needs_restart(&self, id: &str) -> bool {
+        self.inst
+            .restart_pending
+            .shown(id, self.runs.game_running(id))
+    }
+
     pub(crate) fn refresh_mods(&mut self, id: &str) {
         self.check_mods(id, true);
     }
@@ -633,6 +648,9 @@ impl ArcticApp {
                 self.inst.install_progress = None;
                 match result {
                     Ok((installed, failed)) => {
+                        if installed > 0 {
+                            self.note_mod_change(&instance);
+                        }
                         let note = if failed.is_empty() {
                             String::new()
                         } else {
@@ -718,9 +736,50 @@ impl ArcticApp {
     }
 }
 
+/// Instances whose mods changed while their game ran, so the game needs a restart.
+#[derive(Default)]
+pub struct RestartPending(HashSet<String>);
+
+impl RestartPending {
+    /// A mod was added, removed or switched; counts only while the game is running.
+    pub fn note(&mut self, id: &str, game_running: bool) {
+        if game_running {
+            self.0.insert(id.to_owned());
+        }
+    }
+
+    /// A game of the instance exited; the notice ends with its last copy.
+    pub fn exited(&mut self, id: &str, still_running: bool) {
+        if !still_running {
+            self.0.remove(id);
+        }
+    }
+
+    pub fn shown(&self, id: &str, game_running: bool) -> bool {
+        game_running && self.0.contains(id)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn restart_notice_follows_the_running_game() {
+        let mut pending = RestartPending::default();
+        pending.note("a", false);
+        assert!(!pending.shown("a", false) && !pending.shown("a", true));
+        pending.note("a", true);
+        assert!(pending.shown("a", true));
+        assert!(!pending.shown("b", true), "other instances stay quiet");
+        pending.exited("a", true);
+        assert!(pending.shown("a", true), "another copy still runs");
+        pending.exited("a", false);
+        assert!(!pending.shown("a", true));
+        pending.note("a", false);
+        assert!(!pending.shown("a", true), "changes with no game stay quiet");
+    }
+
     use arctic_core::mods::ProjectHit;
 
     fn hit(id: &str) -> ProjectHit {

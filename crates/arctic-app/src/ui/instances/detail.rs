@@ -145,6 +145,11 @@ impl ArcticApp {
         {
             self.inst.page = InstancePage::Mods;
         }
+        if self.needs_restart(&instance.id) {
+            let p = self.palette();
+            ui.label(RichText::new(t!("instances.restart_to_apply_mod_changes")).color(p.warn));
+            ui.add_space(8.0);
+        }
         match (self.inst.page, modded) {
             (InstancePage::Mods, true) => self.mods_page(ui, &instance),
             (InstancePage::Browse, true) => self.browse_page(ui, &instance),

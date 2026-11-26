@@ -179,6 +179,7 @@ impl ArcticApp {
             });
         });
         if changed {
+            self.note_mod_change(&instance.id);
             self.refresh_mods(&instance.id);
         }
     }
@@ -336,6 +337,7 @@ impl ArcticApp {
             }
         }
         if added > 0 {
+            self.note_mod_change(id);
             self.toasts.push(
                 Kind::Success,
                 if added == 1 {
