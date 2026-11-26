@@ -225,6 +225,12 @@ public final class ArcticClient {
 		return style().restyles;
 	}
 
+	/** Style for restyled stock Minecraft buttons: the D4 chrome under Arctic, the chosen style otherwise. */
+	public static Style buttonStyle() {
+		Style s = style();
+		return s == Style.ARCTIC ? Style.D4 : s;
+	}
+
 	// ---- Hooks for adapters ----------------------------------------------------
 
 	private static final LauncherNotice LAUNCHER_NOTICE = new LauncherNotice(System.getProperty("arctic.launcher"));

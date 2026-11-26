@@ -249,7 +249,7 @@ abstract class AbstractButtonMixin {
 	private void draw(GfxImpl gfx, int x, int y, int width, int height) {
 		AbstractWidget w = (AbstractWidget) (Object) this;
 		float hover = Compat.widgetHovered(w) ? 1f : 0f;
-		Skin.button(gfx, ArcticClient.style(), x, y, width, height, Compat.widgetActive(w), hover);
+		Skin.button(gfx, ArcticClient.buttonStyle(), x, y, width, height, Compat.widgetActive(w), hover);
 		if (DisconnectConfirm.isArmed(w)) {
 			Draw.outline(gfx, x, y, x + width, y + height, 2, DANGER);
 		}

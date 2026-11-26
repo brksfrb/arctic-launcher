@@ -86,7 +86,7 @@ abstract class ButtonWidgetMixin implements com.arcticlauncher.legacy.LegacyButt
 		if ((Object) this instanceof OptionSliderWidget) {
 			Skin.sliderTrack(g, ArcticClient.style(), x, y, width, height, hovered);
 		} else {
-			Skin.button(g, ArcticClient.style(), x, y, width, height, active, hovered ? 1f : 0f);
+			Skin.button(g, ArcticClient.buttonStyle(), x, y, width, height, active, hovered ? 1f : 0f);
 		}
 		if (LegacyHooks.isArmedLeave(self)) {
 			Draw.outline(g, x, y, x + width, y + height, 2, DANGER);
