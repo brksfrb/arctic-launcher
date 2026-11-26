@@ -224,9 +224,9 @@ final class TabPage extends Page {
 		}
 	}
 
-	/** Right Shift: straight back to the game. */
+	/** The menu key: straight back to the game. */
 	@Override
-	protected boolean rightShift() {
+	protected boolean menuKey() {
 		close();
 		return true;
 	}

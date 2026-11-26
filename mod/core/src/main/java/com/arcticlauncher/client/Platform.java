@@ -92,6 +92,14 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	/** The Minecraft name of a key the game reported (a native key code). */
 	String keyName(int nativeKey);
 
+	/** The Arctic menu key as bound in the game's Controls (a Minecraft key name), or null when this version has no such binding. */
+	default String menuKeyBinding() {
+		return null;
+	}
+
+	/** Bind the Arctic menu key in the game's Controls (and save the options). */
+	default void setMenuKeyBinding(String key) {}
+
 	/** The name of a game key binding ("Jump") that uses this key, or null when none does (or this version can't tell). */
 	default String keyUsedBy(String key) {
 		return null;
@@ -271,7 +279,7 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 	void openPage(Page page);
 
 	/**
-	 * Open {@code page} over the current screen, so closing it comes back to that screen (Right Shift
+	 * Open {@code page} over the current screen, so closing it comes back to that screen (the menu key
 	 * on a server list returns to the server list, not to what was under it). Defaults to openPage.
 	 */
 	default void openPageOver(Page page) {

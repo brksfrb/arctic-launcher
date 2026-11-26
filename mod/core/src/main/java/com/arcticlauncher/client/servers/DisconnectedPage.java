@@ -224,7 +224,7 @@ public final class DisconnectedPage extends Page {
 
 	@Override
 	public void removed() {
-		// Covered by another menu (Right Shift) or left: never count down to a rejoin behind it.
+		// Covered by another menu (the menu key) or left: never count down to a rejoin behind it.
 		cancelled = true;
 		reconnectAttempt++;
 		refreshingSession = false;

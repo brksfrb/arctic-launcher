@@ -150,7 +150,7 @@
   "mods.decimals": "소수점",
   "mods.deleted_the_saved_chat_and_sent_history": "저장된 채팅과 보낸 기록을 지웠습니다",
   "mods.distance": "거리",
-  "mods.drag_it_on_the_hud_screen_right_shift_to": "HUD 화면(오른쪽 Shift)에서 끌어서 옮기세요.",
+  "mods.drag_it_on_the_hud_screen_right_shift_to": "HUD 화면({0})에서 끌어서 옮기세요.",
   "mods.drag_to_move_drag_the_corner_or_scroll_to": "끌어서 이동  ·  모서리를 끌거나 스크롤해 크기 조절  ·  오른쪽 클릭으로 설정",
   "mods.draw_every_creature_but_the_players_bigger": "플레이어를 뺀 모든 생물을 더 크거나 작게 그리기(히트박스는 그대로)",
   "mods.drawing_a_bow_leaves_the_view_alone": "활을 당겨도 시야가 바뀌지 않음",
@@ -769,5 +769,8 @@
   "mods.enchant_value.feather_falling": "낙하 피해 {0}% 감소",
   "mods.enchant_value.blast_protection": "폭발 피해 {0}% 감소",
   "mods.enchant_value.projectile_protection": "발사체 피해 {0}% 감소",
-  "mods.enchant_value.piercing": "최대 {0}개의 대상을 관통함"
+  "mods.enchant_value.piercing": "최대 {0}개의 대상을 관통함",
+  "mods.menu_key": "메뉴 키",
+  "mods.which_key_opens_and_closes_the_arctic_menu": "Arctic 메뉴를 열고 닫는 키입니다.",
+  "mods.also_in_minecrafts_controls_under_arctic_esc_restores": "Minecraft 조작 설정의 Arctic 항목에서도 바꿀 수 있습니다. Esc를 누르면 기본 키로 돌아갑니다."
 }

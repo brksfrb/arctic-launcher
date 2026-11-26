@@ -150,7 +150,7 @@
   "mods.decimals": "Décimales",
   "mods.deleted_the_saved_chat_and_sent_history": "Chat enregistré et historique d'envoi supprimés",
   "mods.distance": "Distance",
-  "mods.drag_it_on_the_hud_screen_right_shift_to": "Fais-le glisser sur l'écran du HUD (Maj droite) pour le déplacer.",
+  "mods.drag_it_on_the_hud_screen_right_shift_to": "Fais-le glisser sur l'écran du HUD ({0}) pour le déplacer.",
   "mods.drag_to_move_drag_the_corner_or_scroll_to": "Glisser pour déplacer  ·  glisser le coin (ou la molette) pour redimensionner  ·  clic droit pour les paramètres",
   "mods.draw_every_creature_but_the_players_bigger": "Afficher toutes les créatures sauf les joueurs plus grandes ou plus petites (les hitbox restent pareilles)",
   "mods.drawing_a_bow_leaves_the_view_alone": "Bander un arc ne touche pas à la vue",
@@ -769,5 +769,8 @@
   "mods.enchant_value.feather_falling": "{0} % de dégâts de chute en moins",
   "mods.enchant_value.blast_protection": "{0} % de dégâts d’explosion en moins",
   "mods.enchant_value.projectile_protection": "{0} % de dégâts de projectiles en moins",
-  "mods.enchant_value.piercing": "Traverse jusqu’à {0} cibles"
+  "mods.enchant_value.piercing": "Traverse jusqu’à {0} cibles",
+  "mods.menu_key": "Touche du menu",
+  "mods.which_key_opens_and_closes_the_arctic_menu": "La touche qui ouvre et ferme le menu Arctic.",
+  "mods.also_in_minecrafts_controls_under_arctic_esc_restores": "Aussi dans les Commandes de Minecraft, sous Arctic. Échap rétablit la touche par défaut."
 }

@@ -874,6 +874,13 @@ final class ModCatalog {
 		out.add(new Mod("lookscheck", Lang.t("mods.cosmetics_check"), Lang.t("mods.why_cant_others_see_my_look_what_this_game"), "looks", Category.CLIENT,
 				"cosmetics skin cape check-in debug missing invisible") // i18n-ignore
 				.page(LooksCheckTab::new));
+		out.add(new Mod("menukey", Lang.t("mods.menu_key"), Lang.t("mods.which_key_opens_and_closes_the_arctic_menu"), "keystrokes", Category.CLIENT,
+				"menu key rebind keybind open close right shift controls") // i18n-ignore
+				.settings((host, f) -> {
+					f.section(Lang.t("mods.key"));
+					f.key(Lang.t("mods.menu_key"), Lang.t("mods.also_in_minecrafts_controls_under_arctic_esc_restores"),
+							Form.key(com.arcticlauncher.client.MenuKey::current, com.arcticlauncher.client.MenuKey::set));
+				}));
 		out.add(new Mod("style", Lang.t("mods.menu_style"), Lang.t("mods.how_the_menus_look_smooth_font"), "style", Category.CLIENT, "theme font fancy")
 				.page(StyleTab::new));
 	}

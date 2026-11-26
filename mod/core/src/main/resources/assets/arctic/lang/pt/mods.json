@@ -150,7 +150,7 @@
   "mods.decimals": "Casas decimais",
   "mods.deleted_the_saved_chat_and_sent_history": "Chat salvo e histórico de envios apagados",
   "mods.distance": "Distância",
-  "mods.drag_it_on_the_hud_screen_right_shift_to": "Arraste na tela do HUD (Shift direito) para mover.",
+  "mods.drag_it_on_the_hud_screen_right_shift_to": "Arraste na tela do HUD ({0}) para mover.",
   "mods.drag_to_move_drag_the_corner_or_scroll_to": "Arraste para mover  ·  arraste o canto (ou role) para redimensionar  ·  botão direito para configurações",
   "mods.draw_every_creature_but_the_players_bigger": "Desenhar todas as criaturas, menos os jogadores, maiores ou menores (as hitboxes ficam iguais)",
   "mods.drawing_a_bow_leaves_the_view_alone": "Puxar o arco não muda a visão",
@@ -769,5 +769,8 @@
   "mods.enchant_value.feather_falling": "{0}% a menos de dano de queda",
   "mods.enchant_value.blast_protection": "{0}% a menos de dano de explosão",
   "mods.enchant_value.projectile_protection": "{0}% a menos de dano de projéteis",
-  "mods.enchant_value.piercing": "Atravessa até {0} alvos"
+  "mods.enchant_value.piercing": "Atravessa até {0} alvos",
+  "mods.menu_key": "Tecla do menu",
+  "mods.which_key_opens_and_closes_the_arctic_menu": "A tecla que abre e fecha o menu do Arctic.",
+  "mods.also_in_minecrafts_controls_under_arctic_esc_restores": "Também nos Controles do Minecraft, em Arctic. Esc restaura a tecla padrão."
 }

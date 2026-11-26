@@ -23,7 +23,8 @@ public final class Keys {
 	public static final int LEFT = 263;
 	public static final int DOWN = 264;
 	public static final int UP = 265;
-	public static final int RIGHT_SHIFT = 344;
+	/** Whatever key opens the Arctic menu (see {@link MenuKey}); adapters report it instead of the key's own code. */
+	public static final int MENU = 1000;
 
 	public static final int MOUSE_LEFT = 0;
 	public static final int MOUSE_RIGHT = 1;

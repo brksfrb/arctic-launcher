@@ -150,7 +150,7 @@
   "mods.decimals": "Знаки после запятой",
   "mods.deleted_the_saved_chat_and_sent_history": "Сохранённый чат и история отправленного удалены",
   "mods.distance": "Расстояние",
-  "mods.drag_it_on_the_hud_screen_right_shift_to": "Перетащите его на экране HUD (правый Shift), чтобы переместить.",
+  "mods.drag_it_on_the_hud_screen_right_shift_to": "Перетащите его на экране HUD ({0}), чтобы переместить.",
   "mods.drag_to_move_drag_the_corner_or_scroll_to": "Тяните, чтобы переместить  ·  тяните угол (или колесо) для размера  ·  правый клик для настроек",
   "mods.draw_every_creature_but_the_players_bigger": "Рисовать всех существ, кроме игроков, крупнее или мельче (хитбоксы не меняются)",
   "mods.drawing_a_bow_leaves_the_view_alone": "Натяжение лука не меняет обзор",
@@ -769,5 +769,8 @@
   "mods.enchant_value.feather_falling": "На {0}% меньше урона от падения",
   "mods.enchant_value.blast_protection": "На {0}% меньше урона от взрыва",
   "mods.enchant_value.projectile_protection": "На {0}% меньше урона от снарядов",
-  "mods.enchant_value.piercing": "Пробивает до {0} целей"
+  "mods.enchant_value.piercing": "Пробивает до {0} целей",
+  "mods.menu_key": "Клавиша меню",
+  "mods.which_key_opens_and_closes_the_arctic_menu": "Клавиша, которая открывает и закрывает меню Arctic.",
+  "mods.also_in_minecrafts_controls_under_arctic_esc_restores": "Также в управлении Minecraft, в разделе Arctic. Esc возвращает клавишу по умолчанию."
 }

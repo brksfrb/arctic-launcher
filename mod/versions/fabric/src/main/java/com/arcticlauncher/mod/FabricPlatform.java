@@ -351,6 +351,16 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public String menuKeyBinding() {
+		return MenuKeyMapping.key();
+	}
+
+	@Override
+	public void setMenuKeyBinding(String key) {
+		MenuKeyMapping.set(key);
+	}
+
+	@Override
 	public String keyUsedBy(String key) {
 		return Compat.keyUsedBy(key);
 	}

@@ -150,7 +150,7 @@
   "mods.decimals": "Знаки після коми",
   "mods.deleted_the_saved_chat_and_sent_history": "Збережений чат та історію надісланого видалено",
   "mods.distance": "Відстань",
-  "mods.drag_it_on_the_hud_screen_right_shift_to": "Перетягни його на екрані HUD (правий Shift), щоб перемістити.",
+  "mods.drag_it_on_the_hud_screen_right_shift_to": "Перетягни його на екрані HUD ({0}), щоб перемістити.",
   "mods.drag_to_move_drag_the_corner_or_scroll_to": "Тягни, щоб перемістити  ·  тягни кут (або коліщатко) для розміру  ·  правий клік для налаштувань",
   "mods.draw_every_creature_but_the_players_bigger": "Малювати всіх істот, крім гравців, більшими або меншими (хітбокси не змінюються)",
   "mods.drawing_a_bow_leaves_the_view_alone": "Натягування лука не змінює огляд",
@@ -769,5 +769,8 @@
   "mods.enchant_value.feather_falling": "На {0}% менше шкоди від падіння",
   "mods.enchant_value.blast_protection": "На {0}% менше шкоди від вибухів",
   "mods.enchant_value.projectile_protection": "На {0}% менше шкоди від снарядів",
-  "mods.enchant_value.piercing": "Пробиває до {0} цілей"
+  "mods.enchant_value.piercing": "Пробиває до {0} цілей",
+  "mods.menu_key": "Клавіша меню",
+  "mods.which_key_opens_and_closes_the_arctic_menu": "Клавіша, що відкриває й закриває меню Arctic.",
+  "mods.also_in_minecrafts_controls_under_arctic_esc_restores": "Також в керуванні Minecraft, у розділі Arctic. Esc повертає клавішу за замовчуванням."
 }

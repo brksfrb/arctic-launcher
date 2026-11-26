@@ -150,7 +150,7 @@
   "mods.decimals": "Miejsca po przecinku",
   "mods.deleted_the_saved_chat_and_sent_history": "Usunięto zapisany czat i historię wysłanych",
   "mods.distance": "Odległość",
-  "mods.drag_it_on_the_hud_screen_right_shift_to": "Przeciągnij go na ekranie HUD (prawy Shift), aby przesunąć.",
+  "mods.drag_it_on_the_hud_screen_right_shift_to": "Przeciągnij go na ekranie HUD ({0}), aby przesunąć.",
   "mods.drag_to_move_drag_the_corner_or_scroll_to": "Przeciągnij, by przesunąć  ·  przeciągnij róg (lub przewiń), by zmienić rozmiar  ·  prawy przycisk – ustawienia",
   "mods.draw_every_creature_but_the_players_bigger": "Rysuj wszystkie stworzenia poza graczami większe lub mniejsze (hitboxy bez zmian)",
   "mods.drawing_a_bow_leaves_the_view_alone": "Napinanie łuku nie zmienia widoku",
@@ -769,5 +769,8 @@
   "mods.enchant_value.feather_falling": "O {0}% mniej obrażeń od upadku",
   "mods.enchant_value.blast_protection": "O {0}% mniej obrażeń od wybuchów",
   "mods.enchant_value.projectile_protection": "O {0}% mniej obrażeń od pocisków",
-  "mods.enchant_value.piercing": "Przebija do {0} celów"
+  "mods.enchant_value.piercing": "Przebija do {0} celów",
+  "mods.menu_key": "Klawisz menu",
+  "mods.which_key_opens_and_closes_the_arctic_menu": "Klawisz, który otwiera i zamyka menu Arctic.",
+  "mods.also_in_minecrafts_controls_under_arctic_esc_restores": "Także w sterowaniu Minecrafta, w sekcji Arctic. Esc przywraca domyślny klawisz."
 }

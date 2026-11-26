@@ -6,7 +6,8 @@
 <% if (resolver) { %>		"MojangBlocklistMixin",
 <% } else { %>		"LegacyMojangBlocklistMixin",
 <% } %>
-		"ScreenshotMixin",<% if (restyleWidgets) { %>
+		"ScreenshotMixin",
+		"OptionsKeyMixin",<% if (restyleWidgets) { %>
 		"AbstractButtonMixin",
 		"AbstractSliderButtonMixin",
 		"ButtonMixin",

@@ -150,7 +150,7 @@
   "mods.decimals": "小数点以下",
   "mods.deleted_the_saved_chat_and_sent_history": "保存したチャットと送信履歴を削除しました",
   "mods.distance": "距離",
-  "mods.drag_it_on_the_hud_screen_right_shift_to": "HUD画面（右Shift）でドラッグして移動します。",
+  "mods.drag_it_on_the_hud_screen_right_shift_to": "HUD画面（{0}）でドラッグして移動します。",
   "mods.drag_to_move_drag_the_corner_or_scroll_to": "ドラッグで移動  ·  角をドラッグ（またはスクロール）でサイズ変更  ·  右クリックで設定",
   "mods.draw_every_creature_but_the_players_bigger": "プレイヤー以外の生き物を大きく、または小さく描画（当たり判定は変わりません）",
   "mods.drawing_a_bow_leaves_the_view_alone": "弓を引いても視野は変わりません",
@@ -769,5 +769,8 @@
   "mods.enchant_value.feather_falling": "落下ダメージを{0}%軽減",
   "mods.enchant_value.blast_protection": "爆発ダメージを{0}%軽減",
   "mods.enchant_value.projectile_protection": "飛び道具のダメージを{0}%軽減",
-  "mods.enchant_value.piercing": "最大{0}体の対象を貫通"
+  "mods.enchant_value.piercing": "最大{0}体の対象を貫通",
+  "mods.menu_key": "メニューキー",
+  "mods.which_key_opens_and_closes_the_arctic_menu": "Arcticメニューを開閉するキーです。",
+  "mods.also_in_minecrafts_controls_under_arctic_esc_restores": "Minecraftの操作設定のArcticにも表示されます。Escで初期のキーに戻ります。"
 }

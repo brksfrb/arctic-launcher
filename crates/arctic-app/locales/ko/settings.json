@@ -80,7 +80,7 @@
   "settings.group.game": "게임",
   "settings.group.general": "일반",
   "settings.group.network_voice": "네트워크 및 음성",
-  "settings.how_minecrafts_menus_look_in_game_press": "게임 속 Minecraft 메뉴의 모습. 게임에서 오른쪽 Shift를 누르면 HUD 위젯과 망토를 볼 수 있습니다.",
+  "settings.how_minecrafts_menus_look_in_game_press": "게임 속 Minecraft 메뉴의 모습. 게임에서 Arctic 메뉴 키를 누르면 HUD 위젯과 망토를 볼 수 있습니다.",
   "settings.hud_layouts_and_keys": "HUD 배치와 키",
   "settings.import": "가져오기",
   "settings.install_updates_automatically": "업데이트 자동 설치",
