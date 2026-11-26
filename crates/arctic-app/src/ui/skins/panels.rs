@@ -351,10 +351,19 @@ impl ArcticApp {
             .skin_key
             .clone()
             .unwrap_or_else(|| super::MANNEQUIN.to_owned());
-        let cape = current
-            .cape_key
-            .as_deref()
-            .and_then(|k| self.skin_texture(&ctx, k).map(|t| t.id_at(now)));
+        let cape = current.cape_key.as_deref().and_then(|k| {
+            // The big preview gets the cape at native resolution (cards use a smaller copy).
+            let hd = format!("{k}{}", super::HD);
+            if let Some(t) = self.skin_texture(&ctx, &hd) {
+                return Some(t.id_at(now));
+            }
+            // Until it has decoded, whatever card copy is already loaded (no gap).
+            let cards = [k.to_owned(), format!("{k}{}", super::STILL)];
+            cards
+                .iter()
+                .find_map(|c| self.skins.textures.get(c))
+                .map(|t| t.id_at(now))
+        });
         let pose = Pose {
             yaw: self.skins.yaw,
             pitch: self.skins.pitch,

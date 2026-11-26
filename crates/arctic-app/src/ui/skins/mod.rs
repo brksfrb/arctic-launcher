@@ -656,7 +656,7 @@ impl ArcticApp {
             if is_cape(key) {
                 self.skins
                     .decoder
-                    .request(ctx, key, png, CAPE_WIDTH, key.ends_with(STILL));
+                    .request(ctx, key, png, cape_width(key), key.ends_with(STILL));
                 return None;
             }
             let Some(mut texture) = upload(ctx, key, &png) else {
@@ -1262,10 +1262,21 @@ fn upload_cape(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture
 
 /// Appended to a cape key for its first frame alone: cards stand still until hovered.
 pub(super) const STILL: &str = "@still";
-/// Capes are kept at most this wide. A card shows the back ~110 px tall and the 3D preview
-/// about as big; a 512-wide cape's back is 128 pixels, and each frame is a quarter of a
-/// 1024-wide one's 2 MB.
+/// Appended to a cape key for the big 3D preview: the cape at its native resolution.
+pub(super) const HD: &str = "@hd";
+/// Cards keep capes at most this wide: a card shows the back ~110 px tall, and each frame is a
+/// quarter of a 1024-wide one's 2 MB. The 3D preview (`HD` keys) is never scaled down: it
+/// draws the cape several times larger than a card.
 const CAPE_WIDTH: u32 = 512;
+
+/// The widest a cape under `key` is kept: native for the preview, `CAPE_WIDTH` for cards.
+fn cape_width(key: &str) -> u32 {
+    if key.ends_with(HD) {
+        arctic_core::cosmetics::MAX_CAPE_WIDTH
+    } else {
+        CAPE_WIDTH
+    }
+}
 /// A cape texture not drawn for this long is let go.
 const UNUSED_TEXTURE: std::time::Duration = std::time::Duration::from_secs(20);
 /// The gallery's downloaded skins are let go this long after the last card showed one.
@@ -1283,9 +1294,10 @@ fn is_cape(key: &str) -> bool {
     key.starts_with("mccape:") || key.starts_with("acape:") || key.starts_with("ofcape:")
 }
 
-/// The key without the still-frame suffix.
+/// The key without the still-frame or HD suffix.
 fn full_key(key: &str) -> &str {
-    key.strip_suffix(STILL).unwrap_or(key)
+    let key = key.strip_suffix(STILL).unwrap_or(key);
+    key.strip_suffix(HD).unwrap_or(key)
 }
 
 /// Decoded cape frames as textures (one per frame).
