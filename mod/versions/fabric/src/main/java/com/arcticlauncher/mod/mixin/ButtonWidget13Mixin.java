@@ -53,8 +53,8 @@ abstract class ButtonWidget13Mixin {
 	}
 
 	/** Option sliders and the volume sliders (a package-private subclass of the one widget class). */
-	static boolean isSlider(ButtonWidget w) {
-		return w instanceof OptionSliderWidget || w.getClass().getName().endsWith("SoundsScreen$SoundButtonWidget");
+	private static boolean isSlider(ButtonWidget w) {
+		return w instanceof OptionSliderWidget || w instanceof com.arcticlauncher.mod.SliderMark13;
 	}
 }
 //#endif

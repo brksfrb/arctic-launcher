@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.Coerce;
 
 /** 1.13 volume sliders (Music & Sounds): the Arctic handle too, as {@link OptionSliderWidget13Mixin}. */
 @Mixin(targets = "net.minecraft.client.gui.screen.SoundsScreen$SoundButtonWidget")
-abstract class SoundSliderWidget13Mixin {
+abstract class SoundSliderWidget13Mixin implements com.arcticlauncher.mod.SliderMark13 {
 	private static final int HANDLE_W = 8;
 
 	// The class isn't public, so the handle takes it as a button; optional (require = 0): if that ever
