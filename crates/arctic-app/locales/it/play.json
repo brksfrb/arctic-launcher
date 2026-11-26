@@ -12,7 +12,7 @@
   "play.add_another_account": "Aggiungi un altro account",
   "play.add_your_account": "Aggiungi il tuo account",
   "play.added": "{username} aggiunto",
-  "play.adds_sodium_lithium_and_friends_to_vanilla": "Aggiunge Sodium, Lithium e compagni a Vanilla per molti più FPS. I tuoi mondi non cambiano.",
+  "play.adds_sodium_lithium_and_friends_to_vanilla": "Aggiunge Sodium, Lithium e compagnia per molti più FPS. I tuoi mondi non cambiano.",
   "play.all": "Tutto",
   "play.also_running": "IN ESECUZIONE ANCHE",
   "play.animated_background": "Sfondo animato",
@@ -165,7 +165,6 @@
   "play.plus_more_keys_video_chat": "E altre {count} (tasti, video, chat…)",
   "play.profile_name_hint": "es. Speedrun, Famiglia, Test",
   "play.profiles": "Profili",
-  "play.pure_vanilla_no_cosmetics_or_capes_no": "Vanilla puro: niente cosmetici o mantelli, niente gioco con gli amici, niente menu Arctic o HUD in gioco. Riattivalo quando vuoi in Istanze → Vanilla.",
   "play.pure_vanilla_no_cosmetics_or_capes_no_2": "Vanilla puro: niente cosmetici o mantelli, niente gioco con gli amici, niente menu o HUD di Arctic in gioco. Riattivalo quando vuoi in Impostazioni → Arctic Client.",
   "play.puts_these_settings_into_that_instance_now": "Applica ora queste impostazioni a quell'istanza (le altre sue impostazioni restano)",
   "play.quit_the_launcher": "Esci dal launcher",
@@ -257,5 +256,6 @@
   "play.you_can_change_this_any_time_in_settings": "Puoi cambiarlo quando vuoi nelle Impostazioni.",
   "play.you_can_turn_this_off_in_settings_updates": "Puoi disattivarlo in Impostazioni → Aggiornamenti → \"Mostra le novità dopo un aggiornamento\".",
   "play.you_wont_see_other_players_arctic_looks": "Non vedrai i look Arctic degli altri giocatori (skin e mantelli) né il menu Arctic in gioco. Le tue impostazioni Arctic restano. Puoi riattivarlo quando vuoi.",
-  "play.your_sign_in_stays_on_this_pc_encrypted": "Il tuo accesso resta su questo PC, cifrato. Arctic non vede mai la tua password."
+  "play.your_sign_in_stays_on_this_pc_encrypted": "Il tuo accesso resta su questo PC, cifrato. Arctic non vede mai la tua password.",
+  "play.arctic": "Arctic"
 }

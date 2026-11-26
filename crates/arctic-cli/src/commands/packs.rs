@@ -119,7 +119,7 @@ fn kind_of(arg: PackKindArg) -> PackKind {
     }
 }
 
-/// The instance's Minecraft version (Vanilla follows the Play tab choice).
+/// The instance's Minecraft version (Arctic follows the Play tab choice).
 fn game(ctx: &Ctx, inst: &Instance) -> String {
     inst.version.clone().unwrap_or_else(|| {
         arctic_core::settings::Settings::load(&ctx.dirs)

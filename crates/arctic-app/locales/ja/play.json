@@ -12,7 +12,7 @@
   "play.add_another_account": "別のアカウントを追加",
   "play.add_your_account": "アカウントを追加",
   "play.added": "{username} を追加しました",
-  "play.adds_sodium_lithium_and_friends_to_vanilla": "バニラにSodium、Lithiumなどを追加してFPSを大きく向上させます。ワールドは変更されません。",
+  "play.adds_sodium_lithium_and_friends_to_vanilla": "Sodium、Lithium などを追加して FPS を大きく上げます。ワールドは変更されません。",
   "play.all": "すべて",
   "play.also_running": "ほかにも起動中",
   "play.animated_background": "動く背景",
@@ -165,7 +165,6 @@
   "play.plus_more_keys_video_chat": "ほか {count} 件（キー、ビデオ、チャット…）",
   "play.profile_name_hint": "例: スピードラン、家族、テスト",
   "play.profiles": "プロファイル",
-  "play.pure_vanilla_no_cosmetics_or_capes_no": "純粋なバニラ: コスメやマントなし、フレンドとの協力プレイなし、ゲーム内のArcticメニューやHUDなし。「インスタンス → バニラ」からいつでも戻せます。",
   "play.pure_vanilla_no_cosmetics_or_capes_no_2": "純粋なバニラ: コスメやマントなし、フレンドとの一緒のプレイなし、ゲーム内の Arctic メニューと HUD なし。設定 → Arctic Client からいつでも戻せます。",
   "play.puts_these_settings_into_that_instance_now": "この設定を今すぐそのインスタンスに反映します（ほかの設定はそのまま）",
   "play.quit_the_launcher": "ランチャーを終了",
@@ -257,5 +256,6 @@
   "play.you_can_change_this_any_time_in_settings": "これは設定からいつでも変更できます。",
   "play.you_can_turn_this_off_in_settings_updates": "「設定 → 更新 → 更新後に新機能を表示」でオフにできます。",
   "play.you_wont_see_other_players_arctic_looks": "ほかのプレイヤーのArcticの見た目（スキンとマント）やゲーム内のArcticメニューは表示されません。Arcticの設定は保持されます。いつでも戻せます。",
-  "play.your_sign_in_stays_on_this_pc_encrypted": "サインイン情報は暗号化してこのPCに保存されます。Arcticがパスワードを見ることはありません。"
+  "play.your_sign_in_stays_on_this_pc_encrypted": "サインイン情報は暗号化してこのPCに保存されます。Arcticがパスワードを見ることはありません。",
+  "play.arctic": "Arctic"
 }

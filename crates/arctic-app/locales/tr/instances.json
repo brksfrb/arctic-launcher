@@ -20,7 +20,6 @@
   "instances.arctic": "ARCTIC",
   "instances.arctic_downloads_the_right_java_for_each": "Arctic her Minecraft sürümü için doğru Java'yı indirir.",
   "instances.arctic_mod": "Arctic modu",
-  "instances.arctics_menus_hud_and_looks_in_game": "Arctic'in menüleri, HUD'ı ve oyun içi görünümleri. Minecraft altta Fabric ile çalışır; saf vanilla için bunu ve Performans'ı kapat.",
   "instances.back": "Geri",
   "instances.back_to_preview_esc": "Önizlemeye dön · Esc",
   "instances.back_to_results": "Sonuçlara dön",
@@ -307,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "O dosya yok; yönetilen Java kullanılacak.",
   "instances.that_instance_is_gone": "O kurulum artık yok.",
   "instances.the_arctic_client_is_off_for_every_instance": "Arctic Client tüm kurulumlar için kapalı",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client; Vanilla, Fabric ve Quilt örneklerinde ve Forge 1.8.9'da çalışır. Bu yükleyici ya da sürümde henüz yok: onunla oynamak için aynı sürümde bir Vanilla veya Fabric örneği oluştur.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client; Arctic örneğinde, Fabric ve Quilt örneklerinde ve Forge 1.8.9'da çalışır. Bu yükleyici ya da sürümde henüz yok: onunla oynamak için Arctic örneğini oyna ya da aynı sürümde bir Fabric örneği oluştur.",
   "instances.the_default_instance_plays_whichever_release": "Varsayılan örnek, Oyna sekmesinde seçtiğin sürümü oynatır.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "Klasör (dünyalar ve modlar dahil) instances/.trash içine taşınır, silinmez.",
   "instances.the_game_would_stop_while_loading_fix_them": "Oyun {name} yüklenirken duracaktı. Burada düzelt ya da yine de oyna.",
@@ -320,7 +319,7 @@
   "instances.this_project_has_no_gallery_screenshots_yet": "Bu projenin henüz galeri ekran görüntüsü yok.",
   "instances.trash": "Çöp ({removed})",
   "instances.trash_2": "Çöp",
-  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Saf vanilla ya da yalnızca kendi modların için kapat. Daha sonra kurulumun sayfasından değiştirebilirsin.",
+  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Yalnızca kendi modlarınla oynamak için kapat. Daha sonra kurulumun sayfasından değiştirebilirsin.",
   "instances.turned_off": ", kapatıldı: {join}",
   "instances.update_all": "Tümünü güncelle",
   "instances.update_available.one": "1 güncelleme var",
@@ -384,7 +383,7 @@
   "instances.hub.nothing_matches": "Bu filtrelere uyan bir şey yok.",
   "instances.hub.filters_failed": "Filtre listeleri yüklenemedi: {e}",
   "instances.hub.follows": "{compact} takip",
-  "instances.hub.vanilla_has_no_mods": "Vanilla örnekleri mod yükleyemez. Yukarıdan modlu bir örnek seç.",
+  "instances.hub.vanilla_has_no_mods": "Arctic ve Vanilla örnekleri buradan mod yükleyemez. Yukarıdan modlu bir örnek seç.",
   "instances.hub.shader_loader_missing": "{name} bu örnekte kurulu değil; gölgelendirici paketiyle birlikte eklenir.",
   "instances.hub.shaders_switched_on": "Bu örnek için gölgelendiriciler açılır.",
   "instances.hub.versions": "Sürümler",
@@ -418,5 +417,7 @@
   "instances.hub.partial_install": "Seçilen projelerin {count} tanesi bu örneğe kurulamaz. Bunlar özette listelenecek.",
   "instances.hub.install_compatible": "Uyumlu projeleri kur",
   "instances.hub.partially_compatible": "Kısmen uyumlu",
-  "instances.hub.modpacks_create_instances": "Her mod paketi ayrı bir örnek oluşturur."
+  "instances.hub.modpacks_create_instances": "Her mod paketi ayrı bir örnek oluşturur.",
+  "instances.vanilla_stays_vanilla": "Vanilla, Arctic Client olmadan vanilla kalır. Kozmetikler, rozetler ve Play Together için gerekir: Arctic örneğini ya da Arctic Client'ı açık bir Fabric örneğini oyna.",
+  "instances.the_arctic_instance_always_plays_with_the_client": "Arctic örneğinde her zaman açık: oyunda Arctic'in menüleri, HUD'u ve görünümleri. Kendi modların için bir Fabric örneği oluştur."
 }

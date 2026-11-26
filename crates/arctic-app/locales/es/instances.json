@@ -20,7 +20,6 @@
   "instances.arctic": "ARCTIC",
   "instances.arctic_downloads_the_right_java_for_each": "Arctic descarga el Java adecuado para cada versión de Minecraft.",
   "instances.arctic_mod": "Mod de Arctic",
-  "instances.arctics_menus_hud_and_looks_in_game": "Los menús, el HUD y los aspectos de Arctic en el juego. Minecraft corre sobre Fabric por debajo; desactiva esto y Rendimiento para vanilla puro.",
   "instances.back": "Atrás",
   "instances.back_to_preview_esc": "Volver a la vista previa · Esc",
   "instances.back_to_results": "Volver a los resultados",
@@ -307,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Ese archivo no existe; se usará el Java gestionado.",
   "instances.that_instance_is_gone": "Esa instancia ya no existe.",
   "instances.the_arctic_client_is_off_for_every_instance": "Arctic Client está desactivado en todas las instancias",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client funciona en instancias Vanilla, Fabric y Quilt, y en Forge 1.8.9. Aún no en este loader o versión: crea una instancia Vanilla o Fabric de la misma versión para jugar con él.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client funciona en la instancia Arctic, en instancias Fabric y Quilt, y en Forge 1.8.9. Aún no en este loader o versión: juega con la instancia Arctic o crea una instancia Fabric de la misma versión para usarlo.",
   "instances.the_default_instance_plays_whichever_release": "La instancia predeterminada juega la versión que elijas en la pestaña Jugar.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "La carpeta (mundos y mods incluidos) se mueve a instances/.trash, no se borra.",
   "instances.the_game_would_stop_while_loading_fix_them": "El juego se detendría al cargar {name}. Arréglalos aquí o juega de todos modos.",
@@ -320,7 +319,7 @@
   "instances.this_project_has_no_gallery_screenshots_yet": "Este proyecto aún no tiene capturas en la galería.",
   "instances.trash": "Papelera ({removed})",
   "instances.trash_2": "Papelera",
-  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Desactívalo para vanilla puro o solo tus propios mods. Puedes cambiarlo luego en la página de la instancia.",
+  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Desactívalo para jugar solo con tus propios mods. Puedes cambiarlo luego en la página de la instancia.",
   "instances.turned_off": ", desactivados: {join}",
   "instances.update_all": "Actualizar todo",
   "instances.update_available.one": "1 actualización disponible",
@@ -384,7 +383,7 @@
   "instances.hub.nothing_matches": "Nada coincide con estos filtros.",
   "instances.hub.filters_failed": "No se pudieron cargar las listas de filtros: {e}",
   "instances.hub.follows": "{compact} seguidores",
-  "instances.hub.vanilla_has_no_mods": "Las instancias Vanilla no cargan mods. Elige arriba una instancia con mods.",
+  "instances.hub.vanilla_has_no_mods": "Las instancias Arctic y Vanilla no cargan mods desde aquí. Elige arriba una instancia con mods.",
   "instances.hub.shader_loader_missing": "{name} no está instalado en esta instancia; se añade junto con el paquete de shaders.",
   "instances.hub.shaders_switched_on": "Los shaders se activan para esta instancia.",
   "instances.hub.versions": "Versiones",
@@ -418,5 +417,7 @@
   "instances.hub.partial_install": "No se pueden instalar {count} proyectos seleccionados en esta instancia. Se mostrarán en el resumen.",
   "instances.hub.install_compatible": "Instalar proyectos compatibles",
   "instances.hub.partially_compatible": "Compatibilidad parcial",
-  "instances.hub.modpacks_create_instances": "Cada modpack crea su propia instancia."
+  "instances.hub.modpacks_create_instances": "Cada modpack crea su propia instancia.",
+  "instances.vanilla_stays_vanilla": "Vanilla sigue siendo vanilla, sin Arctic Client. Los cosméticos, las insignias y Play Together lo necesitan: juega con la instancia Arctic o con una instancia Fabric con Arctic Client activado.",
+  "instances.the_arctic_instance_always_plays_with_the_client": "Siempre activo en la instancia Arctic: los menús, el HUD y el aspecto de Arctic en el juego. Para tus propios mods, crea una instancia Fabric."
 }

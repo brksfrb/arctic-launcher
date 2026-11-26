@@ -12,7 +12,7 @@
   "play.add_another_account": "다른 계정 추가",
   "play.add_your_account": "내 계정 추가",
   "play.added": "{username} 추가됨",
-  "play.adds_sodium_lithium_and_friends_to_vanilla": "바닐라에 Sodium, Lithium 등을 추가해 FPS를 크게 높입니다. 월드는 바뀌지 않습니다.",
+  "play.adds_sodium_lithium_and_friends_to_vanilla": "Sodium, Lithium 등을 추가해 FPS를 크게 높입니다. 월드는 바뀌지 않습니다.",
   "play.all": "전체",
   "play.also_running": "함께 실행 중",
   "play.animated_background": "움직이는 배경",
@@ -165,7 +165,6 @@
   "play.plus_more_keys_video_chat": "외 {count}개 (키, 비디오, 채팅…)",
   "play.profile_name_hint": "예: 스피드런, 가족, 테스트",
   "play.profiles": "프로필",
-  "play.pure_vanilla_no_cosmetics_or_capes_no": "순수 바닐라: 치장이나 망토 없음, 친구와 함께 플레이 없음, 게임 내 Arctic 메뉴나 HUD 없음. 인스턴스 → 바닐라에서 언제든 다시 켤 수 있습니다.",
   "play.pure_vanilla_no_cosmetics_or_capes_no_2": "순수 바닐라: 치장품과 망토 없음, 친구와 함께 플레이 없음, 게임 내 Arctic 메뉴와 HUD 없음. 설정 → Arctic Client에서 언제든 다시 켤 수 있습니다.",
   "play.puts_these_settings_into_that_instance_now": "이 설정을 지금 그 인스턴스에 넣습니다 (나머지 설정은 유지)",
   "play.quit_the_launcher": "런처 종료",
@@ -257,5 +256,6 @@
   "play.you_can_change_this_any_time_in_settings": "설정에서 언제든 바꿀 수 있습니다.",
   "play.you_can_turn_this_off_in_settings_updates": "설정 → 업데이트 → \"업데이트 후 새로운 기능 표시\"에서 끌 수 있습니다.",
   "play.you_wont_see_other_players_arctic_looks": "다른 플레이어의 Arctic 모습(스킨과 망토)과 게임 내 Arctic 메뉴를 볼 수 없습니다. Arctic 설정은 유지됩니다. 언제든 다시 켤 수 있습니다.",
-  "play.your_sign_in_stays_on_this_pc_encrypted": "로그인 정보는 이 PC에 암호화되어 보관됩니다. Arctic은 절대 비밀번호를 보지 않습니다."
+  "play.your_sign_in_stays_on_this_pc_encrypted": "로그인 정보는 이 PC에 암호화되어 보관됩니다. Arctic은 절대 비밀번호를 보지 않습니다.",
+  "play.arctic": "Arctic"
 }

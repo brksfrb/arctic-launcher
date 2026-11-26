@@ -12,7 +12,7 @@
   "play.add_another_account": "Nog een account toevoegen",
   "play.add_your_account": "Je account toevoegen",
   "play.added": "{username} toegevoegd",
-  "play.adds_sodium_lithium_and_friends_to_vanilla": "Voegt Sodium, Lithium en vrienden toe aan Vanilla voor veel meer FPS. Je werelden veranderen niet.",
+  "play.adds_sodium_lithium_and_friends_to_vanilla": "Voegt Sodium, Lithium en co. toe voor veel meer FPS. Je werelden blijven ongewijzigd.",
   "play.all": "Alles",
   "play.also_running": "DRAAIT OOK",
   "play.animated_background": "Bewegende achtergrond",
@@ -165,7 +165,6 @@
   "play.plus_more_keys_video_chat": "Plus {count} meer (toetsen, video, chat…)",
   "play.profile_name_hint": "bijv. Speedruns, Familie, Testen",
   "play.profiles": "Profielen",
-  "play.pure_vanilla_no_cosmetics_or_capes_no": "Puur vanilla: geen cosmetica of capes, niet samen spelen met vrienden, geen Arctic-menu of HUD in het spel. Zet het altijd weer aan via Instanties → Vanilla.",
   "play.pure_vanilla_no_cosmetics_or_capes_no_2": "Puur vanilla: geen cosmetics of capes, niet samen spelen met vrienden, geen Arctic-menu of HUD in het spel. Zet het altijd weer aan via Instellingen → Arctic Client.",
   "play.puts_these_settings_into_that_instance_now": "Zet deze instellingen nu in die instantie (de rest van zijn instellingen blijft)",
   "play.quit_the_launcher": "Launcher afsluiten",
@@ -257,5 +256,6 @@
   "play.you_can_change_this_any_time_in_settings": "Je kunt dit altijd wijzigen in Instellingen.",
   "play.you_can_turn_this_off_in_settings_updates": "Je kunt dit uitzetten via Instellingen → Updates → \"Toon wat nieuw is na een update\".",
   "play.you_wont_see_other_players_arctic_looks": "Je ziet de Arctic-looks (skins en capes) van andere spelers en het Arctic-menu in het spel niet. Je Arctic-instellingen blijven bewaard. Je kunt het altijd weer aanzetten.",
-  "play.your_sign_in_stays_on_this_pc_encrypted": "Je aanmelding blijft versleuteld op deze pc. Arctic ziet je wachtwoord nooit."
+  "play.your_sign_in_stays_on_this_pc_encrypted": "Je aanmelding blijft versleuteld op deze pc. Arctic ziet je wachtwoord nooit.",
+  "play.arctic": "Arctic"
 }

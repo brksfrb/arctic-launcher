@@ -20,7 +20,6 @@
   "instances.arctic": "ARCTIC",
   "instances.arctic_downloads_the_right_java_for_each": "Arctic downloads the right Java for each Minecraft version.",
   "instances.arctic_mod": "Arctic mod",
-  "instances.arctics_menus_hud_and_looks_in_game": "Arctic's menus, HUD and looks in game. Minecraft runs through Fabric underneath; turn this and Performance off for pure vanilla.",
   "instances.back": "Back",
   "instances.back_to_preview_esc": "Back to preview · Esc",
   "instances.back_to_results": "Back to results",
@@ -307,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "That file doesn't exist; the managed Java will be used.",
   "instances.that_instance_is_gone": "That instance is gone.",
   "instances.the_arctic_client_is_off_for_every_instance": "The Arctic Client is off for every instance",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "The Arctic Client runs on Vanilla, Fabric and Quilt instances, and on Forge 1.8.9. Not on this loader or version yet: make a Vanilla or Fabric instance of the same version to play with it.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "The Arctic Client runs on the Arctic instance, on Fabric and Quilt instances, and on Forge 1.8.9. Not on this loader or version yet: play the Arctic instance, or make a Fabric instance of the same version, to play with it.",
   "instances.the_default_instance_plays_whichever_release": "The default instance plays whichever release you pick on the Play tab.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "The folder (worlds and mods included) is moved to instances/.trash, not deleted.",
   "instances.the_game_would_stop_while_loading_fix_them": "The game would stop while loading {name}. Fix them here, or play anyway.",
@@ -320,7 +319,7 @@
   "instances.this_project_has_no_gallery_screenshots_yet": "This project has no gallery screenshots yet.",
   "instances.trash": "Trash ({removed})",
   "instances.trash_2": "Trash",
-  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Turn it off for pure vanilla or just your own mods. You can change it later in the instance's page.",
+  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Turn it off to play with just your own mods. You can change it later in the instance's page.",
   "instances.turned_off": ", turned off: {join}",
   "instances.update_all": "Update all",
   "instances.update_available.one": "1 update available",
@@ -384,7 +383,7 @@
   "instances.hub.nothing_matches": "Nothing matches these filters.",
   "instances.hub.filters_failed": "Couldn't load the filter lists: {e}",
   "instances.hub.follows": "{compact} follows",
-  "instances.hub.vanilla_has_no_mods": "Vanilla instances can't load mods. Pick a modded instance above.",
+  "instances.hub.vanilla_has_no_mods": "Arctic and Vanilla instances can't load mods from here. Pick a modded instance above.",
   "instances.hub.shader_loader_missing": "{name} isn't installed in this instance; it is added with the shader pack.",
   "instances.hub.shaders_switched_on": "Shaders are switched on for this instance.",
   "instances.hub.versions": "Versions",
@@ -418,5 +417,7 @@
   "instances.hub.partial_install": "{count} selected projects can't be installed into this instance. They'll be listed in the summary.",
   "instances.hub.install_compatible": "Install compatible projects",
   "instances.hub.partially_compatible": "Partially compatible",
-  "instances.hub.modpacks_create_instances": "Each modpack creates its own instance."
+  "instances.hub.modpacks_create_instances": "Each modpack creates its own instance.",
+  "instances.vanilla_stays_vanilla": "Vanilla stays vanilla, without the Arctic Client. Cosmetics, badges and Play Together need it: play the Arctic instance, or a Fabric instance with the Arctic Client on.",
+  "instances.the_arctic_instance_always_plays_with_the_client": "Always on in the Arctic instance: Arctic's menus, HUD and looks in game. For your own mods, make a Fabric instance."
 }

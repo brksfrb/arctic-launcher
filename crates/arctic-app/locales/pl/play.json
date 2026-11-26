@@ -12,7 +12,7 @@
   "play.add_another_account": "Dodaj kolejne konto",
   "play.add_your_account": "Dodaj swoje konto",
   "play.added": "Dodano {username}",
-  "play.adds_sodium_lithium_and_friends_to_vanilla": "Dodaje Sodium, Lithium i spółkę do Vanilli dla znacznie wyższego FPS. Twoje światy się nie zmieniają.",
+  "play.adds_sodium_lithium_and_friends_to_vanilla": "Dodaje Sodium, Lithium i spółkę dla znacznie wyższego FPS. Twoje światy się nie zmieniają.",
   "play.all": "Wszystko",
   "play.also_running": "DZIAŁA TAKŻE",
   "play.animated_background": "Animowane tło",
@@ -167,7 +167,6 @@
   "play.plus_more_keys_video_chat": "I jeszcze {count} (klawisze, wideo, czat…)",
   "play.profile_name_hint": "np. Speedruny, Rodzina, Testy",
   "play.profiles": "Profile",
-  "play.pure_vanilla_no_cosmetics_or_capes_no": "Czysta vanilla: bez kosmetyków i peleryn, bez grania ze znajomymi, bez menu i HUD-a Arctic w grze. Włącz ponownie w każdej chwili w Instancje → Vanilla.",
   "play.pure_vanilla_no_cosmetics_or_capes_no_2": "Czyste vanilla: bez kosmetyków i peleryn, bez wspólnej gry ze znajomymi, bez menu i HUD Arctic w grze. Włącz ponownie w dowolnej chwili w Ustawienia → Arctic Client.",
   "play.puts_these_settings_into_that_instance_now": "Wgrywa te ustawienia do tej instancji teraz (reszta jej ustawień zostaje)",
   "play.quit_the_launcher": "Zamknij launcher",
@@ -259,5 +258,6 @@
   "play.you_can_change_this_any_time_in_settings": "Możesz to zmienić w każdej chwili w Ustawieniach.",
   "play.you_can_turn_this_off_in_settings_updates": "Możesz to wyłączyć w Ustawienia → Aktualizacje → „Pokaż co nowego po aktualizacji”.",
   "play.you_wont_see_other_players_arctic_looks": "Nie zobaczysz wyglądów Arctic innych graczy (skinów i peleryn) ani menu Arctic w grze. Twoje ustawienia Arctic zostają. Możesz włączyć to ponownie w każdej chwili.",
-  "play.your_sign_in_stays_on_this_pc_encrypted": "Twoje logowanie zostaje na tym komputerze, zaszyfrowane. Arctic nigdy nie widzi twojego hasła."
+  "play.your_sign_in_stays_on_this_pc_encrypted": "Twoje logowanie zostaje na tym komputerze, zaszyfrowane. Arctic nigdy nie widzi twojego hasła.",
+  "play.arctic": "Arctic"
 }

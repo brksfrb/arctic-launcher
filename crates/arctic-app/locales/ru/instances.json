@@ -20,7 +20,6 @@
   "instances.arctic": "ARCTIC",
   "instances.arctic_downloads_the_right_java_for_each": "Arctic загружает нужную Java для каждой версии Minecraft.",
   "instances.arctic_mod": "Мод Arctic",
-  "instances.arctics_menus_hud_and_looks_in_game": "Меню, HUD и образы Arctic в игре. Minecraft работает поверх Fabric; выключите это и «Производительность» для чистой vanilla.",
   "instances.back": "Назад",
   "instances.back_to_preview_esc": "Назад к превью · Esc",
   "instances.back_to_results": "Назад к результатам",
@@ -307,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Такого файла нет; будет использована управляемая Java.",
   "instances.that_instance_is_gone": "Этой сборки больше нет.",
   "instances.the_arctic_client_is_off_for_every_instance": "Arctic Client выключен для всех сборок",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client работает на сборках Vanilla, Fabric и Quilt, а также на Forge 1.8.9. На этом загрузчике или версии пока нет: создайте сборку Vanilla или Fabric той же версии, чтобы играть с ним.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "Arctic Client работает в сборке Arctic, на сборках Fabric и Quilt, а также на Forge 1.8.9. На этом загрузчике или версии пока нет: играйте в сборке Arctic или создайте сборку Fabric той же версии, чтобы играть с ним.",
   "instances.the_default_instance_plays_whichever_release": "Сборка по умолчанию запускает версию, выбранную на вкладке «Играть».",
   "instances.the_folder_worlds_and_mods_included_is_moved": "Папка (с мирами и модами) переместится в instances/.trash, а не удалится.",
   "instances.the_game_would_stop_while_loading_fix_them": "Игра остановится при загрузке {name}. Исправьте здесь или играйте всё равно.",
@@ -320,7 +319,7 @@
   "instances.this_project_has_no_gallery_screenshots_yet": "У этого проекта пока нет скриншотов в галерее.",
   "instances.trash": "Корзина ({removed})",
   "instances.trash_2": "Корзина",
-  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Выключи для чистой ванили или только своих модов. Позже это можно изменить на странице сборки.",
+  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Выключи, чтобы играть только со своими модами. Позже это можно изменить на странице сборки.",
   "instances.turned_off": ", выключено: {join}",
   "instances.update_all": "Обновить всё",
   "instances.update_available.few": "Доступно {n} обновления",
@@ -388,7 +387,7 @@
   "instances.hub.nothing_matches": "По этим фильтрам ничего не найдено.",
   "instances.hub.filters_failed": "Не удалось загрузить списки фильтров: {e}",
   "instances.hub.follows": "Подписчиков: {compact}",
-  "instances.hub.vanilla_has_no_mods": "В Vanilla-экземплярах моды не работают. Выберите выше экземпляр с модами.",
+  "instances.hub.vanilla_has_no_mods": "В сборках Arctic и Vanilla моды отсюда не работают. Выберите выше сборку с модами.",
   "instances.hub.shader_loader_missing": "{name} не установлен в этом экземпляре; он будет добавлен вместе с шейдерпаком.",
   "instances.hub.shaders_switched_on": "Для этого экземпляра включаются шейдеры.",
   "instances.hub.versions": "Версии",
@@ -422,5 +421,7 @@
   "instances.hub.partial_install": "Не удастся установить выбранные проекты ({count}) в этот экземпляр. Они будут перечислены в итогах.",
   "instances.hub.install_compatible": "Установить совместимые проекты",
   "instances.hub.partially_compatible": "Частично совместимо",
-  "instances.hub.modpacks_create_instances": "Каждая сборка создаёт свой экземпляр."
+  "instances.hub.modpacks_create_instances": "Каждая сборка создаёт свой экземпляр.",
+  "instances.vanilla_stays_vanilla": "Vanilla остаётся ванилью, без Arctic Client. Косметике, значкам и Play Together он нужен: играйте в сборке Arctic или в сборке Fabric с включённым Arctic Client.",
+  "instances.the_arctic_instance_always_plays_with_the_client": "В сборке Arctic всегда включён: меню, HUD и внешний вид Arctic в игре. Для своих модов создайте сборку Fabric."
 }

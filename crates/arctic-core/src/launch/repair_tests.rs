@@ -165,7 +165,8 @@ fn prepare_with_library(
         performance: false,
         own_settings: true,
         java_path: Some(java),
-        ..Instance::vanilla_default()
+        builtin: false,
+        ..Instance::arctic_default()
     };
     let entry = VersionEntry {
         id: version.into(),

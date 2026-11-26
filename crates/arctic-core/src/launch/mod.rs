@@ -1774,7 +1774,7 @@ mod tests {
         let instance = Instance {
             arctic_mod: false,
             jvm_args: "-Xmx4G -Xms1G -Xmx3584M".into(),
-            ..Instance::vanilla_default()
+            ..Instance::arctic_default()
         };
         let inst = Installation {
             version: serde_json::from_str(

@@ -20,7 +20,6 @@
   "instances.arctic": "ARCTIC",
   "instances.arctic_downloads_the_right_java_for_each": "Arctic downloadt de juiste Java voor elke Minecraft-versie.",
   "instances.arctic_mod": "Arctic-mod",
-  "instances.arctics_menus_hud_and_looks_in_game": "Arctics menu's, HUD en looks in het spel. Minecraft draait onderhuids via Fabric; zet dit en Prestaties uit voor puur vanilla.",
   "instances.back": "Terug",
   "instances.back_to_preview_esc": "Terug naar voorbeeld · Esc",
   "instances.back_to_results": "Terug naar resultaten",
@@ -307,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Dat bestand bestaat niet; de beheerde Java wordt gebruikt.",
   "instances.that_instance_is_gone": "Die instantie bestaat niet meer.",
   "instances.the_arctic_client_is_off_for_every_instance": "De Arctic Client staat uit voor alle instanties",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "De Arctic Client draait op Vanilla-, Fabric- en Quilt-instanties en op Forge 1.8.9. Nog niet op deze loader of versie: maak een Vanilla- of Fabric-instantie van dezelfde versie om ermee te spelen.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "De Arctic Client draait op de Arctic-instantie, op Fabric- en Quilt-instanties en op Forge 1.8.9. Nog niet op deze loader of versie: speel de Arctic-instantie of maak een Fabric-instantie van dezelfde versie om ermee te spelen.",
   "instances.the_default_instance_plays_whichever_release": "De standaardinstantie speelt de versie die je kiest op het tabblad Spelen.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "De map (inclusief werelden en mods) wordt naar instances/.trash verplaatst, niet gewist.",
   "instances.the_game_would_stop_while_loading_fix_them": "Het spel zou stoppen bij het laden van {name}. Los het hier op, of speel toch.",
@@ -320,7 +319,7 @@
   "instances.this_project_has_no_gallery_screenshots_yet": "Dit project heeft nog geen galerijscreenshots.",
   "instances.trash": "Prullenbak ({removed})",
   "instances.trash_2": "Prullenbak",
-  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Zet het uit voor puur vanilla of alleen je eigen mods. Je kunt dit later wijzigen op de pagina van de instantie.",
+  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Zet het uit om alleen met je eigen mods te spelen. Je kunt dit later wijzigen op de pagina van de instantie.",
   "instances.turned_off": ", uitgeschakeld: {join}",
   "instances.update_all": "Alles bijwerken",
   "instances.update_available.one": "1 update beschikbaar",
@@ -384,7 +383,7 @@
   "instances.hub.nothing_matches": "Niets komt overeen met deze filters.",
   "instances.hub.filters_failed": "De filterlijsten konden niet worden geladen: {e}",
   "instances.hub.follows": "{compact} volgers",
-  "instances.hub.vanilla_has_no_mods": "Vanilla-instanties kunnen geen mods laden. Kies hierboven een instantie met mods.",
+  "instances.hub.vanilla_has_no_mods": "Arctic- en Vanilla-instanties kunnen hier geen mods laden. Kies hierboven een instantie met mods.",
   "instances.hub.shader_loader_missing": "{name} is niet geïnstalleerd in deze instantie; het wordt samen met het shaderpack toegevoegd.",
   "instances.hub.shaders_switched_on": "Shaders worden voor deze instantie ingeschakeld.",
   "instances.hub.versions": "Versies",
@@ -418,5 +417,7 @@
   "instances.hub.partial_install": "{count} geselecteerde projecten kunnen niet in deze instantie worden geïnstalleerd. Ze staan in het overzicht.",
   "instances.hub.install_compatible": "Compatibele projecten installeren",
   "instances.hub.partially_compatible": "Gedeeltelijk compatibel",
-  "instances.hub.modpacks_create_instances": "Elk modpack maakt een eigen instantie aan."
+  "instances.hub.modpacks_create_instances": "Elk modpack maakt een eigen instantie aan.",
+  "instances.vanilla_stays_vanilla": "Vanilla blijft vanilla, zonder de Arctic Client. Cosmetica, badges en Play Together hebben hem nodig: speel de Arctic-instantie of een Fabric-instantie met de Arctic Client aan.",
+  "instances.the_arctic_instance_always_plays_with_the_client": "Altijd aan in de Arctic-instantie: de menu's, HUD en looks van Arctic in het spel. Voor je eigen mods maak je een Fabric-instantie."
 }

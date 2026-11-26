@@ -234,7 +234,7 @@ impl ArcticApp {
                 let subtitle = if instance.is_default() {
                     t!("play.default_instance").to_owned()
                 } else {
-                    tf!("play.instance_2", label = instance.loader.label())
+                    tf!("play.instance_2", label = instance.kind_label())
                 };
                 ui.add(egui::Label::new(RichText::new(subtitle).color(p.muted)).selectable(false));
             })

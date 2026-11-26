@@ -20,7 +20,6 @@
   "instances.arctic": "ARCTIC",
   "instances.arctic_downloads_the_right_java_for_each": "Arctic télécharge le bon Java pour chaque version de Minecraft.",
   "instances.arctic_mod": "Mod Arctic",
-  "instances.arctics_menus_hud_and_looks_in_game": "Les menus, le HUD et les looks d'Arctic en jeu. Minecraft tourne sur Fabric en dessous ; désactive ceci et Performance pour du vanilla pur.",
   "instances.back": "Retour",
   "instances.back_to_preview_esc": "Retour à l'aperçu · Échap",
   "instances.back_to_results": "Retour aux résultats",
@@ -307,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Ce fichier n'existe pas ; le Java géré sera utilisé.",
   "instances.that_instance_is_gone": "Cette instance n'existe plus.",
   "instances.the_arctic_client_is_off_for_every_instance": "L'Arctic Client est désactivé pour toutes les instances",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "L'Arctic Client fonctionne sur les instances Vanilla, Fabric et Quilt, et sur Forge 1.8.9. Pas encore sur ce loader ou cette version : crée une instance Vanilla ou Fabric de la même version pour en profiter.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "L'Arctic Client fonctionne sur l'instance Arctic, sur les instances Fabric et Quilt, et sur Forge 1.8.9. Pas encore sur ce loader ou cette version : joue sur l'instance Arctic ou crée une instance Fabric de la même version pour en profiter.",
   "instances.the_default_instance_plays_whichever_release": "L'instance par défaut lance la version que tu choisis dans l'onglet Jouer.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "Le dossier (mondes et mods inclus) est déplacé dans instances/.trash, pas supprimé.",
   "instances.the_game_would_stop_while_loading_fix_them": "Le jeu s'arrêterait en chargeant {name}. Corrige-les ici, ou joue quand même.",
@@ -320,7 +319,7 @@
   "instances.this_project_has_no_gallery_screenshots_yet": "Ce projet n'a pas encore de captures dans sa galerie.",
   "instances.trash": "Corbeille ({removed})",
   "instances.trash_2": "Corbeille",
-  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Désactive-le pour du vanilla pur ou seulement tes propres mods. Tu peux changer ça plus tard sur la page de l'instance.",
+  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Désactive-le pour jouer seulement avec tes propres mods. Tu peux changer ça plus tard sur la page de l'instance.",
   "instances.turned_off": ", désactivés : {join}",
   "instances.update_all": "Tout mettre à jour",
   "instances.update_available.one": "1 mise à jour disponible",
@@ -384,7 +383,7 @@
   "instances.hub.nothing_matches": "Rien ne correspond à ces filtres.",
   "instances.hub.filters_failed": "Impossible de charger les listes de filtres : {e}",
   "instances.hub.follows": "{compact} abonnés",
-  "instances.hub.vanilla_has_no_mods": "Les instances Vanilla ne peuvent pas charger de mods. Choisis plus haut une instance avec mods.",
+  "instances.hub.vanilla_has_no_mods": "Les instances Arctic et Vanilla ne peuvent pas charger de mods d'ici. Choisis plus haut une instance avec mods.",
   "instances.hub.shader_loader_missing": "{name} n'est pas installé dans cette instance ; il est ajouté avec le pack de shaders.",
   "instances.hub.shaders_switched_on": "Les shaders sont activés pour cette instance.",
   "instances.hub.versions": "Versions",
@@ -418,5 +417,7 @@
   "instances.hub.partial_install": "Impossible d’installer {count} projets sélectionnés dans cette instance. Ils seront listés dans le récapitulatif.",
   "instances.hub.install_compatible": "Installer les projets compatibles",
   "instances.hub.partially_compatible": "Partiellement compatible",
-  "instances.hub.modpacks_create_instances": "Chaque modpack crée sa propre instance."
+  "instances.hub.modpacks_create_instances": "Chaque modpack crée sa propre instance.",
+  "instances.vanilla_stays_vanilla": "Vanilla reste vanilla, sans l'Arctic Client. Les cosmétiques, les badges et Play Together en ont besoin : joue sur l'instance Arctic, ou sur une instance Fabric avec l'Arctic Client activé.",
+  "instances.the_arctic_instance_always_plays_with_the_client": "Toujours activé dans l'instance Arctic : les menus, le HUD et le look d'Arctic en jeu. Pour tes propres mods, crée une instance Fabric."
 }

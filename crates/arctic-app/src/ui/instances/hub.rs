@@ -213,7 +213,7 @@ impl ArcticApp {
         });
     }
 
-    /// Every instance an install can go into, Vanilla first.
+    /// Every instance an install can go into, Arctic first.
     fn hub_instances(&self) -> Vec<Instance> {
         std::iter::once(self.instance.clone())
             .chain(self.custom_instances.iter().cloned())
@@ -221,7 +221,7 @@ impl ArcticApp {
     }
 
     /// The project page over the discovery page. Its owner is the instance it installs into
-    /// (modpacks install nowhere, so the Vanilla instance stands in).
+    /// (modpacks install nowhere, so the Arctic instance stands in).
     pub(super) fn project_preview_in_hub(&mut self, ctx: &egui::Context) {
         let owner = match self.inst.hub.section {
             Section::Modpacks => None,

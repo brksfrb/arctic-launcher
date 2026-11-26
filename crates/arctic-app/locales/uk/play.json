@@ -12,7 +12,7 @@
   "play.add_another_account": "Додати ще один обліковий запис",
   "play.add_your_account": "Додай свій обліковий запис",
   "play.added": "Додано {username}",
-  "play.adds_sodium_lithium_and_friends_to_vanilla": "Додає до Vanilla Sodium, Lithium і компанію для набагато вищого FPS. Твої світи не змінюються.",
+  "play.adds_sodium_lithium_and_friends_to_vanilla": "Додає Sodium, Lithium та інші моди для значно вищого FPS. Твої світи не змінюються.",
   "play.all": "Усі",
   "play.also_running": "ТАКОЖ ЗАПУЩЕНО",
   "play.animated_background": "Анімований фон",
@@ -167,7 +167,6 @@
   "play.plus_more_keys_video_chat": "І ще {count} (клавіші, відео, чат…)",
   "play.profile_name_hint": "наприклад, Спідрани, Родина, Тести",
   "play.profiles": "Профілі",
-  "play.pure_vanilla_no_cosmetics_or_capes_no": "Чиста vanilla: без косметики та плащів, без спільної гри з друзями, без меню та HUD Arctic у грі. Увімкнути знову можна будь-коли: Збірки → Vanilla.",
   "play.pure_vanilla_no_cosmetics_or_capes_no_2": "Чиста ваніль: без косметики й плащів, без спільної гри з друзями, без меню та HUD Arctic у грі. Увімкнути знову можна будь-коли в Налаштування → Arctic Client.",
   "play.puts_these_settings_into_that_instance_now": "Одразу записує ці налаштування в ту збірку (решта її налаштувань лишається)",
   "play.quit_the_launcher": "Вийти з лаунчера",
@@ -259,5 +258,6 @@
   "play.you_can_change_this_any_time_in_settings": "Це можна змінити будь-коли в налаштуваннях.",
   "play.you_can_turn_this_off_in_settings_updates": "Це можна вимкнути: Налаштування → Оновлення → «Показувати, що нового, після оновлення».",
   "play.you_wont_see_other_players_arctic_looks": "Ти не побачиш образи Arctic інших гравців (скіни та плащі) і меню Arctic у грі. Твої налаштування Arctic зберігаються. Увімкнути знову можна будь-коли.",
-  "play.your_sign_in_stays_on_this_pc_encrypted": "Дані входу лишаються на цьому ПК у зашифрованому вигляді. Arctic ніколи не бачить твій пароль."
+  "play.your_sign_in_stays_on_this_pc_encrypted": "Дані входу лишаються на цьому ПК у зашифрованому вигляді. Arctic ніколи не бачить твій пароль.",
+  "play.arctic": "Arctic"
 }

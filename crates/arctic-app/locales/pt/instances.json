@@ -20,7 +20,6 @@
   "instances.arctic": "ARCTIC",
   "instances.arctic_downloads_the_right_java_for_each": "O Arctic baixa o Java certo para cada versão do Minecraft.",
   "instances.arctic_mod": "Mod do Arctic",
-  "instances.arctics_menus_hud_and_looks_in_game": "Menus, HUD e visuais do Arctic no jogo. O Minecraft roda sobre o Fabric por baixo; desligue isto e Desempenho para vanilla puro.",
   "instances.back": "Voltar",
   "instances.back_to_preview_esc": "Voltar à prévia · Esc",
   "instances.back_to_results": "Voltar aos resultados",
@@ -307,7 +306,7 @@
   "instances.that_file_doesnt_exist_the_managed_java_will": "Esse arquivo não existe; o Java gerenciado será usado.",
   "instances.that_instance_is_gone": "Essa instância não existe mais.",
   "instances.the_arctic_client_is_off_for_every_instance": "O Arctic Client está desativado em todas as instâncias",
-  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "O Arctic Client roda em instâncias Vanilla, Fabric e Quilt, e no Forge 1.8.9. Ainda não neste loader ou versão: crie uma instância Vanilla ou Fabric da mesma versão para jogar com ele.",
+  "instances.the_arctic_client_runs_on_vanilla_fabric_and": "O Arctic Client roda na instância Arctic, em instâncias Fabric e Quilt, e no Forge 1.8.9. Ainda não neste loader ou versão: jogue na instância Arctic ou crie uma instância Fabric da mesma versão para jogar com ele.",
   "instances.the_default_instance_plays_whichever_release": "A instância padrão joga a versão que você escolher na aba Jogar.",
   "instances.the_folder_worlds_and_mods_included_is_moved": "A pasta (com mundos e mods) vai para instances/.trash, não é apagada.",
   "instances.the_game_would_stop_while_loading_fix_them": "O jogo pararia ao carregar {name}. Corrija aqui ou jogue mesmo assim.",
@@ -320,7 +319,7 @@
   "instances.this_project_has_no_gallery_screenshots_yet": "Este projeto ainda não tem capturas na galeria.",
   "instances.trash": "Lixeira ({removed})",
   "instances.trash_2": "Lixeira",
-  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Desative para vanilla puro ou só seus próprios mods. Você pode mudar depois na página da instância.",
+  "instances.turn_it_off_for_pure_vanilla_or_just_your": "Desative para jogar só com seus próprios mods. Você pode mudar depois na página da instância.",
   "instances.turned_off": ", desligados: {join}",
   "instances.update_all": "Atualizar tudo",
   "instances.update_available.one": "1 atualização disponível",
@@ -384,7 +383,7 @@
   "instances.hub.nothing_matches": "Nada corresponde a estes filtros.",
   "instances.hub.filters_failed": "Não foi possível carregar as listas de filtros: {e}",
   "instances.hub.follows": "{compact} seguidores",
-  "instances.hub.vanilla_has_no_mods": "Instâncias Vanilla não carregam mods. Escolha acima uma instância com mods.",
+  "instances.hub.vanilla_has_no_mods": "Instâncias Arctic e Vanilla não carregam mods daqui. Escolha acima uma instância com mods.",
   "instances.hub.shader_loader_missing": "{name} não está instalado nesta instância; ele é adicionado com o pacote de shaders.",
   "instances.hub.shaders_switched_on": "Os shaders são ativados para esta instância.",
   "instances.hub.versions": "Versões",
@@ -418,5 +417,7 @@
   "instances.hub.partial_install": "Não é possível instalar {count} dos projetos selecionados nesta instância. Eles serão listados no resumo.",
   "instances.hub.install_compatible": "Instalar projetos compatíveis",
   "instances.hub.partially_compatible": "Parcialmente compatível",
-  "instances.hub.modpacks_create_instances": "Cada modpack cria uma instância própria."
+  "instances.hub.modpacks_create_instances": "Cada modpack cria uma instância própria.",
+  "instances.vanilla_stays_vanilla": "Vanilla continua vanilla, sem o Arctic Client. Cosméticos, emblemas e Play Together precisam dele: jogue na instância Arctic ou em uma instância Fabric com o Arctic Client ligado.",
+  "instances.the_arctic_instance_always_plays_with_the_client": "Sempre ligado na instância Arctic: os menus, o HUD e o visual do Arctic no jogo. Para seus próprios mods, crie uma instância Fabric."
 }
