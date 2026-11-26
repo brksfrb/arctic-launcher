@@ -82,7 +82,7 @@ final class MenuFrame {
 				@Override
 				protected void draw(Gfx g, Style s, int mx, int my, float dt) {
 					Skin.button(g, s, x, y, w, h, true, hover);
-					g.texture("asset:icons/account", x + 4, y + 5, 16, 16, 0, 0, 32, 32, 32, 32);
+					g.texture("asset:icons/account", x + 4, y + (h - 16) / 2, 16, 16, 0, 0, 32, 32, 32, 32);
 					g.text(Draw.fit(g, player, w - 27), x + 23, y + 6, s.text, false);
 					g.text(Draw.fit(g, accounts, w - 27), x + 23, y + 20, s.muted, false);
 				}

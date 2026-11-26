@@ -167,7 +167,7 @@ public final class GfxImpl implements Gfx, MenuFont.DrawGlyph {
 				}
 			}
 			id = Compat.id(ArcticMod.ID, "menu_font/" + ready.scale());
-			Minecraft.getInstance().getTextureManager().register(id, Compat.smoothTexture("Arctic Menu", image));
+			Minecraft.getInstance().getTextureManager().register(id, Compat.smoothTexture("Arctic Menu", image)); // i18n-ignore
 			MENU_ATLASES[index] = id;
 		}
 		menuAtlas = id;

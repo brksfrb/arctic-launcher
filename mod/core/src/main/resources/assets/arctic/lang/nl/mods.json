@@ -769,5 +769,7 @@
   "mods.enchant_value.feather_falling": "{0}% minder valschade",
   "mods.enchant_value.blast_protection": "{0}% minder explosieschade",
   "mods.enchant_value.projectile_protection": "{0}% minder projectielschade",
-  "mods.enchant_value.piercing": "Gaat door maximaal {0} doelwitten"
+  "mods.enchant_value.piercing": "Gaat door maximaal {0} doelwitten",
+  "mods.recent": "Recent",
+  "mods.armor_hider_detail": "Verborgen voor jouw weergave."
 }
