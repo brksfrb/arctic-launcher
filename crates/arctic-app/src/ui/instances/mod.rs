@@ -690,6 +690,9 @@ impl ArcticApp {
                 }
                 match result {
                     Ok(installed) => {
+                        if !installed.is_empty() {
+                            self.note_mod_change(&instance_id);
+                        }
                         let names: Vec<&str> = installed.iter().map(|m| m.title.as_str()).collect();
                         let title = match names.split_first() {
                             Some((first, [])) => tf!("instances.installed_3", first = first),
