@@ -177,6 +177,7 @@
   "settings.start_the_launcher_maximized": "Avvia il launcher a finestra massimizzata",
   "settings.storage": "Archiviazione",
   "settings.supported_by_flash_hosting_in_the_sidebar": "\"Con il supporto di Flash Hosting\" nella barra laterale, in Informazioni e in Gioca insieme.",
+  "settings.temporary_portal_folder": "Questa cartella usa un portale documenti temporaneo di Linux. L’accesso può andare perso tra una sessione e l’altra. Se possibile, scegli una cartella normale.",
   "settings.test_proxy": "Prova proxy",
   "settings.testing": "Prova in corso…",
   "settings.the_file_cant_be_read_as_a_picture": "Il file non può essere letto come immagine ({e}).",

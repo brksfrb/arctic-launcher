@@ -21,6 +21,7 @@ public final class MenuKeyMapping {
 			KeyMapping.Category category = KeyMapping.Category.register(Compat.id("arctic", "menu"));
 			//#else
 			String category = "key.categories.arctic";
+			registerCategory(category);
 			//#endif
 			//#if MC >= 26.3
 			mapping = new KeyMapping("key.arctic.menu", InputConstants.Type.KEYBOARD, KeyCodes.RIGHT_SHIFT, category);
@@ -30,6 +31,13 @@ public final class MenuKeyMapping {
 		}
 		return mapping;
 	}
+
+	//#if MC < 1.21.9
+	/** Gives the category a place in Controls' sort order, which Minecraft's constructor does not (compareTo would throw). */
+	static void registerCategory(String category) {
+		CategoryOrder.register(com.arcticlauncher.mod.mixin.KeyMappingAccess.arctic$categoryOrder(), category);
+	}
+	//#endif
 
 	/** Minecraft's key bindings plus this one (before the options file is read, so it is read too). */
 	public static KeyMapping[] with(KeyMapping[] all) {

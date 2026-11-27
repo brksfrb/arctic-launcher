@@ -2472,6 +2472,28 @@ pub(crate) fn runtime_native_error(line: &str) -> Option<regex::Match<'_>> {
 }
 
 pub(crate) fn runtime_diagnosis(text: &str) -> Option<(Diagnosis, String)> {
+    if let Some(line) = text.lines().find(|line| {
+        [
+            "platform encoding not initialized",
+            "null property: user.dir",
+            "Could not determine current working directory",
+        ]
+        .into_iter()
+        .any(|message| {
+            line.trim()
+                .strip_suffix(message)
+                .is_some_and(|prefix| prefix.is_empty() || prefix.ends_with(": "))
+        })
+    }) {
+        return Some((
+            Diagnosis::new(
+                "Java couldn't open the game folder",
+                "If your Arctic data folder is under /run/user/<uid>/doc/, it uses a temporary document portal. Move it to a regular folder in Settings → Storage.",
+                Vec::new(),
+            ),
+            head_of(line.trim(), 2048).to_owned(),
+        ));
+    }
     let line = text
         .lines()
         .find(|line| runtime_native_error(line).is_some())?;
@@ -5159,6 +5181,35 @@ java.lang.UnsatisfiedLinkError: Failed to locate library: shaderc.dll\n\
             None,
         );
         assert_eq!(report.title, "The Java runtime is broken");
+    }
+
+    #[test]
+    fn crash_404_diagnoses_java_startup_working_directory_failures() {
+        let text = include_str!("../tests/fixtures/crash-404-jvm-workdir.log");
+        let mods = tempfile::tempdir().unwrap();
+        let title = "Java couldn't open the game folder";
+        for error in [
+            "java.lang.InternalError: platform encoding not initialized",
+            "java.lang.InternalError: null property: user.dir",
+            "Error: Properties init: Could not determine current working directory",
+        ] {
+            let text = text.replace(
+                "java.lang.InternalError: platform encoding not initialized",
+                error,
+            );
+            let d = crate::crash_conflicts::diagnose_exit_in(&text, 1, mods.path()).unwrap();
+            assert_eq!(d.title, title);
+            assert!(d.detail.contains("/run/user/<uid>/doc/"));
+            assert!(d.detail.contains("Settings → Storage"));
+            assert!(d.mods.is_empty());
+            assert!(!d.repair);
+            let report = Report::build("1.21.1", "NeoForge", "", &[&text], &[], None, None);
+            assert_eq!(report.title, title);
+            assert!(report.log.contains(&format!("matched: {error}")));
+        }
+        assert!(
+            diagnose("[Arctic diagnostics] cwd=/tmp/platform encoding not initialized").is_none()
+        );
     }
 
     #[test]

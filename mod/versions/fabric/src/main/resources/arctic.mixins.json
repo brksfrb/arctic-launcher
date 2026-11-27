@@ -1,13 +1,15 @@
 {
 	"required": true,
 	"package": "com.arcticlauncher.mod.mixin",
+	"plugin": "com.arcticlauncher.mod.GlassRenderMixinPlugin",
 	"compatibilityLevel": "JAVA_${java}",
 	"client": [
 <% if (resolver) { %>		"MojangBlocklistMixin",
 <% } else { %>		"LegacyMojangBlocklistMixin",
 <% } %>
 		"ScreenshotMixin",
-		"OptionsKeyMixin",<% if (restyleWidgets) { %>
+		"OptionsKeyMixin",<% if (keyCategoryAccess) { %>
+		"KeyMappingAccess",<% } %><% if (restyleWidgets) { %>
 		"AbstractButtonMixin",
 		"AbstractSliderButtonMixin",
 		"ButtonMixin",

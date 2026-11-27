@@ -21,6 +21,20 @@ const NOT_MOVED: &[&str] = &["cache"];
 const CLEANUP_TRIES: u32 = 5;
 const CLEANUP_PAUSE: std::time::Duration = std::time::Duration::from_millis(800);
 
+/// A Linux desktop document-portal path, which can become inaccessible across sessions.
+pub fn is_document_portal_path(path: &Path) -> bool {
+    if !cfg!(target_os = "linux") {
+        return false;
+    }
+    let Ok(path) = path.strip_prefix("/run/user") else {
+        return false;
+    };
+    let mut parts = path.components();
+    matches!(parts.next(), Some(std::path::Component::Normal(uid))
+        if uid.as_encoded_bytes().iter().all(u8::is_ascii_digit))
+        && parts.next().is_some_and(|p| p.as_os_str() == "doc")
+}
+
 /// How the data folder was chosen.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RootSource {

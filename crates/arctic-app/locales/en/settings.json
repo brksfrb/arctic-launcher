@@ -177,6 +177,7 @@
   "settings.start_the_launcher_maximized": "Start the launcher maximized",
   "settings.storage": "Storage",
   "settings.supported_by_flash_hosting_in_the_sidebar": "\"Supported by Flash Hosting\" in the sidebar, About and Play together.",
+  "settings.temporary_portal_folder": "This folder uses a temporary Linux document portal. Access can disappear between sessions. Choose a regular folder if possible.",
   "settings.test_proxy": "Test proxy",
   "settings.testing": "Testing…",
   "settings.the_file_cant_be_read_as_a_picture": "The file can't be read as a picture ({e}).",

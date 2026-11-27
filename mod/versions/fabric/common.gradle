@@ -420,6 +420,8 @@ processResources {
 			fontSharpStb: atLeast('1.14') && !atLeast('1.20.5'),
 			// 1.21.9+ look players up by name off the game's thread (player heads): made safe.
 			playerInfoRace: atLeast('1.21.9'),
+			// Controls' category sort order is a plain map before 1.21.9; Arctic's own category must be added to it.
+			keyCategoryAccess: !atLeast('1.21.9'),
 			// Toast slots were tracked from 1.19.
 			toastSlots: atLeast('1.19'),
 			// HUD widgets hand in last frame's GUI pieces again (26.1's GUI states).

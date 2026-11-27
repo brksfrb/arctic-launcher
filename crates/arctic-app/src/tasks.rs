@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Sender;
 
-use crate::t;
+use crate::{t, tf};
 use arctic_core::auth::avatar::{self, Face};
 use arctic_core::auth::microsoft::{self, DeviceCode, MsaConfig};
 use arctic_core::auth::{self, Account, now_secs};
@@ -254,6 +254,7 @@ pub enum Event {
     /// A new recovery code (shown once; offline accounts only).
     #[cfg(feature = "offline-accounts")]
     RecoveryCode(Outcome<String>),
+    PublicServerIcon(String, Vec<u8>),
     PublicServers(Outcome<Vec<arctic_core::servers::public::PublicServer>>),
     ServerSubmitted(Outcome<arctic_core::servers::public::Submitted>),
     /// A Bedrock tab job (see `bedrock_tasks`).
@@ -548,6 +549,11 @@ impl Tasks {
                     t.send(Event::LaunchCancelled(id));
                     return;
                 }
+                Err(arctic_core::Error::GameWorkingDirectory { path, source }) => Err(tf!(
+                    "tasks.could_not_open_game_working_folder",
+                    path = path.display(),
+                    error = source
+                )),
                 Err(err) => Err(err.chain()),
             };
             t.send(Event::Launched(id, result));

@@ -177,6 +177,7 @@
   "settings.start_the_launcher_maximized": "Başlatıcıyı ekranı kaplayarak aç",
   "settings.storage": "Depolama",
   "settings.supported_by_flash_hosting_in_the_sidebar": "Kenar çubuğunda, Hakkında'da ve Birlikte oyna'da \"Destekleyen: Flash Hosting\".",
+  "settings.temporary_portal_folder": "Bu klasör geçici bir Linux belge portalı kullanıyor. Oturumlar arasında erişim kaybolabilir. Mümkünse normal bir klasör seç.",
   "settings.test_proxy": "Proxy'yi sına",
   "settings.testing": "Sınanıyor…",
   "settings.the_file_cant_be_read_as_a_picture": "Dosya resim olarak okunamıyor ({e}).",

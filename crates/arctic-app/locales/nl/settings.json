@@ -177,6 +177,7 @@
   "settings.start_the_launcher_maximized": "Launcher gemaximaliseerd starten",
   "settings.storage": "Opslag",
   "settings.supported_by_flash_hosting_in_the_sidebar": "'Gesteund door Flash Hosting' in de zijbalk, Over en Samen spelen.",
+  "settings.temporary_portal_folder": "Deze map gebruikt een tijdelijk Linux-documentportaal. De toegang kan tussen sessies verdwijnen. Kies indien mogelijk een normale map.",
   "settings.test_proxy": "Proxy testen",
   "settings.testing": "Testen…",
   "settings.the_file_cant_be_read_as_a_picture": "Het bestand kan niet als afbeelding worden gelezen ({e}).",
