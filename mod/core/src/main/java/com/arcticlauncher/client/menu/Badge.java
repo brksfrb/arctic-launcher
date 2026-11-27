@@ -1,5 +1,6 @@
 package com.arcticlauncher.client.menu;
 
+import com.arcticlauncher.client.gfx.BrandMark;
 import com.arcticlauncher.client.gfx.Gfx;
 
 /** A small Arctic logo and the launcher's version, so a player can tell the game runs through Arctic. */
@@ -30,7 +31,7 @@ public final class Badge {
 	}
 
 	private static void draw(Gfx g, int x, int y) {
-		g.texture("icon", x, y, ICON, ICON, 0, 0, 256, 256, 256, 256);
+		BrandMark.draw(g, x, y, ICON);
 		g.text(label(), x + ICON + GAP, y + (ICON - 8) / 2, COLOR, true);
 	}
 }

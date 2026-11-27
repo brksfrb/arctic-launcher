@@ -12,7 +12,10 @@ param(
 	# The certificate's thumbprint ("Open Source Developer Leyla Barlak", Certum, until 2027-10-07).
 	[string]$Thumbprint = "1CB4E723F6E1CE921BE5C2E6CBB7B22A131B57D4",
 	[string]$Timestamp = "http://time.certum.pl",
-	[string]$SiteRevalidate = "https://arcticlauncher.com/api/revalidate"
+	[string]$SiteRevalidate = "https://arcticlauncher.com/api/revalidate",
+	# The release.yml run to check against; by default the newest run for the tag, finished or not
+	# (macOS may still be running: only the windows artifact of the build job is needed).
+	[string]$Run = ""
 )
 $ErrorActionPreference = "Stop"
 
@@ -36,18 +39,24 @@ try {
 	# Sign only what CI built. The draft's files must match the checksums CI wrote next to them, and the
 	# Windows files must be byte for byte the build job's own artifact: a replaced asset in the draft
 	# (or a replaced checksum file) would otherwise be signed with the real certificate and published.
+	# The CI provenance manifest is published separately and can gain Mac entries
+	# while signing is in progress. Leave it out of the refreshed download checksums.
+	$checksumFiles = @("SHA256SUMS.txt", "SHA256SUMS-unsigned.txt")
 	$expected = @{}
 	$sumsFile = Join-Path $work "SHA256SUMS.txt"
 	if (-not (Test-Path $sumsFile)) { throw "the release has no SHA256SUMS.txt from CI" }
 	foreach ($line in Get-Content $sumsFile) {
 		if ($line -match '^([0-9a-f]{64})\s+\*?(.+)$') { $expected[$Matches[2]] = $Matches[1] }
 	}
-	foreach ($file in Get-ChildItem $work -File | Where-Object Name -ne "SHA256SUMS.txt") {
+	foreach ($file in Get-ChildItem $work -File | Where-Object { $_.Name -notin $checksumFiles }) {
 		$have = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLower()
 		if ($expected[$file.Name] -ne $have) { throw "$($file.Name) is not what CI built (checksum differs or is missing)" }
 	}
-	$run = gh run list --workflow release.yml --branch $Tag --status success --limit 1 --json databaseId --jq ".[0].databaseId"
-	if ($LASTEXITCODE -ne 0 -or -not $run) { throw "no successful release.yml run found for $Tag" }
+	$run = $Run
+	if (-not $run) {
+		$run = gh run list --workflow release.yml --branch $Tag --limit 1 --json databaseId --jq ".[0].databaseId"
+		if ($LASTEXITCODE -ne 0 -or -not $run) { throw "no release.yml run found for $Tag" }
+	}
 	$ci = Join-Path $work "ci-artifact"
 	gh run download $run --name windows --dir $ci
 	if ($LASTEXITCODE -ne 0) { throw "couldn't download the build job's windows artifact (run $run)" }
@@ -67,7 +76,7 @@ try {
 
 	# Checksums of every download, as the workflow writes them (sha256sum format).
 	$sums = Join-Path $work "SHA256SUMS.txt"
-	$lines = Get-ChildItem $work -File | Where-Object Name -ne "SHA256SUMS.txt" | Sort-Object Name | ForEach-Object {
+	$lines = Get-ChildItem $work -File | Where-Object { $_.Name -notin $checksumFiles } | Sort-Object Name | ForEach-Object {
 		"{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
 	}
 	[IO.File]::WriteAllText($sums, ($lines -join "`n") + "`n")

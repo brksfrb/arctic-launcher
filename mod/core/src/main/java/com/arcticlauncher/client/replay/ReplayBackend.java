@@ -4,6 +4,7 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.UUID;
 
+import com.arcticlauncher.client.Lang;
 /**
  * What watching a replay needs from Minecraft. Each version adapter
  * implements this: it turns recorded bytes back into the game's packets and
@@ -12,12 +13,21 @@ import java.util.UUID;
  * camera, the timeline) is the core's. Game thread unless noted.
  */
 public interface ReplayBackend {
+	/** A protocol handover failed: later packets cannot safely be delivered. */
+	final class ProtocolFailure extends RuntimeException {
+		private static final long serialVersionUID = 1L;
+
+		public ProtocolFailure(String message, Throwable cause) { super(message, cause); }
+	}
+
 	/** Sorts recorded packets into {@link Category categories}; used on a background thread. */
 	interface Classifier {
 		/** The category of {@code packet} (its id, then its body); may put a key in {@code key[0]}. */
 		byte classify(ByteBuffer packet, long[] key);
 		/** Ids removed by an ENTITY_REMOVE packet; null if its format is unknown. */
 		default int[] removedEntities(ByteBuffer packet) { return null; }
+		/** Chunk keys ({@link Category#chunk}) a CHUNK_BULK packet loads; null if its format is unknown. */
+		default long[] bulkChunks(ByteBuffer packet) { return null; }
 	}
 
 	/** The network protocol this game speaks (a replay must match it); 0 if unknown. */
@@ -41,6 +51,21 @@ public interface ReplayBackend {
 
 	/** Finish the seek after world, body and camera are restored; also called on failure. */
 	default void endSeek() {}
+
+	/**
+	 * Thrown by {@link #apply} when playback can't work at all (say the connection never left the
+	 * login state): the viewer stops, tells the player, and doesn't feed the rest of the packets.
+	 */
+	final class Unusable extends RuntimeException {
+		private static final long serialVersionUID = 1L;
+
+		public Unusable(String message) {
+			super(message);
+		}
+	}
+
+	/** Where the packet stream stands (protocol phase, last phase switch), for failure logs; may be empty. */
+	default String diagnostics() { return ""; }
 
 	/** Hand one recorded packet to the game; {@code jumping}: nobody sees it, skip what only shows. */
 	void apply(ByteBuffer packet, boolean jumping);
@@ -96,7 +121,7 @@ public interface ReplayBackend {
 
 	/** Open a resolved sound from the same resource packs used by the game. Export worker only. */
 	default java.io.InputStream audioResource(String resource) throws java.io.IOException {
-		throw new java.io.IOException("Game audio resources are unavailable");
+		throw new java.io.IOException(Lang.t("replay.game_audio_resources_are_unavailable"));
 	}
 
 	/** Why videos can't be made here (shown instead of starting one), or null when they can. */

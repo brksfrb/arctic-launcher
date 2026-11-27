@@ -267,6 +267,9 @@ fn read_ok<T: serde::de::DeserializeOwned>(
     mut resp: ureq::http::Response<ureq::Body>,
 ) -> Result<T> {
     let status = resp.status().as_u16();
+    if status == 429 {
+        return Err(Error::Other(status_message(status, "")));
+    }
     let body = resp
         .body_mut()
         .with_config()
@@ -325,6 +328,7 @@ mod tests {
     fn errors_are_readable() {
         assert!(status_message(401, "").contains("Sign in"));
         assert!(status_message(400, "Invalid skin").contains("Invalid skin"));
+        assert!(status_message(429, "").contains("Wait a minute"));
         assert_eq!(status_message(500, ""), "Mojang returned an error (500).");
     }
 

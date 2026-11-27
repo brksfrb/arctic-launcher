@@ -92,7 +92,7 @@ fn list(ctx: &Ctx, scan: &Scan) -> Result<i32> {
                    "sizes": Category::ALL.iter().map(|c| (c.id(), sizes.bytes.get(c).copied().unwrap_or(0))).collect::<std::collections::HashMap<_, _>>(),
                    "other_loader_mods": sizes.other_loader.len()}),
             || {
-                let target = if f.into_vanilla { " → your Vanilla instance".to_owned() } else { String::new() };
+                let target = if f.into_vanilla { " → your Arctic instance".to_owned() } else { String::new() };
                 let mut text = format!("{}\n    {} · {loader}{target}\n    {}", f.key(), f.game_version, parts.join(", "));
                 if !sizes.other_loader.is_empty() {
                     text.push_str(&format!("\n    ({} mods in this shared folder are for another loader; left out)", sizes.other_loader.len()));
@@ -121,6 +121,12 @@ fn list(ctx: &Ctx, scan: &Scan) -> Result<i32> {
                 }
                 text
             },
+        );
+    }
+    if scan.curseforge_blocked {
+        ctx.out.emit(
+            json!({"launcher": "curseforge", "note": arctic_core::curseforge::MESSAGE}),
+            || arctic_core::curseforge::MESSAGE.to_owned(),
         );
     }
     for (launcher, why) in &scan.seen {

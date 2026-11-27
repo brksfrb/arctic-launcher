@@ -1,87 +1,194 @@
-//! Fonts. The interface uses the system's own UI font (Segoe UI on
-//! Windows) so the launcher reads like a native app rather than a stock
-//! toolkit demo; headings use its semibold weight. Fallback fonts for
-//! scripts those don't cover (Chinese, Japanese, Korean, …) come from the
-//! system too, loaded the first time such text shows up, so nothing is
-//! bundled and nothing extra sits in memory for people who never see it.
+//! Prefer platform UI fonts. Small embedded faces keep text available even
+//! without system fonts, and large system script fonts are mapped on demand.
 
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use eframe::egui::{self, FontData, FontFamily};
 use eframe::epaint::text::{FontInsert, FontPriority, InsertFontFamily};
+use skrifa::{FontRef, MetadataProvider};
 
 /// The font family for headings (semibold); plain text uses Proportional.
 pub const HEADING: &str = "heading";
 
-/// System UI fonts: (regular candidates, semibold candidates), first found wins.
-fn ui_fonts() -> (&'static [&'static str], &'static [&'static str]) {
+type Faces = &'static [(&'static str, u32)];
+
+macro_rules! bundled {
+    ($file:literal) => {
+        bundled_font(include_bytes!(concat!(
+            env!("OUT_DIR"),
+            "/",
+            $file,
+            ".lzma"
+        )))
+    };
+}
+
+fn bundled_font(mut bytes: &[u8]) -> FontData {
+    let mut plain = Vec::new();
+    lzma_rs::lzma_decompress(&mut bytes, &mut plain).expect("decode embedded font");
+    FontData::from_owned(plain)
+}
+
+fn ui_fonts() -> (Faces, Faces, Faces) {
     if cfg!(windows) {
         (
+            &[("segoeui.ttf", 0), ("SegUIVar.ttf", 0)],
+            &[("seguisb.ttf", 0), ("segoeuib.ttf", 0)],
+            &[("consola.ttf", 0)],
+        )
+    } else if cfg!(target_os = "macos") {
+        (
             &[
-                r"C:\Windows\Fonts\SegUIVar.ttf",
-                r"C:\Windows\Fonts\segoeui.ttf",
+                ("/System/Library/Fonts/Helvetica.ttc", 0),
+                ("/System/Library/Fonts/Supplemental/Arial.ttf", 0),
             ],
-            &[
-                r"C:\Windows\Fonts\seguisb.ttf",
-                r"C:\Windows\Fonts\segoeuib.ttf",
-            ],
+            &[("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 0)], // i18n-ignore: path
+            &[("/System/Library/Fonts/Menlo.ttc", 0)],
         )
     } else {
         (
             &[
-                "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-                "/usr/share/fonts/noto/NotoSans-Regular.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                ("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", 0),
+                ("/usr/share/fonts/noto/NotoSans-Regular.ttf", 0),
+                ("/usr/share/fonts/google-noto-vf/NotoSans[wght].ttf", 0),
+                ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 0),
+                ("/usr/share/fonts/dejavu/DejaVuSans.ttf", 0),
+                ("/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf", 0),
             ],
             &[
-                "/usr/share/fonts/truetype/noto/NotoSans-SemiBold.ttf",
-                "/usr/share/fonts/noto/NotoSans-SemiBold.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                ("/usr/share/fonts/truetype/noto/NotoSans-SemiBold.ttf", 0),
+                ("/usr/share/fonts/noto/NotoSans-SemiBold.ttf", 0),
+                ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0),
+                ("/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf", 0),
+                ("/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf", 0),
+            ],
+            &[
+                ("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 0),
+                ("/usr/share/fonts/dejavu/DejaVuSansMono.ttf", 0),
+                (
+                    "/usr/share/fonts/dejavu-sans-mono-fonts/DejaVuSansMono.ttf",
+                    0,
+                ),
+                ("/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf", 0),
             ],
         )
     }
 }
 
-fn first_readable(paths: &[&str]) -> Option<Vec<u8>> {
-    paths.iter().find_map(|p| std::fs::read(p).ok())
+fn symbol_fonts() -> Faces {
+    if cfg!(windows) {
+        &[("seguisym.ttf", 0)]
+    } else if cfg!(target_os = "macos") {
+        &[
+            ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", 0), // i18n-ignore: path
+            ("/Library/Fonts/Arial Unicode.ttf", 0),                     // i18n-ignore: path
+        ]
+    } else {
+        &[
+            (
+                "/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf",
+                0,
+            ),
+            ("/usr/share/fonts/noto/NotoSansSymbols2-Regular.ttf", 0),
+            (
+                "/usr/share/fonts/google-noto-sans-symbols2-fonts/NotoSansSymbols2-Regular.ttf",
+                0,
+            ),
+        ]
+    }
 }
 
-/// Use the system UI font for text and its semibold for headings. Without
-/// them (unusual systems), egui's built-in font stays and headings use it too.
+fn emoji_fonts() -> Faces {
+    if cfg!(windows) {
+        &[("seguiemj.ttf", 0)]
+    } else if cfg!(target_os = "macos") {
+        // Apple Color Emoji is bitmap-only. Use the outline fallbacks.
+        &[]
+    } else {
+        &[
+            ("/usr/share/fonts/truetype/noto/NotoEmoji-Regular.ttf", 0),
+            ("/usr/share/fonts/noto/NotoEmoji-Regular.ttf", 0),
+            ("/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf", 0),
+            ("/usr/share/fonts/noto/NotoColorEmoji.ttf", 0),
+        ]
+    }
+}
+
 pub fn install_ui(ctx: &egui::Context) {
-    let (regular, semibold) = ui_fonts();
-    let mut fonts = egui::FontDefinitions::default();
-    if let Some(bytes) = first_readable(regular) {
-        fonts
-            .font_data
-            .insert("ui".into(), std::sync::Arc::new(centered(bytes)));
-        if let Some(list) = fonts.families.get_mut(&FontFamily::Proportional) {
-            list.insert(0, "ui".into());
+    let (regular, semibold, monospace) = ui_fonts();
+    ctx.set_fonts(definitions(
+        regular,
+        semibold,
+        monospace,
+        symbol_fonts(),
+        emoji_fonts(),
+    ));
+}
+
+fn definitions(
+    regular: Faces,
+    semibold: Faces,
+    monospace: Faces,
+    symbols: Faces,
+    emoji: Faces,
+) -> egui::FontDefinitions {
+    let mut fonts = egui::FontDefinitions::empty();
+    let mut proportional = Vec::new();
+    let mut mono = vec!["ui-mono".into()];
+    fonts.font_data.insert(
+        "ui-mono".into(),
+        Arc::new(system_font(monospace).unwrap_or_else(|| bundled!("DejaVuSansMono-Subset.ttf"))),
+    );
+    for (name, data) in [
+        ("ui", system_font(regular).map(centered)),
+        ("ui-symbols", system_font(symbols)),
+        ("text-fallback", Some(bundled!("DejaVuSans-Subset.ttf"))),
+        // Keep the outline emoji that egui drew before, including on systems
+        // where the native emoji glyphs only have color layers.
+        (
+            "emoji-fallback",
+            Some(bundled!("NotoEmoji-Regular.ttf").tweak(egui::FontTweak {
+                scale: 0.81,
+                ..Default::default()
+            })),
+        ),
+        (
+            "icon-fallback",
+            Some(bundled!("emoji-icon-font.ttf").tweak(egui::FontTweak {
+                scale: 0.90,
+                ..Default::default()
+            })),
+        ),
+        ("ui-emoji", system_font(emoji)),
+    ] {
+        if let Some(data) = data {
+            fonts.font_data.insert(name.into(), Arc::new(data));
+            proportional.push(name.into());
         }
     }
-    let heading = FontFamily::Name(HEADING.into());
-    let mut heading_list = fonts
-        .families
-        .get(&FontFamily::Proportional)
-        .cloned()
-        .unwrap_or_default();
-    if let Some(bytes) = first_readable(semibold) {
-        fonts
-            .font_data
-            .insert("ui-semibold".into(), std::sync::Arc::new(centered(bytes)));
-        heading_list.insert(0, "ui-semibold".into());
+    mono.extend(proportional.iter().cloned());
+    let mut heading = proportional.clone();
+    if let Some(data) = system_font(semibold).map(centered) {
+        fonts.font_data.insert("ui-semibold".into(), Arc::new(data));
+        heading.insert(0, "ui-semibold".into());
     }
-    fonts.families.insert(heading, heading_list);
-    ctx.set_fonts(fonts);
+    fonts
+        .families
+        .insert(FontFamily::Proportional, proportional);
+    fonts.families.insert(FontFamily::Monospace, mono);
+    fonts
+        .families
+        .insert(FontFamily::Name(HEADING.into()), heading);
+    fonts
 }
 
-/// A font whose letters sit in the middle of their line: centered text (button labels) lines
-/// up with icons and boxes. Fonts like Segoe UI keep more room above the letters than below, so
-/// text centered by its line box looks low; this moves the glyphs up by the difference.
-fn centered(bytes: Vec<u8>) -> FontData {
-    let shift = letters_low_by(&bytes);
-    let mut data = FontData::from_owned(bytes);
-    if let Some(shift) = shift {
+/// Nudge glyphs to center the letters vertically in their line box.
+fn centered(mut data: FontData) -> FontData {
+    if data.index == 0
+        && let Some(shift) = letters_low_by(data.font.as_ref())
+    {
         data.tweak.y_offset_factor = -shift;
     }
     data
@@ -126,7 +233,6 @@ pub fn heading(size: f32) -> egui::FontId {
     egui::FontId::new(size, FontFamily::Name(HEADING.into()))
 }
 
-/// Scripts the built-in fonts can't draw; each loads its own system font, only when shown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Script {
     Han,
@@ -135,134 +241,173 @@ enum Script {
     Indic,
 }
 
-const SCRIPTS: [Script; 4] = [Script::Han, Script::Kana, Script::Hangul, Script::Indic];
-
 impl Script {
     fn of(c: char) -> Option<Self> {
         match c as u32 {
             0x0900..=0x0DFF => Some(Self::Indic),
             0x3040..=0x30FF | 0x31F0..=0x31FF => Some(Self::Kana),
             0x1100..=0x11FF | 0x3130..=0x318F | 0xAC00..=0xD7AF => Some(Self::Hangul),
-            0x3000..=0x9FFF | 0xF900..=0xFAFF | 0xFF00..=0xFFEF => Some(Self::Han),
+            0x3000..=0x9FFF | 0xF900..=0xFAFF | 0xFF00..=0xFFEF | 0x20000..=0x323AF => {
+                Some(Self::Han)
+            }
             _ => None,
         }
     }
 
-    fn index(self) -> usize {
-        self as usize
-    }
-
-    /// (path, face index in a collection) of system fonts that draw it, tried in order.
-    fn fonts(self) -> &'static [(&'static str, u32)] {
-        if cfg!(windows) {
-            match self {
-                Self::Han => &[(r"C:\Windows\Fonts\msyh.ttc", 0)], // Microsoft YaHei
-                Self::Kana => &[
-                    (r"C:\Windows\Fonts\YuGothM.ttc", 0),
-                    (r"C:\Windows\Fonts\msgothic.ttc", 0),
-                ],
-                Self::Hangul => &[(r"C:\Windows\Fonts\malgun.ttf", 0)], // Malgun Gothic
-                Self::Indic => &[(r"C:\Windows\Fonts\Nirmala.ttc", 0)],
-            }
-        } else {
-            // One Noto CJK covers Han, kana and Hangul (mapped once, see LOADED).
-            const CJK: &[(&str, u32)] = &[
-                ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
-                ("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", 0),
-                (
-                    "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
-                    0,
-                ),
-                ("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 0),
-                ("/System/Library/Fonts/PingFang.ttc", 0),
-            ];
-            match self {
-                Self::Indic => &[(
-                    "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
-                    0,
-                )],
-                _ => CJK,
-            }
+    fn windows_fonts(self) -> Faces {
+        match self {
+            Self::Han => &[("msyh.ttc", 0), ("simsun.ttc", 0)],
+            Self::Kana => &[("YuGothM.ttc", 0), ("msgothic.ttc", 0)],
+            Self::Hangul => &[("malgun.ttf", 0)],
+            Self::Indic => &[("Nirmala.ttc", 0), ("Nirmala.ttf", 0)],
         }
     }
 }
 
-/// Scripts asked for so far (each loads once).
-static REQUESTED: [AtomicBool; SCRIPTS.len()] = [const { AtomicBool::new(false) }; SCRIPTS.len()];
-/// Font files already added (a file serving two scripts is added once).
-static LOADED: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+static CJK_REQUESTED: AtomicBool = AtomicBool::new(false);
+static INDIC_REQUESTED: AtomicBool = AtomicBool::new(false);
 
-/// True if `text` has characters the built-in fonts can't draw.
-fn needs_fallback(text: &str) -> bool {
-    text.chars().any(|c| Script::of(c).is_some())
-}
-
-/// Load the fallback fonts `text` needs in the background (each script once). Only the script
-/// shown is loaded (the four Windows ones together are some 50 MB), and the file is mapped,
-/// not read: its pages are the system's file cache, shared, not this program's memory.
+/// Map CJK or Indic fonts in the background the first time those scripts are shown.
 pub fn ensure_for(ctx: &egui::Context, text: &str) {
-    if !needs_fallback(text) {
-        return;
-    }
-    let mut wanted = Vec::new();
-    for c in text.chars() {
-        if let Some(script) = Script::of(c)
-            && !wanted.contains(&script)
-            && !REQUESTED[script.index()].swap(true, Ordering::Relaxed)
-        {
-            wanted.push(script);
+    let mut cjk = None;
+    let mut indic = false;
+    for script in text.chars().filter_map(Script::of) {
+        if script == Script::Indic {
+            indic = true;
+        } else if cjk.is_none() {
+            cjk = Some(script);
         }
     }
-    if wanted.is_empty() {
+    let cjk = cjk.filter(|_| !CJK_REQUESTED.swap(true, Ordering::Relaxed));
+    let indic = indic && !INDIC_REQUESTED.swap(true, Ordering::Relaxed);
+    if cjk.is_none() && !indic {
         return;
     }
+
     let ctx = ctx.clone();
     std::thread::spawn(move || {
-        for script in wanted {
-            add_fallback(&ctx, script);
+        if let Some(preferred) = cjk {
+            add_cjk(&ctx, preferred);
+        }
+        if indic {
+            let paths: Faces = if cfg!(windows) {
+                Script::Indic.windows_fonts()
+            } else if cfg!(target_os = "macos") {
+                &[
+                    ("/System/Library/Fonts/Kohinoor.ttc", 0),
+                    (
+                        "/System/Library/Fonts/Supplemental/Devanagari Sangam MN.ttc", // i18n-ignore: path
+                        0,
+                    ),
+                ]
+            } else {
+                &[(
+                    "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+                    0,
+                )]
+            };
+            if let Some(font) = system_font(paths) {
+                add_fallback(&ctx, "system-indic", font);
+            }
         }
         ctx.request_repaint();
     });
 }
 
-fn add_fallback(ctx: &egui::Context, script: Script) {
-    for &(path, index) in script.fonts() {
-        let mut loaded = LOADED
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if loaded.contains(&path) {
-            return;
+fn add_cjk(ctx: &egui::Context, preferred: Script) {
+    if cfg!(windows) {
+        for script in std::iter::once(preferred).chain(
+            [Script::Han, Script::Kana, Script::Hangul]
+                .into_iter()
+                .filter(|&script| script != preferred),
+        ) {
+            if let Some(font) = system_font(script.windows_fonts()) {
+                add_fallback(ctx, &format!("system-{script:?}"), font);
+            }
         }
-        let Some(bytes) = map(path) else {
-            continue;
+    } else if cfg!(target_os = "macos") {
+        let faces: &[(&str, Faces)] = &[
+            (
+                "system-kana",
+                &[
+                    ("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc", 0),
+                    ("/System/Library/Fonts/ヒラギノ角ゴシック W4.ttc", 0),
+                ],
+            ),
+            (
+                "system-hangul",
+                &[("/System/Library/Fonts/AppleSDGothicNeo.ttc", 0)],
+            ),
+            ("system-han", &[("/System/Library/Fonts/PingFang.ttc", 0)]),
+        ];
+        for &(name, paths) in faces {
+            if let Some(font) = system_font(paths) {
+                add_fallback(ctx, name, font);
+            }
+        }
+    } else {
+        // Noto's collection order is JP, KR, SC, TC, HK. Pick the first
+        // requested regional face, which also covers the other two scripts.
+        let index = match preferred {
+            Script::Kana => 0,
+            Script::Hangul => 1,
+            _ => 2,
         };
-        loaded.push(path);
-        drop(loaded);
-        let mut data = FontData::from_static(bytes);
-        data.index = index;
-        let families = [FontFamily::Proportional, FontFamily::Monospace]
-            .into_iter()
-            .map(|family| InsertFontFamily {
-                family,
-                priority: FontPriority::Lowest,
-            })
-            .collect();
-        ctx.add_font(FontInsert::new(
-            &format!("fallback-{script:?}"),
-            data,
-            families,
-        ));
-        return;
+        let paths = [
+            (
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                index,
+            ),
+            ("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", index),
+            (
+                "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+                index,
+            ),
+            ("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 0),
+        ];
+        if let Some(font) = system_font(&paths) {
+            add_fallback(ctx, "system-cjk", font);
+        }
     }
+    add_fallback(ctx, "cjk-fallback", bundled!("NotoSansCJKsc-Subset.otf"));
 }
 
-/// A font file mapped for the rest of the run (fonts are never removed once added).
-fn map(path: &str) -> Option<&'static [u8]> {
-    let file = std::fs::File::open(path).ok()?;
-    // SAFETY: a system font, mapped read-only; Windows keeps a mapped file from being changed,
-    // and fonts aren't rewritten in place elsewhere.
-    let mapped = unsafe { memmap2::Mmap::map(&file) }.ok()?;
-    Some(&**Box::leak(Box::new(mapped)))
+fn add_fallback(ctx: &egui::Context, name: &str, data: FontData) {
+    let families = [
+        FontFamily::Proportional,
+        FontFamily::Monospace,
+        FontFamily::Name(HEADING.into()),
+    ]
+    .into_iter()
+    .map(|family| InsertFontFamily {
+        family,
+        priority: FontPriority::Lowest,
+    })
+    .collect();
+    ctx.add_font(FontInsert::new(name, data, families));
+}
+
+fn system_font(paths: &[(&str, u32)]) -> Option<FontData> {
+    paths.iter().find_map(|&(path, index)| {
+        let path = if cfg!(windows) {
+            std::env::var_os("WINDIR") // i18n-ignore: environment variable
+                .map_or_else(|| PathBuf::from(r"C:\Windows"), PathBuf::from)
+                .join("Fonts")
+                .join(path)
+        } else {
+            PathBuf::from(path)
+        };
+        let file = std::fs::File::open(path).ok()?;
+        // SAFETY: a system font, mapped read-only. System fonts are replaced
+        // as files on updates; Windows also prevents writes to a mapped file.
+        let mapped = unsafe { memmap2::Mmap::map(&file) }.ok()?;
+        let face = FontRef::from_index(&mapped, index).ok()?;
+        // egui 0.36 rasterizes outline glyphs. Skip bitmap-only faces.
+        face.outline_glyphs().format()?;
+        let mut data = FontData::from_static(Box::leak(Box::new(mapped)));
+        data.index = index;
+        Some(data)
+    })
 }
 
 #[cfg(test)]
@@ -281,11 +426,36 @@ mod tests {
 
     #[test]
     fn detects_scripts_needing_fallback() {
-        assert!(needs_fallback("僵尸入侵100天"));
-        assert!(needs_fallback("ゾンビ"));
-        assert!(needs_fallback("좀비"));
-        assert!(!needs_fallback("Zombie Invade — 100 Days"));
-        assert!(!needs_fallback("Привет"));
+        assert!("僵尸入侵100天".chars().any(|c| Script::of(c).is_some()));
+        assert!("ゾンビ".chars().any(|c| Script::of(c).is_some()));
+        assert!("좀비".chars().any(|c| Script::of(c).is_some()));
+        assert!(
+            !"Zombie Invade — 100 Days"
+                .chars()
+                .any(|c| Script::of(c).is_some())
+        );
+        assert!(!"Привет".chars().any(|c| Script::of(c).is_some()));
+    }
+
+    #[test]
+    fn bundled_fonts_render_without_system_fonts() {
+        let ctx = egui::Context::default();
+        ctx.set_fonts(definitions(&[], &[], &[], &[], &[]));
+        add_fallback(&ctx, "test-cjk", bundled!("NotoSansCJKsc-Subset.otf"));
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            // i18n-ignore: exercise text rendering across the supported scripts.
+            let text = "English Türkçe ı ş ğ İ Русский 简体中文 日本語 한국어 ✓ ⚙ ▶";
+            for id in [
+                egui::FontId::proportional(16.0),
+                egui::FontId::monospace(16.0),
+                heading(16.0),
+            ] {
+                assert!(ui.fonts_mut(|fonts| fonts.has_glyphs(&id, text)));
+                ui.label(egui::RichText::new(text).font(id));
+            }
+        });
+        assert!(!output.shapes.is_empty());
+        output.textures_delta.clear();
     }
 }
 
@@ -293,13 +463,14 @@ mod tests {
 mod metric_tests {
     use super::*;
 
+    #[cfg(windows)]
     #[test]
     fn segoe_letters_sit_low_in_their_line() {
         // Only where the font is (Windows).
-        let Some(bytes) = first_readable(&[r"C:\Windows\Fonts\segoeui.ttf"]) else {
+        let Some(data) = system_font(&[("segoeui.ttf", 0)]) else {
             return;
         };
-        let low = letters_low_by(&bytes).expect("Segoe UI has the tables");
+        let low = letters_low_by(data.font.as_ref()).expect("Segoe UI has the tables");
         // ascender 2210, descender 514, cap height 1434, 2048 units: about 0.064.
         assert!((low - 0.064).abs() < 0.01, "{low}");
     }

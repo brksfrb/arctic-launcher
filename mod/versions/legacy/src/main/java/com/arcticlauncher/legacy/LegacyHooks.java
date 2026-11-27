@@ -5,16 +5,24 @@ import java.util.Date;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
+import com.arcticlauncher.client.feature.ArmorHider;
+import com.arcticlauncher.client.feature.Badge;
 import com.arcticlauncher.client.feature.Features;
 import com.arcticlauncher.client.feature.Mentions;
 import com.arcticlauncher.client.feature.Streamer;
+import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.BufferBuilder;
+import net.minecraft.client.render.Tessellator;
+import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.util.DefaultSkinHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.text.LiteralText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
+import org.lwjgl.opengl.GL11;
 
+import com.arcticlauncher.client.Lang;
 /** What the 1.8.9 hooks call: small, so each mixin stays a one-liner. */
 public final class LegacyHooks {
 	/** The skin streamer mode shows for you. */
@@ -30,6 +38,8 @@ public final class LegacyHooks {
 
 	/** The held-item layer of players and mobs is drawing an item (see OldHeldLayerMixin). */
 	public static volatile boolean heldLayerActive;
+
+	private static final float[] BADGE_SNAP = new float[2];
 
 	private LegacyHooks() {}
 
@@ -232,10 +242,40 @@ public final class LegacyHooks {
 		syncHitboxes();
 		syncChunkBorders();
 		com.arcticlauncher.legacy.replay.LegacyReplayRecording.tick();
+		com.arcticlauncher.client.feature.ArmorHider.tick(MinecraftClient.getInstance().player,
+				MinecraftClient.getInstance().player == null ? 0 : MinecraftClient.getInstance().player.hurtTime);
 		ArcticClient.tick(screenOpen);
+		LegacyTextures.reapBadges();
 		// Features can reassert bindings (e.g. toggled sneak); release after those updates.
 		// Keep ticking in-world as well, so window events recover keys even without chat.
 		cursorGuard(screenOpen || MinecraftClient.getInstance().currentScreen != null, resized);
+	}
+
+	public static void drawArmorCheckboxes() {
+		ClientConfig config = ArcticClient.config();
+		if (config == null || !config.armorHider) return;
+		boolean lighting = GL11.glIsEnabled(GL11.GL_LIGHTING);
+		GlStateManager.disableLighting();
+		GlStateManager.pushMatrix();
+		try {
+			// The item renderer adds its own depth to both the slot and floating item offsets.
+			GlStateManager.translate(0, 0, 300);
+			ArmorHider.drawCheckboxes(new LegacyGfx(), 0, 0);
+		} finally {
+			GlStateManager.popMatrix();
+			if (lighting) GlStateManager.enableLighting();
+		}
+	}
+
+	public static boolean drawArmorTooltip(int x, int y, int mouseX, int mouseY) {
+		if (ArmorHider.hoveredPiece(x, y, mouseX, mouseY) == null) return false;
+		boolean lighting = GL11.glIsEnabled(GL11.GL_LIGHTING);
+		GlStateManager.disableLighting();
+		try {
+			return ArmorHider.drawTooltip(new LegacyGfx(), x, y, mouseX, mouseY);
+		} finally {
+			if (lighting) GlStateManager.enableLighting();
+		}
 	}
 
 	/** Over the game, after Minecraft's own HUD. */
@@ -316,44 +356,72 @@ public final class LegacyHooks {
 		com.arcticlauncher.client.feature.ContainerPeek.hover(new LegacyGfx(), mouseX, mouseY, slot.getStack());
 	}
 
-	/** The Arctic badge in the {@code size}-wide blank at ({@code x}, {@code y}), with the text's own transparency. */
-	public static void drawBadge(float x, float y, int size, int argb) {
-		net.minecraft.util.Identifier texture = LegacyTextures.resolve("asset:badge");
+	/** Draw the Arctic badge at the top left of the text line, using the text opacity. */
+	public static void drawBadge(float x, float y, int argb, boolean shadow, int style, int role, boolean tab, boolean unicode) {
+		float capCenter = tab ? LegacySmoothFont.tabCapCenter(unicode) : 0f;
+		float pixelsPerUnit = LegacySmoothFont.badgePixels(x, y);
+		if (pixelsPerUnit <= 0) return;
+		int resolution = Badge.rasterSize(tab, pixelsPerUnit);
+		float side = Badge.quadSide(tab, pixelsPerUnit);
+		if (tab) y += capCenter - side / 2f;
+		if (LegacySmoothFont.snapOrigin(x, y, BADGE_SNAP)) {
+			x = BADGE_SNAP[0];
+			y = BADGE_SNAP[1];
+		}
+		Identifier texture = LegacyTextures.badge(style, resolution, role);
 		if (texture == null) {
 			return;
 		}
-		int side = Math.max(6, Math.min(9, size - 2));
 		int alpha = argb >>> 24;
+		// Text with no alpha is opaque, as the game draws it.
+		float a = alpha == 0 ? 1f : alpha / 255f;
+		MinecraftClient.getInstance().getTextureManager().bindTexture(texture);
+		com.mojang.blaze3d.platform.GlStateManager.enableBlend();
+		com.mojang.blaze3d.platform.GlStateManager.blendFuncSeparate(GL11.GL_SRC_ALPHA,
+				GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
+		// The badge picture has no drop shadow; the name text keeps its own.
+		if (Badge.drawShadow(tab, shadow)) {
+			com.mojang.blaze3d.platform.GlStateManager.color(0.25f, 0.25f, 0.25f, a);
+			badgeQuad(x + 1, y + 1, side);
+		}
+		com.mojang.blaze3d.platform.GlStateManager.color(1f, 1f, 1f, a);
+		badgeQuad(x, y, side);
+	}
+
+	private static void badgeQuad(float x, float y, float side) {
+		Tessellator tessellator = Tessellator.getInstance();
+		BufferBuilder buffer = tessellator.getBuffer();
+		buffer.begin(GL11.GL_QUADS, VertexFormats.POSITION_TEXTURE);
+		buffer.vertex(x, y + side, 0).texture(0, 1).next();
+		buffer.vertex(x + side, y + side, 0).texture(1, 1).next();
+		buffer.vertex(x + side, y, 0).texture(1, 0).next();
+		buffer.vertex(x, y, 0).texture(0, 0).next();
+		tessellator.draw();
+	}
+
+	/** RGBA chat glyph, using the same one-texture path as the badge. */
+	public static void drawEmote(com.arcticlauncher.client.feature.EmoteAtlas.Emote emote, float x, float y, float alpha, boolean shadow) {
+		net.minecraft.util.Identifier texture = LegacyTextures.resolve("asset:emotes");
+		if (texture == null) return;
 		MinecraftClient.getInstance().getTextureManager().bindTexture(texture);
 		com.mojang.blaze3d.platform.GlStateManager.enableBlend();
 		com.mojang.blaze3d.platform.GlStateManager.blendFuncSeparate(org.lwjgl.opengl.GL11.GL_SRC_ALPHA,
 				org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA, org.lwjgl.opengl.GL11.GL_ONE, org.lwjgl.opengl.GL11.GL_ZERO);
-		// Text with no alpha is opaque, as the game draws it.
-		com.mojang.blaze3d.platform.GlStateManager.color(1f, 1f, 1f, alpha == 0 ? 1f : alpha / 255f);
-		net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x), Math.round(y) - 1, 0f, 0f, 64, 64, side, side, 64, 64);
+		float tint = shadow ? 0.25f : 1f;
+		com.mojang.blaze3d.platform.GlStateManager.color(tint, tint, tint, alpha);
+		net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x), Math.round(y) - 1, emote.u(), emote.v(), 144, 144, 10, 10, 1152, 1152);
 	}
 
 	/** The ping number in the player list, in the place of the ping bars; false when the latency is unknown. */
 	public static boolean drawTabPing(int width, int x, int y, int ms) {
-		if (ms < 0) {
-			return false;
-		}
-		String text = String.valueOf(ms);
-		int color = ms < 80 ? 0xFF55FF55 : ms < 160 ? 0xFFFFFF55 : 0xFFFF5555;
-		float scale = 0.8f;
-		LegacyGfx g = new LegacyGfx();
-		g.push();
-		g.translate(x + width - 1 - g.textWidth(text) * scale, y + 1.5f);
-		g.scale(scale);
-		g.text(text, 0, 0, color, true);
-		g.pop();
-		return true;
+		return com.arcticlauncher.client.ui.TabPing.draw(new LegacyGfx(), width, x, y, ms);
 	}
 
 	/** Pop-ups on the screens that cover the game; in the game the HUD shows them. */
 	public static void drawScreenNotices(net.minecraft.client.gui.screen.Screen screen) {
 		ClientConfig c = ArcticClient.config();
-		if (c == null || ArcticClient.platform() == null || screen instanceof LegacyPageScreen) {
+		if (c == null || ArcticClient.platform() == null || screen instanceof LegacyPageScreen
+				|| screen instanceof net.minecraft.client.gui.screen.TitleScreen) {
 			return;
 		}
 		String name = screen.getClass().getSimpleName().toLowerCase(java.util.Locale.ROOT);
@@ -398,9 +466,26 @@ public final class LegacyHooks {
 			out = LegacyChatCopy.tag(new LiteralText("§e» §r"), source, false).append(out);
 			ArcticClient.platform().mentionSound();
 		}
+		return stamped(out, source, new java.util.Date());
+	}
+
+	/** A line restored from the saved chat: no sound or stacking, but the time it arrived (0: no stamp). */
+	public static Text restoredChat(Text message, long time) {
+		ClientConfig c = ArcticClient.config();
+		if (c == null || time <= 0) {
+			return message;
+		}
+		String source = message.asUnformattedString();
+		return stamped(LegacyChatCopy.tag(message, source, false), source, new java.util.Date(time));
+	}
+
+	private static Text stamped(Text out, String source, java.util.Date when) {
+		ClientConfig c = ArcticClient.config();
 		if (c.chatTimestamps) {
-			out = new LiteralText("").append(LegacyChatCopy.tag(new LiteralText("§8" + (c.chatStampBold ? "§l" : "") + (c.chatStampItalic ? "§o" : "")
-					+ com.arcticlauncher.client.feature.ChatStamp.text(c) + "§r"), source, true)).append(out);
+			String shown = com.arcticlauncher.client.feature.ChatStamp.text(c, when);
+			Text stamp = LegacyChatCopy.tag(new LiteralText("§8" + (c.chatStampBold ? "§l" : "") + (c.chatStampItalic ? "§o" : "")
+					+ shown + "§r"), new com.arcticlauncher.client.feature.ChatCopy.Data(source, true, true));
+			out = new LiteralText("").append(stamp).append(out);
 		} else if (c.chatCopy) {
 			out = new LiteralText("").append(LegacyChatCopy.tag(new LiteralText("§8[Copy] §r"), source, true)).append(out);
 		}
@@ -459,7 +544,7 @@ public final class LegacyHooks {
 		}
 		armedLeave = button;
 		leaveLabel = button.message;
-		button.message = "Click again to leave";
+		button.message = Lang.t("platform.click_again_to_leave");
 		return false;
 	}
 

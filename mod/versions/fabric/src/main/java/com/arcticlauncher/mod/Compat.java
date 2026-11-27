@@ -1,5 +1,6 @@
 package com.arcticlauncher.mod;
 
+import com.arcticlauncher.client.feature.Badge;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
@@ -119,12 +120,6 @@ public final class Compat {
 		//#endif
 	}
 
-	/** Whether text can show Arctic's badge glyph (it needs fonts in text, 1.16+). */
-	//#if MC >= 1.16
-	public static final boolean BADGES = true;
-	//#else
-	public static final boolean BADGES = false;
-	//#endif
 
 	public static int widgetY(net.minecraft.client.gui.components.AbstractWidget w) {
 		//#if MC >= 1.19.3
@@ -214,6 +209,35 @@ public final class Compat {
 		//#endif
 	}
 
+	/** Like {@link #texture}, but filtered linearly: for a picture that is drawn turned. */
+	public static DynamicTexture smoothTexture(String name, NativeImage image) {
+		return new SmoothTexture(name, image);
+	}
+
+	//#if MC >= 1.19.3
+	/** Reused, so turning allocates nothing per frame (render thread only). */
+	private static final org.joml.Quaternionf TURN = new org.joml.Quaternionf();
+	//#endif
+
+	/** Turn the pose clockwise about Z by radians (GUI pose: Matrix3x2fStack from 1.21.6, PoseStack before). */
+	public static void turnZ(
+			//#if MC >= 1.21.6
+			org.joml.Matrix3x2fStack pose,
+			//#else
+			com.mojang.blaze3d.vertex.PoseStack pose,
+			//#endif
+			float radians) {
+		//#if MC >= 1.21.6
+		pose.rotate(radians);
+		//#elif MC >= 1.19.3
+		pose.mulPose(TURN.rotationZ(radians));
+		//#elif MC >= 1.15
+		pose.mulPose(com.mojang.math.Vector3f.ZP.rotation(radians));
+		//#else
+		pose.rotate(radians, 0f, 0f, 1f);
+		//#endif
+	}
+
 	/** Turn the pose Z, then Y, then X (radians), the order a model part turns in. */
 	public static void turnZYX(com.mojang.blaze3d.vertex.PoseStack pose, float x, float y, float z) {
 		//#if MC >= 26.3
@@ -287,6 +311,21 @@ public final class Compat {
 		//#else
 		return InputConstants.Type.KEYSYM.getOrCreate(code).getName();
 		//#endif
+	}
+
+	/** The name of the game key binding on this key ("Jump"), or null. Settings screens only, so it may allocate. */
+	public static String keyUsedBy(String name) {
+		//#if MC >= 1.16
+		if (name == null || name.endsWith(".unknown")) {
+			return null;
+		}
+		for (net.minecraft.client.KeyMapping k : mc().options.keyMappings) {
+			if (name.equals(k.saveString())) {
+				return net.minecraft.client.resources.language.I18n.get(k.getName());
+			}
+		}
+		//#endif
+		return null;
 	}
 
 	public static String keyLabel(String name) {
@@ -513,19 +552,47 @@ public final class Compat {
 		//#endif
 	}
 
-	/** The Arctic snowflake as a text glyph (font {@code arctic:badge}). */
+	/** The wearer's badge spacer and its two-pixel gap. The draw path supplies the textured quad. */
+	public static net.minecraft.network.chat.MutableComponent arcticBadgeWithGap(java.util.UUID wearer, boolean tab) {
+		int style = Badge.style(wearer);
+		int role = Badge.roleIndex(Badge.role(wearer));
+		//#if MC < 1.16
+		if (net.minecraft.client.Minecraft.getInstance().options.forceUnicodeFont) {
+			return literal("");
+		}
+		return literal("\u00a7r" + Badge.glyph(style, role, tab) + "\u00a7r");
+		//#else
+		return literal(String.valueOf((char) (BadgeTexture.SPACER + role))).withStyle(badgeStyle(style, tab));
+		//#endif
+	}
+
+	//#if MC >= 1.16
+	/** The text style that puts a text in the font of badge picture {@code style}. */
+	public static net.minecraft.network.chat.Style badgeStyle(int style, boolean tab) {
+		net.minecraft.resources.Identifier font = id(ArcticMod.ID, Badge.definition(style).font + (tab ? "_tab" : ""));
+		//#if MC >= 1.21.9
+		net.minecraft.network.chat.Style badge = net.minecraft.network.chat.Style.EMPTY.withFont(new net.minecraft.network.chat.FontDescription.Resource(font));
+		//#else
+		net.minecraft.network.chat.Style badge = net.minecraft.network.chat.Style.EMPTY.withFont(font);
+		//#endif
+		// The badge picture has no drop shadow; the name text beside it keeps its own.
+		// Before 1.21.4 a style can't say so, so BadgeShadowMixin omits the shadow-pass quad.
+		//#if MC >= 1.21.11
+		return badge.withoutShadow();
+		//#elif MC >= 1.21.4
+		return badge.withShadowColor(0);
+		//#else
+		return badge;
+		//#endif
+	}
+	//#endif
+
+	/** The Arctic snowflake (the speaker's picture, in font {@code arctic:badge}). */
 	public static net.minecraft.network.chat.MutableComponent arcticBadge() {
 		//#if MC < 1.16
-		// No custom fonts in text before 1.16: the snowflake character (smaller than the picture, but there).
-		return literal("§b❄§r ");
+		return literal("\u00a7b\u2744\u00a7r ");
 		//#else
-		net.minecraft.resources.Identifier font = id(ArcticMod.ID, "badge");
-		net.minecraft.network.chat.MutableComponent badge = literal("");
-		//#if MC >= 1.21.9
-		return badge.withStyle(style -> style.withFont(new net.minecraft.network.chat.FontDescription.Resource(font)));
-		//#else
-		return badge.withStyle(style -> style.withFont(font));
-		//#endif
+		return literal("").withStyle(badgeStyle(0, false));
 		//#endif
 	}
 

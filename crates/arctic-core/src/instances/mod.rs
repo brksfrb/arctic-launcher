@@ -1,12 +1,18 @@
 //! Instances: isolated game directories.
 //!
-//! MVP ships exactly one, the built-in "Vanilla" instance, whose version is
-//! picked on the Play tab. User-created instances (with mod loaders) will
-//! live next to it under `instances/<id>/` and reuse the shared libraries,
-//! assets and runtimes.
+//! Every profile has the built-in "Arctic" instance (see [`builtin`]): the
+//! Arctic Client and Polarium on Fabric, following the version picked on the
+//! Play tab. User-created instances (Vanilla or a mod loader) live next to it
+//! under `instances/<id>/` and reuse the shared libraries, assets and runtimes.
 
+mod builtin;
 mod duplicate;
 
+pub use builtin::{
+    ARCTIC_ID, BuiltinMigration, LEGACY_DEFAULT_ID, ensure_default, fallback_default, peek_default,
+};
+
+pub(crate) use duplicate::copy_entry;
 pub use duplicate::duplicate;
 
 use std::path::{Path, PathBuf};
@@ -17,7 +23,6 @@ use crate::loaders::LoaderKind;
 use crate::storage::{DataDirs, load_json, save_json};
 use crate::{Error, Result};
 
-pub const VANILLA_ID: &str = "vanilla";
 const INSTANCE_FILE: &str = "instance.json";
 /// Game directory inside an instance (what vanilla calls `.minecraft`).
 const GAME_DIR: &str = "minecraft";
@@ -141,7 +146,8 @@ pub struct Instance {
     /// Icon shown for this instance; defaults to the loader's style.
     #[serde(default)]
     pub icon: InstanceIcon,
-    /// Install Arctic's companion mod (Fabric/Quilt, supported versions).
+    /// Install Arctic's companion mod (Fabric/Quilt/Forge, supported versions). Always on for
+    /// the built-in Arctic instance and always off for plain Vanilla ones (see [`Instance::normalize`]).
     #[serde(default = "enabled")]
     pub arctic_mod: bool,
     /// Java executable for this instance (falls back to the launcher setting).
@@ -167,6 +173,10 @@ pub struct Instance {
     /// instance's own folder. Never shared: a path on this computer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_folder: Option<PathBuf>,
+    /// The built-in Arctic instance (one per profile, can't be removed or copied). Its folder id
+    /// is `arctic`, or `vanilla` for one converted from the old default (see [`builtin`]).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub builtin: bool,
 }
 
 fn enabled() -> bool {
@@ -174,10 +184,11 @@ fn enabled() -> bool {
 }
 
 impl Instance {
-    pub fn vanilla_default() -> Self {
+    /// A fresh built-in Arctic instance (what new players start with).
+    pub fn arctic_default() -> Self {
         Self {
-            id: VANILLA_ID.into(),
-            name: "Vanilla".into(),
+            id: ARCTIC_ID.into(),
+            name: ARCTIC_NAME.into(),
             loader: Loader::Vanilla,
             version: None,
             max_memory_mb: None,
@@ -190,11 +201,55 @@ impl Instance {
             extras: Vec::new(),
             own_settings: false,
             game_folder: None,
+            builtin: true,
         }
     }
 
+    /// The built-in Arctic instance: follows the Play tab, can't be removed or copied.
     pub fn is_default(&self) -> bool {
-        self.id == VANILLA_ID
+        self.builtin
+    }
+
+    /// Whether games of this instance run with the Arctic Client (the global "Play with Arctic
+    /// Client" setting aside): always for the built-in Arctic instance, never for plain Vanilla
+    /// ones, and the instance's switch for loaders.
+    pub fn arctic_client(&self) -> bool {
+        if self.builtin {
+            true
+        } else if self.loader.kind().is_none() {
+            false
+        } else {
+            self.arctic_mod
+        }
+    }
+
+    /// Whether the player gets an Arctic Client switch for this instance: not on the Arctic
+    /// instance (always on) nor on Vanilla ones (Vanilla stays vanilla); loaders keep theirs.
+    pub fn has_arctic_switch(&self) -> bool {
+        !self.builtin && self.loader.kind().is_some()
+    }
+
+    /// What kind of instance this is, for lists ("Arctic", "Vanilla", "Fabric", …).
+    pub fn kind_label(&self) -> &'static str {
+        if self.builtin {
+            ARCTIC_NAME
+        } else {
+            self.loader.label()
+        }
+    }
+
+    /// Makes the stored flags match what the instance is: the Arctic instance always has the
+    /// client and follows the Play tab, plain Vanilla never has the client.
+    pub fn normalize(&mut self) {
+        self.arctic_mod = self.arctic_client();
+        if self.builtin {
+            self.version = None;
+        }
+    }
+
+    pub fn normalized(mut self) -> Self {
+        self.normalize();
+        self
     }
 
     pub fn game_dir(&self, dirs: &DataDirs) -> PathBuf {
@@ -210,21 +265,28 @@ impl Instance {
     }
 
     pub fn save(&self, dirs: &DataDirs) -> Result<()> {
-        save_json(&dirs.instance_dir(&self.id).join(INSTANCE_FILE), self)
+        save_json(
+            &dirs.instance_dir(&self.id).join(INSTANCE_FILE),
+            &self.clone().normalized(),
+        )
     }
 }
 
-/// Load the default Vanilla instance, creating it on first run.
+/// The built-in Arctic instance's stock name.
+pub const ARCTIC_NAME: &str = "Arctic";
+
+/// An instance's `instance.json`, normalized (`None` if there is none).
+fn read(dirs: &DataDirs, id: &str) -> Result<Option<Instance>> {
+    Ok(
+        load_json::<Instance>(&dirs.instance_dir(id).join(INSTANCE_FILE))?
+            .map(Instance::normalized),
+    )
+}
+
+/// Load the built-in Arctic instance, creating it (or moving an older default over to it)
+/// when it isn't there yet. See [`ensure_default`].
 pub fn load_default(dirs: &DataDirs) -> Result<Instance> {
-    let path = dirs.instance_dir(VANILLA_ID).join(INSTANCE_FILE);
-    match load_json::<Instance>(&path)? {
-        Some(instance) => Ok(instance),
-        None => {
-            let instance = Instance::vanilla_default();
-            instance.save(dirs)?;
-            Ok(instance)
-        }
-    }
+    ensure_default(dirs).map(|(instance, _)| instance)
 }
 
 /// Removed instances are moved here instead of being deleted.
@@ -254,7 +316,9 @@ pub fn create(dirs: &DataDirs, name: &str, game_version: &str, loader: Loader) -
         extras: Vec::new(),
         own_settings: false,
         game_folder: None,
-    };
+        builtin: false,
+    }
+    .normalized();
     let mods = instance.game_dir(dirs).join("mods");
     std::fs::create_dir_all(&mods).map_err(|e| Error::io(&mods, e))?;
     instance.save(dirs)?;
@@ -273,7 +337,10 @@ pub fn free_name(dirs: &DataDirs, name: &str) -> Result<String> {
         .into_iter()
         .map(|i| i.name.to_lowercase())
         .collect();
-    taken.push("vanilla".into());
+    taken.push(ARCTIC_NAME.to_lowercase());
+    if let Some(default) = peek_default(dirs) {
+        taken.push(default.name.to_lowercase());
+    }
     if !taken.contains(&name.to_lowercase()) {
         return Ok(name);
     }
@@ -365,10 +432,11 @@ fn empty_folder(folder: &Path) {
 
 /// Move an instance folder (worlds and mods included) to `instances/.trash`.
 pub fn remove(dirs: &DataDirs, id: &str) -> Result<()> {
-    if id == VANILLA_ID {
-        return Err(Error::Other(
-            "the Vanilla instance cannot be removed".into(),
-        ));
+    // Read only: a failing move to the Arctic instance mustn't block removing other instances.
+    if peek_default(dirs).is_some_and(|d| d.id == id)
+        || read(dirs, id).ok().flatten().is_some_and(|i| i.builtin)
+    {
+        return Err(Error::Other("the Arctic instance cannot be removed".into()));
     }
     let from = dirs.instance_dir(id);
     let trash = dirs.instances().join(TRASH_DIR);
@@ -442,8 +510,18 @@ fn in_trash(dirs: &DataDirs, dir: &Path) -> Result<()> {
 pub fn restore(dirs: &DataDirs, dir: &Path) -> Result<Instance> {
     in_trash(dirs, dir)?;
     let file = dir.join(INSTANCE_FILE);
-    let mut instance: Instance =
-        load_json(&file)?.ok_or_else(|| Error::Other("it has no instance.json".into()))?;
+    let mut instance: Instance = load_json::<Instance>(&file)?
+        .map(Instance::normalized)
+        .ok_or_else(|| Error::Other("it has no instance.json".into()))?;
+    // Only one built-in Arctic instance: one brought back from the trash is an ordinary one.
+    let demoted = instance.builtin;
+    if demoted {
+        instance.builtin = false;
+        instance.version = load_json::<crate::settings::Settings>(&dirs.settings_file())
+            .ok()
+            .flatten()
+            .and_then(|s| s.last_version);
+    }
     let id = if dirs.instance_dir(&instance.id).exists() || instance.id.is_empty() {
         unique_id(dirs, &instance.name)
     } else {
@@ -451,7 +529,7 @@ pub fn restore(dirs: &DataDirs, dir: &Path) -> Result<Instance> {
     };
     let to = dirs.instance_dir(&id);
     std::fs::rename(dir, &to).map_err(|e| Error::io(dir, e))?;
-    if id != instance.id {
+    if id != instance.id || demoted {
         instance.id = id;
         instance.save(dirs)?;
     }
@@ -474,11 +552,12 @@ fn unique_id(dirs: &DataDirs, name: &str) -> String {
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
         .join("-");
-    let base = if slug.is_empty() || slug == VANILLA_ID || slug == "trash" {
-        "instance".to_owned()
-    } else {
-        slug
-    };
+    let base =
+        if slug.is_empty() || slug == LEGACY_DEFAULT_ID || slug == ARCTIC_ID || slug == "trash" {
+            "instance".to_owned()
+        } else {
+            slug
+        };
     let taken = |id: &str| dirs.instance_dir(id).exists();
     if !taken(&base) {
         return base;
@@ -496,14 +575,19 @@ pub fn find(dirs: &DataDirs, query: &str) -> Result<Instance> {
     if query.eq_ignore_ascii_case(&default.id) || query.eq_ignore_ascii_case(&default.name) {
         return Ok(default);
     }
-    list_custom(dirs)?
+    if let Some(found) = list_custom(dirs)?
         .into_iter()
         .find(|i| i.id == query || i.name.eq_ignore_ascii_case(query))
-        .ok_or_else(|| {
-            Error::Other(format!(
-                "no instance named '{query}' (see `arctic instances list`)"
-            ))
-        })
+    {
+        return Ok(found);
+    }
+    // "arctic" is the built-in instance whatever the player renamed it to.
+    if query.eq_ignore_ascii_case(ARCTIC_ID) {
+        return Ok(default);
+    }
+    Err(Error::Other(format!(
+        "no instance named '{query}' (see `arctic instances list`)"
+    )))
 }
 
 /// User-created instances (everything except the default).
@@ -515,7 +599,7 @@ pub fn list_custom(dirs: &DataDirs) -> Result<Vec<Instance>> {
     for entry in entries.flatten() {
         let path = entry.path().join(INSTANCE_FILE);
         match load_json::<Instance>(&path) {
-            Ok(Some(i)) if !i.is_default() => out.push(i),
+            Ok(Some(i)) if !i.is_default() => out.push(i.normalized()),
             Ok(_) => {}
             Err(e) => log::warn!("skipping broken instance {}: {e}", path.display()),
         }
@@ -642,7 +726,7 @@ mod tests {
         assert_eq!(list_custom(&dirs).unwrap().len(), 2);
         remove(&dirs, &a.id).unwrap();
         assert_eq!(list_custom(&dirs).unwrap().len(), 1);
-        assert!(remove(&dirs, VANILLA_ID).is_err());
+        assert!(remove(&dirs, &load_default(&dirs).unwrap().id).is_err());
         assert!(create(&dirs, "  ", "1.21.4", Loader::Vanilla).is_err());
     }
 
@@ -676,7 +760,7 @@ mod tests {
         assert!(
             first
                 .game_dir(&dirs)
-                .ends_with("instances/vanilla/minecraft")
+                .ends_with("instances/arctic/minecraft")
         );
     }
 
@@ -689,9 +773,12 @@ mod tests {
         let custom = Instance {
             id: "abc".into(),
             name: "Test".into(),
-            ..Instance::vanilla_default()
+            version: Some("1.21.4".into()),
+            builtin: false,
+            ..Instance::arctic_default()
         };
         custom.save(&dirs).unwrap();
+        let custom = custom.normalized();
         assert_eq!(list_custom(&dirs).unwrap(), vec![custom]);
     }
 }

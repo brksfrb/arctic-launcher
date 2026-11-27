@@ -11,9 +11,11 @@ import net.minecraft.network.ClientConnection;
 import net.minecraft.network.Packet;
 import net.minecraft.server.integrated.IntegratedServer;
 
+import com.arcticlauncher.client.Lang;
 /** Recording on old versions: every connection that logs in, plus where you are each tick. */
 public final class LegacyReplayRecording {
 	private static volatile boolean swung;
+	private static final com.arcticlauncher.client.replay.SnapshotGate SNAPSHOT = new com.arcticlauncher.client.replay.SnapshotGate();
 
 	private LegacyReplayRecording() {}
 
@@ -31,16 +33,58 @@ public final class LegacyReplayRecording {
 			name = local.getLevelName();
 		} else {
 			SocketAddress address = connection.getAddress();
-			name = address instanceof InetSocketAddress ? ((InetSocketAddress) address).getHostString() : "Server";
+			name = address instanceof InetSocketAddress ? ((InetSocketAddress) address).getHostString() : Lang.t("platform.server");
 		}
 		return recorder.begin(name, singleplayer, LegacyReplayCodec.protocolVersion(), LegacyReplayView.VERSION);
+	}
+
+	/**
+	 * Recording was asked for inside a world that was not being buffered (Replay was off when you
+	 * joined, or was switched on since): start a buffer now, opening with the world as it is.
+	 * Game thread only. False if this version can't, or you aren't in a world.
+	 */
+	public static boolean beginInWorld() {
+		Recorder recorder = Replays.recorder();
+		MinecraftClient mc = MinecraftClient.getInstance();
+		if (recorder == null || mc.world == null || mc.player == null || mc.getNetworkHandler() == null || Replays.watching()) {
+			return false;
+		}
+		if (recorder.current() != null) {
+			return true;
+		}
+		if (!LegacyReplaySnapshot.supported()) {
+			return false;
+		}
+		ClientConnection connection = mc.getNetworkHandler().getClientConnection();
+		if (!(connection instanceof LegacyReplayConnection)) {
+			return false;
+		}
+		Recorder.Take take = begin(connection);
+		if (take == null) {
+			return false;
+		}
+		//#if MC < 1.9
+		// Packets arriving while the world is written out go after it: the recording must open with its login.
+		SNAPSHOT.begin(take);
+		int packets;
+		try {
+			((LegacyReplayConnection) connection).arctic$attach(take);
+			packets = LegacyReplaySnapshot.write(take);
+		} finally {
+			SNAPSHOT.end(take::packet);
+		}
+		com.arcticlauncher.legacy.ArcticLegacy.LOG.info("replay: no buffer from the join; started one in the world with " + packets + " opening packets");
+		//#else
+		((LegacyReplayConnection) connection).arctic$attach(take);
+		//#endif
+		return true;
 	}
 
 	/** A packet arrived (network thread). */
 	public static void record(Recorder.Take take, Packet<?> packet) {
 		byte[] bytes = LegacyReplayCodec.encode(packet);
 		if (bytes != null) {
-			take.packet(bytes);
+			SNAPSHOT.live(take, bytes, take::packet);
 		}
 	}
 

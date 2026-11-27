@@ -133,7 +133,7 @@ pub enum Command {
         /// `abcd-efgh`, `arctic1.…` text, or a file path.
         source: String,
         /// For HUD, crosshair and client settings: the instance to apply to
-        /// (default: Vanilla).
+        /// (default: Arctic).
         #[arg(long)]
         instance: Option<String>,
     },
@@ -144,7 +144,7 @@ pub enum Command {
     Crash {
         /// A log or crash report file (default: the instance's last game log).
         file: Option<std::path::PathBuf>,
-        /// Instance whose last game log to read (default: Vanilla).
+        /// Instance whose last game log to read (default: Arctic).
         #[arg(long)]
         instance: Option<String>,
     },
@@ -724,7 +724,7 @@ pub enum MigrateCommand {
     /// Use a client's HUD layout and keys (LabyMod, Lunar).
     Hud {
         which: String,
-        /// Instance to apply to (default: Vanilla).
+        /// Instance to apply to (default: Arctic).
         #[arg(long)]
         instance: Option<String>,
         /// Widgets to turn on where the client didn't save it (Lunar),
@@ -899,7 +899,7 @@ pub struct InstanceEditArgs {
     /// Icon color as `#rrggbb`, or `default` for the theme's.
     #[arg(long)]
     pub color: Option<String>,
-    /// Arctic Client (Fabric and Quilt instances).
+    /// Arctic Client (Fabric, Quilt and Forge instances; always on for Arctic, never on Vanilla).
     #[arg(long, value_enum)]
     pub arctic_client: Option<Switch>,
     /// Java executable, or `default` for the launcher's choice.
@@ -908,10 +908,10 @@ pub struct InstanceEditArgs {
     /// Extra JVM flags (after the launcher-wide ones); an empty value clears them.
     #[arg(long, allow_hyphen_values = true)]
     pub jvm_args: Option<String>,
-    /// Vanilla instances: performance mods (Sodium, Lithium, ...).
+    /// Arctic and Vanilla instances: performance mods (Sodium, Lithium, ...).
     #[arg(long, value_enum)]
     pub performance: Option<Switch>,
-    /// Vanilla instances: Iris, so shader packs work.
+    /// Arctic and Vanilla instances: Iris, so shader packs work.
     #[arg(long, value_enum)]
     pub shaders: Option<Switch>,
     /// Game folder (worlds, mods, packs): a folder on any drive, or `default` for the
@@ -1062,7 +1062,7 @@ pub enum ScreenshotsCommand {
 pub enum ReplaysCommand {
     /// List an instance's replays, newest first.
     List {
-        /// Instance id or name (default: Vanilla).
+        /// Instance id or name (default: Arctic).
         #[arg(short, long)]
         instance: Option<String>,
     },
@@ -1077,7 +1077,7 @@ pub enum ReplaysCommand {
 
 #[derive(Debug, Args)]
 pub struct LogsArgs {
-    /// Instance whose last game log to show (default: Vanilla).
+    /// Instance whose last game log to show (default: Arctic).
     #[arg(short, long)]
     pub instance: Option<String>,
     /// The launcher's own log instead.
@@ -1252,6 +1252,10 @@ pub struct LaunchArgs {
     #[arg(short, long)]
     pub wait: bool,
 
+    /// Explicitly allow launching with mods that the malware check flags.
+    #[arg(long)]
+    pub allow_flagged_mods: bool,
+
     /// Prepare everything and print the command line, but don't start.
     #[arg(long)]
     pub dry_run: bool,
@@ -1303,6 +1307,9 @@ pub enum ProfilesCommand {
 
 #[derive(Debug, Args)]
 pub struct OpenArgs {
+    /// Launch an instance by id in the GUI. Takes precedence over --launch.
+    #[arg(long, value_name = "ID")]
+    pub instance: Option<String>,
     /// Start launching this version as soon as the window opens.
     #[arg(long, value_name = "VERSION")]
     pub launch: Option<String>,

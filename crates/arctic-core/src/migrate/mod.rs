@@ -4,16 +4,16 @@
 //! and account data never comes along.
 //!
 //! Formats were checked against real installs (official launcher,
-//! TLauncher, ATLauncher, CurseForge, LabyMod, Lunar) and against the
+//! TLauncher, ATLauncher, LabyMod, Lunar) and against the
 //! open-source launchers' own code (Prism/MultiMC/PolyMC, Modrinth App,
 //! GDLauncher). Anything that can't be carried over exactly is reported.
 
 mod clashes;
 mod copy;
-mod deps;
+pub(crate) mod deps;
 pub(crate) mod detect;
 mod hud;
-mod ranges;
+pub(crate) mod ranges;
 mod sources;
 #[cfg(test)]
 mod tests;
@@ -38,7 +38,6 @@ pub enum Launcher {
     PolyMc,
     MultiMc,
     ModrinthApp,
-    CurseForge,
     AtLauncher,
     GdLauncher,
     GdLauncherLegacy,
@@ -62,7 +61,6 @@ impl Launcher {
             Launcher::PolyMc => "PolyMC",
             Launcher::MultiMc => "MultiMC",
             Launcher::ModrinthApp => "Modrinth App",
-            Launcher::CurseForge => "CurseForge",
             Launcher::AtLauncher => "ATLauncher",
             Launcher::GdLauncher => "GDLauncher",
             Launcher::GdLauncherLegacy => "GDLauncher (old)",
@@ -85,7 +83,6 @@ impl Launcher {
             Launcher::PolyMc => "polymc",
             Launcher::MultiMc => "multimc",
             Launcher::ModrinthApp => "modrinth",
-            Launcher::CurseForge => "curseforge",
             Launcher::AtLauncher => "atlauncher",
             Launcher::GdLauncher => "gdlauncher",
             Launcher::GdLauncherLegacy => "gdlauncher-legacy",
@@ -175,4 +172,6 @@ pub struct Scan {
     pub clients: Vec<FoundClient>,
     /// Launchers seen, including ones with nothing to import (and why).
     pub seen: Vec<(Launcher, String)>,
+    /// A CurseForge app instance was picked (or lay in the picked folder) and refused.
+    pub curseforge_blocked: bool,
 }

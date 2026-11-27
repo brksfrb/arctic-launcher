@@ -1,6 +1,6 @@
 //! `arctic launch`.
 
-use std::sync::mpsc;
+use std::sync::{Mutex, mpsc};
 
 use arctic_core::ProgressInfo;
 #[cfg(feature = "offline-accounts")]
@@ -8,6 +8,7 @@ use arctic_core::ProgressInfo;
 use arctic_core::auth::offline;
 use arctic_core::auth::{self, Account, AccountStore};
 use arctic_core::launch::{self, GameEvent, LaunchRequest, QuickPlay};
+use arctic_core::mods::malware::{self, Reason};
 use arctic_core::settings::Settings;
 use arctic_core::versions::VersionManifest;
 use arctic_core::{Error, Result, instances};
@@ -19,7 +20,7 @@ use crate::output::parse_memory;
 
 pub fn run(ctx: &Ctx, args: &LaunchArgs) -> Result<i32> {
     let settings = apply_overrides(Settings::load(&ctx.dirs)?, args)?;
-    let manifest = VersionManifest::fetch(&ctx.dirs)?;
+    let manifest = VersionManifest::fetch_for_launch(&ctx.dirs)?;
     let instance = match &args.instance {
         Some(query) => instances::find(&ctx.dirs, query)?,
         None => instances::load_default(&ctx.dirs)?,
@@ -34,7 +35,13 @@ pub fn run(ctx: &Ctx, args: &LaunchArgs) -> Result<i32> {
     // for the game too.
     let bridge = args
         .wait
-        .then(|| arctic_core::bridge::start(CliAccounts(ctx.dirs.clone())).ok())
+        .then(|| {
+            arctic_core::bridge::start(CliAccounts {
+                dirs: ctx.dirs.clone(),
+                session_updates: Mutex::new(()),
+            })
+            .ok()
+        })
         .flatten();
     let req = LaunchRequest {
         dirs: &ctx.dirs,
@@ -55,6 +62,35 @@ pub fn run(ctx: &Ctx, args: &LaunchArgs) -> Result<i32> {
             || plan.redacted_command(),
         );
         return Ok(0);
+    }
+    if settings.check_mods_for_malware {
+        let findings = malware::scan(&ctx.dirs, &plan.game_dir.join("mods"));
+        if !findings.is_empty() {
+            for finding in findings {
+                let path = finding.path.display().to_string();
+                let severity = if finding.reason == Reason::KnownMalware {
+                    "Known malware"
+                } else {
+                    "Suspicious"
+                };
+                let reason = match &finding.reason {
+                    Reason::KnownMalware => "file hash matches the blocklist",
+                    Reason::Filename(reason) => reason,
+                    Reason::Fractureiser => "Fractureiser indicators",
+                };
+                ctx.out.emit(
+                    json!({"event": "mod_malware_warning", "file": path, "severity": severity, "reason": reason}),
+                    || format!(
+                        "{}: {severity} ({})",
+                        path.replace(char::is_control, "�"),
+                        reason.replace(char::is_control, "�"),
+                    ),
+                );
+            }
+            if !args.allow_flagged_mods {
+                return Err(Error::Other("Launch cancelled. The check looks for known and obvious malware and cannot guarantee safety. Use --allow-flagged-mods to launch anyway.".into()));
+            }
+        }
     }
     if !args.wait {
         let pid = launch::spawn_detached(&plan)?;
@@ -93,11 +129,14 @@ fn quick_play(args: &LaunchArgs) -> Result<Option<QuickPlay>> {
 
 /// The CLI's accounts for the in-game switcher: read from disk each time,
 /// refreshed and saved like `arctic launch` does.
-struct CliAccounts(arctic_core::storage::DataDirs);
+struct CliAccounts {
+    dirs: arctic_core::storage::DataDirs,
+    session_updates: Mutex<()>,
+}
 
 impl arctic_core::bridge::Accounts for CliAccounts {
     fn list(&self) -> Vec<arctic_core::bridge::AccountEntry> {
-        let store = AccountStore::load(&self.0).unwrap_or_default();
+        let store = AccountStore::load(&self.dirs).unwrap_or_default();
         store
             .accounts
             .iter()
@@ -111,23 +150,32 @@ impl arctic_core::bridge::Accounts for CliAccounts {
             .collect()
     }
 
-    fn session(&self, id: &str) -> Result<arctic_core::bridge::SessionGrant> {
-        let mut store = AccountStore::load(&self.0)?;
+    fn session(&self, id: &str, force: bool) -> Result<arctic_core::bridge::SessionGrant> {
+        let updating = self
+            .session_updates
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut store = AccountStore::load(&self.dirs)?;
         let account = store
             .accounts
             .iter()
             .find(|a| a.id == id)
             .cloned()
             .ok_or_else(|| Error::Other("no such account".into()))?;
-        let (fresh, changed) = auth::ensure_fresh(&self.0, &account)?;
-        if changed {
-            store.upsert(fresh.clone());
-            store.save(&self.0)?;
+        let (fresh, changed) = auth::refresh_session(&self.dirs, &account, force)?;
+        if changed && store.replace_refreshed(&account, fresh.clone()) {
+            store.save(&self.dirs)?;
         }
-        let base = arctic_core::cosmetics::base_url();
+        drop(updating);
         Ok(arctic_core::bridge::SessionGrant {
             identity: fresh.identity(),
-            arctic_token: arctic_core::cosmetics::token_for(&self.0, &base, &fresh).ok(),
+            minecraft_refresh_at: fresh.minecraft_refresh_at(),
+            arctic_token: if force {
+                None
+            } else {
+                let base = arctic_core::cosmetics::base_url();
+                arctic_core::cosmetics::token_for(&self.dirs, &base, &fresh).ok()
+            },
         })
     }
 }
@@ -165,7 +213,7 @@ fn wait_for_game(
             GameEvent::WindowReady => ctx.out.emit(json!({"event": "window_ready"}), || {
                 "── Game window is up ──".into()
             }),
-            GameEvent::Exited { code } => {
+            GameEvent::Exited { code, .. } => {
                 ctx.out.emit(json!({"event": "exited", "code": code}), || {
                     format!(
                         "Minecraft exited ({})",

@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
+import com.arcticlauncher.client.Lang;
 /** Arctic Client settings, in {@code config/arctic.json}. */
 public final class ClientConfig {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -41,6 +42,10 @@ public final class ClientConfig {
 	public int hudVersion = HUD_VERSION;
 	/** Features: Fullbright (on/off), and the keys (Minecraft key names). */
 	public boolean fullbright;
+	public volatile boolean connectedGlass = true;
+	/** Clear glass: how much of the white streaks and flecks in the glass texture stays, 0 (clear) to 100 (as vanilla). Joined neighbours lose their shared border either way. */
+	public static final int CLEAR_GLASS_LINES = 25;
+	public volatile int clearGlassLines = CLEAR_GLASS_LINES;
 	/** With Fullbright: the client's light engine does no work (faster). Takes effect when you rejoin a world. */
 	public boolean fullbrightSkipLight;
 	public boolean zoomEnabled = true;
@@ -65,7 +70,7 @@ public final class ClientConfig {
 	public int zoomDurationMs = 250;
 	/** The scroll wheel eases to its new zoom level instead of jumping. */
 	public boolean zoomSmoothScroll = true;
-	public static final String[] ZOOM_CURVES = {"Instant", "Linear", "Ease out", "Ease in and out", "Snappy"};
+	public static final String[] ZOOM_CURVES = {"mods.zoom_curve.instant", "mods.zoom_curve.linear", "mods.zoom_curve.ease_out", "mods.zoom_curve.ease_in_and_out", "mods.zoom_curve.snappy"};
 	/** The Compass widget's middle tick (ARGB; 0 = the menu's accent color). */
 	public int compassPointer;
 	public String freelookKey = "key.keyboard.left.alt";
@@ -73,6 +78,8 @@ public final class ClientConfig {
 	public boolean snaplookEnabled;
 	public String snaplookKey = "key.keyboard.unknown";
 	public String fullbrightKey = "key.keyboard.unknown";
+	/** Keys that switch a feature on and off, by the feature's id in the Mods list (unbound ones are left out). */
+	public Map<String, String> toggleKeys = new LinkedHashMap<String, String>();
 	/** Opens the emote wheel. */
 	public String emoteKey = "key.keyboard.b";
 	/** The emote wheel stays open while its key is held (let go to play); off: press to open, click to play. */
@@ -82,7 +89,7 @@ public final class ClientConfig {
 	/** Streamer mode: your name, skin and the server are hidden on your screen. */
 	public boolean streamerMode;
 	/** What your name shows as in streamer mode. */
-	public String streamerName = "Streamer";
+	public String streamerName = Lang.t("hud.streamer");
 	/** Switches streamer mode. */
 	public String streamerKey = "key.keyboard.unknown";
 	/** Drops a waypoint where you stand. */
@@ -218,6 +225,8 @@ public final class ClientConfig {
 	public boolean tabGlowSelf;
 	/** Playing with a game controller. */
 	public com.arcticlauncher.client.controller.Controller.Settings controller = new com.arcticlauncher.client.controller.Controller.Settings();
+	/** Ignore Mojang's server address blocklist when connecting or pinging. */
+	public volatile boolean ignoreMojangServerBlocklist = true;
 	/** SOCKS5 proxy for server connections and Arctic's web requests. */
 	public ProxyConfig proxy = new ProxyConfig();
 	/** When the launcher's proxy choice was last applied (its timestamp). */
@@ -243,8 +252,11 @@ public final class ClientConfig {
 	public boolean chatStampItalic;
 	/** Keep the chat lines when you disconnect or change server. */
 	public boolean chatKeep;
+	public boolean chatPersistent = true;
 	/** While you host a world in Arctic Launcher's play together, the world you're in opens to LAN by itself. */
 	public boolean lanAuto = true;
+	/** Friends who play offline can join the world through Play Together, an invite or a code. */
+	public boolean allowOfflineFriends = true;
 	/** Brackets around the crosshair while a creature is within hit reach. */
 	public boolean rangeIndicator;
 	/** Items you pick up are listed on the HUD for a moment. */
@@ -337,6 +349,8 @@ public final class ClientConfig {
 	/** Particle Control: keep only this share (percent) of the particles. */
 	public boolean particleControl;
 	public int particleAmount = 50;
+	public boolean hideOwnPotionParticles;
+	public boolean hideOtherPlayersPotionParticles;
 	/** Particle kinds switched off (bit per {@code ParticleKinds.LABELS} entry). */
 	public int particleOff;
 	/** Ctrl+K opens the command palette (mods, servers, friends). */
@@ -347,12 +361,33 @@ public final class ClientConfig {
 	public boolean hitboxes;
 	/** Chunk Borders: the chunk edges as lines, like F3+G in one click. */
 	public boolean chunkBorders;
+	/** Light Overlay: markers on the ground where hostile mobs can spawn (red now, yellow at night, green safe). */
+	public boolean lightOverlay;
+	/** How far around you it marks, in blocks (4 to 32). */
+	public int lightRange = 16;
+	/** 0 colored squares, 1 crosses, 2 the block light as a number. */
+	public int lightStyle;
+	/** Also mark the safe (green) blocks. */
+	public boolean lightShowSafe = true;
+	/** Key that switches the overlay on and off. */
+	public String lightKey = "key.keyboard.unknown";
 	/** Mob Size: creatures other than players drawn at this scale (0.25 to 3). */
 	public boolean mobSize;
 	/** Fog: stretch (1 to 10 times) or remove the fog. */
 	public boolean fog;
 	/** Scrollable Tooltips: a tooltip taller than the screen moves with the mouse wheel. */
 	public boolean tooltipScroll;
+	public boolean enchantDescriptions;
+	public int enchantDescriptionStyle;
+	public boolean enchantDescriptionsShiftOnly;
+	public boolean enchantDescriptionsAllItems;
+	public boolean armorHider;
+	public boolean hideHelmet = true;
+	public boolean hideChestplate = true;
+	public boolean hideLeggings = true;
+	public boolean hideBoots = true;
+	public boolean showArmorWhenHit = true;
+	public double showArmorSeconds = 2.0;
 	/** Glint Colorizer: the enchant shimmer color (0 = the game's purple). */
 	public int glintColor;
 	public int glintColorOff;
@@ -371,8 +406,8 @@ public final class ClientConfig {
 	public boolean replayAutoExport;
 	/** Encode the game framebuffer while playing, alongside the independent 3D recording. */
 	/** The whole replay system: instant clips, recordings and gameplay video. Applies from the next world join. */
-	public boolean replayEnabled = true;
-	public boolean replayVideoEnabled = true;
+	public boolean replayEnabled;
+	public boolean replayVideoEnabled;
 	public int replayVideoHeight = 720;
 	public int replayVideoFps = 30;
 	/** Saves only the recent rolling window, independently of manual recording. */
@@ -449,6 +484,9 @@ public final class ClientConfig {
 		if (hud == null) {
 			hud = new LinkedHashMap<String, HudSlot>();
 		}
+		if (toggleKeys == null) {
+			toggleKeys = new LinkedHashMap<String, String>();
+		}
 		if (style == null) {
 			style = "arctic";
 		}
@@ -463,6 +501,7 @@ public final class ClientConfig {
 		debugLabelColor = Math.max(0, Math.min(7, debugLabelColor));
 		debugValueColor = Math.max(0, Math.min(7, debugValueColor));
 		zoomAnimation = Math.max(0, Math.min(ZOOM_CURVES.length - 1, zoomAnimation));
+		clearGlassLines = Math.max(0, Math.min(100, clearGlassLines));
 		zoomDurationMs = Math.max(0, Math.min(1500, zoomDurationMs));
 		if (snaplookKey == null) {
 			snaplookKey = "key.keyboard.unknown";
@@ -476,6 +515,11 @@ public final class ClientConfig {
 		if (waypointKey == null) {
 			waypointKey = "key.keyboard.unknown";
 		}
+		if (lightKey == null) {
+			lightKey = "key.keyboard.unknown";
+		}
+		lightRange = Math.max(4, Math.min(32, lightRange));
+		lightStyle = Math.max(0, Math.min(2, lightStyle));
 		if (stopwatchKey == null) {
 			stopwatchKey = "key.keyboard.unknown";
 		}

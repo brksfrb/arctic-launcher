@@ -19,7 +19,7 @@ final class LegacyGamepads {
 	/** evdev button names (Linux, macOS), in Gamepad's order. */
 	private static final String[][] NAMED = {
 			{"a", "south", "cross"}, {"b", "east", "circle"}, {"x", "west", "square"}, {"y", "north", "triangle"},
-			{"left thumb", "tl", "l1"}, {"right thumb", "tr", "r1"}, {"select", "back", "share"}, {"start", "options"},
+			{"left thumb", "tl", "l1"}, {"right thumb", "tr", "r1"}, {"select", "back", "share"}, {"start", "options"}, // i18n-ignore: evdev names
 			{"mode", "guide"}, {"left thumb 3", "thumbl", "l3"}, {"right thumb 3", "thumbr", "r3"}};
 
 	/** How long after the first frame JInput starts. */

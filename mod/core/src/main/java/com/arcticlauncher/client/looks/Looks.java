@@ -19,6 +19,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Arctic looks: every player picks their own skin and cape and publishes
  * it; this shows everyone's. Lookups are batched and cached, and nothing
@@ -44,6 +45,18 @@ public final class Looks {
 	/** A try-on lasts this long unless it's asked for again (every frame while hovered). */
 	private static final long TRY_ON_MS = 150;
 	private static final long RETRY_MS = TimeUnit.MINUTES.toMillis(1);
+	/** Requests for names that came together in this time go out as one. */
+	private static final long LOOKUP_GATHER_MS = 25;
+	/** After a failed lookup the next one waits this long, doubling with each failure in a row up to the maximum. */
+	private static final long LOOKUP_BACKOFF_MS = TimeUnit.SECONDS.toMillis(4);
+	private static final long LOOKUP_BACKOFF_MAX_MS = TimeUnit.MINUTES.toMillis(1);
+	/** The catalog of cosmetics is asked for ahead of need at most this often while it hasn't loaded. */
+	private static final long PREFETCH_EVERY_MS = TimeUnit.SECONDS.toMillis(30);
+	/**
+	 * Someone the server just called an Arctic player who is then reported not to be (a check-in that is a few
+	 * seconds late) keeps the snowflake for this long: the server counts a check-in for 150 s.
+	 */
+	private static final long ARCTIC_GRACE_MS = TimeUnit.SECONDS.toMillis(150);
 	private static final int BATCH = 100;
 	private static final Gson GSON = new Gson();
 	/** Animated capes: playback speed and size limits (as the launcher and server). */
@@ -81,6 +94,36 @@ public final class Looks {
 		}
 	});
 
+	/**
+	 * Look lookups have a thread of their own: the other worker's check-ins, emote polls and texture downloads
+	 * (each a blocking request, up to 18 s when a server is slow) must not hold up the badge on someone's name.
+	 */
+	private final ScheduledExecutorService lookupWorker = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+		@Override
+		public Thread newThread(Runnable r) {
+			Thread t = new Thread(r, "arctic-looks-lookup");
+			t.setDaemon(true);
+			return t;
+		}
+	});
+	/** Skin and cape downloads, a few at a time (a full server's worth used to go one after another). */
+	private final java.util.concurrent.ExecutorService textureWorker = Executors.newFixedThreadPool(4, new ThreadFactory() {
+		@Override
+		public Thread newThread(Runnable r) {
+			Thread t = new Thread(r, "arctic-looks-texture");
+			t.setDaemon(true);
+			return t;
+		}
+	});
+	/** A lookup is already queued to run in a moment. */
+	private final java.util.concurrent.atomic.AtomicBoolean lookupQueued = new java.util.concurrent.atomic.AtomicBoolean();
+	/** Lookups wait for this time after one failed (the badges already known stay as they are). */
+	private volatile long lookupBackoffUntil;
+	private volatile int lookupFailures;
+	private volatile long lastPrefetch;
+	/** When each player was last told to be on Arctic (to ride out one answer that says otherwise). */
+	private final Map<UUID, Long> arcticSeen = new ConcurrentHashMap<UUID, Long>();
+
 	private final OptifineCapes optifine = new OptifineCapes(this);
 	private final Map<UUID, Look> players = new ConcurrentHashMap<UUID, Look>();
 	private final Set<UUID> pending = Collections.newSetFromMap(new ConcurrentHashMap<UUID, Boolean>());
@@ -117,7 +160,7 @@ public final class Looks {
 		this.baseUrl = baseUrl;
 		this.token = token;
 		this.waitingForLauncher = token == null;
-		this.cosmetics = new Cosmetics(platform, baseUrl);
+		this.cosmetics = new Cosmetics(platform, baseUrl, player -> isMe(player) || knownArctic(player));
 	}
 
 	public Cosmetics cosmetics() {
@@ -130,14 +173,14 @@ public final class Looks {
 	}
 
 	public void start() {
-		worker.scheduleWithFixedDelay(new Runnable() {
+		lookupWorker.scheduleWithFixedDelay(new Runnable() {
 			@Override
 			public void run() {
 				// A task that throws is never run again: keep the worker alive.
 				try {
 					flushLookups();
 				} catch (Throwable t) {
-					survive(t, "look lookups");
+					survive(t, "look lookups"); // i18n-ignore
 				}
 			}
 		}, 1, 1, TimeUnit.SECONDS);
@@ -147,7 +190,7 @@ public final class Looks {
 				try {
 					checkIn();
 				} catch (Throwable t) {
-					survive(t, "Arctic check-in");
+					survive(t, Lang.t("looks.arctic_check_in"));
 				}
 			}
 		}, CHECK_IN_POLL_MS, CHECK_IN_POLL_MS, TimeUnit.MILLISECONDS);
@@ -181,7 +224,7 @@ public final class Looks {
 			adoptLauncherToken();
 		}
 		if (token == null) {
-			checkInResult = "not signed in: the game was started without the launcher's Arctic session";
+			checkInResult = Lang.t("looks.not_signed_in_the_game_was_started_without");
 			return;
 		}
 		UUID inWorld = platform.inWorld() ? platform.worldPlayerId() : null;
@@ -196,11 +239,11 @@ public final class Looks {
 			sendCheckIn(as);
 			playingAs = as;
 			checkInAt = now;
-			checkInResult = as == null ? "signed off (not in a world)" : "ok, as " + as;
+			checkInResult = as == null ? Lang.t("looks.signed_off_not_in_a_world") : "ok, as " + as; // i18n-ignore: diagnostics, read by support
 			if (inWorld != null && changed) {
 				// Show our own snowflake without waiting for the cache.
 				players.remove(inWorld);
-				pending.add(inWorld);
+				want(inWorld);
 			}
 		} catch (Exception e) {
 			checkInAt = now;
@@ -210,7 +253,7 @@ public final class Looks {
 	}
 
 	/** Why a check-in last did what it did, for {@link #diagnostics()}. */
-	private volatile String checkInResult = "none yet";
+	private volatile String checkInResult = Lang.t("looks.none_yet");
 	private volatile long checkInAt;
 
 	/**
@@ -227,18 +270,18 @@ public final class Looks {
 			// no session yet
 		}
 		UUID world = platform.worldPlayerId();
-		out.add("Signed in to Arctic: " + (token == null ? "no" : "yes"));
-		out.add("Account: " + (account == null ? "?" : compact(account)));
-		out.add("In this world as: " + (world == null ? "not in a world" : compact(world)));
+		out.add(Lang.t("looks.signed_in_to_arctic") + (token == null ? "no" : "yes"));
+		out.add(Lang.t("looks.account") + (account == null ? "?" : compact(account)));
+		out.add(Lang.t("looks.in_this_world_as") + (world == null ? "not in a world" : compact(world)));
 		long ago = checkInAt == 0 ? -1 : (System.currentTimeMillis() - checkInAt) / 1000;
-		out.add("Last check-in: " + (ago < 0 ? "none yet" : ago + " s ago") + " - " + checkInResult);
+		out.add(Lang.t("looks.last_check_in") + (ago < 0 ? "none yet" : ago + " s ago") + " - " + checkInResult); // i18n-ignore: diagnostics, read by support
 		int arctic = 0;
 		for (Look look : players.values()) {
 			if (look.arctic) {
 				arctic++;
 			}
 		}
-		out.add("Players looked up: " + players.size() + ", on Arctic now: " + arctic);
+		out.add(Lang.t("looks.players_looked_up") + players.size() + ", on Arctic now: " + arctic); // i18n-ignore: diagnostics, read by support
 		int shown = 0;
 		for (Map.Entry<UUID, Look> e : players.entrySet()) {
 			if (shown++ >= 12) {
@@ -247,8 +290,8 @@ public final class Looks {
 			Look look = e.getValue();
 			String id = compact(e.getKey());
 			out.add(id.substring(0, 8) + (isMe(e.getKey()) ? " (you)" : "") + ": "
-					+ (look.arctic ? "on Arctic" : "not on Arctic") + ", skin " + (look.skin != null ? "yes" : "no")
-					+ ", cape " + (look.cape != null ? "yes" : "no") + ", cosmetics " + look.cosmetics.size());
+					+ (look.arctic ? Lang.t("looks.on_arctic") : Lang.t("looks.not_on_arctic")) + ", skin " + (look.skin != null ? "yes" : "no") // i18n-ignore: diagnostics, read by support
+					+ ", cape " + (look.cape != null ? "yes" : "no") + ", cosmetics " + look.cosmetics.size()); // i18n-ignore: diagnostics, read by support
 		}
 		return out;
 	}
@@ -257,7 +300,9 @@ public final class Looks {
 	public void checkInNow() {
 		lastCheckIn = 0;
 		playingAs = null;
-		pending.addAll(players.keySet());
+		for (UUID known : players.keySet()) {
+			want(known);
+		}
 		version.incrementAndGet();
 	}
 
@@ -354,7 +399,7 @@ public final class Looks {
 
 	/** Ask for your own look again soon (it was changed elsewhere). */
 	public void refreshOwn() {
-		pending.add(platform.playerId());
+		want(platform.playerId());
 	}
 
 	/** A registered texture (a look, a chat picture…) can be drawn. */
@@ -364,7 +409,56 @@ public final class Looks {
 
 	// ---- Rendering side -----------------------------------------------------
 
-	/** The player's Arctic look, or null. Queues lookups as needed. */
+	/** Ask about this player now: a lookup goes out within a moment (the one-a-second poll is only the backstop). */
+	private void want(UUID player) {
+		if (pending.add(player)) {
+			kick();
+		}
+	}
+
+	/** An answer that has gone stale: asked again with the next one-a-second batch (a whole server's go out together). */
+	private void refresh(UUID player) {
+		pending.add(player);
+	}
+
+	private void kick() {
+		if (System.currentTimeMillis() < lookupBackoffUntil || !lookupQueued.compareAndSet(false, true)) {
+			return;
+		}
+		try {
+			lookupWorker.schedule(new Runnable() {
+				@Override
+				public void run() {
+					lookupQueued.set(false);
+					try {
+						flushLookups();
+					} catch (Throwable t) {
+						survive(t, "look lookups"); // i18n-ignore
+					}
+				}
+			}, LOOKUP_GATHER_MS, TimeUnit.MILLISECONDS);
+		} catch (java.util.concurrent.RejectedExecutionException shuttingDown) {
+			lookupQueued.set(false);
+		}
+	}
+
+	/** Everyone in the player list has a look coming before they are drawn (called every tick). */
+	public void expect(java.util.Collection<UUID> players) {
+		for (UUID player : players) {
+			Look look = this.players.get(player);
+			if (look == null && player != null) {
+				want(player);
+			}
+		}
+		// The catalog of cosmetics is wanted as soon as anyone might wear one.
+		long now = System.currentTimeMillis();
+		if (!players.isEmpty() && config.showCosmetics && !cosmetics.loaded() && now - lastPrefetch > PREFETCH_EVERY_MS) {
+			lastPrefetch = now;
+			cosmetics.prefetch();
+		}
+	}
+
+	/** The local player's look, or a remote player's look while on Arctic. Queues lookups as needed. */
 	public Look lookFor(UUID player) {
 		// Asked for every player every frame: the UUID's text only when someone is hidden.
 		if (!config.showCosmetics || !config.hiddenPlayers.isEmpty() && config.hiddenPlayers.contains(player.toString())) {
@@ -378,8 +472,10 @@ public final class Looks {
 		boolean mine = isMe(player);
 		long now = System.currentTimeMillis();
 		long ttl = !mine ? othersTtl(look) : now < menuOpenUntil ? OWN_TTL_OPEN_MS : OWN_TTL_MS;
-		if (look == null || now - look.fetched > ttl) {
-			pending.add(player);
+		if (look == null) {
+			want(player);
+		} else if (now - look.fetched > ttl) {
+			refresh(player);
 		}
 		// Hovering a cosmetic in the Looks menu: shown on you, only here.
 		java.util.List<String> trying = tryOn;
@@ -389,14 +485,14 @@ public final class Looks {
 			return look == null ? new Look(null, false, previewCape ? capeTrying : null, trying, true, now,
 					tryFits != null ? tryFits : java.util.Collections.<String, Fit>emptyMap())
 					: new Look(look.skin, look.slim, previewCape ? capeTrying : look.cape, trying, look.arctic, look.fetched,
-							tryFits != null ? tryFits : look.fits);
+							tryFits != null ? tryFits : look.fits, look.badgeStyle, look.badgeRole);
 		}
 		if (previewCape) {
 			return look == null ? new Look(null, false, capeTrying,
 					java.util.Collections.<String>emptyList(), true, now)
-					: new Look(look.skin, look.slim, capeTrying, look.cosmetics, look.arctic, look.fetched, look.fits);
+					: new Look(look.skin, look.slim, capeTrying, look.cosmetics, look.arctic, look.fetched, look.fits, look.badgeStyle, look.badgeRole);
 		}
-		return look == null || look.isEmpty() ? null : look;
+		return look == null || (!mine && !look.arctic) || look.isEmpty() ? null : look;
 	}
 
 	/**
@@ -416,7 +512,7 @@ public final class Looks {
 		}
 		return look == null
 				? new Look(null, false, hash, java.util.Collections.<String>emptyList(), false, System.currentTimeMillis())
-				: new Look(look.skin, look.slim, hash, look.cosmetics, look.arctic, look.fetched, look.fits);
+				: new Look(look.skin, look.slim, hash, look.cosmetics, look.arctic, look.fetched, look.fits, look.badgeStyle, look.badgeRole);
 	}
 
 	/** A cape from somewhere other than Arctic's server (OptiFine's): registered, never downloaded from the server. */
@@ -433,10 +529,32 @@ public final class Looks {
 	/** Whether this player is playing with Arctic (from the lookup cache; queues one if needed). */
 	public boolean isArctic(UUID player) {
 		Look look = players.get(player);
-		if (look == null || System.currentTimeMillis() - look.fetched > othersTtl(look)) {
-			pending.add(player);
+		if (look == null) {
+			want(player);
+		} else if (System.currentTimeMillis() - look.fetched > othersTtl(look)) {
+			refresh(player);
 		}
 		return look != null && look.arctic;
+	}
+
+	/** The server-assigned role from the cached look. */
+	public String badgeRole(UUID player) {
+		if (player == null) return null;
+		Look look = players.get(player);
+		if (look == null || System.currentTimeMillis() - look.fetched > TimeUnit.SECONDS.toMillis(20)) pending.add(player);
+		return look == null ? null : look.badgeRole;
+	}
+
+	/** Badges share the looks cache but refresh promptly when another wearer changes their choice. */
+	public int badgeStyle(UUID player) {
+		if (player == null) return 0;
+		Look look = players.get(player);
+		if (look == null) {
+			want(player);
+		} else if (System.currentTimeMillis() - look.fetched > TimeUnit.SECONDS.toMillis(20)) {
+			refresh(player);
+		}
+		return look == null ? 0 : look.badgeStyle;
 	}
 
 	private static long othersTtl(Look look) {
@@ -453,7 +571,7 @@ public final class Looks {
 		playingAs = null;
 		lastCheckIn = 0;
 		players.clear();
-		pending.add(platform.playerId());
+		want(platform.playerId());
 		version.incrementAndGet();
 	}
 
@@ -469,7 +587,7 @@ public final class Looks {
 			token = late;
 			waitingForLauncher = false;
 			lastCheckIn = 0;
-			pending.add(platform.playerId());
+			want(platform.playerId());
 			version.incrementAndGet();
 		}
 	}
@@ -528,13 +646,13 @@ public final class Looks {
 		UUID me = platform.playerId();
 		long now = System.currentTimeMillis();
 		players.put(me, mine == null ? new Look(null, false, null, ids, true, now)
-				: new Look(mine.skin, mine.slim, mine.cape, ids, mine.arctic, now, mine.fits));
+				: new Look(mine.skin, mine.slim, mine.cape, ids, mine.arctic, now, mine.fits, mine.badgeStyle, mine.badgeRole));
 		version.incrementAndGet();
 		if (busy) {
 			nextCosmetics = ids;
 			return;
 		}
-		setBusy(true, "Saving...");
+		setBusy(true, Lang.t("looks.saving"));
 		worker.execute(new Runnable() {
 			@Override
 			public void run() {
@@ -545,12 +663,12 @@ public final class Looks {
 						sending = nextCosmetics;
 						nextCosmetics = null;
 					}
-					setBusy(false, "Every Arctic player sees your cosmetics.");
+					setBusy(false, Lang.t("looks.every_arctic_player_sees_your_cosmetics"));
 				} catch (Throwable t) {
-					survive(t, "Arctic look");
+					survive(t, Lang.t("looks.arctic_look"));
 					nextCosmetics = null;
-					pending.add(platform.playerId());
-					setBusy(false, "Couldn't save: " + t.getMessage());
+					want(platform.playerId());
+					setBusy(false, Lang.t("looks.couldnt_save") + t.getMessage());
 				}
 			}
 		});
@@ -565,7 +683,7 @@ public final class Looks {
 			return true;
 		}
 		if (loading.add(hash)) {
-			worker.execute(new Runnable() {
+			textureWorker.execute(new Runnable() {
 				@Override
 				public void run() {
 					try {
@@ -600,9 +718,13 @@ public final class Looks {
 			return hash + "/0";
 		}
 		Integer fps = capeFps.get(hash);
-		long frameMs = 1000L / (fps == null ? DEFAULT_CAPE_FPS : fps);
-		long frame = (System.currentTimeMillis() / frameMs) % frames;
-		return hash + "/" + frame;
+		return hash + "/" + capeFrameAt(System.currentTimeMillis(), frames,
+				fps == null ? DEFAULT_CAPE_FPS : fps);
+	}
+
+	/** Scale milliseconds before dividing so fractional frame durations do not accumulate drift. */
+	static long capeFrameAt(long timeMs, int frames, int fps) {
+		return (timeMs * fps / 1000L) % frames;
 	}
 
 	/** Frames in a cape image: 1 plain, more when animated, 0 if invalid. */
@@ -637,10 +759,10 @@ public final class Looks {
 
 	private void loadTexture(final String hash) {
 		try {
-			byte[] png = Http.get(baseUrl + "/v1/textures/" + hash + ".png", null);
+			byte[] png = AssetCache.get(hash, () -> Http.get(baseUrl + "/v1/textures/" + hash + ".png", null));
 			boolean cape = capes.contains(hash);
 			if (!fitsTexture(png, cape)) {
-				throw new java.io.IOException("not a " + (cape ? "cape" : "skin") + "-sized PNG");
+				throw new java.io.IOException("not a " + (cape ? "cape" : "skin") + Lang.t("looks.sized_png")); // i18n-ignore: diagnostics, read by support
 			}
 			// Old 64x32 skins into the layout the player model reads (Minecraft does this for its own downloads).
 			platform.registerTexture(hash, cape ? CapeFormat.withElytra(png) : SkinFormat.modern(png), cape);
@@ -656,7 +778,7 @@ public final class Looks {
 	}
 
 	private void flushLookups() {
-		if (pending.isEmpty()) {
+		if (pending.isEmpty() || System.currentTimeMillis() < lookupBackoffUntil) {
 			return;
 		}
 		List<UUID> batch = new ArrayList<UUID>();
@@ -672,21 +794,49 @@ public final class Looks {
 		try {
 			JsonElement reply = GSON.fromJson(Http.getText(baseUrl + "/v1/players?uuids=" + ids, null), JsonElement.class);
 			JsonObject found = reply != null && reply.isJsonObject() ? reply.getAsJsonObject() : null;
-			for (UUID player : batch) {
-				players.put(player, parseLook(found == null ? null : found.get(compact(player)), now));
+			if (found == null) {
+				throw new java.io.IOException("not a player list");
 			}
+			for (UUID player : batch) {
+				Look look = keepArctic(player, parseLook(found.get(compact(player)), now), now);
+				players.put(player, look);
+				if (look.arctic && !look.cosmetics.isEmpty() && config.showCosmetics) {
+					cosmetics.preload(look.cosmetics);
+				}
+			}
+			lookupFailures = 0;
 			version.incrementAndGet();
 		} catch (Exception | StackOverflowError e) {
-			// Server unreachable: try these players again in a minute.
-			for (UUID player : batch) {
-				players.put(player, new Look(null, false, null, java.util.Collections.<String>emptyList(), false, now - NOT_ARCTIC_TTL_MS + RETRY_MS));
-			}
+			// Server unreachable or answering badly: what is known stays (a snowflake already shown must not
+			// vanish for a failed request), these players are asked again in a few seconds.
+			int failures = lookupFailures;
+			lookupFailures = Math.min(failures + 1, 10);
+			lookupBackoffUntil = System.currentTimeMillis() + Math.min(LOOKUP_BACKOFF_MAX_MS, LOOKUP_BACKOFF_MS << failures);
+			pending.addAll(batch);
 			platform.log(false, "look lookup: " + e);
+		}
+		if (!pending.isEmpty() && System.currentTimeMillis() >= lookupBackoffUntil) {
+			kick();
 		}
 	}
 
+	/** {@code fresh}, unless it calls a player not on Arctic whom the server called on Arctic a moment ago. */
+	private Look keepArctic(UUID player, Look fresh, long now) {
+		if (fresh.arctic) {
+			arcticSeen.put(player, now);
+			return fresh;
+		}
+		Look old = players.get(player);
+		Long seen = arcticSeen.get(player);
+		if (old != null && old.arctic && seen != null && now - seen < ARCTIC_GRACE_MS) {
+			return new Look(old.skin, old.slim, old.cape, old.cosmetics, true, now, old.fits, old.badgeStyle, old.badgeRole);
+		}
+		arcticSeen.remove(player);
+		return fresh;
+	}
+
 	/** One player's look; anything malformed counts as no look. */
-	private Look parseLook(JsonElement e, long now) {
+	Look parseLook(JsonElement e, long now) {
 		if (e == null || !e.isJsonObject()) {
 			return new Look(null, false, null, java.util.Collections.<String>emptyList(), false, now);
 		}
@@ -699,7 +849,17 @@ public final class Looks {
 		JsonElement arctic = o.get("arctic");
 		boolean onArctic = arctic != null && arctic.isJsonPrimitive() && arctic.getAsJsonPrimitive().isBoolean() && arctic.getAsBoolean();
 		return new Look(skin, "slim".equals(stringField(o, "model")), cape, Cosmetics.worn(o.get("cosmetics")), onArctic, now,
-				Fit.parse(o.get("fit")));
+				Fit.parse(o.get("fit")), parseBadgeStyle(o.get("badge_style")), stringField(o, "badge_role"));
+	}
+
+	/** Only integer JSON numbers are styles: strings, fractions and huge numbers use the default. */
+	static int parseBadgeStyle(JsonElement e) {
+		if (e == null || !e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber()) return 0;
+		try {
+			return com.arcticlauncher.client.feature.Badge.normalize(new java.math.BigDecimal(e.getAsString()).intValueExact());
+		} catch (RuntimeException invalid) {
+			return 0;
+		}
 	}
 
 	/** A string field, or null when missing or not a string. */
@@ -829,15 +989,15 @@ public final class Looks {
 		if (busy) {
 			return;
 		}
-		setBusy(true, "Connecting to Arctic...");
+		setBusy(true, Lang.t("looks.connecting_to_arctic"));
 		worker.execute(new Runnable() {
 			@Override
 			public void run() {
 				try {
 					loadCatalog();
 				} catch (Throwable t) {
-					survive(t, "Arctic catalog");
-					setBusy(false, "Couldn't reach Arctic. Try again later.");
+					survive(t, Lang.t("looks.arctic_catalog"));
+					setBusy(false, Lang.t("looks.couldnt_reach_arctic_try_again_later"));
 				}
 			}
 		});
@@ -860,7 +1020,7 @@ public final class Looks {
 			platform.log(false, "Arctic capes: " + presets.size() + " from " + baseUrl);
 		} catch (Exception e) {
 			platform.log(true, "Arctic catalog: " + e);
-			setBusy(false, "Couldn't reach Arctic. Try again later.");
+			setBusy(false, Lang.t("looks.couldnt_reach_arctic_try_again_later"));
 			return;
 		}
 		if (token == null) {
@@ -868,11 +1028,11 @@ public final class Looks {
 				signInWithMojang();
 			} catch (Exception e) {
 				platform.log(false, "Arctic sign-in: " + e);
-				setBusy(false, "Launch through Arctic Launcher to change your look.");
+				setBusy(false, Lang.t("looks.launch_through_arctic_launcher_to_change"));
 				return;
 			}
 		}
-		pending.add(platform.playerId());
+		want(platform.playerId());
 		setBusy(false, "");
 	}
 
@@ -903,7 +1063,7 @@ public final class Looks {
 	/** Printable text only (no control or formatting codes), at most MAX_NAME long. */
 	static String cleanName(String name) {
 		if (name == null) {
-			return "Cape";
+			return Lang.t("looks.cape");
 		}
 		StringBuilder out = new StringBuilder();
 		for (int i = 0; i < name.length() && out.length() < MAX_NAME; i++) {
@@ -913,7 +1073,7 @@ public final class Looks {
 			}
 		}
 		String cleaned = out.toString().trim();
-		return cleaned.isEmpty() ? "Cape" : cleaned;
+		return cleaned.isEmpty() ? Lang.t("looks.cape") : cleaned;
 	}
 
 	private void signInWithMojang() throws Exception {
@@ -932,15 +1092,15 @@ public final class Looks {
 		if (busy || token == null) {
 			return;
 		}
-		setBusy(true, "Saving...");
+		setBusy(true, Lang.t("looks.saving"));
 		worker.execute(new Runnable() {
 			@Override
 			public void run() {
 				try {
 					putCape(presetId);
 				} catch (Throwable t) {
-					survive(t, "Arctic look");
-					setBusy(false, "Couldn't save your look.");
+					survive(t, Lang.t("looks.arctic_look"));
+					setBusy(false, Lang.t("looks.couldnt_save_your_look"));
 				}
 			}
 		});
@@ -955,22 +1115,57 @@ public final class Looks {
 				choice = HASH_PREFIX + p.still;
 			}
 			putLook(choice, null);
-			setBusy(false, presetId == null ? "Cape removed." : "Every Arctic player sees your new cape.");
+			setBusy(false, presetId == null ? Lang.t("looks.cape_removed") : Lang.t("looks.every_arctic_player_sees_your_new_cape"));
 		} catch (Exception e) {
-			setBusy(false, "Couldn't save: " + e.getMessage());
+			setBusy(false, Lang.t("looks.couldnt_save") + e.getMessage());
 		}
 	}
 
 	/** {@link #putLook} cape argument: keep the current cape. */
 	private static final String KEEP_CAPE = "\u0000keep";
 
+	/** Publish the chosen badge through the same authenticated looks API as capes and cosmetics. */
+	public void wearBadgeStyle(final int style) {
+		if (busy || token == null) return;
+		setBusy(true, Lang.t("looks.saving_badge"));
+		worker.execute(new Runnable() {
+			@Override public void run() {
+				try {
+					putLook(KEEP_CAPE, null, com.arcticlauncher.client.feature.Badge.normalize(style));
+					List<String> queued = nextCosmetics;
+					nextCosmetics = null;
+					while (queued != null) {
+						putLook(KEEP_CAPE, queued);
+						queued = nextCosmetics;
+						nextCosmetics = null;
+					}
+					setBusy(false, Lang.t("looks.every_arctic_player_sees_your_badge"));
+				} catch (Throwable t) {
+					survive(t, "badge save"); // i18n-ignore
+					nextCosmetics = null;
+					want(platform.playerId());
+					setBusy(false, Lang.t("looks.couldnt_save_your_badge_try_again"));
+				}
+			}
+		});
+	}
+
 	/**
 	 * Publish the look: the current skin, a preset cape ({@code null} = none,
 	 * {@link #KEEP_CAPE} = the current one) and, when given, worn cosmetics.
 	 */
 	private void putLook(String capePreset, List<String> cosmeticIds) throws Exception {
+		putLook(capePreset, cosmeticIds, null);
+	}
+
+	private void putLook(String capePreset, List<String> cosmeticIds, Integer badgeStyle) throws Exception {
 		JsonObject body = new JsonObject();
 		Look mine = myLook();
+		if (badgeStyle != null) {
+			// Read the latest look so an early picker click cannot clear a skin/cape before the cache fills.
+			mine = parseLook(GSON.fromJson(Http.getText(baseUrl + "/v1/look", token), JsonElement.class), System.currentTimeMillis());
+			body.addProperty("badge_style", badgeStyle);
+		}
 		if (mine != null && mine.skin != null) {
 			JsonObject skin = new JsonObject();
 			skin.addProperty("hash", mine.skin);
@@ -1000,7 +1195,17 @@ public final class Looks {
 			body.add("cosmetics", list);
 		}
 		String response = Http.send("PUT", baseUrl + "/v1/look", token, body.toString());
-		players.put(platform.playerId(), parseLook(GSON.fromJson(response, JsonElement.class), System.currentTimeMillis()));
+		Look saved = parseLook(GSON.fromJson(response, JsonElement.class), System.currentTimeMillis());
+		if (badgeStyle != null && saved.badgeStyle != badgeStyle.intValue()) {
+			throw new java.io.IOException("badge choice was not accepted");
+		}
+		players.put(platform.playerId(), saved);
+		want(platform.playerId());
+		UUID world = platform.worldPlayerId();
+		if (world != null && !world.equals(platform.playerId())) {
+			players.remove(world);
+			want(world);
+		}
 	}
 
 	private void setBusy(boolean now, String message) {

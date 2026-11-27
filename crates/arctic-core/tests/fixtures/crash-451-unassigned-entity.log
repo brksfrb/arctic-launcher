@@ -1,0 +1,35 @@
+---- full mod list (id version) ----
+randomcutscene 1.1.0+mc26.3
+
+[14:36:02] [Download-2/ERROR] Failed to fetch user properties
+    com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401
+	at knot//com.mojang.authlib.services.MinecraftServicesUserApiService.fetchProperties(MinecraftServicesUserApiService.java:168)
+    Caused by: MinecraftClientHttpException[type=HTTP_ERROR, status=401, response=ErrorResponse[path=/player/attributes, error=null, errorMessage=null, details=null]]
+	at knot//com.mojang.authlib.minecraft.client.MinecraftClient.buildHttpException(MinecraftClient.java:170)
+[14:36:08] [Download-3/ERROR] Failed to fetch Realms feature flags
+    com.mojang.realmsclient.exception.RealmsServiceException: Realms authentication error with message 'java.lang.RuntimeException: Failed to parse into SignedJWT: 0'
+	at knot//com.mojang.realmsclient.client.RealmsClient.fetchFeatureFlags(RealmsClient.java:204)
+
+---- logs/arctic-freezes/freeze.txt ----
+Arctic: game froze for 420.3s, mostly in java.base/java.lang.Object.wait0(Native Method)
+duration: 420.34s (still frozen when written)
+context: window focused, in a world, screen: net.randomcutscene.CutsceneScreen
+
+---- crash report ----
+---- Minecraft Crash Report ----
+Description: Rendering entity in world
+
+java.lang.IllegalStateException: Tried to access entity ID before ID assignment
+	at knot//net.minecraft.world.entity.Entity.getId(Entity.java:446)
+	at knot//net.minecraft.client.renderer.entity.EntityRenderDispatcher.handler$cfo000$iris$beginEntityRender(EntityRenderDispatcher.java:3564)
+	at knot//net.minecraft.client.renderer.entity.EntityRenderDispatcher.submit(EntityRenderDispatcher.java:150)
+	at knot//net.minecraft.client.renderer.LevelRenderer.wrapOperation$coh000$polarium$skipTaken(LevelRenderer.java:6358)
+	at knot//net.minecraft.client.renderer.LevelRenderer.submitEntities(LevelRenderer.java:953)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:517)
+
+-- Head --
+Thread: Render thread
+
+-- EntityRenderState being rendered --
+Details:
+	EntityRenderState: net.minecraft.client.renderer.entity.state.AvatarRenderState

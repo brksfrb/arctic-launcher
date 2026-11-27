@@ -30,6 +30,7 @@ public final class Preloader {
 		}
 		final List<String> wanted = onlyCached(names);
 		int threads = Integer.getInteger("arctic.preload.threads", 2);
+		if (threads > 0 && !wanted.isEmpty()) System.setProperty("arctic.diagnostics.preloader.started", "true");
 		AtomicInteger next = new AtomicInteger();
 		for (int i = 0; i < threads; i++) {
 			Thread thread = new Thread(() -> {

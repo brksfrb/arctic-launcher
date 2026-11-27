@@ -21,18 +21,10 @@ pub(super) fn prepare(client: &Path, game_dir: &Path) -> Result<()> {
     {
         return Ok(());
     }
-    let mut jar = zip::ZipArchive::new(fs::File::open(client).at(client)?)
-        .map_err(|e| Error::Other(format!("could not read {}: {e}", client.display())))?;
-    // Detect the actual resource layout, including snapshots and loader profiles.
     // Resource-pack-era games handle missing languages themselves.
-    if jar.by_name("lang/en_US.lang").is_err() {
+    let Some(languages) = legacy_languages(client)? else {
         return Ok(());
-    }
-    let languages: Vec<String> = jar
-        .file_names()
-        .filter_map(|name| name.strip_prefix("lang/")?.strip_suffix(".lang"))
-        .map(str::to_owned)
-        .collect();
+    };
     let mut changed = false;
     let mut repaired = Vec::with_capacity(bytes.len());
     // Options use the game's platform encoding. Only replace ASCII language
@@ -64,6 +56,66 @@ pub(super) fn prepare(client: &Path, game_dir: &Path) -> Result<()> {
         fs::write(&options, repaired).at(&options)?;
     }
     Ok(())
+}
+
+/// What a client jar was found to hold, next to it: reading the list of a modern client's
+/// thousands of files to find it has none of these is a large part of a warm start's file
+/// checks (and done for the vanilla and the loader's installation alike).
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Known {
+    size: u64,
+    /// The jar's modification time, nanoseconds since 1970.
+    modified: String,
+    languages: Option<Vec<String>>,
+}
+
+fn known_file(client: &Path) -> Option<std::path::PathBuf> {
+    let name = client.file_name()?.to_str()?;
+    Some(client.with_file_name(format!(".{name}.languages.json")))
+}
+
+fn stamp(client: &Path) -> Option<(u64, String)> {
+    let meta = fs::metadata(client).ok()?;
+    let modified = meta
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?;
+    Some((meta.len(), modified.as_nanos().to_string()))
+}
+
+/// The languages of a pre-1.6 client (`lang/<code>.lang` at the jar's top), `None` for any
+/// other. Remembered for the jar as it is (its size and modification time).
+fn legacy_languages(client: &Path) -> Result<Option<Vec<String>>> {
+    let known_file = known_file(client);
+    let stamp = stamp(client);
+    if let (Some(file), Some((size, modified))) = (&known_file, &stamp)
+        && let Ok(Some(known)) = crate::storage::load_json::<Known>(file)
+        && known.size == *size
+        && known.modified == *modified
+    {
+        return Ok(known.languages);
+    }
+    let mut jar = zip::ZipArchive::new(fs::File::open(client).at(client)?)
+        .map_err(|e| Error::Other(format!("could not read {}: {e}", client.display())))?;
+    // Detect the actual resource layout, including snapshots and loader profiles.
+    let legacy = jar.by_name("lang/en_US.lang").is_ok();
+    let languages = legacy.then(|| {
+        jar.file_names()
+            .filter_map(|name| name.strip_prefix("lang/")?.strip_suffix(".lang"))
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    });
+    if let (Some(file), Some((size, modified))) = (known_file, stamp) {
+        let known = Known {
+            size,
+            modified,
+            languages: languages.clone(),
+        };
+        // Best effort: without it the jar is read again next time.
+        let _ = crate::storage::save_json(&file, &known);
+    }
+    Ok(languages)
 }
 
 #[cfg(test)]
@@ -102,6 +154,53 @@ mod tests {
             prepare(&client, dir.path()).unwrap();
             assert_eq!(fs::read_to_string(&options).unwrap(), want);
         }
+    }
+
+    #[test]
+    fn a_jar_is_read_once_and_again_when_it_is_another_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let client = dir.path().join("1.5.2.jar");
+        let write = |languages: &[&str]| {
+            let mut jar = zip::ZipWriter::new(fs::File::create(&client).unwrap());
+            for code in languages {
+                jar.start_file(
+                    format!("lang/{code}.lang"),
+                    zip::write::SimpleFileOptions::default(),
+                )
+                .unwrap();
+            }
+            jar.finish().unwrap();
+        };
+        write(&["en_US", "de_DE"]);
+        let found = legacy_languages(&client).unwrap().unwrap();
+        assert_eq!(found, ["en_US", "de_DE"]);
+        let known = dir.path().join(".1.5.2.jar.languages.json");
+        assert!(known.is_file());
+        // The same size and time: what was read from it is used (these bytes are no jar).
+        let (len, time) = {
+            let meta = fs::metadata(&client).unwrap();
+            (meta.len() as usize, meta.modified().unwrap())
+        };
+        let jar = fs::read(&client).unwrap();
+        fs::write(&client, vec![0u8; len]).unwrap();
+        let file = fs::File::options().write(true).open(&client).unwrap();
+        file.set_modified(time).unwrap();
+        drop(file);
+        assert_eq!(legacy_languages(&client).unwrap().unwrap(), found);
+        fs::write(&client, jar).unwrap();
+
+        // Another client under the same name (its size differs): read, not remembered.
+        write(&["en_US", "de_DE", "tr_TR"]);
+        assert_eq!(legacy_languages(&client).unwrap().unwrap().len(), 3);
+        write(&[]);
+        assert_eq!(legacy_languages(&client).unwrap(), None);
+        assert_eq!(legacy_languages(&client).unwrap(), None);
+
+        // A damaged note is no reason to fail, and an unreadable jar still is one.
+        fs::write(&known, b"{").unwrap();
+        assert_eq!(legacy_languages(&client).unwrap(), None);
+        fs::write(&client, b"not a jar").unwrap();
+        assert!(legacy_languages(&client).is_err());
     }
 
     #[test]

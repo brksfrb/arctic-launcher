@@ -124,14 +124,27 @@ public final class Http {
 	private static byte[] request(String method, String url, String token, byte[] body, String contentType)
 			throws IOException {
 		URL target = new URL(url);
+		return request(method, target, token, body, contentType, CONNECT_MS, READ_MS);
+	}
+
+	/** Send JSON with a caller-specified timeout for this request. */
+	@SuppressWarnings("deprecation")
+	public static String send(String method, String url, String token, String json, int timeoutMillis) throws IOException {
+		byte[] body = json.getBytes(StandardCharsets.UTF_8);
+		return new String(request(method, new URL(url), token, body, "application/json",
+				Math.min(CONNECT_MS, timeoutMillis), timeoutMillis), StandardCharsets.UTF_8);
+	}
+
+	private static byte[] request(String method, URL target, String token, byte[] body, String contentType,
+			int connectMillis, int readMillis) throws IOException {
 		// This PC (the launcher's bridge) is never reached through the proxy.
 		java.net.Proxy route = "127.0.0.1".equals(target.getHost()) ? java.net.Proxy.NO_PROXY : proxy;
 		HttpURLConnection c = (HttpURLConnection) target.openConnection(route);
 		trust(c);
 		try {
 			c.setRequestMethod(method);
-			c.setConnectTimeout(CONNECT_MS);
-			c.setReadTimeout(READ_MS);
+			c.setConnectTimeout(connectMillis);
+			c.setReadTimeout(readMillis);
 			c.setRequestProperty("User-Agent", "arctic-client/1");
 			if (token != null) {
 				c.setRequestProperty("Authorization", "Bearer " + token);

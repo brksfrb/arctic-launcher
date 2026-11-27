@@ -1,3 +1,4 @@
+// i18n-ignore-file: Bedrock stays in English for now.
 //! Bedrock tab: Minecraft for Windows (Release and Preview). Play it,
 //! switch it to another version, and look after its worlds, packs and
 //! servers. Everything here works on the game's own folders.

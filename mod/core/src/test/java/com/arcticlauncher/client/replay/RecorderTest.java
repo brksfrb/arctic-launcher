@@ -276,4 +276,61 @@ class RecorderTest {
 		}
 		t.end(); await(r);
 	}
+	/** 1.8 servers send chunks in bulk packets: a long session must not pile every one into each clip. */
+	@Test void longOldVersionSessionKeepsOnlyTheChunksStillLoaded() throws Exception {
+		String[] play = {"login", "map_chunk_bulk", "level_chunk", "respawn"};
+		Recorder r = new Recorder(dir.toFile(), () -> 30, message -> {}, () -> new PacketSorter(
+				new String[][] {{"game_profile"}, {}, play}, false, false, true), 512L << 20, 0, 10_000, clock::get);
+		Recorder.Take t = r.begin("bulk", false, 47, "1.8.9");
+		t.packet(new byte[] {0}); t.packet(new byte[] {0, 1});
+		int sent = 0;
+		for (int second = 1; second <= 20 * 60; second++) {
+			at(second * 1000);
+			if (second == 600) t.packet(new byte[] {3, 0}); // A world switch half way.
+			java.nio.ByteBuffer b = java.nio.ByteBuffer.allocate(3 + 4 * 10 + 64);
+			b.put((byte) 1).put((byte) 1).put((byte) 4);
+			for (int z = 0; z < 4; z++) b.putInt(second).putInt(z).putShort((short) 1);
+			t.packet(b.array()); sent++;
+			for (int z = 0; z < 4; z++) { // Walking on: the chunks 8 columns back unload.
+				java.nio.ByteBuffer u = java.nio.ByteBuffer.allocate(13);
+				u.put((byte) 2).putInt(second - 8).putInt(z).put((byte) 1).putShort((short) 0).put((byte) 0);
+				t.packet(u.array());
+			}
+			if (second % 10 == 0) await(r);
+		}
+		await(r);
+		int bulks = 0, atStart = 0;
+		try (ReplayData data = ReplayData.open(clip(r), dir.resolve("bulk").toFile())) {
+			for (int i = 0; i < data.count(); i++) {
+				if (data.time(i) != 0) continue;
+				atStart++;
+				if (data.packet(i).get(0) == 1) bulks++;
+			}
+		}
+		assertEquals(1200, sent);
+		// Only the bulks loading chunks still in view when the clip begins (8 columns), not all 1170 before it.
+		assertTrue(bulks <= 16, "clip starts with " + bulks + " chunk bulks");
+		assertTrue(atStart < 100, "clip starts with " + atStart + " packets");
+		t.end(); await(r);
+	}
+	/** A world written out in one go (recording started inside it) is far more than the writer's pending limit. */
+	@Test void aBulkProducerWaitsForTheWriterInsteadOfEndingTheBuffer() throws Exception {
+		Recorder r = recorder(1L << 40, 0); Recorder.Take t = r.begin("s", true, 47, "1.8.9");
+		byte[] chunk = new byte[1 << 20]; chunk[0] = 1;
+		for (int i = 0; i < 160; i++) { chunk = chunk.clone(); chunk[1] = (byte) i; t.packetWhenRoom(chunk); }
+		await(r);
+		assertTrue(r.bufferReady(), "160 MB written in one go ended the buffer");
+		assertTrue(r.startRecording(file -> {}), "recording must still start after a large snapshot");
+		t.end(); await(r);
+	}
+	@Test void theNetworkPathStillStopsWhenItOutrunsTheWriter() throws Exception {
+		Recorder r = recorder(1L << 40, 0); Recorder.Take t = r.begin("s", true, 47, "1.8.9");
+		CountDownLatch release = new CountDownLatch(1);
+		r.afterPackets(() -> { try { release.await(10, TimeUnit.SECONDS); } catch (InterruptedException ignored) {} });
+		byte[] chunk = new byte[1 << 20];
+		for (int i = 0; i < 80; i++) t.packet(chunk);
+		release.countDown(); await(r);
+		assertFalse(r.bufferReady(), "the pending limit protects game memory from a stalled writer");
+		t.end(); await(r);
+	}
 }

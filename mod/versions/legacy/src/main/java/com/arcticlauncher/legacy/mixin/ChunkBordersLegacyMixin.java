@@ -15,6 +15,7 @@ abstract class ChunkBordersLegacyMixin {
 		com.arcticlauncher.legacy.LegacyChunkBorders.draw(tickDelta);
 		//#if MC < 1.9
 		com.arcticlauncher.legacy.LegacyTeamBoxes.draw(tickDelta);
+		com.arcticlauncher.legacy.LegacyLightOverlay.draw(tickDelta);
 		//#endif
 	}
 }

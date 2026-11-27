@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<defs><symbol id="mark" viewBox="0 0 100 100">
+      <g transform="translate(50 50)" fill="currentColor">
+        <polygon points="10,0 5,8.660254 -5,8.660254 -10,0 -5,-8.660254 5,-8.660254"/>
+        <g id="arm">
+          <path d="M0 -46 L 2.632 -37.579 L 0 -36 L -2.632 -37.579 Z"/>
+          <path d="M7.5 -22 L 0 -10 L -7.5 -22 L -5.429 -28.629 L 0 -27 L 5.429 -28.629 Z"/>
+          <path d="M4 -33 L 13 -38 M -4 -33 L -13 -38" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+        </g>
+        <use href="#arm" transform="rotate(60)"/>
+        <use href="#arm" transform="rotate(120)"/>
+        <use href="#arm" transform="rotate(180)"/>
+        <use href="#arm" transform="rotate(240)"/>
+        <use href="#arm" transform="rotate(300)"/>
+      </g>
+    </symbol></defs>
+<rect x="3.5" y="3.5" width="57" height="57" rx="15" fill="none" stroke="#2EB1EC" stroke-width="3"/>
+<use href="#mark" x="10" y="10" width="44" height="44" style="color:#2EB1EC"/>
+</svg>

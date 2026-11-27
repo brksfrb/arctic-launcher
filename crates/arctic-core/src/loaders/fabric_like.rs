@@ -5,14 +5,16 @@
 //! fetching (and caching) one JSON document; its Maven libraries are
 //! downloaded later by `launch::install`.
 
+use std::time::Instant;
+
 use serde::Deserialize;
 use serde_json::Value;
 
 use super::util::{
-    compare_versions, encode_segment, load_saved_profile, parse_profile, save_profile,
+    compare_versions, encode_segment, is_safe_id, load_saved_profile, parse_profile, save_profile,
 };
 use super::{LoaderKind, LoaderVersion};
-use crate::net::get_json;
+use crate::net::{get_json, get_json_before};
 use crate::storage::DataDirs;
 use crate::versions::{VersionJson, merge};
 use crate::{Error, Result};
@@ -72,10 +74,30 @@ pub fn game_versions(kind: LoaderKind) -> Result<Vec<String>> {
 }
 
 pub fn loader_versions(kind: LoaderKind, game_version: &str) -> Result<Vec<LoaderVersion>> {
-    let (base, _) = meta(kind, game_version);
-    let url = format!("{base}/versions/loader/{}", encode_segment(game_version));
-    let entries: Vec<LoaderEntry> = get_json(&url).map_err(|e| unreachable_meta(kind, &e))?;
-    Ok(to_loader_versions(entries))
+    get_loader_versions(kind, game_version, get_json)
+}
+
+pub(crate) fn latest_fabric_before(game: &str, deadline: Instant) -> Result<Option<String>> {
+    let versions = get_loader_versions(LoaderKind::Fabric, game, |url| {
+        get_json_before(url, deadline)
+    })?;
+    Ok(versions
+        .iter()
+        .find(|v| v.stable)
+        .or(versions.first())
+        .map(|v| v.id.clone()))
+}
+
+fn get_loader_versions(
+    kind: LoaderKind,
+    game: &str,
+    get: impl FnOnce(&str) -> Result<Vec<LoaderEntry>>,
+) -> Result<Vec<LoaderVersion>> {
+    let (base, _) = meta(kind, game);
+    let url = format!("{base}/versions/loader/{}", encode_segment(game));
+    Ok(to_loader_versions(
+        get(&url).map_err(|e| unreachable_meta(kind, &e))?,
+    ))
 }
 
 fn to_loader_versions(entries: Vec<LoaderEntry>) -> Vec<LoaderVersion> {
@@ -102,33 +124,51 @@ pub fn install(
     loader_version: &str,
     vanilla: &VersionJson,
 ) -> Result<VersionJson> {
-    let game = vanilla.id.as_str();
-    let (base, prefix) = meta(kind, game);
-    let expected_id = format!("{prefix}-{loader_version}-{game}");
+    let (profile, raw) = profile(dirs, kind, loader_version, &vanilla.id, get_json)?;
+    if let Some(raw) = raw {
+        let id = save_profile(dirs, &raw)?;
+        if id != profile_id_for(kind, loader_version, &vanilla.id) {
+            log::debug!("{} profile id {id} differs from expected id", kind.label());
+        }
+    }
+    Ok(merge(vanilla.clone(), profile))
+}
+
+/// Resolve the profile without Mojang metadata. The caller decides when to publish
+/// newly fetched JSON so a background update can stage the libraries first.
+pub(crate) fn profile(
+    dirs: &DataDirs,
+    kind: LoaderKind,
+    loader_version: &str,
+    game: &str,
+    get: impl FnOnce(&str) -> Result<Value>,
+) -> Result<(VersionJson, Option<Value>)> {
+    let (base, _) = meta(kind, game);
+    let expected_id = profile_id_for(kind, loader_version, game);
+    if !is_safe_id(&expected_id) {
+        return Err(Error::Other("invalid loader profile id".into()));
+    }
     if let Some(profile) = load_saved_profile(dirs, &expected_id) {
-        return Ok(merge(vanilla.clone(), profile));
+        return Ok((profile, None));
     }
     let url = format!(
         "{base}/versions/loader/{}/{}/profile/json",
         encode_segment(game),
         encode_segment(loader_version)
     );
-    let raw: Value = get_json(&url).map_err(|e| {
+    let raw = get(&url).map_err(|e| {
         Error::Other(format!(
             "{} {loader_version} could not be installed for Minecraft {game} \
              (is this combination available?): {e}",
             kind.label()
         ))
     })?;
-    let profile = parse_profile(&raw)?;
-    let id = save_profile(dirs, &raw)?;
-    if id != expected_id {
-        log::debug!(
-            "{} profile id {id} differs from {expected_id}",
-            kind.label()
-        );
-    }
-    Ok(merge(vanilla.clone(), profile))
+    Ok((parse_profile(&raw)?, Some(raw)))
+}
+
+pub(crate) fn profile_id_for(kind: LoaderKind, version: &str, game: &str) -> String {
+    let (_, prefix) = meta(kind, game);
+    format!("{prefix}-{version}-{game}")
 }
 
 fn unreachable_meta(kind: LoaderKind, e: &Error) -> Error {

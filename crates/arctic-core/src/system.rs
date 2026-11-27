@@ -2,6 +2,9 @@
 
 use crate::settings::MIN_MEMORY_MB;
 
+#[cfg(windows)]
+pub(crate) mod windows;
+
 /// Upper bound for the recommended game memory. More rarely helps and
 /// makes garbage collection pauses longer.
 const MAX_RECOMMENDED_MB: u32 = 8 * 1024;
@@ -92,6 +95,12 @@ pub fn total_memory_mb() -> Option<u64> {
     imp::total_memory_bytes().map(|b| b / (1024 * 1024))
 }
 
+/// Physical memory free for programs right now in MiB (Windows: available physical, Linux:
+/// MemAvailable, macOS: free plus inactive pages), if it can be read. Not the commit headroom.
+pub fn free_memory_mb() -> Option<u64> {
+    imp::free_memory_bytes().map(|b| b / (1024 * 1024))
+}
+
 /// A sensible `-Xmx` for this machine: a quarter of RAM, between 2 and
 /// 8 GiB, rounded down to 512 MiB.
 /// This computer's network name, if known (no lookups).
@@ -170,6 +179,16 @@ mod imp {
         (ok != 0).then_some(status.ullTotalPhys)
     }
 
+    /// Physical memory that is available right now (not the commit headroom).
+    pub fn free_memory_bytes() -> Option<u64> {
+        // SAFETY: as above.
+        let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+        status.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+        // SAFETY: `status` is a valid, initialized MEMORYSTATUSEX.
+        let ok = unsafe { GlobalMemoryStatusEx(&mut status) };
+        (ok != 0).then_some(status.ullAvailPhys)
+    }
+
     /// The commit limit: installed memory plus the page file.
     pub fn commit_limit_bytes() -> Option<u64> {
         // SAFETY: as above.
@@ -215,6 +234,30 @@ mod imp {
         String::from_utf8_lossy(&out.stdout).trim().parse().ok()
     }
 
+    unsafe extern "C" {
+        fn mach_host_self() -> u32;
+        fn host_page_size(host: u32, size: *mut usize) -> i32;
+        fn host_statistics64(host: u32, flavor: i32, info: *mut u32, count: *mut u32) -> i32;
+    }
+
+    /// Free plus inactive pages from `host_statistics64` (HOST_VM_INFO64), in bytes.
+    pub fn free_memory_bytes() -> Option<u64> {
+        const HOST_VM_INFO64: i32 = 4;
+        // vm_statistics64 is 38 words; its first fields are free_count, active_count, inactive_count.
+        const WORDS: u32 = 38;
+        let mut info = [0u32; 40];
+        let mut count = WORDS;
+        let mut page = 0usize;
+        // SAFETY: `info` holds at least `count` words, `page` and `count` are valid out-pointers,
+        // and the host port comes from mach_host_self.
+        let ok = unsafe {
+            let host = mach_host_self();
+            host_page_size(host, &mut page) == 0
+                && host_statistics64(host, HOST_VM_INFO64, info.as_mut_ptr(), &mut count) == 0
+        };
+        (ok && page > 0).then(|| (u64::from(info[0]) + u64::from(info[2])) * page as u64)
+    }
+
     /// macOS grows its swap as needed: no fixed limit to go by.
     pub fn commit_limit_bytes() -> Option<u64> {
         None
@@ -239,6 +282,12 @@ mod imp {
     pub fn total_memory_bytes() -> Option<u64> {
         let text = std::fs::read_to_string("/proc/meminfo").ok()?;
         super::parse_meminfo(&text)
+    }
+
+    /// MemAvailable: what can be given to programs without swapping.
+    pub fn free_memory_bytes() -> Option<u64> {
+        let text = std::fs::read_to_string("/proc/meminfo").ok()?;
+        super::meminfo_field(&text, "MemAvailable:")
     }
 
     /// Memory plus swap.
@@ -322,6 +371,20 @@ mod tests {
         assert_eq!(memory_for_mods(4096, 300), 8192);
         // A bigger setting stays.
         assert_eq!(memory_for_mods(12288, 300), 12288);
+    }
+
+    #[test]
+    fn meminfo_available_parses() {
+        let text = "MemTotal:       16318376 kB\nMemFree:  100 kB\nMemAvailable:    4194304 kB\n";
+        assert_eq!(meminfo_field(text, "MemAvailable:"), Some(4_194_304 * 1024));
+        assert_eq!(meminfo_field("MemTotal: 1 kB\n", "MemAvailable:"), None);
+    }
+
+    #[test]
+    fn free_memory_is_readable_and_within_total() {
+        let free = free_memory_mb().expect("free memory");
+        let total = total_memory_mb().expect("total memory");
+        assert!(free <= total, "{free} > {total}");
     }
 
     #[test]

@@ -22,6 +22,46 @@ pub struct JvmOptions {
 /// Placeholder values for `${name}` substitution.
 pub type Placeholders = HashMap<&'static str, String>;
 
+pub(crate) const CUSTOM_MAX_HEAP_SOURCE: &str = " (maximum heap set by custom JVM arguments)";
+
+/// Disable the Base64 decode intrinsic affected by Java4Shell (CVE-2026-114938).
+pub(crate) fn java4shell_flags(
+    major: Option<u32>,
+    native_x86_64: bool,
+    existing: &[String],
+) -> &'static [&'static str] {
+    if native_x86_64
+        && major.is_some_and(|version| version >= 17)
+        && !existing.iter().any(|arg| {
+            matches!(
+                arg.as_str(),
+                "-XX:+UseBASE64Intrinsics" | "-XX:-UseBASE64Intrinsics"
+            )
+        })
+    {
+        &["-XX:+UnlockDiagnosticVMOptions", "-XX:-UseBASE64Intrinsics"]
+    } else {
+        &[]
+    }
+}
+
+/// A Java heap size in MiB. Java interprets an unsuffixed size as bytes.
+pub(crate) fn heap_size_mb(size: &str) -> Option<u32> {
+    let end = size
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(size.len());
+    let (number, unit) = size.split_at(end);
+    let number = number.parse::<u64>().ok()?;
+    let mib = match unit {
+        "" => number / (1024 * 1024),
+        "k" | "K" => number / 1024,
+        "m" | "M" => number,
+        "g" | "G" => number.checked_mul(1024)?,
+        _ => return None,
+    };
+    mib.try_into().ok()
+}
+
 /// Arguments used by versions that predate the `arguments` object.
 const LEGACY_JVM_ARGS: [&str; 3] = [
     "-Djava.library.path=${natives_directory}",
@@ -36,14 +76,39 @@ pub fn build(
     vars: &Placeholders,
     opts: &JvmOptions,
 ) -> Vec<String> {
-    let mut args = vec![
-        format!("-Xms{}M", opts.min_memory_mb),
-        format!("-Xmx{}M", opts.max_memory_mb),
-    ];
-    args.extend(opts.extra.iter().cloned());
+    let custom_min = opts.extra.iter().rposition(|arg| arg.starts_with("-Xms"));
+    let custom_max = opts.extra.iter().rposition(|arg| arg.starts_with("-Xmx"));
+    let mut args = Vec::new();
+    if custom_min.is_none() {
+        let min_mb = custom_max
+            .and_then(|i| opts.extra[i].strip_prefix("-Xmx"))
+            .and_then(heap_size_mb)
+            .map_or(opts.min_memory_mb, |max| opts.min_memory_mb.min(max));
+        args.push(format!("-Xms{min_mb}M"));
+    }
+    if custom_max.is_none() {
+        args.push(format!("-Xmx{}M", opts.max_memory_mb));
+    }
+    // Keep the last explicit flag in its original position among the JVM arguments.
+    args.extend(
+        opts.extra
+            .iter()
+            .enumerate()
+            .filter(|(i, arg)| match arg.as_str() {
+                a if a.starts_with("-Xms") => Some(*i) == custom_min,
+                a if a.starts_with("-Xmx") => Some(*i) == custom_max,
+                _ => true,
+            })
+            .map(|(_, arg)| arg.clone()),
+    );
 
     match &version.arguments {
-        Some(a) if !a.jvm.is_empty() => args.extend(expand(&a.jvm, env, vars)),
+        Some(a) if !a.jvm.is_empty() => {
+            args.extend(expand(&a.jvm, env, vars).into_iter().filter(|arg| {
+                (custom_min.is_none() || !arg.starts_with("-Xms"))
+                    && (custom_max.is_none() || !arg.starts_with("-Xmx"))
+            }));
+        }
         _ => args.extend(LEGACY_JVM_ARGS.iter().map(|s| substitute(s, vars))),
     }
     args.extend(opts.logging_arg.iter().cloned());
@@ -188,6 +253,48 @@ mod tests {
     }
 
     #[test]
+    fn java4shell_flags_precede_custom_jvm_args() {
+        let version: VersionJson =
+            serde_json::from_str(r#"{"id":"1.21","mainClass":"M"}"#).unwrap();
+        let user_args = split_jvm_args("-Xmx4G -XX:+UseG1GC");
+        for major in [17, 21, 25, 27] {
+            let mut options = opts();
+            options.extra = java4shell_flags(Some(major), true, &user_args)
+                .iter()
+                .map(|&arg| arg.to_owned())
+                .chain(user_args.iter().cloned())
+                .collect();
+            let args = build(&version, &windows_env(), &vars(), &options);
+            assert_eq!(
+                &args[..5],
+                [
+                    "-Xms512M",
+                    "-XX:+UnlockDiagnosticVMOptions",
+                    "-XX:-UseBASE64Intrinsics",
+                    "-Xmx4G",
+                    "-XX:+UseG1GC",
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn java4shell_flags_skip_older_or_unknown_java_and_non_native_x86_64() {
+        for major in [Some(8), Some(11), None] {
+            assert!(java4shell_flags(major, true, &[]).is_empty());
+        }
+        // Both native ARM64 and Rosetta pass false.
+        assert!(java4shell_flags(Some(21), false, &[]).is_empty());
+    }
+
+    #[test]
+    fn java4shell_flags_respect_explicit_intrinsic_settings() {
+        for arg in ["-XX:+UseBASE64Intrinsics", "-XX:-UseBASE64Intrinsics"] {
+            assert!(java4shell_flags(Some(21), true, &[arg.into()]).is_empty());
+        }
+    }
+
+    #[test]
     fn substitution() {
         let v = vars();
         assert_eq!(
@@ -276,6 +383,25 @@ mod tests {
         assert_eq!(
             split_jvm_args(r#"-Dfoo="1.8.9 Forge"#),
             [r#"-Dfoo="1.8.9"#, "Forge"]
+        );
+    }
+
+    #[test]
+    fn launcher_minimum_cannot_exceed_a_custom_maximum() {
+        let version: VersionJson =
+            serde_json::from_str(r#"{"id":"1.20.1","mainClass":"M"}"#).unwrap();
+        let args = build(
+            &version,
+            &windows_env(),
+            &vars(),
+            &JvmOptions {
+                extra: vec!["-Xmx256M".into()],
+                ..opts()
+            },
+        );
+        assert_eq!(
+            &args[..3],
+            ["-Xms256M", "-Xmx256M", "-Djava.library.path=N"]
         );
     }
 

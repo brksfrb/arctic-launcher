@@ -23,7 +23,7 @@ import com.google.gson.reflect.TypeToken;
 public final class Waypoints {
 	private static final String FILE = "arctic-waypoints.json";
 	public static final int MAX_PER_WORLD = 50;
-	public static final String DEATH = "Death";
+	public static final String DEATH = "Death"; // i18n-ignore // i18n-ignore
 	/** Colors new waypoints take in turn. */
 	public static final int[] COLORS = {0xFF7DD3FC, 0xFF86EFAC, 0xFFFDE047, 0xFFF87171, 0xFFE879F9, 0xFFFFFFFF};
 	private static final int DEATH_COLOR = 0xFFF87171;

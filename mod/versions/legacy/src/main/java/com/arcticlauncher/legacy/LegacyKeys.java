@@ -1,13 +1,16 @@
+// i18n-ignore-file: LWJGL 2 key names, not text people read.
 package com.arcticlauncher.legacy;
 
 import java.util.HashMap;
 import java.util.Map;
 
 import com.arcticlauncher.client.Keys;
+import com.arcticlauncher.client.MenuKey;
 import net.minecraft.client.option.GameOptions;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Keys on old Minecraft (LWJGL 2): Arctic's settings name keys the modern
  * way ("key.keyboard.c", "key.mouse.left") so they carry across versions;
@@ -103,7 +106,8 @@ public final class LegacyKeys {
 			int button = code - MOUSE_OFFSET;
 			return MOUSE + (button == 0 ? "left" : button == 1 ? "right" : button == 2 ? "middle" : String.valueOf(button + 1));
 		}
-		String lwjgl = code == 0 ? null : Keyboard.getKeyName(code);
+		// Keyboard.getKeyName indexes an array of KEYBOARD_SIZE names and throws outside it.
+		String lwjgl = code == 0 || code >= Keyboard.KEYBOARD_SIZE ? null : Keyboard.getKeyName(code);
 		if (lwjgl == null || "NONE".equals(lwjgl)) {
 			return KEYBOARD + "unknown";
 		}
@@ -130,19 +134,20 @@ public final class LegacyKeys {
 	/** What the game calls the key ("C", "Button 4"). */
 	public static String label(String name) {
 		int code = code(name);
-		return code == 0 ? "None" : GameOptions.getFormattedNameForKeyCode(code);
+		return code == 0 || code >= Keyboard.KEYBOARD_SIZE ? Lang.t("platform.none") : GameOptions.getFormattedNameForKeyCode(code);
 	}
 
 	/** The core's key code for an LWJGL 2 key (the few it acts on). */
 	public static int core(int lwjgl) {
+		if (lwjgl > 0 && MenuKey.matches(name(lwjgl))) {
+			return Keys.MENU;
+		}
 		switch (lwjgl) {
 			case Keyboard.KEY_ESCAPE:
 				return Keys.ESCAPE;
 			case Keyboard.KEY_RETURN:
 			case Keyboard.KEY_NUMPADENTER:
 				return Keys.ENTER;
-			case Keyboard.KEY_RSHIFT:
-				return Keys.RIGHT_SHIFT;
 			case Keyboard.KEY_BACK:
 				return Keys.BACKSPACE;
 			case Keyboard.KEY_TAB:
@@ -177,6 +182,21 @@ public final class LegacyKeys {
 			default:
 				return -1;
 		}
+	}
+
+	/**
+	 * The Arctic menu key as Minecraft's own key binding (shown in Controls under
+	 * "Arctic", saved in options.txt). Right Shift until the player rebinds it.
+	 */
+	private static net.minecraft.client.option.KeyBinding menuBinding;
+
+	/** The menu key binding, made on first use (before the options file is read; see GameOptionsMixin). */
+	public static synchronized net.minecraft.client.option.KeyBinding menuBinding() {
+		if (menuBinding == null) {
+			// Minecraft shows these as they are: no translation entry for them.
+			menuBinding = new net.minecraft.client.option.KeyBinding("Arctic menu", Keyboard.KEY_RSHIFT, "Arctic"); // i18n-ignore
+		}
+		return menuBinding;
 	}
 
 	/** The core's mouse button for an LWJGL 2 button. */

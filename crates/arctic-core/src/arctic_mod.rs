@@ -7,6 +7,8 @@ use std::io::{Cursor, Read, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use sha2::{Digest, Sha256};
+
 use crate::Result;
 use crate::error::IoContext;
 
@@ -21,7 +23,7 @@ include!(concat!(env!("OUT_DIR"), "/arctic_jars.rs"));
 
 /// The Forge build (remapped to Forge's names: mod/forge/build_forge.py) is in the pack under
 /// `forge-<game version>`; only 1.8.9 has one so far.
-const FORGE_BUILDS: &[(&str, &str)] = &[("1.8.9", "forge-1.8.9")];
+pub(crate) const FORGE_BUILDS: &[(&str, &str)] = &[("1.8.9", "forge-1.8.9")];
 
 /// The Forge build for `game_version`, if there is one.
 fn forge_build_for(game_version: &str) -> Option<&'static str> {
@@ -36,6 +38,25 @@ pub fn supports_forge(game_version: &str) -> bool {
     forge_build_for(game_version)
         .zip(pack())
         .is_some_and(|(build, pack)| pack.jars.contains_key(build))
+}
+
+/// Mixin 0.8 needs ASM 5.2 on Forge 1.8.9. Change the launch profile in memory
+/// so already-installed Forge profiles get the same dependency as new ones.
+pub(crate) fn update_forge_asm(game_version: &str, profile: &mut crate::versions::VersionJson) {
+    if game_version != "1.8.9" {
+        return;
+    }
+    if let Some(asm) = profile
+        .libraries
+        .iter_mut()
+        .find(|lib| lib.name == "org.ow2.asm:asm-all:5.0.3")
+    {
+        asm.name = "org.ow2.asm:asm-all:5.2".into();
+        asm.downloads = None;
+        asm.url = Some("https://repo.maven.apache.org/maven2/".into());
+        asm.sha1 = Some("2ea49e08b876bbd33e0a7ce75c8f371d29e1f10a".into());
+        asm.size = Some(247_787);
+    }
 }
 
 /// The build target that serves `game_version`.
@@ -128,14 +149,11 @@ impl Pack {
     }
 }
 
-/// Unpacked on first use (a fraction of a second), then kept.
-fn pack() -> Option<&'static Pack> {
+/// The embedded pack, unpacked on first use.
+fn bundled_pack() -> Option<&'static Pack> {
     static PACKED: OnceLock<Option<Pack>> = OnceLock::new();
     PACKED
         .get_or_init(|| {
-            if let Some(dev) = dev_pack() {
-                return Some(dev);
-            }
             let pack = Pack::unpack(PACK);
             if pack.is_none() && !PACK.is_empty() {
                 log::error!("the bundled Arctic Client is damaged");
@@ -143,6 +161,40 @@ fn pack() -> Option<&'static Pack> {
             pack
         })
         .as_ref()
+}
+
+fn pack() -> Option<&'static Pack> {
+    static DEV: OnceLock<Option<Pack>> = OnceLock::new();
+    DEV.get_or_init(dev_pack).as_ref().or_else(bundled_pack)
+}
+
+/// Match the exact ZIP bytes the installer rebuilds from the embedded pack.
+pub(crate) fn matches_bundled_sha256(entries: usize, sha256: &str) -> bool {
+    // The entry count narrows the candidates so a scan needn't rebuild the whole pack.
+    let candidates = BUNDLED_ENTRY_COUNTS
+        .iter()
+        .filter(|(_, count)| *count == entries);
+    if candidates.clone().next().is_none() {
+        return false;
+    }
+    type HashesByEntryCount = Mutex<HashMap<usize, Vec<String>>>;
+    static HASHES: OnceLock<HashesByEntryCount> = OnceLock::new();
+    HASHES
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(|err| err.into_inner())
+        .entry(entries)
+        .or_insert_with(|| {
+            let Some(pack) = bundled_pack() else {
+                return Vec::new();
+            };
+            candidates
+                .filter_map(|(build, _)| pack.jar(build))
+                .map(|jar| hex::encode(Sha256::digest(jar)))
+                .collect()
+        })
+        .iter()
+        .any(|hash| hash == sha256)
 }
 
 /// A hash of the developer pack in use, so its jars replace ones from
@@ -191,19 +243,94 @@ type JarCache = Mutex<HashMap<&'static str, Arc<Vec<u8>>>>;
 /// The mod's jar for `game_version` (built once per target).
 #[cfg(test)]
 fn jar_for(game_version: &str) -> Option<Arc<Vec<u8>>> {
-    jar_of(build_for(game_version)?)
+    jar_of(build_for(game_version)?, None)
 }
 
-/// The jar of build target `build` (built once).
-fn jar_of(build: &'static str) -> Option<Arc<Vec<u8>>> {
+/// The jar of build target `build` (built once). With `kept` (a folder in the launcher's cache),
+/// a jar built by an earlier run is read from there instead of unpacking the pack again, which
+/// is most of a second of every first Play on another game version.
+fn jar_of(build: &'static str, kept: Option<&Path>) -> Option<Arc<Vec<u8>>> {
     static JARS: OnceLock<JarCache> = OnceLock::new();
     let mut jars = JARS.get_or_init(Default::default).lock().ok()?;
     if let Some(jar) = jars.get(build) {
         return Some(jar.clone());
     }
-    let jar = Arc::new(pack()?.jar(build)?);
+    let jar = kept_or_built(kept, pack_id(), build, || pack()?.jar(build))?;
+    let jar = Arc::new(jar);
     jars.insert(build, jar.clone());
     Some(jar)
+}
+
+/// The kept jar of pack `id` and target `build` if there is a whole one, or else a new one
+/// from `rebuild`, kept for the next time.
+fn kept_or_built(
+    kept: Option<&Path>,
+    id: u64,
+    build: &str,
+    rebuild: impl FnOnce() -> Option<Vec<u8>>,
+) -> Option<Vec<u8>> {
+    if let Some(jar) = kept.and_then(|dir| read_kept(dir, id, build)) {
+        return Some(jar);
+    }
+    let jar = rebuild()?;
+    if let Some(dir) = kept {
+        keep(dir, id, build, &jar);
+    }
+    Some(jar)
+}
+
+/// Folder (in the launcher's cache folder) of the jars rebuilt from the pack.
+pub const JAR_CACHE: &str = "arctic-client";
+
+fn kept_name(id: u64, build: &str) -> String {
+    format!("{id:016x}-{build}.jar")
+}
+
+fn sha1_hex(bytes: &[u8]) -> String {
+    use sha1::Digest;
+    hex::encode(sha1::Sha1::digest(bytes))
+}
+
+/// A kept jar of this pack and target, only if it is whole: its checksum was written after it.
+fn read_kept(dir: &Path, id: u64, build: &str) -> Option<Vec<u8>> {
+    let path = dir.join(kept_name(id, build));
+    let sum = fs::read_to_string(path.with_extension("sha1")).ok()?;
+    let jar = fs::read(&path).ok()?;
+    (sha1_hex(&jar) == sum.trim()).then_some(jar)
+}
+
+/// Best effort: a jar that can't be kept is built again next time.
+fn keep(dir: &Path, id: u64, build: &str, jar: &[u8]) {
+    let name = kept_name(id, build);
+    let path = dir.join(&name);
+    let sum = path.with_extension("sha1");
+    let write = || -> std::io::Result<()> {
+        fs::create_dir_all(dir)?;
+        // Jars of an earlier pack (an older launcher) are never used again, nor is what a
+        // launcher that was stopped while writing left behind.
+        let current = format!("{id:016x}-");
+        for entry in fs::read_dir(dir)?.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !name.starts_with(&current) || name.ends_with(".part") {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+        // The checksum goes last, so it never vouches for a half-written jar.
+        match fs::remove_file(&sum) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
+            _ => {}
+        }
+        let part = dir.join(format!("{name}.{}.part", std::process::id()));
+        fs::write(&part, jar)?;
+        fs::rename(&part, &path)?;
+        fs::write(&sum, sha1_hex(jar))
+    };
+    if let Err(e) = write() {
+        log::info!(
+            "couldn't keep the Arctic Client's jar in {}: {e}",
+            dir.display()
+        );
+    }
 }
 
 /// Next to the jar: which pack and target it came from, and its size, so a
@@ -212,7 +339,12 @@ const STAMP_NAME: &str = ".arctic-mod.stamp";
 
 /// Put the mod in `mods_dir` (when enabled and available) or take it out.
 pub fn sync(mods_dir: &Path, game_version: &str, enabled: bool) -> Result<()> {
-    sync_build(mods_dir, build_for(game_version), enabled)
+    sync_build(mods_dir, build_for(game_version), enabled, None)
+}
+
+/// [`sync`], with the rebuilt jar kept in (and taken from) `kept`: see [`JAR_CACHE`].
+pub fn sync_cached(mods_dir: &Path, game_version: &str, enabled: bool, kept: &Path) -> Result<()> {
+    sync_build(mods_dir, build_for(game_version), enabled, Some(kept))
 }
 
 /// The same for a Forge instance: the Forge build of the mod.
@@ -221,10 +353,16 @@ pub fn sync_forge(mods_dir: &Path, game_version: &str, enabled: bool) -> Result<
         mods_dir,
         forge_build_for(game_version).filter(|_| supports_forge(game_version)),
         enabled,
+        None,
     )
 }
 
-fn sync_build(mods_dir: &Path, build: Option<&'static str>, enabled: bool) -> Result<()> {
+fn sync_build(
+    mods_dir: &Path,
+    build: Option<&'static str>,
+    enabled: bool,
+    kept: Option<&Path>,
+) -> Result<()> {
     let path = mods_dir.join(FILE_NAME);
     let stamp_path = mods_dir.join(STAMP_NAME);
     let Some(build) = build.filter(|_| enabled) else {
@@ -241,7 +379,7 @@ fn sync_build(mods_dir: &Path, build: Option<&'static str>, enabled: bool) -> Re
     {
         return Ok(());
     }
-    let Some(jar) = jar_of(build) else {
+    let Some(jar) = jar_of(build, kept) else {
         return Ok(());
     };
     fs::create_dir_all(mods_dir).at(mods_dir)?;
@@ -293,6 +431,29 @@ pub fn loader_fits(game_version: &str, loader_version: &str) -> bool {
     min_loader(game_version).is_none_or(|min| at_least(loader_version, &min))
 }
 
+/// Quilt's version is independent of the Fabric Loader version it provides.
+/// Read the selected jar's declaration instead of guessing from its version number.
+pub fn quilt_loader_fits(game_version: &str, loader_jar: &Path) -> bool {
+    if min_loader(game_version).is_none() {
+        return true;
+    }
+    let provided = || -> Option<String> {
+        let mut jar = zip::ZipArchive::new(fs::File::open(loader_jar).ok()?).ok()?;
+        let metadata: serde_json::Value =
+            serde_json::from_reader(jar.by_name("quilt.mod.json").ok()?).ok()?;
+        metadata
+            .pointer("/quilt_loader/provides")?
+            .as_array()?
+            .iter()
+            .find(|p| p.get("id").and_then(|id| id.as_str()) == Some("fabricloader"))?
+            .get("version")?
+            .as_str()
+            .map(str::to_owned)
+    };
+    // Unknown compatibility must not install a mod that could prevent the game from starting.
+    provided().is_some_and(|version| loader_fits(game_version, &version))
+}
+
 /// `a >= b`, comparing the numbers in the versions (`0.19.10` > `0.19.5`).
 pub fn at_least(a: &str, b: &str) -> bool {
     let nums = |s: &str| -> Vec<u64> {
@@ -304,44 +465,10 @@ pub fn at_least(a: &str, b: &str) -> bool {
     nums(a) >= nums(b)
 }
 
-/// How long a looked-up Fabric Loader version is used before asking again.
-const LOADER_RECHECK: std::time::Duration = std::time::Duration::from_secs(6 * 60 * 60);
-
 /// Fabric loader version for running the Arctic Client on `game`: the
 /// newest stable build, remembered so launches also work offline.
 pub fn client_loader(dirs: &crate::storage::DataDirs, game: &str) -> Option<String> {
-    let cache = dirs.meta().join("arctic-client-loader.json");
-    let mut known: std::collections::HashMap<String, String> = crate::storage::load_json(&cache)
-        .ok()
-        .flatten()
-        .unwrap_or_default();
-    // Asked recently: don't hold up the launch with another round trip.
-    let recent = std::fs::metadata(&cache)
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| t.elapsed().ok())
-        .is_some_and(|age| age < LOADER_RECHECK);
-    if recent && let Some(version) = known.get(game) {
-        return Some(version.clone());
-    }
-    let fresh = crate::loaders::loader_versions(crate::loaders::LoaderKind::Fabric, game)
-        .ok()
-        .and_then(|versions| {
-            versions
-                .iter()
-                .find(|v| v.stable)
-                .or(versions.first())
-                .map(|v| v.id.clone())
-        });
-    match fresh {
-        Some(version) => {
-            known.insert(game.to_owned(), version.clone());
-            // Saved every time: the file's age says when we last asked.
-            let _ = crate::storage::save_json(&cache, &known);
-            Some(version)
-        }
-        None => known.get(game).cloned(),
-    }
+    crate::launch::fabric_refresh::client_loader(dirs, game)
 }
 
 /// JVM flag pointing the mod at a different cosmetics server, if set.
@@ -374,6 +501,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn forge_client_replaces_the_cached_189_asm_dependency() {
+        let mut profile = serde_json::from_value(serde_json::json!({
+            "id": "1.8.9-forge",
+            "type": "release",
+            "mainClass": "net.minecraft.launchwrapper.Launch",
+            "libraries": [{
+                "name": "org.ow2.asm:asm-all:5.0.3",
+                "downloads": {"artifact": {"url": "https://example.invalid/old-asm.jar"}}
+            }]
+        }))
+        .unwrap();
+        update_forge_asm("1.7.10", &mut profile);
+        assert_eq!(profile.libraries[0].name, "org.ow2.asm:asm-all:5.0.3");
+        update_forge_asm("1.8.9", &mut profile);
+        assert_eq!(profile.libraries.len(), 1);
+        let asm = &profile.libraries[0];
+        assert_eq!(asm.name, "org.ow2.asm:asm-all:5.2");
+        assert!(asm.downloads.is_none());
+    }
+
+    #[test]
     fn a_damaged_jar_is_noticed_and_written_again() {
         let dir = tempfile::tempdir().unwrap();
         let mods = dir.path().join("mods");
@@ -387,6 +535,63 @@ mod tests {
         rewrite(&mods, "26.3").unwrap();
         assert!(jar_usable(&path));
         assert!(!mods.join(format!("{FILE_NAME}.part")).exists());
+    }
+
+    #[test]
+    fn a_kept_jar_is_used_only_while_it_is_whole() {
+        let dir = tempfile::tempdir().unwrap();
+        let (kept, id) = (dir.path().join("kept"), 7);
+        assert!(read_kept(&kept, id, "fabric-26.3").is_none());
+        fs::create_dir_all(&kept).unwrap();
+        fs::write(kept.join("00000000000000aa-fabric-26.3.jar"), b"older pack").unwrap();
+        keep(&kept, id, "fabric-26.3", b"the jar");
+        assert_eq!(read_kept(&kept, id, "fabric-26.3").unwrap(), b"the jar");
+        assert!(!kept.join("00000000000000aa-fabric-26.3.jar").exists());
+        // Another pack or target has its own; a damaged jar is not used.
+        assert!(read_kept(&kept, id + 1, "fabric-26.3").is_none());
+        assert!(read_kept(&kept, id, "fabric-1.8.9").is_none());
+        let path = kept.join(kept_name(id, "fabric-26.3"));
+        fs::write(&path, b"the jaR").unwrap();
+        assert!(read_kept(&kept, id, "fabric-26.3").is_none());
+        keep(&kept, id, "fabric-26.3", b"the jar");
+        assert_eq!(read_kept(&kept, id, "fabric-26.3").unwrap(), b"the jar");
+        fs::remove_file(path.with_extension("sha1")).unwrap();
+        assert!(read_kept(&kept, id, "fabric-26.3").is_none());
+    }
+
+    #[test]
+    fn a_jar_is_rebuilt_only_when_no_whole_one_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let kept = dir.path().join("kept");
+        let build = build_for("26.3").unwrap();
+        let jar = pack().unwrap().jar(build).unwrap();
+        let rebuilt = std::cell::Cell::new(0);
+        let get = || {
+            kept_or_built(Some(&kept), pack_id(), build, || {
+                rebuilt.set(rebuilt.get() + 1);
+                pack()?.jar(build)
+            })
+            .unwrap()
+        };
+        assert_eq!(get(), jar);
+        assert_eq!(rebuilt.get(), 1);
+        // Kept: read, not rebuilt, and the same bytes the pack gives.
+        assert_eq!(get(), jar);
+        assert_eq!(rebuilt.get(), 1);
+        // Damaged on disk: rebuilt and kept again.
+        let path = kept.join(kept_name(pack_id(), build));
+        let mut damaged = fs::read(&path).unwrap();
+        damaged[100] ^= 1;
+        fs::write(&path, damaged).unwrap();
+        assert_eq!(get(), jar);
+        assert_eq!(rebuilt.get(), 2);
+        assert_eq!(get(), jar);
+        assert_eq!(rebuilt.get(), 2);
+        // Without a folder to keep it in, as before.
+        assert_eq!(
+            kept_or_built(None, pack_id(), build, || pack()?.jar(build)).unwrap(),
+            jar
+        );
     }
 
     #[test]

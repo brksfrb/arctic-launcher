@@ -1,6 +1,7 @@
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.mod.ArcticButton;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -31,7 +32,11 @@ abstract class PauseScreenMixin extends Screen {
 	}
 	//#endif
 
+	//#if MC >= 1.14
 	@Inject(method = "init", at = @At("TAIL"))
+	//#else
+	@Inject(method = "method_1044", at = @At("TAIL"))
+	//#endif
 	private void arctic$button(CallbackInfo ci) {
 		//#if MC >= 1.20.2
 		if (((PauseScreen) (Object) this).showsPauseMenu()) {
@@ -41,7 +46,9 @@ abstract class PauseScreenMixin extends Screen {
 		//#else
 		if (showPauseMenu) {
 		//#endif
-			addRenderableWidget(ArcticButton.create());
+			Button button = ArcticButton.create();
+			button.visible = false;
+			addRenderableWidget(button);
 		}
 	}
 }

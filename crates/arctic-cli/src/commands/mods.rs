@@ -179,6 +179,7 @@ fn search(ctx: &Ctx, inst: &Instance, text: &str, limit: usize) -> Result<()> {
         offset: 0,
         limit,
         project_type: mods::ProjectType::Mod,
+        ..SearchQuery::default()
     })?;
     for hit in page.hits {
         ctx.out.emit(

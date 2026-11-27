@@ -3,12 +3,17 @@
 
 mod browse;
 mod clashes;
+mod content_install;
 mod create;
 mod detail;
+mod hub;
+mod hub_cards;
+mod hub_installed;
 mod icon_picker;
 mod loader_switch;
 mod modpacks;
 mod mods_page;
+mod pack_preview;
 mod packs;
 mod preview;
 mod replays;
@@ -25,13 +30,14 @@ use eframe::egui::{self, Align2, FontId, RichText, vec2};
 
 pub use create::CreateForm;
 pub(crate) use detail::dialog_frame;
+pub(crate) use hub::Section;
 
 use crate::app::ArcticApp;
 use crate::art::icons::Icon;
 use crate::tasks::{Event, ProgressSnapshot};
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf, tn};
 const CARD: [f32; 2] = [260.0, 104.0];
 
 /// Something fetched in the background.
@@ -72,10 +78,14 @@ pub struct SearchState {
     /// Where the page being fetched starts (0: a new search, which replaces the results; more:
     /// the next page, added to them).
     pub more_from: usize,
+    /// Why the last next page failed; it's asked for again only on Retry, so a rate limit
+    /// isn't hit again every frame.
+    pub more_failed: Option<String>,
     /// Instance the results were fetched for.
     pub instance: Option<String>,
     /// When the search text last changed (search runs shortly after typing stops).
     pub typed_at: Option<f64>,
+    pub selected: Vec<arctic_core::mods::ProjectHit>,
 }
 
 /// Under a result list: when its end scrolls into view and there are more, the next page is
@@ -85,20 +95,45 @@ pub(super) fn more_on_scroll(
     p: &crate::theme::Palette,
     search: &SearchState,
 ) -> Option<usize> {
-    let Some(Ok(page)) = &search.results else {
-        return None;
-    };
-    let shown = page.hits.len();
-    if shown == 0 || shown >= page.total {
-        return None;
+    let shown = more_to_load(search)?;
+    if let Some(e) = &search.more_failed {
+        let retry = ui
+            .horizontal_wrapped(|ui| {
+                ui.label(
+                    egui::RichText::new(tf!("instances.load_more_failed", e = e)).color(p.error),
+                );
+                ui.button(t!("instances.retry")).clicked()
+            })
+            .inner;
+        return next_page(search, shown, false, retry);
     }
     let end = ui
         .horizontal(|ui| {
             ui.spinner();
-            ui.label(egui::RichText::new("Loading more…").color(p.muted));
+            ui.label(egui::RichText::new(t!("instances.loading_more")).color(p.muted));
         })
         .response;
-    (!search.loading && ui.is_rect_visible(end.rect)).then_some(shown)
+    next_page(search, shown, ui.is_rect_visible(end.rect), false)
+}
+
+/// How many results are shown, when there are more to load.
+fn more_to_load(search: &SearchState) -> Option<usize> {
+    let Some(Ok(page)) = &search.results else {
+        return None;
+    };
+    let shown = page.hits.len();
+    (shown > 0 && shown < page.total).then_some(shown)
+}
+
+/// Whether to ask for the page after `shown`: when the list end comes into view, or after a
+/// failed page only when the player presses Retry.
+fn next_page(search: &SearchState, shown: usize, end_visible: bool, retry: bool) -> Option<usize> {
+    let wanted = if search.more_failed.is_some() {
+        retry
+    } else {
+        end_visible
+    };
+    (wanted && !search.loading).then_some(shown)
 }
 
 /// Stable, unique egui texture URI for a remote icon URL.
@@ -124,6 +159,8 @@ pub struct InstancesUi {
     pub rename: Option<String>,
     /// Cached lists and background checks, retained when switching instances.
     pub(crate) mod_scans: HashMap<String, crate::mod_tasks::ModScan>,
+    /// Instances whose mods changed while their game ran; cleared when it exits.
+    pub restart_pending: RestartPending,
     /// Installed-mod filter, kept separate from the Modrinth search.
     pub mod_filter: (String, String),
     /// Mods that won't start together, and a Play they stopped.
@@ -139,6 +176,12 @@ pub struct InstancesUi {
     /// Worlds of the open instance.
     pub worlds: Option<(String, Vec<arctic_core::worlds::World>)>,
     pub worlds_busy: bool,
+    /// Starred worlds of the open instance.
+    pub world_favorites: arctic_core::worlds::Favorites,
+    /// The Worlds page shows the world trash, with what's in it and the one asked "delete for good?".
+    pub worlds_trash_open: bool,
+    pub worlds_trash: Vec<arctic_core::worlds::Trashed>,
+    pub worlds_trash_confirm: Option<std::path::PathBuf>,
     /// Replays of the open instance.
     pub replays: Option<(String, Vec<arctic_core::replays::Replay>)>,
     pub import: Option<worlds::ImportDialog>,
@@ -152,8 +195,16 @@ pub struct InstancesUi {
     pub pack_choosing: Option<String>,
     /// Versions of the modpacks looked at, by project id.
     pub pack_versions: HashMap<String, Load<Vec<arctic_core::mods::modpack::PackVersion>>>,
+    /// The "View mods" dialog of a modpack.
+    pub pack_preview: Option<pack_preview::PreviewUi>,
+    /// What modpack versions contain, by version id (kept for the session).
+    pub pack_previews:
+        HashMap<String, Load<std::sync::Arc<arctic_core::mods::pack_preview::PackPreview>>>,
     /// Resource packs and shaders page.
     pub packs: packs::PacksUi,
+    /// The discovery page.
+    pub hub: hub::HubUi,
+    pub(crate) content: content_install::ContentUi,
     /// Moving the open instance to another Minecraft version.
     pub retarget: Option<retarget::RetargetUi>,
     /// Moving the open instance to another mod loader.
@@ -163,7 +214,10 @@ pub struct InstancesUi {
 impl InstancesUi {
     /// Dismiss the innermost open view before leaving the Instances tab.
     pub(crate) fn go_back(&mut self) -> bool {
-        if self.preview.take().is_some() {
+        if self.content.close_picker() || self.preview.take().is_some() {
+            return true;
+        }
+        if self.pack_preview.take().is_some() {
             return true;
         }
         if self.modpacks_open {
@@ -189,7 +243,7 @@ impl ArcticApp {
         self.custom_instances.iter_mut().find(|i| i.id == id)
     }
 
-    /// Instance chosen on the Play tab (falls back to Vanilla).
+    /// Instance chosen on the Play tab (falls back to Arctic).
     pub(crate) fn selected_instance(&self) -> &Instance {
         self.settings
             .last_instance
@@ -202,10 +256,15 @@ impl ArcticApp {
     pub(crate) fn instance_subtitle(instance: &Instance) -> String {
         match (&instance.version, instance.loader.version()) {
             (Some(game), Some(loader)) => {
-                format!("{} {loader} · Minecraft {game}", instance.loader.label())
+                tf!(
+                    "instances.minecraft_2",
+                    label = instance.loader.label(),
+                    loader = loader,
+                    game = game
+                )
             }
-            (Some(game), None) => format!("Minecraft {game}"),
-            (None, _) => "Plays any release".to_owned(),
+            (Some(game), None) => tf!("instances.minecraft", game = game),
+            (None, _) => t!("instances.plays_any_release").to_owned(),
         }
     }
 
@@ -216,16 +275,15 @@ impl ArcticApp {
     pub(crate) fn instances_tab(&mut self, ui: &mut egui::Ui) {
         if self.inst.modpacks_open {
             self.modpacks_page(ui);
-            return;
-        }
-        if let Some(id) = self.inst.open.clone() {
-            if self.instance_by_id(&id).is_some() {
-                self.instance_page(ui, &id);
-                return;
-            }
+        } else if let Some(id) = self.inst.open.clone()
+            && self.instance_by_id(&id).is_some()
+        {
+            self.instance_page(ui, &id);
+        } else {
             self.inst.open = None;
+            self.instances_grid(ui);
         }
-        self.instances_grid(ui);
+        self.content_install_dialog(ui.ctx());
     }
 
     /// A modpack file dropped anywhere on the Instances page installs it.
@@ -243,12 +301,29 @@ impl ArcticApp {
                     })
                 })
         });
+        // CurseForge packs and app instances are refused, not ignored.
+        let refused = ui.input(|i| {
+            i.raw.dropped_files.iter().any(|f| {
+                let p = f.path();
+                arctic_core::curseforge::is_curseforge_instance(p)
+                    || (p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+                        && arctic_core::curseforge::is_curseforge_pack(p))
+            })
+        });
+        if refused {
+            self.toasts.push(
+                Kind::Error,
+                t!("instances.could_not_install_modpack"),
+                t!("instances.curseforge_not_supported"),
+            );
+            return;
+        }
         if let Some(path) = dropped
             && self.inst.pack_installing.is_none()
         {
             self.inst.pack_installing = Some(String::new());
             self.tasks.install_modpack_file(Some(path));
-            self.inst.modpacks_open = true;
+            self.open_hub(hub::Section::Modpacks);
         }
     }
 
@@ -260,17 +335,28 @@ impl ArcticApp {
             ui.set_width(ui.available_width());
             crate::widgets::row(ui, |ui| {
                 ui.vertical(|ui| {
-                    ui.label(RichText::new("Modpacks").size(16.0).strong().color(p.text));
                     ui.label(
-                        RichText::new(
-                            "Install a whole modpack from Modrinth in one click, or drop a .mrpack file anywhere on this page.",
-                        )
-                        .color(p.muted),
+                        RichText::new(t!("instances.modpacks"))
+                            .size(16.0)
+                            .strong()
+                            .color(p.text),
+                    );
+                    ui.label(
+                        RichText::new(t!("instances.install_a_whole_modpack_from_modrinth_in_one"))
+                            .color(p.muted),
                     );
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if widgets::button(ui, p, Some(Icon::Layers), "Browse modpacks", true).clicked() {
-                        self.inst.modpacks_open = true;
+                    if widgets::button(
+                        ui,
+                        p,
+                        Some(Icon::Layers),
+                        t!("instances.browse_modpacks"),
+                        true,
+                    )
+                    .clicked()
+                    {
+                        self.open_hub(hub::Section::Modpacks);
                     }
                 });
             });
@@ -288,25 +374,41 @@ impl ArcticApp {
                 widgets::page_header(
                     ui,
                     p,
-                    "Instances",
-                    "Separate game folders, each with its own version, mods and snowflake.",
+                    t!("instances.instances"),
+                    t!("instances.separate_game_folders_each_with_its_own"),
                 );
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                if widgets::button(ui, p, Some(Icon::Plus), "New instance", true).clicked() {
+                if widgets::button(ui, p, Some(Icon::Plus), t!("instances.new_instance"), true)
+                    .clicked()
+                {
                     self.open_create_dialog();
                 }
-                if widgets::button(ui, p, Some(Icon::Layers), "Modpacks", false).clicked() {
-                    self.inst.modpacks_open = true;
-                }
-                if widgets::button(ui, p, Some(Icon::Layers), "From another launcher", false)
-                    .on_hover_text("Bring instances, worlds and HUD setups over from TLauncher, CurseForge, Prism, Lunar…")
+                if widgets::button(ui, p, Some(Icon::Layers), t!("instances.modpacks"), false)
                     .clicked()
+                {
+                    self.open_hub(hub::Section::Modpacks);
+                }
+                if widgets::button(ui, p, Some(Icon::Layers), t!("instances.hub.title"), false)
+                    .on_hover_text(t!("instances.hub.subtitle"))
+                    .clicked()
+                {
+                    self.open_hub(hub::Section::Mods);
+                }
+                if widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::Layers),
+                    t!("instances.from_another_launcher"),
+                    false,
+                )
+                .on_hover_text(t!("instances.bring_instances_worlds_and_hud_setups_over"))
+                .clicked()
                 {
                     self.open_migrate();
                 }
-                if widgets::button(ui, p, Some(Icon::Import), "Import", false)
-                    .on_hover_text("Add an instance, HUD layout or crosshair someone shared")
+                if widgets::button(ui, p, Some(Icon::Import), t!("instances.import"), false)
+                    .on_hover_text(t!("instances.add_an_instance_hud_layout_or_crosshair"))
                     .clicked()
                 {
                     self.open_share_import();
@@ -314,9 +416,15 @@ impl ArcticApp {
                 // Removed instances can come back: easy to find, not only in a folder.
                 let removed = self.trash_count();
                 if removed > 0
-                    && widgets::button(ui, p, Some(Icon::Trash), &format!("Trash ({removed})"), false)
-                        .on_hover_text("Removed instances, to bring back or delete for good")
-                        .clicked()
+                    && widgets::button(
+                        ui,
+                        p,
+                        Some(Icon::Trash),
+                        &tf!("instances.trash", removed = removed),
+                        false,
+                    )
+                    .on_hover_text(t!("instances.removed_instances_to_bring_back_or_delete"))
+                    .clicked()
                 {
                     self.open_trash();
                 }
@@ -336,10 +444,8 @@ impl ArcticApp {
         if self.custom_instances.is_empty() {
             ui.add_space(18.0);
             ui.label(
-                RichText::new(
-                    "Create a Fabric, Quilt, NeoForge or Forge instance to play with mods.",
-                )
-                .color(p.muted),
+                RichText::new(t!("instances.create_a_fabric_quilt_neoforge_or_forge"))
+                    .color(p.muted),
             );
         }
     }
@@ -381,7 +487,7 @@ impl ArcticApp {
             ui.painter().text(
                 egui::pos2(text_x, rect.top() + 80.0),
                 Align2::LEFT_CENTER,
-                "Selected on Play",
+                t!("instances.selected_on_play"),
                 FontId::proportional(11.0),
                 p.accent,
             );
@@ -400,6 +506,8 @@ impl ArcticApp {
             InstancePage::Worlds
         };
         self.inst.worlds = None;
+        self.inst.worlds_trash_open = false;
+        self.inst.worlds_trash_confirm = None;
         self.inst.import = None;
         self.inst.confirm_delete = false;
         self.inst.rename = None;
@@ -407,11 +515,24 @@ impl ArcticApp {
     }
 
     /// Re-read after a local edit; coalesced if a scan is already running.
+    /// Remember that mods changed, if (and only if) that instance's game is running now.
+    pub(crate) fn note_mod_change(&mut self, id: &str) {
+        let running = self.runs.game_running(id);
+        self.inst.restart_pending.note(id, running);
+    }
+
+    /// The mod folder changed on a running instance and the game has not exited since.
+    pub(crate) fn needs_restart(&self, id: &str) -> bool {
+        self.inst
+            .restart_pending
+            .shown(id, self.runs.game_running(id))
+    }
+
     pub(crate) fn refresh_mods(&mut self, id: &str) {
         self.check_mods(id, true);
     }
 
-    /// Opening and drawing a page only schedules work, never reads its JARs.
+    /// The scan reads JARs in the background. The tracking index is available immediately.
     pub(super) fn check_mods(&mut self, id: &str, force: bool) {
         let Some(instance) = self.instance_by_id(id) else {
             return;
@@ -464,6 +585,13 @@ impl ArcticApp {
                 };
                 self.inst.pack_versions.insert(project, state);
             }
+            Event::PackPreview(version, result) => {
+                let state = match result {
+                    Ok(preview) => Load::Ready(preview),
+                    Err(e) => Load::Failed(e),
+                };
+                self.inst.pack_previews.insert(version, state);
+            }
             Event::LoaderVersions(kind, game, result) => {
                 let state = match result {
                     Ok(list) => Load::Ready(list),
@@ -472,6 +600,9 @@ impl ArcticApp {
                 self.inst.loader_versions.insert((kind, game), state);
                 self.create_form_defaults();
             }
+            Event::HubTags(result) => self.on_hub_tags(result),
+            Event::ContentProgress(progress) => self.inst.content.progress = Some(progress),
+            Event::ContentInstalled(report) => self.on_content_installed(report),
             Event::ModSearch(request, result) => {
                 if let Ok(page) = &result {
                     for hit in &page.hits {
@@ -495,8 +626,11 @@ impl ArcticApp {
                             }
                             shown.total = page.total;
                         }
-                        // A next page that failed leaves what's shown; it's tried again on scrolling.
-                        (true, Some(Ok(_)), Err(e)) => log::warn!("loading more results: {e}"),
+                        // A next page that failed leaves what's shown, with a Retry under it.
+                        (true, Some(Ok(_)), Err(e)) => {
+                            log::warn!("loading more results: {e}");
+                            search.more_failed = Some(e);
+                        }
                         (_, results, result) => *results = Some(result),
                     }
                 }
@@ -514,21 +648,24 @@ impl ArcticApp {
                 self.inst.install_progress = None;
                 match result {
                     Ok((installed, failed)) => {
+                        if installed > 0 {
+                            self.note_mod_change(&instance);
+                        }
                         let note = if failed.is_empty() {
                             String::new()
                         } else {
-                            format!("{} could not be updated.", failed.len())
+                            tf!("instances.could_not_be_updated", count = failed.len())
                         };
                         self.toasts.push(
                             Kind::Success,
-                            format!(
-                                "Updated {installed} file{}",
-                                if installed == 1 { "" } else { "s" }
-                            ),
+                            tn!("instances.updated_file", installed),
                             note,
                         );
                     }
-                    Err(e) => self.toasts.push(Kind::Error, "Could not update mods", e),
+                    Err(e) => {
+                        self.toasts
+                            .push(Kind::Error, t!("instances.could_not_update_mods"), e)
+                    }
                 }
                 if self.inst.open.as_deref() == Some(instance.as_str()) {
                     self.refresh_mods(&instance);
@@ -553,27 +690,39 @@ impl ArcticApp {
                 }
                 match result {
                     Ok(installed) => {
+                        if !installed.is_empty() {
+                            self.note_mod_change(&instance_id);
+                        }
                         let names: Vec<&str> = installed.iter().map(|m| m.title.as_str()).collect();
                         let title = match names.split_first() {
-                            Some((first, [])) => format!("Installed {first}"),
+                            Some((first, [])) => tf!("instances.installed_3", first = first),
                             Some((first, rest)) => {
-                                format!("Installed {first} + {} dependencies", rest.len())
+                                tf!(
+                                    "instances.installed_dependencies",
+                                    first = first,
+                                    count = rest.len()
+                                )
                             }
                             None => "Already installed".to_owned(),
                         };
                         self.toasts.push(Kind::Success, title, "");
                     }
-                    Err(e) => self.toasts.push(Kind::Error, "Could not install mod", e),
+                    Err(e) => {
+                        self.toasts
+                            .push(Kind::Error, t!("instances.could_not_install_mod"), e)
+                    }
                 }
                 if self.inst.open.as_deref() == Some(instance_id.as_str()) {
                     self.refresh_mods(&instance_id);
                 }
             }
             Event::ModGalleryImage(url, result) => {
+                self.inst.hub.banners.image_result(ctx, &url, &result);
                 if let Some(preview) = &mut self.inst.preview {
                     preview.gallery_result(url, result);
                 }
             }
+            Event::HubBanner(project, url) => self.inst.hub.banners.source_result(project, url),
             Event::ModIcon(url, result) => {
                 let state = match result {
                     Ok(bytes) => {
@@ -587,5 +736,105 @@ impl ArcticApp {
             }
             _ => {}
         }
+    }
+}
+
+/// Instances whose mods changed while their game ran, so the game needs a restart.
+#[derive(Default)]
+pub struct RestartPending(HashSet<String>);
+
+impl RestartPending {
+    /// A mod was added, removed or switched; counts only while the game is running.
+    pub fn note(&mut self, id: &str, game_running: bool) {
+        if game_running {
+            self.0.insert(id.to_owned());
+        }
+    }
+
+    /// A game of the instance exited; the notice ends with its last copy.
+    pub fn exited(&mut self, id: &str, still_running: bool) {
+        if !still_running {
+            self.0.remove(id);
+        }
+    }
+
+    pub fn shown(&self, id: &str, game_running: bool) -> bool {
+        game_running && self.0.contains(id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn restart_notice_follows_the_running_game() {
+        let mut pending = RestartPending::default();
+        pending.note("a", false);
+        assert!(!pending.shown("a", false) && !pending.shown("a", true));
+        pending.note("a", true);
+        assert!(pending.shown("a", true));
+        assert!(!pending.shown("b", true), "other instances stay quiet");
+        pending.exited("a", true);
+        assert!(pending.shown("a", true), "another copy still runs");
+        pending.exited("a", false);
+        assert!(!pending.shown("a", true));
+        pending.note("a", false);
+        assert!(!pending.shown("a", true), "changes with no game stay quiet");
+    }
+
+    use arctic_core::mods::ProjectHit;
+
+    fn hit(id: &str) -> ProjectHit {
+        ProjectHit {
+            project_id: id.into(),
+            slug: id.into(),
+            title: id.into(),
+            description: String::new(),
+            author: String::new(),
+            downloads: 0,
+            follows: 0,
+            icon_url: None,
+            featured_gallery: None,
+            categories: vec![],
+            game_versions: vec![],
+        }
+    }
+
+    fn showing(shown: usize, total: usize) -> SearchState {
+        SearchState {
+            results: Some(Ok(SearchPage {
+                hits: (0..shown).map(|i| hit(&i.to_string())).collect(),
+                total,
+            })),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn next_page_starts_after_the_shown_results_only_when_there_are_more() {
+        assert_eq!(more_to_load(&showing(20, 45)), Some(20));
+        assert_eq!(more_to_load(&showing(45, 45)), None);
+        assert_eq!(more_to_load(&showing(0, 0)), None);
+        assert_eq!(more_to_load(&SearchState::default()), None);
+        let failed = SearchState {
+            results: Some(Err("rate limit".into())),
+            ..Default::default()
+        };
+        assert_eq!(more_to_load(&failed), None);
+    }
+
+    #[test]
+    fn next_page_loads_on_scroll_but_a_failed_page_waits_for_retry() {
+        let mut search = showing(20, 45);
+        assert_eq!(next_page(&search, 20, true, false), Some(20));
+        assert_eq!(next_page(&search, 20, false, false), None);
+        search.loading = true;
+        assert_eq!(next_page(&search, 20, true, false), None);
+        search.loading = false;
+        // After a failure (a 429, say) a visible list end doesn't ask again every frame.
+        search.more_failed = Some("Modrinth rate limit reached".into());
+        assert_eq!(next_page(&search, 20, true, false), None);
+        assert_eq!(next_page(&search, 20, false, true), Some(20));
     }
 }

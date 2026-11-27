@@ -15,12 +15,13 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::LoaderKind;
 use super::forge_meta::InstallerSource;
 use super::installer::{self, Installer};
 use super::legacy_forge;
 use super::processors::{self, Context, Processor, lib_path, resolve_data_value};
 use super::util::{load_saved_profile, parse_profile, save_profile};
-use crate::net::{DownloadJob, download_all};
+use crate::net::{DownloadJob, download_all, is_not_found};
 use crate::storage::{DataDirs, load_json, save_json};
 use crate::versions::{Library, VersionJson, maven_path, merge};
 use crate::{Error, Progress, Result};
@@ -69,6 +70,7 @@ fn installed(dirs: &DataDirs, source: &InstallerSource) -> Option<VersionJson> {
 /// Install from the first installer in `sources` that can be downloaded.
 pub fn install(
     dirs: &DataDirs,
+    kind: LoaderKind,
     sources: &[InstallerSource],
     vanilla: &VersionJson,
     java: &Path,
@@ -77,19 +79,38 @@ pub fn install(
     if let Some(profile) = sources.iter().find_map(|s| installed(dirs, s)) {
         return Ok(merge(vanilla.clone(), profile));
     }
-    let mut last_err = Error::Other("no installer to download".into());
+    let mut last_err = None;
     for source in sources {
         match installer::fetch(dirs, source, progress) {
             Ok(inst) => return install_from(dirs, source, inst, vanilla, java, progress),
             Err(e) => {
                 log::info!("installer {} unavailable: {e}", source.url);
-                last_err = e;
+                // Preserve a diagnosed connection problem across later candidates.
+                if !matches!(last_err, Some(Error::DownloadConnectionDropping))
+                    && (last_err.as_ref().is_none_or(is_not_found) || !is_not_found(&e))
+                {
+                    last_err = Some(e);
+                }
             }
         }
     }
-    Err(Error::Other(format!(
-        "the installer could not be downloaded (is this version available?): {last_err}"
-    )))
+    Err(installer_download_error(kind, last_err))
+}
+
+fn installer_download_error(kind: LoaderKind, error: Option<Error>) -> Error {
+    let loader = kind.label();
+    let message = if let Some(error) = error {
+        if is_not_found(&error) {
+            format!(
+                "Could not download the {loader} installer. Check that this version is available. ({error})"
+            )
+        } else {
+            format!("Could not download the {loader} installer. {error}")
+        }
+    } else {
+        format!("No installer is available for this {loader} version.")
+    };
+    Error::Other(message)
 }
 
 fn install_from(
@@ -205,6 +226,7 @@ fn library_jobs(dirs: &DataDirs, libs: &[Library]) -> Vec<DownloadJob> {
                 sha1: a.sha1.clone(),
                 size: a.size,
                 lzma: None,
+                md5: None,
             })
         })
         .collect()
@@ -297,6 +319,79 @@ fn produced_files(dirs: &DataDirs, profile: &InstallProfile) -> Result<Vec<PathB
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn installer_errors_name_the_requested_loader() {
+        for (kind, loader) in [
+            (LoaderKind::NeoForge, "NeoForge"),
+            (LoaderKind::Forge, "Forge"),
+        ] {
+            let error =
+                installer_download_error(kind, Some(Error::DownloadConnectionDropping)).to_string();
+            assert!(error.starts_with(&format!("Could not download the {loader} installer.")));
+            assert!(error.contains("Check your network or try a VPN"));
+        }
+    }
+
+    #[test]
+    fn installer_candidates_preserve_connection_dropping_after_a_503() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (seen, requests) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().take(12).map(|stream| stream.unwrap()) {
+                let mut reader = BufReader::new(&mut stream);
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                let path = line.split_whitespace().nth(1).unwrap().to_owned();
+                loop {
+                    line.clear();
+                    reader.read_line(&mut line).unwrap();
+                    if line == "\r\n" || line.is_empty() {
+                        break;
+                    }
+                }
+                let (status, len) = if path.ends_with(".sha1") {
+                    (404, 0)
+                } else if path == "/drops.jar" {
+                    (200, 10)
+                } else {
+                    (503, 0)
+                };
+                seen.send(status).unwrap();
+                write!(
+                    stream,
+                    "HTTP/1.1 {status} X\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n"
+                )
+                .unwrap();
+            }
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let sources = ["drops.jar", "unavailable.jar"].map(|file_name| InstallerSource {
+            url: format!("http://{addr}/{file_name}"),
+            file_name: file_name.into(),
+        });
+        let vanilla =
+            parse_profile(&serde_json::json!({"id": "test", "mainClass": "Test"})).unwrap();
+        let error = install(
+            &DataDirs::new(dir.path()),
+            LoaderKind::Forge,
+            &sources,
+            &vanilla,
+            Path::new("java"),
+            &|_| {},
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("Check your network or try a VPN"), "{error}");
+        assert_eq!(
+            requests.try_iter().collect::<Vec<_>>(),
+            [404, 200, 200, 200, 200, 200, 404, 503, 503, 503, 503, 503]
+        );
+    }
 
     const PROFILE: &str = r#"{
         "spec": 1, "profile": "NeoForge", "version": "neoforge-21.1.251", "minecraft": "1.21.1",

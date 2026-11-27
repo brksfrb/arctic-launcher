@@ -7,4 +7,7 @@ public interface LegacyReplayConnection {
 
 	/** Replaced by a fresh connection (jumping back): its closing is quiet. */
 	void arctic$retire();
+
+	/** Start recording this already-logged-in connection (null stops). */
+	void arctic$attach(com.arcticlauncher.client.replay.Recorder.Take take);
 }

@@ -4,6 +4,8 @@
 //! The filtered view is cached as line indices and only rebuilt when new
 //! lines arrive or the filter changes; rendering reads just the visible rows.
 
+use std::path::PathBuf;
+
 use arctic_core::launch::logparse::{Level, LogLine};
 use eframe::egui::{self, CornerRadius, RichText, Stroke, TextStyle};
 
@@ -13,11 +15,11 @@ use crate::logbook;
 use crate::theme::Palette;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 const LEVELS: [(Level, &str); 3] = [
-    (Level::Debug, "All"),
-    (Level::Warn, "Warnings"),
-    (Level::Error, "Errors"),
+    (Level::Debug, "play.logs.level_all"),
+    (Level::Warn, "play.logs.level_warnings"),
+    (Level::Error, "play.logs.level_errors"),
 ];
 
 /// What a cached filtered view was computed for.
@@ -35,17 +37,9 @@ impl ArcticApp {
         widgets::page_header(
             ui,
             p,
-            "Logs",
-            "Live output from Minecraft and the launcher.",
+            t!("play.logs"),
+            t!("play.live_output_from_minecraft_and_the_launcher"),
         );
-        // Toolbar first: it may change the source, filter or clear the log,
-        // and the view below must be built from the state it leaves behind.
-        let copy_requested = self.logs_toolbar(ui);
-        ui.add_space(8.0);
-        if let Some((total, lines)) = logbook::snapshot_if_changed(self.launcher_log_seen) {
-            self.launcher_log = lines;
-            self.launcher_log_seen = total;
-        }
         // A game log that's gone (profile switch) falls back to the newest.
         if let LogSource::Game(id) = self.log_source
             && self.runs.get(id).is_none()
@@ -55,6 +49,13 @@ impl ArcticApp {
                 .latest()
                 .map_or(LogSource::Launcher, |r| LogSource::Game(r.id));
         }
+        if let Some((total, lines)) = logbook::snapshot_if_changed(self.launcher_log_seen) {
+            self.launcher_log = lines;
+            self.launcher_log_seen = total;
+        }
+        // The toolbar can change the source, filter or clear the log before building the view.
+        let copy_requested = self.logs_toolbar(ui);
+        ui.add_space(8.0);
         let source = self.log_source;
         let key = LogViewKey {
             source,
@@ -62,6 +63,7 @@ impl ArcticApp {
             query: self.log_search.trim().to_lowercase(),
             revision: match source {
                 LogSource::Game(id) => self.runs.get(id).map_or(0, |r| r.log_rev),
+                LogSource::Launcher if self.launcher_archive.is_some() => 0,
                 LogSource::Launcher => self.launcher_log_seen,
             },
         };
@@ -72,10 +74,9 @@ impl ArcticApp {
         let indices = self
             .log_cache
             .as_ref()
-            .map(|(_, i)| i.clone())
-            .unwrap_or_default();
+            .map_or(&[][..], |(_, i)| i.as_slice());
         let line = |i: usize| self.log_line(source, i);
-        if copy_requested {
+        let copied = copy_requested.then(|| {
             let text: Vec<&str> = indices
                 .iter()
                 .filter_map(|&i| line(i))
@@ -85,21 +86,21 @@ impl ArcticApp {
                 "
 ",
             ));
-            let count = text.len();
+            text.len()
+        });
+        console(ui, p, indices, &line, self.log_follow, source);
+        if let Some(count) = copied {
             self.toasts
-                .push(Kind::Info, format!("Copied {count} lines"), "");
+                .push(Kind::Info, tf!("play.copied_lines", count = count), "");
         }
-        let line = |i: usize| self.log_line(source, i);
-        console(ui, p, &indices, &line, self.log_follow, source);
     }
 
-    /// What "Send logs to staff" sends: the log shown (all of it, not the filtered lines), its name and
-    /// the Minecraft version it belongs to.
+    /// The unfiltered game log or current launcher run, with its name and Minecraft version.
     fn log_to_send(&self) -> (String, String, String) {
         match self.log_source {
             LogSource::Game(id) => match self.runs.get(id) {
                 Some(run) => (
-                    format!("Minecraft {}", run.version),
+                    tf!("play.minecraft", version = run.version),
                     run.version.clone(),
                     run.log
                         .iter()
@@ -110,7 +111,7 @@ impl ArcticApp {
                 None => (String::new(), String::new(), String::new()),
             },
             LogSource::Launcher => (
-                "Launcher".to_owned(),
+                t!("play.launcher").to_owned(),
                 String::new(),
                 self.launcher_log
                     .iter()
@@ -132,30 +133,32 @@ impl ArcticApp {
             .frame(super::dialogs::dialog_frame(p))
             .show(ctx, |ui| {
                 ui.set_width(400.0);
-                ui.label(RichText::new("Send this log to the staff?").size(20.0).strong());
                 ui.label(
-                    RichText::new(
-                        "The log you are looking at goes to the Arctic staff, so they can read it without you copying text around. Your user name, your folders, e-mail and IP addresses and sign-in tokens are taken out first. Chat lines the game wrote to the log are in it. You get a short code to give them.",
-                    )
-                    .color(p.muted),
+                    RichText::new(t!("play.send_this_log_to_the_staff"))
+                        .size(20.0)
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new(t!("play.the_log_you_are_looking_at_goes_to_the")).color(p.muted),
                 );
                 ui.add_space(12.0);
                 if sending {
                     ui.horizontal(|ui| {
                         ui.spinner();
-                        ui.label(RichText::new("Sending…").color(p.muted));
+                        ui.label(RichText::new(t!("play.sending")).color(p.muted));
                     });
                     return;
                 }
                 widgets::row(ui, |ui| {
-                    if widgets::button(ui, p, None, "Cancel", false).clicked() {
+                    if widgets::button(ui, p, None, t!("play.cancel"), false).clicked() {
                         self.log_send = LogSend::Idle;
                     }
-                    if widgets::button(ui, p, Some(Icon::Share), "Send", true).clicked() {
+                    if widgets::button(ui, p, Some(Icon::Share), t!("play.send"), true).clicked() {
                         let (source, game, text) = self.log_to_send();
                         if text.trim().is_empty() {
                             self.log_send = LogSend::Idle;
-                            self.toasts.push(Kind::Info, "Nothing to send yet", "");
+                            self.toasts
+                                .push(Kind::Info, t!("play.nothing_to_send_yet"), "");
                         } else {
                             self.log_send = LogSend::Sending;
                             self.tasks.send_log(source, game, text);
@@ -176,46 +179,125 @@ impl ArcticApp {
                 ctx.copy_text(code.clone());
                 self.toasts.push(
                     Kind::Success,
-                    format!("Sent: {code}"),
-                    "The code is copied. Paste it in your ticket or message to the staff.",
+                    tf!("play.sent", code = code),
+                    t!("play.the_code_is_copied_paste_it_in_your_ticket"),
                 );
             }
-            Err(e) => self.toasts.push(Kind::Error, "Couldn't send the log", e),
+            Err(e) => self
+                .toasts
+                .push(Kind::Error, t!("play.couldnt_send_the_log"), e),
         }
+    }
+
+    fn launcher_lines(&self) -> &[LogLine] {
+        self.launcher_archive
+            .as_ref()
+            .map_or(self.launcher_log.as_slice(), |(_, lines)| lines.as_slice())
     }
 
     fn log_line(&self, source: LogSource, i: usize) -> Option<&LogLine> {
         match source {
             LogSource::Game(id) => self.runs.get(id).and_then(|r| r.log.get(i)),
-            LogSource::Launcher => self.launcher_log.get(i),
+            LogSource::Launcher => self.launcher_lines().get(i),
         }
     }
 
     fn filter_log(&self, key: &LogViewKey) -> Vec<usize> {
-        let keep = |l: &LogLine| {
-            l.level >= key.min_level
-                && (key.query.is_empty() || l.text.to_lowercase().contains(&key.query))
+        let matching_index = |(i, l): (usize, &LogLine)| {
+            (l.level >= key.min_level
+                && (key.query.is_empty() || l.text.to_lowercase().contains(&key.query)))
+            .then_some(i)
         };
         match key.source {
-            LogSource::Game(id) => self
-                .runs
-                .get(id)
-                .map(|r| {
-                    r.log
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, l)| keep(l))
-                        .map(|(i, _)| i)
-                        .collect()
-                })
-                .unwrap_or_default(),
+            LogSource::Game(id) => self.runs.get(id).map_or_else(Vec::new, |r| {
+                r.log
+                    .iter()
+                    .enumerate()
+                    .filter_map(matching_index)
+                    .collect()
+            }),
             LogSource::Launcher => self
-                .launcher_log
+                .launcher_lines()
                 .iter()
                 .enumerate()
-                .filter(|(_, l)| keep(l))
-                .map(|(i, _)| i)
+                .filter_map(matching_index)
                 .collect(),
+        }
+    }
+
+    fn launcher_run_picker(&mut self, ui: &mut egui::Ui) {
+        if self
+            .launcher_archive
+            .as_ref()
+            .is_some_and(|(path, _)| !path.is_file())
+        {
+            self.launcher_archive = None;
+            self.log_cache = None;
+        }
+        let archive = self.launcher_archive.as_ref().map(|(path, _)| path);
+        let current_label = t!("play.current_launcher_run");
+        let selected = archive
+            .and_then(|path| logbook::archive_label(path))
+            .unwrap_or_else(|| current_label.to_owned());
+        let mut selection = None;
+        egui::ComboBox::from_id_salt("launcher_run")
+            .selected_text(selected)
+            .show_ui(ui, |ui| {
+                if ui
+                    .selectable_label(archive.is_none(), current_label)
+                    .clicked()
+                {
+                    selection = Some(None);
+                }
+                for path in logbook::retained_log_paths(&self.dirs.launcher_logs()) {
+                    let Some(label) = logbook::archive_label(&path) else {
+                        continue;
+                    };
+                    if ui.selectable_label(archive == Some(&path), label).clicked() {
+                        selection = Some(Some(path));
+                    }
+                }
+            });
+        match selection {
+            Some(Some(path)) => self.view_launcher_archive(path),
+            Some(None) => {
+                self.launcher_archive = None;
+                self.log_cache = None;
+            }
+            None => {}
+        }
+    }
+
+    fn view_launcher_archive(&mut self, path: PathBuf) {
+        match std::fs::read(&path) {
+            Ok(bytes) => {
+                let lines = String::from_utf8_lossy(&bytes)
+                    .lines()
+                    .map(|text| {
+                        let level = match text
+                            .strip_prefix('[')
+                            .and_then(|text| text.split_once("] ["))
+                            .and_then(|(_, text)| text.split_once(']'))
+                        {
+                            Some((/* i18n-ignore */ "ERROR", _)) => Level::Error,
+                            Some((/* i18n-ignore */ "WARN", _)) => Level::Warn,
+                            Some((/* i18n-ignore */ "INFO", _)) => Level::Info,
+                            _ => Level::Debug,
+                        };
+                        LogLine {
+                            level,
+                            text: text.to_owned(),
+                        }
+                    })
+                    .collect();
+                self.launcher_archive = Some((path, lines));
+                self.log_cache = None;
+            }
+            Err(e) => self.toasts.push(
+                Kind::Error,
+                t!("play.couldnt_read_launcher_log"),
+                e.to_string(),
+            ),
         }
     }
 
@@ -229,47 +311,62 @@ impl ArcticApp {
             for run in &self.runs.list {
                 // A bullet the launcher's font has (● isn't in it).
                 let marker = if run.is_active() { "• " } else { "" };
-                ui.selectable_value(
-                    &mut self.log_source,
-                    LogSource::Game(run.id),
-                    format!("{marker}{}", run.title),
-                );
+                ui.push_id(run.id, |ui| {
+                    ui.selectable_value(
+                        &mut self.log_source,
+                        LogSource::Game(run.id),
+                        format!("{marker}{}", run.title),
+                    );
+                });
             }
-            ui.selectable_value(&mut self.log_source, LogSource::Launcher, "Launcher");
+            ui.selectable_value(
+                &mut self.log_source,
+                LogSource::Launcher,
+                t!("play.launcher"),
+            );
+            if self.log_source == LogSource::Launcher {
+                self.launcher_run_picker(ui);
+            }
             ui.separator();
             for (level, name) in LEVELS {
-                ui.selectable_value(&mut self.log_min_level, level, name);
+                ui.selectable_value(&mut self.log_min_level, level, t!(name));
             }
             ui.separator();
             ui.add(
                 widgets::text_field(&mut self.log_search)
-                    .hint_text("Filter…")
+                    .hint_text(t!("play.filter"))
                     .desired_width(180.0),
             );
-            ui.checkbox(&mut self.log_follow, "Auto-scroll");
+            ui.checkbox(&mut self.log_follow, t!("play.auto_scroll"));
             ui.add_space(8.0);
             if let LogSource::Game(id) = self.log_source
-                && widgets::icon_button(ui, p, Icon::Trash, "Clear").clicked()
+                && widgets::icon_button(ui, p, Icon::Trash, t!("play.clear")).clicked()
                 && let Some(run) = self.runs.get_mut(id)
             {
                 run.clear_log();
             }
             let file = match self.log_source {
-                LogSource::Game(id) => self.runs.get(id).map_or_else(
-                    || self.dirs.logs().join("none"),
-                    |r| self.dirs.logs().join(format!("game-{}.log", r.instance_id)),
-                ),
-                LogSource::Launcher => self.dirs.launcher_logs().join("launcher.log"),
+                LogSource::Game(id) => self.runs.get(id).and_then(|r| r.log_file.clone()),
+                LogSource::Launcher => Some(self.launcher_archive.as_ref().map_or_else(
+                    || self.dirs.launcher_logs().join("launcher.log"),
+                    |(path, _)| path.clone(),
+                )),
             };
-            if file.is_file()
-                && widgets::icon_button(ui, p, Icon::Document, "Open log file").clicked()
+            if let Some(file) = file.filter(|file| file.is_file())
+                && widgets::icon_button(ui, p, Icon::Document, t!("play.open_log_file")).clicked()
             {
                 let _ = open::that_detached(&file);
             }
-            if widgets::icon_button(ui, p, Icon::Copy, "Copy shown lines").clicked() {
+            if widgets::icon_button(ui, p, Icon::Copy, t!("play.copy_shown_lines")).clicked() {
                 copy = true;
             }
-            if widgets::icon_button(ui, p, Icon::Share, "Send this log to the Arctic staff")
+            if (self.log_source != LogSource::Launcher || self.launcher_archive.is_none())
+                && widgets::icon_button(
+                    ui,
+                    p,
+                    Icon::Share,
+                    t!("play.send_this_log_to_the_arctic_staff"),
+                )
                 .clicked()
                 && self.log_send == LogSend::Idle
             {
@@ -305,8 +402,8 @@ fn console<'a>(
                 ui.set_min_height(height);
                 ui.centered_and_justified(|ui| {
                     let msg = match source {
-                        LogSource::Game(_) => "No output yet.",
-                        LogSource::Launcher => "Nothing logged yet.",
+                        LogSource::Game(_) => t!("play.no_output_yet"),
+                        LogSource::Launcher => t!("play.nothing_logged_yet"),
                     };
                     ui.label(RichText::new(msg).color(p.muted));
                 });

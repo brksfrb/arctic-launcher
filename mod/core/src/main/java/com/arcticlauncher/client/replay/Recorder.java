@@ -15,6 +15,7 @@ import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import java.util.zip.*;
 
+import com.arcticlauncher.client.Lang;
 /** A rolling replay buffer and an independent, explicitly started recording. Packet writes are serialized; immutable snapshots are saved separately. */
 public final class Recorder {
 	static final String PACKETS_ENTRY = "recording.tmcpr";
@@ -24,6 +25,8 @@ public final class Recorder {
 	static final String THUMB_ENTRY = "arctic/thumb.png";
 	private static final int BUFFER = 1 << 18;
 	private static final long MAX_PENDING_BYTES = 64L << 20;
+	/** Longest a bulk producer waits for the writer before queueing anyway. */
+	private static final long BULK_WAIT_NANOS = 10_000_000_000L;
 	/** These limits count compressed bytes on disk, not inflated network traffic. */
 	static final long MAX_RECORDING_BYTES = 512L << 20;
 	static final long MIN_FREE_BYTES = 512L << 20;
@@ -81,7 +84,7 @@ public final class Recorder {
 				} catch (InterruptedException e) {
 					return;
 				} catch (Throwable t) {
-					log.accept("replay writer: " + t);
+					log.accept("replay writer: " + t); // i18n-ignore
 				}
 			}
 		}, "arctic-replay-writer");
@@ -162,7 +165,7 @@ public final class Recorder {
 		private long pending;
 
 		Take(String server, boolean singleplayer, int protocol, String mcVersion) {
-			this.server = server == null ? "Unknown" : server;
+			this.server = server == null ? Lang.t("replay.unknown") : server;
 			this.singleplayer = singleplayer;
 			this.protocol = protocol;
 			this.mcVersion = mcVersion;
@@ -183,13 +186,13 @@ public final class Recorder {
 			if (ended || failed || data == null) return;
 			if (pending + data.length > MAX_PENDING_BYTES) {
 				failed = true;
-				tasks.add(() -> fail("replay data arrived faster than it could be processed (64 MB queued); recording stopped to protect game memory"));
+				tasks.add(() -> fail(Lang.t("replay.replay_data_arrived_faster_than_it_could_be")));
 				return;
 			}
 			final int t = time();
 			pending += data.length;
 			tasks.add(() -> {
-				synchronized (Take.this) { pending -= data.length; }
+				synchronized (Take.this) { pending -= data.length; Take.this.notifyAll(); }
 				if (ring == null || failed) return;
 				try {
 					ring.active().packet(t, data);
@@ -198,6 +201,29 @@ public final class Recorder {
 					maintain(t);
 				} catch (IOException | RuntimeException e) { fail(e.toString()); }
 			});
+		}
+
+		/**
+		 * A packet from a producer that can wait (a snapshot of the whole world, written in one go):
+		 * waits for the writer to catch up rather than running into the pending limit, which is meant
+		 * for a network that outruns the disk and would end the buffer. Not for the network thread.
+		 */
+		public void packetWhenRoom(final byte[] data) {
+			if (data == null) return;
+			synchronized (this) {
+				long deadline = System.nanoTime() + BULK_WAIT_NANOS;
+				while (!ended && !failed && pending > 0 && pending + data.length > MAX_PENDING_BYTES / 2) {
+					long left = deadline - System.nanoTime();
+					if (left <= 0) break;
+					try {
+						wait(Math.max(1, left / 1_000_000L));
+					} catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
+						break;
+					}
+				}
+			}
+			packet(data);
 		}
 
 		public synchronized void sample(final SelfSample sample) {
@@ -259,7 +285,7 @@ public final class Recorder {
 							});
 						} catch (IOException | RuntimeException e) {
 							if (next != null) next.delete();
-							tasks.add(() -> { compacting = false; if (!ended && !failed) fail("buffer cleanup failed: " + e); });
+							tasks.add(() -> { compacting = false; if (!ended && !failed) fail("buffer cleanup failed: " + e); }); // i18n-ignore
 						} finally { for (Stream stream : prefix) stream.release(); }
 					});
 				}
@@ -269,8 +295,8 @@ public final class Recorder {
 				checkedAt = t;
 				ring.flush();
 				if (manual != null) { manual.flush(); manualDiskBytes = manual.diskBytes(); }
-				if (tempDir.getUsableSpace() < minFreeBytes) fail("less than 512 MB of disk space remains");
-				else if (ring.diskBytes() > maxBytes) fail("the replay's world data is too large for the temporary buffer");
+				if (tempDir.getUsableSpace() < minFreeBytes) fail(Lang.t("replay.less_than_512_mb_of_disk_space_remains"));
+				else if (ring.diskBytes() > maxBytes) fail(Lang.t("replay.the_replays_world_data_is_too_large_for_the"));
 			}
 		}
 
@@ -278,7 +304,7 @@ public final class Recorder {
 			if (ended) return false;
 			final int at = failed ? latest : time();
 			final int from = Math.max(0, at - clipSeconds.getAsInt() * 1000);
-			tasks.add(() -> saveLater(ring, from, at, "Clip", thumbnail, done));
+			tasks.add(() -> saveLater(ring, from, at, Lang.t("replay.clip"), thumbnail, done));
 			return true;
 		}
 		private synchronized boolean startRecording(Consumer<File> done) {
@@ -309,7 +335,7 @@ public final class Recorder {
 			Consumer<File> done = manualDone;
 			manual = null;
 			manualDone = null;
-			saveLater(stream, 0, Math.max(0, at - manualBase), "Recording", null, done);
+			saveLater(stream, 0, Math.max(0, at - manualBase), Lang.t("replay.recording"), null, done);
 			if (stream != null) stream.delete();
 		}
 		public synchronized void end() {
@@ -327,8 +353,8 @@ public final class Recorder {
 		private void fail(String why) {
 			failed = true;
 			recording = false;
-			log.accept("replay: stopped: " + why);
-			notice("Replay buffer stopped", why + ". Saved clips are safe.");
+			log.accept("replay: stopped: " + why); // i18n-ignore
+			notice(Lang.t("replay.replay_buffer_stopped"), why + Lang.t("replay.saved_clips_are_safe"));
 			if (manual != null) finishManual(time());
 		}
 		private void saveLater(Stream stream, int from, int to, String kind, byte[] thumbnail, Consumer<File> done) {
@@ -350,7 +376,7 @@ public final class Recorder {
 						for (Stream stream : streams) stream.release();
 					}
 				});
-			} catch (IOException e) { log.accept("replay: snapshot failed: " + e); if (done != null) done.accept(null); }
+			} catch (IOException e) { log.accept("replay: snapshot failed: " + e); if (done != null) done.accept(null); } // i18n-ignore
 		}
 		private File save(Snapshot stream, int from, int to, String kind, byte[] thumbnail) {
 			if (stream == null || stream.packetBytes == 0) return null;
@@ -393,7 +419,7 @@ public final class Recorder {
 				Files.move(part.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING);
 				return out;
 			} catch (IOException | RuntimeException e) {
-				part.delete(); log.accept("replay: save failed: " + e); return null;
+				part.delete(); log.accept("replay: save failed: " + e); return null; // i18n-ignore
 			}
 		}
 	}
@@ -519,7 +545,7 @@ public final class Recorder {
 		// Only the older bootstrap needs a seek plan. The recent interval is copied in full.
 		Index index = Index.before(source, classifier == null ? (p, k) -> Category.ALWAYS : classifier, from);
 		int cut = index.count;
-		int[] earlier = SeekPlan.plan(index.category, index.key, 0, cut, index.removals);
+		int[] earlier = SeekPlan.plan(index.category, index.key, 0, cut, index.removals, index.bulks);
 		try (DataInputStream in = source.packets()) {
 			byte[] buf = new byte[1 << 16];
 			int e = 0;
@@ -610,6 +636,7 @@ public final class Recorder {
 		byte[] category = new byte[1 << 12];
 		long[] key = new long[1 << 12];
 		final java.util.Map<Integer, int[]> removals = new java.util.HashMap<Integer, int[]>();
+		final java.util.Map<Integer, long[]> bulks = new java.util.HashMap<Integer, long[]>();
 
 		static Index before(Snapshot source, ReplayBackend.Classifier classifier, int before) throws IOException {
 			Index index = new Index();
@@ -635,6 +662,9 @@ public final class Recorder {
 					if (category == Category.ENTITY_REMOVE) {
 						int[] ids = classifier.removedEntities(packet);
 						if (ids != null) index.removals.put(index.count, ids);
+					} else if (category == Category.CHUNK_BULK) {
+						long[] chunks = classifier.bulkChunks(packet);
+						if (chunks != null) index.bulks.put(index.count, chunks);
 					}
 					index.add(category, out[0]);
 				}

@@ -4,6 +4,7 @@ import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.Keys;
 import com.arcticlauncher.client.config.HudSlot;
 import com.arcticlauncher.client.gfx.Draw;
+import com.arcticlauncher.client.gfx.BrandMark;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.hud.Hud;
 import com.arcticlauncher.client.hud.HudWidget;
@@ -15,8 +16,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.arcticlauncher.client.Lang;
 /**
- * Right Shift in a world: your HUD, live and movable. Drag a widget to move
+ * The menu key in a world: your HUD, live and movable. Drag a widget to move
  * it (it snaps to edges and to other widgets), drag its bottom-right corner
  * or scroll on it to resize it, right-click it for its settings. The bar in the middle opens Mods and the
  * other Arctic screens; drop a widget on the bar to take it off the HUD.
@@ -39,7 +41,7 @@ public final class HudEditor extends Page {
 	private static final int HINT_PAD = 8;
 	private static final float SCALE_SNAP = 0.05f;
 	private static final String[][] SHORTCUTS = {
-			{"Waypoints", "waypoints"}, {"Replays", "replays"}, {"Packs", "packs"}, {"Friends", "friends"},
+			{"mods.waypoints", "waypoints"}, {"mods.replays", "replays"}, {"mods.packs", "packs"}, {"mods.friends", "friends"},
 	};
 
 	private int bx;
@@ -55,8 +57,8 @@ public final class HudEditor extends Page {
 	private int pressY;
 	private int grabX;
 	private int grabY;
-	private int mouseX;
-	private int mouseY;
+	private int gestureButton;
+	private HudSlot originalPlacement;
 	/** Being resized from its corner: its top-left and unscaled size. */
 	private HudWidget resizing;
 	private int resizeX;
@@ -93,7 +95,7 @@ public final class HudEditor extends Page {
 		bx = (width - BAR_W) / 2;
 		by = (height - BAR_H) / 2;
 		barButtons.clear();
-		Button mods = new Button("Mods", Menus::mods).primary();
+		Button mods = new Button(Lang.t("mods.mods"), Menus::mods).primary();
 		add(mods).bounds(bx + PAD, by + 22, BAR_W - PAD * 2, MODS_H);
 		barButtons.add(mods);
 		java.util.List<String[]> shortcuts = new java.util.ArrayList<String[]>();
@@ -107,7 +109,7 @@ public final class HudEditor extends Page {
 		int sw = (BAR_W - PAD * 2 - GAP * (n - 1)) / n;
 		for (int i = 0; i < n; i++) {
 			final String id = shortcuts.get(i)[1];
-			Button b = new Button(shortcuts.get(i)[0], () -> Menus.open(id, this));
+			Button b = new Button(Lang.t(shortcuts.get(i)[0]), () -> Menus.open(id, this));
 			add(b).bounds(bx + PAD + i * (sw + GAP), by + 22 + MODS_H + GAP, sw, SMALL_H);
 			barButtons.add(b);
 		}
@@ -121,12 +123,13 @@ public final class HudEditor extends Page {
 		final HudWidget w = menuFor;
 		int x = Math.min(menuX, width - MENU_W - 2);
 		int y = Math.min(menuY, height - 42);
-		add(new Button("Settings", () -> {
+		add(new Button(Lang.t("mods.settings"), () -> {
 			menuFor = null;
 			Menus.open("hud." + w.id, this);
 		})).bounds(x, y, MENU_W, 18);
-		add(new Button("Remove", () -> {
+		add(new Button(Lang.t("mods.remove"), () -> {
 			hide(w);
+			ArcticClient.saveConfig();
 			menuFor = null;
 			rebuild();
 		})).bounds(x, y + 20, MENU_W, 18);
@@ -141,6 +144,10 @@ public final class HudEditor extends Page {
 		long now = System.nanoTime();
 		float dt = lastFrame == 0 ? 0f : Math.min(0.1f, (now - lastFrame) / 1e9f);
 		lastFrame = now;
+		// Legacy screens dispatch mouse movement during client ticks. The render
+		// coordinates are refreshed every frame on both Legacy Fabric and Fabric.
+		snapper.clear();
+		updateGesture(mx, my);
 		float target = dragging != null && moved ? 0.25f : 1f;
 		shown += (target - shown) * Math.min(1f, dt * FADE_SPEED);
 		for (Button b : barButtons) {
@@ -154,13 +161,6 @@ public final class HudEditor extends Page {
 		Hud hud = ArcticClient.hud();
 		// Laid out as the editor shows it (the boss bar's stand-in has its own place).
 		hud.previewing(true);
-		snapper.clear();
-		if (dragging != null && moved) {
-			placeDragged(g, hud);
-		}
-		if (resizing != null) {
-			resize(g, hud);
-		}
 		rects = hud.layout(g);
 		for (Map.Entry<HudWidget, int[]> e : hud.sorted(rects)) {
 			HudWidget w = e.getKey();
@@ -182,7 +182,7 @@ public final class HudEditor extends Page {
 		}
 		snapper.draw(g, s, width, height);
 		drawBar(g, s, mx, my);
-		String help = "Drag to move  ·  drag the corner (or scroll) to resize  ·  right-click for settings";
+		String help = Lang.t("mods.drag_to_move_drag_the_corner_or_scroll_to");
 		int hw = g.textWidth(help) / 2 + HINT_PAD;
 		// Under the menu bar: at the bottom it would sit on the hotbar.
 		int hy = by + BAR_H + 10;
@@ -192,31 +192,31 @@ public final class HudEditor extends Page {
 
 	private void drawBar(Gfx g, Style s, int mx, int my) {
 		// Where the widget is being dragged (the same as the mouse, when a mouse drags it).
-		boolean removing = dragging != null && moved && inBar(mouseX, mouseY);
+		boolean removing = dragging != null && moved && inBar(mx, my);
 		float a = removing ? 1f : shown;
 		Skin.panel(g, s, bx, by, bx + BAR_W, by + BAR_H);
 		if (removing) {
 			Draw.outline(g, bx, by, bx + BAR_W, by + BAR_H, 2, s.accent);
-			Draw.centered(g, "Drop here to take it off", bx + BAR_W / 2, by + BAR_H / 2 - 4, s.accent, false);
+			Draw.centered(g, Lang.t("mods.drop_here_to_take_it_off"), bx + BAR_W / 2, by + BAR_H / 2 - 4, s.accent, false);
 			return;
 		}
 		if (a < 0.5f) {
 			return;
 		}
-		g.texture("icon", bx + PAD, by + 6, 12, 12, 0, 0, 256, 256, 256, 256);
-		g.text("§lArctic", bx + PAD + 16, by + 8, s.text, false);
+		BrandMark.draw(g, bx + PAD, by + 6, 12);
+		g.text("§lArctic", bx + PAD + 16, by + 8, s.text, false); // i18n-ignore: the brand
 		String version = ArcticClient.platform().minecraftVersion();
 		g.text(version, bx + BAR_W - PAD - g.textWidth(version), by + 8, s.muted, false);
 	}
 
 	/** Scale the widget so its bottom-right corner follows the mouse (top-left stays). */
-	private void resize(Gfx g, Hud hud) {
+	private void resize(Hud hud, int mouseX, int mouseY) {
 		float k = Math.max((mouseX - resizeX) / baseW, (mouseY - resizeY) / baseH);
 		k = Math.round(k / SCALE_SNAP) * SCALE_SNAP;
 		k = Math.max(Hud.MIN_SCALE, Math.min(Hud.MAX_SCALE, k));
 		hud.slot(resizing).scale = k;
 		int[] rect = {resizeX, resizeY, Math.round(baseW * k), Math.round(baseH * k)};
-		hud.place(g, resizing, rect, resizeX, resizeY);
+		hud.place(resizing, rect, resizeX, resizeY, width, height);
 	}
 
 	private static boolean onHandle(int[] r, double mx, double my) {
@@ -224,7 +224,7 @@ public final class HudEditor extends Page {
 	}
 
 	/** Follow the mouse, snapping to the screen and the other widgets. */
-	private void placeDragged(Gfx g, Hud hud) {
+	private void placeDragged(Hud hud, int mouseX, int mouseY) {
 		int[] me = rects.get(dragging);
 		if (me == null) {
 			return;
@@ -237,7 +237,7 @@ public final class HudEditor extends Page {
 		}
 		int x = snapper.x(mouseX - grabX, me[2], width, others);
 		int y = snapper.y(mouseY - grabY, me[3], height, others);
-		hud.place(g, dragging, me, x, y);
+		hud.place(dragging, me, x, y, width, height);
 	}
 
 	private static boolean inside(int[] r, double mx, double my) {
@@ -257,6 +257,9 @@ public final class HudEditor extends Page {
 
 	@Override
 	public boolean mouseClicked(double mx, double my, int button) {
+		if (dragging != null || resizing != null) {
+			return true;
+		}
 		if (super.mouseClicked(mx, my, button)) {
 			return true;
 		}
@@ -278,16 +281,16 @@ public final class HudEditor extends Page {
 			rebuild();
 			return true;
 		}
+		gestureButton = button;
+		originalPlacement = ArcticClient.hud().slot(w).copy();
 		int[] r = rects.get(w);
 		if (onHandle(r, mx, my)) {
-			float scale = ArcticClient.hud().slot(w).scale;
+			float scale = originalPlacement.scale;
 			resizing = w;
 			resizeX = r[0];
 			resizeY = r[1];
 			baseW = Math.max(1f, r[2] / scale);
 			baseH = Math.max(1f, r[3] / scale);
-			mouseX = (int) mx;
-			mouseY = (int) my;
 			return true;
 		}
 		dragging = w;
@@ -296,48 +299,50 @@ public final class HudEditor extends Page {
 		pressY = (int) my;
 		grabX = (int) mx - r[0];
 		grabY = (int) my - r[1];
-		mouseX = pressX;
-		mouseY = pressY;
 		return true;
+	}
+
+	private void updateGesture(int mx, int my) {
+		if (resizing != null) {
+			resize(ArcticClient.hud(), mx, my);
+		} else if (dragging != null) {
+			moved |= Math.abs(mx - pressX) > DRAG_START || Math.abs(my - pressY) > DRAG_START;
+			if (moved) {
+				placeDragged(ArcticClient.hud(), mx, my);
+			}
+		}
 	}
 
 	@Override
 	public boolean mouseDragged(double mx, double my, int button) {
-		if (resizing != null) {
-			mouseX = (int) mx;
-			mouseY = (int) my;
-			return true;
-		}
-		if (dragging == null) {
-			return super.mouseDragged(mx, my, button);
-		}
-		mouseX = (int) mx;
-		mouseY = (int) my;
-		if (!moved && (Math.abs(mx - pressX) > DRAG_START || Math.abs(my - pressY) > DRAG_START)) {
-			moved = true;
-		}
-		return true;
+		return dragging != null || resizing != null || super.mouseDragged(mx, my, button);
 	}
 
 	@Override
 	public boolean mouseReleased(double mx, double my, int button) {
-		if (resizing != null) {
-			resizing = null;
-			ArcticClient.saveConfig();
-			return true;
-		}
-		if (dragging == null) {
+		if (dragging == null && resizing == null) {
 			return super.mouseReleased(mx, my, button);
 		}
-		HudWidget w = dragging;
-		boolean wasMoved = moved;
-		dragging = null;
-		moved = false;
-		if (wasMoved && inBar(mx, my)) {
-			hide(w);
+		if (button != gestureButton) {
+			return true;
 		}
-		ArcticClient.saveConfig();
+		// A release can arrive before the next render, including a quick press and drag.
+		updateGesture((int) mx, (int) my);
+		if (dragging != null && moved && inBar(mx, my)) {
+			hide(dragging);
+		}
+		if (moved || resizing != null) {
+			ArcticClient.saveConfig();
+		}
+		clearGesture();
 		return true;
+	}
+
+	private void clearGesture() {
+		dragging = null;
+		resizing = null;
+		moved = false;
+		originalPlacement = null;
 	}
 
 	private void hide(HudWidget w) {
@@ -346,11 +351,13 @@ public final class HudEditor extends Page {
 		// It was dropped on the bar, so that spot is under the bar: showing it again lays it out
 		// where it would have gone, never back under the bar where it can't be grabbed.
 		slot.placed = false;
-		ArcticClient.saveConfig();
 	}
 
 	@Override
 	public boolean mouseScrolled(double mx, double my, double amount) {
+		if (dragging != null || resizing != null) {
+			return true;
+		}
 		HudWidget w = placedAt(mx, my);
 		if (w == null) {
 			return false;
@@ -363,14 +370,23 @@ public final class HudEditor extends Page {
 	}
 
 	@Override
-	protected boolean rightShift() {
+	protected boolean menuKey() {
 		close();
 		return true;
 	}
 
 	@Override
-	public void close() {
-		ArcticClient.saveConfig();
-		super.close();
+	public void removed() {
+		if (originalPlacement != null) {
+			HudSlot slot = ArcticClient.hud().slot(dragging != null ? dragging : resizing);
+			slot.placed = originalPlacement.placed;
+			slot.ax = originalPlacement.ax;
+			slot.ay = originalPlacement.ay;
+			slot.dx = originalPlacement.dx;
+			slot.dy = originalPlacement.dy;
+			slot.scale = originalPlacement.scale;
+		}
+		clearGesture();
+		super.removed();
 	}
 }

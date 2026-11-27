@@ -13,6 +13,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(MinecraftClient.class)
 abstract class MinecraftClientReplayMixin {
+    @Inject(method = "stop", at = @At("HEAD"), require = 0)
+    private void arctic$stopStarted(CallbackInfo ci) {
+        com.arcticlauncher.client.CrashDiagnostics.stopStarted();
+    }
+
+    @Inject(method = "stop", at = @At(value = "INVOKE", target = "Ljava/lang/System;exit(I)V"), require = 0)
+    private void arctic$stopComplete(CallbackInfo ci) {
+        com.arcticlauncher.client.CrashDiagnostics.stopComplete();
+    }
+
 	@Inject(method = "setScreen", at = @At("HEAD"), cancellable = true)
 	private void arctic$keepReplayView(net.minecraft.client.gui.screen.Screen screen, CallbackInfo ci) {
 		if (com.arcticlauncher.legacy.replay.LegacyReplayPlayback.INSTANCE.suppressSeekScreen(screen)) ci.cancel();

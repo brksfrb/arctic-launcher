@@ -25,6 +25,8 @@ public final class Session {
 	/** Friends may see which server we're on. */
 	public boolean shareServer;
 	public String bridgeSecret;
+	/** Unix seconds when the launched Minecraft session should be refreshed. */
+	public long minecraftRefreshAt;
 	/** This launch's own token for the launcher's join queue (null = none). */
 	public String launchToken;
 	/** When the style was picked in the launcher (seconds), 0 if unknown. */
@@ -37,6 +39,8 @@ public final class Session {
 	/** A replay the launcher asked to open, and when (seconds). */
 	public String replayFile;
 	public long replayAt;
+	/** The language picked in the launcher ("tr"); null or "" to follow the game's. */
+	public String language;
 
 	private Session(String url, String token, String style, Boolean fancy, long styleSet, ProxyConfig proxy, long proxySet) {
 		this.proxy = proxy;
@@ -85,6 +89,8 @@ public final class Session {
 					number(o, "style_set"), proxy, proxySet);
 			Boolean share = bool(o, "share_server");
 			session.shareServer = share != null && share;
+			session.language = string(o, "language");
+			session.minecraftRefreshAt = number(o, "minecraft_refresh_at");
 			JsonElement b = o.get("bridge");
 			if (b != null && b.isJsonObject()) {
 				long port = number(b.getAsJsonObject(), "port");

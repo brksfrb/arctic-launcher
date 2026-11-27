@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-//#if MC >= 1.16
+//#if MC >= 1.15
 import com.mojang.blaze3d.vertex.PoseStack;
 //#endif
 //#if MC >= 26.1
@@ -20,7 +20,7 @@ abstract class NoHurtCamMixin {
 	//#if MC >= 26.1
 	@Inject(method = "bobHurt", at = @At("HEAD"), cancellable = true, require = 0)
 	private void arctic$noShake(CameraRenderState camera, PoseStack pose, CallbackInfo ci) {
-	//#elif MC >= 1.16
+	//#elif MC >= 1.15
 	@Inject(method = "bobHurt", at = @At("HEAD"), cancellable = true, require = 0)
 	private void arctic$noShake(PoseStack pose, float partialTicks, CallbackInfo ci) {
 	//#else

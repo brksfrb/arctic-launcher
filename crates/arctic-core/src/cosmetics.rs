@@ -257,6 +257,9 @@ pub fn set_look(base: &str, token: &str, look: &NewLook) -> Result<Look> {
             body
         })?;
     let status = resp.status().as_u16();
+    if matches!(status, 401 | 403) {
+        return Err(Error::Auth(server_error(&mut resp, status)));
+    }
     if !(200..300).contains(&status) {
         return Err(Error::Other(server_error(&mut resp, status)));
     }
@@ -456,6 +459,8 @@ pub fn send_crash_report(base: &str, report: &crate::crash::Report) -> Result<()
             "title": report.title,
             "contact": report.contact,
             "log": report.log,
+            "ram_total_mb": report.ram_total_mb,
+            "ram_free_mb": report.ram_free_mb,
         }))?;
     let status = resp.status().as_u16();
     if (200..300).contains(&status) {
@@ -476,8 +481,61 @@ pub struct Suggestion {
     pub log: String,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SuggestionReceipt {
+    pub id: i64,
+    reply_token: Option<String>,
+}
+
+impl SuggestionReceipt {
+    pub fn can_receive_replies(&self) -> bool {
+        self.reply_token.is_some()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SuggestionReply {
+    pub id: i64,
+    pub text: String,
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SuggestionReplies {
+    pub done: bool,
+    pub replies: Vec<SuggestionReply>,
+}
+
+/// A missing report or invalid receipt returns `None`; transient errors leave the cache usable.
+pub fn suggestion_replies(
+    base: &str,
+    receipt: &SuggestionReceipt,
+) -> Result<Option<SuggestionReplies>> {
+    let Some(token) = &receipt.reply_token else {
+        return Ok(None);
+    };
+    let mut response = agent()
+        .get(&format!("{base}/v1/suggest/{}/replies", receipt.id))
+        .header("Authorization", &format!("Bearer {token}"))
+        .config()
+        .http_status_as_error(false)
+        .max_redirects(0)
+        .build()
+        .call()?;
+    match response.status().as_u16() {
+        200 => Ok(Some(
+            response
+                .body_mut()
+                .with_config()
+                .limit(MAX_BYTES)
+                .read_json()?,
+        )),
+        404 => Ok(None),
+        status => Err(Error::Other(server_error(&mut response, status))),
+    }
+}
+
 /// Send a suggestion the player wrote.
-pub fn send_suggestion(base: &str, suggestion: &Suggestion) -> Result<()> {
+pub fn send_suggestion(base: &str, suggestion: &Suggestion) -> Result<Option<SuggestionReceipt>> {
     let mut resp = agent()
         .post(&format!("{base}/v1/suggest"))
         .config()
@@ -493,7 +551,13 @@ pub fn send_suggestion(base: &str, suggestion: &Suggestion) -> Result<()> {
         }))?;
     let status = resp.status().as_u16();
     if (200..300).contains(&status) {
-        Ok(())
+        // A successful submission can come from an older server with no receipt.
+        Ok(resp
+            .body_mut()
+            .with_config()
+            .limit(MAX_BYTES)
+            .read_json()
+            .ok())
     } else {
         Err(Error::Other(server_error(&mut resp, status)))
     }
@@ -554,7 +618,7 @@ mod plain_key {
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
-        crate::secret::on_disk_opt::deserialize(d)
+        crate::secret::plain_or_sealed_opt::deserialize(d)
     }
 }
 
@@ -577,6 +641,74 @@ fn held() -> std::sync::MutexGuard<'static, ()> {
     CREDENTIALS_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Sessions of this run, by server and account. Where the secret key file can't be written a token can't
+/// be saved, so the one just signed in is kept here and the next request doesn't sign in again.
+type Sessions = HashMap<(String, String), (String, u64)>;
+
+fn sessions() -> std::sync::MutexGuard<'static, Sessions> {
+    static SESSIONS: std::sync::OnceLock<std::sync::Mutex<Sessions>> = std::sync::OnceLock::new();
+    SESSIONS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Throw away the session for `account` (the server refused it): the next [`token_for`] signs in again.
+pub fn forget_token(dirs: &DataDirs, base: &str, account: &Account) {
+    let _held = held();
+    sessions().remove(&(base.to_owned(), account.uuid.clone()));
+    let path = credentials_path(dirs);
+    if let Ok(Some(mut creds)) = load_json::<Credentials>(&path)
+        && let Some(entry) = creds.accounts.get_mut(&account.uuid)
+        && entry.token.is_some()
+    {
+        entry.token = None;
+        entry.expires = 0;
+        if let Err(e) = save_json(&path, &creds) {
+            log::warn!("couldn't clear the refused session: {e}");
+        }
+    }
+    forget_failure(&format!("{base}|{}", account.uuid));
+}
+
+/// The server refused the session itself (not the request).
+pub fn refused(error: &Error) -> bool {
+    match error {
+        Error::Auth(_) => true,
+        Error::Http(text) => text.contains("status: 401") || text.contains("status: 403"),
+        _ => false,
+    }
+}
+
+/// Run `request` with a session token; if the server refuses the session (401/403), sign in again once
+/// and retry before giving up.
+pub fn with_session<T>(
+    dirs: &DataDirs,
+    base: &str,
+    account: &Account,
+    request: impl Fn(&str) -> Result<T>,
+) -> Result<T> {
+    let token = token_for(dirs, base, account)?;
+    match request(&token) {
+        Err(e) if refused(&e) => {
+            log::info!(
+                "Arctic refused the session for {} ({e}); signing in again",
+                account.username
+            );
+            forget_token(dirs, base, account);
+            let token = token_for(dirs, base, account)?;
+            request(&token).map_err(|e| {
+                if refused(&e) {
+                    Error::Auth(format!("Arctic refused a fresh sign-in too ({e})"))
+                } else {
+                    e
+                }
+            })
+        }
+        other => other,
+    }
 }
 
 /// A session token for `account`, reusing a stored one while it's valid.
@@ -650,9 +782,17 @@ fn token_for_locked(dirs: &DataDirs, base: &str, account: &Account) -> Result<St
         save_json(&path, &creds)?;
     }
     let entry = creds.accounts.entry(account.uuid.clone()).or_default();
-    if let Some(token) = &entry.token
+    // An empty token is no token: where the secret key file can't be written (read-only or missing data
+    // folder) a saved token reads back empty, and sending `Bearer ` gets a 401 on every look request.
+    if let Some(token) = entry.token.as_ref().filter(|t| !t.is_empty())
         && entry.expires > now_secs() + TOKEN_MARGIN_SECS
         && entry.server == base
+    {
+        return Ok(token.clone());
+    }
+    let session_key = (base.to_owned(), account.uuid.clone());
+    if let Some((token, expires)) = sessions().get(&session_key)
+        && *expires > now_secs() + TOKEN_MARGIN_SECS
     {
         return Ok(token.clone());
     }
@@ -739,6 +879,7 @@ fn token_for_locked(dirs: &DataDirs, base: &str, account: &Account) -> Result<St
         }
     };
     log::info!("Arctic sign-in for {} worked", account.username);
+    sessions().insert(session_key, (session.token.clone(), session.expires));
     let entry = creds.accounts.entry(account.uuid.clone()).or_default();
     entry.token = Some(session.token.clone());
     entry.expires = session.expires;
@@ -756,6 +897,7 @@ fn token_for_locked(dirs: &DataDirs, base: &str, account: &Account) -> Result<St
 /// system's machine id changed) reads as empty, and the server refuses an empty key as
 /// "invalid name or key" for good; a new key at least gets a clear answer (the name is claimed:
 /// use the recovery code) instead.
+#[cfg(any(feature = "offline-accounts", test))]
 fn usable_key(dirs: &DataDirs, uuid: &str, name: &str, entry: &mut Credential) -> Result<String> {
     let fine = |k: &str| (32..=128).contains(&k.len()) && k.bytes().all(|b| b.is_ascii_hexdigit());
     if let Some(key) = entry.key.clone().filter(|k| fine(k)) {
@@ -779,7 +921,16 @@ fn usable_key(dirs: &DataDirs, uuid: &str, name: &str, entry: &mut Credential) -
     let key =
         uuid::Uuid::new_v4().simple().to_string() + &uuid::Uuid::new_v4().simple().to_string();
     // Saved in the ledgers before it claims anything; with no place to save it, no name is claimed.
-    crate::offline_keys::remember(dirs, uuid, name, &key)?;
+    crate::offline_keys::remember(dirs, uuid, name, &key).map_err(|e| {
+        let reason = format!(
+            "the data folder isn't writable, so the offline key for {name} can't be saved: {e}"
+        );
+        crate::secret::key_unsaved(reason.clone());
+        Error::Other(format!(
+            "{reason}. No name was claimed; fix the folder's permissions."
+        ))
+    })?;
+    crate::secret::key_saved();
     entry.key = Some(key.clone());
     // Whatever token went with the old key is no good either.
     entry.token = None;
@@ -787,9 +938,11 @@ fn usable_key(dirs: &DataDirs, uuid: &str, name: &str, entry: &mut Credential) -
 }
 
 /// The most keys tried for one sign-in.
+#[cfg(any(feature = "offline-accounts", test))]
 const MAX_KEY_TRIES: usize = 8;
 
 /// The key for `uuid` in a credentials file's text (readable, or the older encrypted kind).
+#[cfg(any(feature = "offline-accounts", test))]
 fn key_in_credentials(text: &str, uuid: &str) -> Option<String> {
     serde_json::from_str::<Credentials>(text)
         .ok()?
@@ -801,6 +954,7 @@ fn key_in_credentials(text: &str, uuid: &str) -> Option<String> {
 /// Every offline key this PC may have held for `uuid` besides `first`: the ledgers' history, then every
 /// `cosmetics.json` and ledger (backups and set-aside copies too) in the data folder and in every
 /// profile, including removed ones. A key counts as lost only when none of these works.
+#[cfg(any(feature = "offline-accounts", test))]
 fn other_keys(dirs: &DataDirs, uuid: &str, first: &str) -> Vec<String> {
     let fine = |k: &str| (32..=128).contains(&k.len()) && k.bytes().all(|b| b.is_ascii_hexdigit());
     let mut found = crate::offline_keys::history(dirs, uuid);
@@ -822,6 +976,7 @@ fn other_keys(dirs: &DataDirs, uuid: &str, first: &str) -> Vec<String> {
 }
 
 /// The server says this name is held by another key (so another key may still be right).
+#[cfg(any(feature = "offline-accounts", test))]
 fn wrong_key(error: &Error) -> bool {
     let text = error.to_string();
     text.contains("used by another") || text.contains("invalid name or key")
@@ -1026,12 +1181,15 @@ pub struct ModSession<'a> {
     pub proxy: &'a crate::proxy::ProxySettings,
     /// In-game account switching, while the launcher runs.
     pub bridge: Option<&'a crate::bridge::BridgeInfo>,
+    pub minecraft_refresh_at: Option<u64>,
     /// The game may tell the Arctic server (for friends) which server it's on.
     pub share_server: bool,
     /// A duel to start from the title screen (see `QuickPlay::Duel`).
     pub duel: Option<serde_json::Value>,
     /// A replay to watch from the title screen (see `QuickPlay::Replay`).
     pub replay: Option<serde_json::Value>,
+    /// The language picked in the launcher ("tr"), or "" to follow the game's own.
+    pub language: &'a str,
 }
 
 /// Write the session file for the Arctic mod in `game_dir`.
@@ -1044,9 +1202,11 @@ pub fn write_mod_session(game_dir: &Path, session: &ModSession) -> Result<()> {
         style_set,
         proxy,
         bridge,
+        minecraft_refresh_at,
         share_server,
         duel,
         replay,
+        language,
     } = session;
     let path = game_dir.join("config").join("arctic-session.json");
     let contents = serde_json::json!({
@@ -1070,9 +1230,11 @@ pub fn write_mod_session(game_dir: &Path, session: &ModSession) -> Result<()> {
             "set": proxy.set,
         },
         "bridge": bridge,
+        "minecraft_refresh_at": minecraft_refresh_at,
         "share_server": share_server,
         "duel": duel,
         "replay": replay,
+        "language": language,
     });
     write_private(&path, &serde_json::to_vec_pretty(&contents)?)
 }
@@ -1211,6 +1373,180 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let dirs = DataDirs::new(dir.path().join("data"));
         (dir, dirs)
+    }
+
+    /// A tiny Arctic server: offline sign-in (numbered tokens, the keys it was given are recorded) and
+    /// `/v1/look`, which refuses the tokens in `refuse`.
+    struct FakeServer {
+        base: String,
+        keys: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    fn fake_server(refuse: &'static [&'static str]) -> FakeServer {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let keys = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let seen = keys.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let mut reader = BufReader::new(stream);
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap_or(0);
+                let (mut length, mut auth) = (0usize, String::new());
+                loop {
+                    let mut header = String::new();
+                    if reader.read_line(&mut header).unwrap_or(0) == 0 || header.trim().is_empty() {
+                        break;
+                    }
+                    let lower = header.to_ascii_lowercase();
+                    if let Some(v) = lower.strip_prefix("content-length:") {
+                        length = v.trim().parse().unwrap_or(0);
+                    }
+                    if lower.starts_with("authorization:") {
+                        auth = header["authorization:".len()..].trim().to_owned();
+                    }
+                }
+                let mut body = vec![0; length];
+                reader.read_exact(&mut body).ok();
+                let (status, reply) = if line.starts_with("POST /v1/auth/offline") {
+                    let sent: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                    let mut seen = seen.lock().unwrap();
+                    seen.push(sent["key"].as_str().unwrap_or("").to_owned());
+                    let token = format!("tok-{}", seen.len());
+                    (
+                        200,
+                        format!(
+                            r#"{{"token":"{token}","expires":{}}}"#,
+                            now_secs() + 7 * 24 * 3600
+                        ),
+                    )
+                } else if line.starts_with("GET /v1/look") {
+                    if auth.len() <= "Bearer ".len() || refuse.iter().any(|t| auth.ends_with(t)) {
+                        (401, "{}".to_owned())
+                    } else {
+                        (200, "{}".to_owned())
+                    }
+                } else {
+                    (404, "{}".to_owned())
+                };
+                let text = if status == 200 { "OK" } else { "No" };
+                let _ = write!(
+                    reader.get_mut(),
+                    "HTTP/1.1 {status} {text}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                    reply.len()
+                );
+            }
+        });
+        FakeServer { base, keys }
+    }
+
+    fn look(base: &str, token: &str) -> Result<serde_json::Value> {
+        get(&format!("{base}/v1/look"), Some(token))
+    }
+
+    /// The reported bug: the secret key file can't be written, so nothing can be saved encrypted.
+    #[cfg(not(windows))]
+    #[test]
+    fn without_a_writable_secret_key_the_session_still_works_and_the_name_survives_a_relaunch() {
+        let (dir, dirs) = key_dirs();
+        crate::secret::break_key_file_for_this_thread(dir.path());
+        let server = fake_server(&[]);
+        let account = crate::auth::offline::create("Alex").unwrap();
+        let first = token_for_locked(&dirs, &server.base, &account).unwrap();
+        assert!(!first.is_empty());
+        look(&server.base, &first).expect("a look request with the session works");
+        // Not signed in again for every request (the token can't be saved, so it's kept in memory).
+        assert_eq!(
+            token_for_locked(&dirs, &server.base, &account).unwrap(),
+            first
+        );
+        assert_eq!(server.keys.lock().unwrap().len(), 1);
+        // The file never holds an empty sealed token.
+        let saved = std::fs::read_to_string(credentials_path(&dirs)).unwrap();
+        assert!(!saved.contains("local1:\""), "{saved}");
+        // A relaunch: the memory is gone, the key is read back from the file and the same name works.
+        sessions().clear();
+        let second = token_for_locked(&dirs, &server.base, &account).unwrap();
+        look(&server.base, &second).unwrap();
+        let keys = server.keys.lock().unwrap();
+        assert_eq!(keys.len(), 2);
+        assert_eq!(keys[0], keys[1], "the same key claims the name again");
+        assert_eq!(keys[0].len(), 64);
+    }
+
+    #[test]
+    fn a_refused_session_signs_in_again_once() {
+        let (_dir, dirs) = key_dirs();
+        let server = fake_server(&["tok-1"]);
+        let account = crate::auth::offline::create("Blake").unwrap();
+        let result = with_session(&dirs, &server.base, &account, |t| look(&server.base, t));
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(server.keys.lock().unwrap().len(), 2, "one new sign-in");
+    }
+
+    #[test]
+    fn a_session_refused_twice_ends_in_a_clear_error_after_one_retry() {
+        let (_dir, dirs) = key_dirs();
+        let server = fake_server(&["tok-1", "tok-2", "tok-3"]);
+        let account = crate::auth::offline::create("Casey").unwrap();
+        let err =
+            with_session(&dirs, &server.base, &account, |t| look(&server.base, t)).unwrap_err();
+        assert!(matches!(err, Error::Auth(_)), "{err:?}");
+        assert!(!err.to_string().starts_with("network error"), "{err}");
+        assert_eq!(
+            server.keys.lock().unwrap().len(),
+            2,
+            "retried once, not forever"
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn an_offline_key_that_cannot_be_saved_claims_no_name_and_says_why() {
+        let (dir, _) = key_dirs();
+        // The data folder is under a plain file: nothing can be written there.
+        let blocker = dir.path().join("blocker");
+        std::fs::write(&blocker, b"x").unwrap();
+        let dirs = DataDirs::new(blocker.join("data"));
+        let server = fake_server(&[]);
+        let account = crate::auth::offline::create("Drew").unwrap();
+        let err = token_for_locked(&dirs, &server.base, &account)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("isn't writable") && err.contains("Drew"),
+            "{err}"
+        );
+        assert!(server.keys.lock().unwrap().is_empty(), "no key was sent");
+        assert!(crate::secret::problem().is_some());
+    }
+
+    #[test]
+    fn a_saved_token_that_reads_back_empty_is_never_reused() {
+        let (_dir, dirs) = key_dirs();
+        let account = crate::auth::offline::create("Alex").unwrap();
+        // Nothing listens here: any sign-in attempt fails, a reused token would not.
+        let base = "http://127.0.0.1:1";
+        let path = credentials_path(&dirs);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        // What a token saved while the secret key file was unwritable looks like on disk:
+        // this platform's sealed-value prefix with nothing sealed behind it.
+        #[cfg(windows)]
+        let empty_sealed = "dpapi2:";
+        #[cfg(not(windows))]
+        let empty_sealed = "local1:";
+        let creds = format!(
+            r#"{{"accounts":{{"{}":{{"token":"{empty_sealed}","expires":{},"server":"{base}"}}}}}}"#,
+            account.uuid,
+            now_secs() + 7 * 24 * 3600
+        );
+        std::fs::write(&path, creds).unwrap();
+        let result = token_for_locked(&dirs, base, &account);
+        assert!(
+            result.is_err(),
+            "an empty token was handed out as a session: {result:?}"
+        );
     }
 
     #[test]

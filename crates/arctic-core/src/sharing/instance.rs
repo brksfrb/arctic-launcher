@@ -38,7 +38,7 @@ fn yes() -> bool {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct InstancePack {
     pub name: String,
-    /// `None` only for a profile's Vanilla instance (it follows the Play tab).
+    /// `None` only for a profile's Arctic instance (it follows the Play tab).
     pub game_version: Option<String>,
     pub loader: Loader,
     #[serde(default)]
@@ -65,7 +65,7 @@ pub struct Exported {
 }
 
 impl InstancePack {
-    /// `play_version` stands in for the Vanilla instance's version (it
+    /// `play_version` stands in for the Arctic instance's version (it
     /// follows the Play tab), so a friend gets the version you play; `None`
     /// keeps it following the Play tab (profiles).
     pub fn export(
@@ -176,12 +176,7 @@ impl InstancePack {
             .as_deref()
             .ok_or_else(|| Error::Other("the share doesn't say which Minecraft version".into()))?;
         let name = instances::free_name(dirs, &self.name)?;
-        let created = instances::create(
-            dirs,
-            &name,
-            version,
-            arctic_ready(dirs, &self.loader, version),
-        )?;
+        let created = instances::create(dirs, &name, version, self.loader_here(dirs, version))?;
         let instance = Instance {
             icon: self.icon,
             performance: self.performance,
@@ -256,7 +251,24 @@ impl InstancePack {
     }
 }
 
+impl InstancePack {
+    /// The loader the copy gets. A Vanilla share with the Arctic Client on (an Arctic instance,
+    /// or a Vanilla one from before Vanilla stayed vanilla) ran on Fabric: it becomes a Fabric
+    /// instance with the client, as Vanilla instances can't have it.
+    fn loader_here(&self, dirs: &DataDirs, game: &str) -> Loader {
+        if self.loader == Loader::Vanilla
+            && self.arctic_mod
+            && crate::arctic_mod::supports(game)
+            && let Some(version) = crate::arctic_mod::client_loader(dirs, game)
+        {
+            return Loader::Fabric { version };
+        }
+        arctic_ready(dirs, &self.loader, game)
+    }
+}
+
 /// A Fabric Loader older than the Arctic Client needs gets the one it needs.
+/// Preserve Quilt: launch checks its jar's Fabric compatibility and skips the client if needed.
 fn arctic_ready(dirs: &DataDirs, loader: &Loader, game: &str) -> Loader {
     match loader {
         Loader::Fabric { version } if !crate::arctic_mod::loader_fits(game, version) => {

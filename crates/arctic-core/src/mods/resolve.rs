@@ -6,7 +6,6 @@
 use std::collections::{HashSet, VecDeque};
 
 use super::modrinth::{self, Version};
-use crate::loaders::LoaderKind;
 use crate::{Error, Result};
 
 /// Where versions come from.
@@ -38,7 +37,7 @@ impl VersionSource for Modrinth<'_> {
 pub(super) struct Target<'a> {
     pub loaders: &'a [&'a str],
     pub game_version: &'a str,
-    pub loader: LoaderKind,
+    pub loader_name: &'a str,
 }
 
 /// A version chosen for installation.
@@ -66,6 +65,38 @@ pub(super) fn resolve(
     source: &dyn VersionSource,
 ) -> Result<Vec<Planned>> {
     let root_version = newest(root, target, source)?;
+    resolve_root(root, root_version, target, installed, source)
+}
+
+/// Resolve an explicitly selected root without substituting a newer release.
+pub(super) fn resolve_version(
+    id: &str,
+    target: Target,
+    installed: &HashSet<String>,
+    source: &dyn VersionSource,
+) -> Result<Vec<Planned>> {
+    let version = source.version(id)?;
+    if !version.is_compatible(target.loaders, target.game_version)
+        || version.primary_file().is_none()
+    {
+        return Err(Error::IncompatibleContentVersion);
+    }
+    resolve_root(
+        &version.project_id.clone(),
+        version,
+        target,
+        installed,
+        source,
+    )
+}
+
+pub(super) fn resolve_root(
+    root: &str,
+    root_version: Version,
+    target: Target,
+    installed: &HashSet<String>,
+    source: &dyn VersionSource,
+) -> Result<Vec<Planned>> {
     let mut seen: HashSet<String> =
         HashSet::from([root.to_string(), root_version.project_id.clone()]);
     let mut queue: VecDeque<Pending> = VecDeque::new();
@@ -153,11 +184,18 @@ fn newest(project_id: &str, target: Target, source: &dyn VersionSource) -> Resul
         .cloned()
         .ok_or_else(|| {
             Error::Other(format!(
-                "{project_id} has no version for {} {}",
-                target.loader.label(),
-                target.game_version
+                "{project_id}{NO_VERSION}{} {}",
+                target.loader_name, target.game_version
             ))
         })
+}
+
+const NO_VERSION: &str = " has no version for ";
+
+/// Whether `e` is Modrinth's answer that a project has no build for the game version and
+/// loader asked for (and not that it could not be asked, or not be understood).
+pub(crate) fn is_no_version(e: &Error) -> bool {
+    matches!(e, Error::Other(text) if text.contains(NO_VERSION))
 }
 
 #[cfg(test)]
@@ -216,13 +254,45 @@ mod tests {
     const TARGET: Target = Target {
         loaders: &["fabric"],
         game_version: "1.21.4",
-        loader: LoaderKind::Fabric,
+        loader_name: "Fabric",
     };
 
     fn ids(plan: &[Planned]) -> Vec<(&str, bool)> {
         plan.iter()
             .map(|p| (p.version.id.as_str(), p.dependency))
             .collect()
+    }
+
+    #[test]
+    fn selected_root_stays_pinned_and_resolves_required_dependencies() {
+        let fake = Fake::new(vec![
+            ver("new", "A", "1.21.4", json!([])),
+            ver("old", "A", "1.21.4", json!([req_project("B")])),
+            ver("b1", "B", "1.21.4", json!([])),
+        ]);
+        let installed = HashSet::from(["A".to_owned()]);
+        let plan = resolve_version("old", TARGET, &installed, &fake).unwrap();
+        assert_eq!(ids(&plan), [("old", false), ("b1", true)]);
+    }
+
+    #[test]
+    fn selected_root_rejects_mismatches_and_missing_files_without_fallback() {
+        for (case, mut bad) in [
+            ver("bad", "A", "1.20.1", json!([])),
+            ver("bad", "A", "1.21.4", json!([])),
+            ver("bad", "A", "1.21.4", json!([])),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            match case {
+                1 => bad["loaders"] = json!(["forge"]),
+                2 => bad["files"] = json!([]),
+                _ => {}
+            }
+            let fake = Fake::new(vec![bad, ver("good", "A", "1.21.4", json!([]))]);
+            assert!(resolve_version("bad", TARGET, &HashSet::new(), &fake).is_err());
+        }
     }
 
     #[test]

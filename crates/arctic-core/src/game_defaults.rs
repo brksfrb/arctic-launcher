@@ -39,7 +39,7 @@ const SKIPPED: &[&str] = &[
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Defaults {
-    /// `options.txt` keys and values, exactly as the game writes them.
+    /// `options.txt` preferences in a format shared across game versions.
     pub values: BTreeMap<String, String>,
 }
 
@@ -258,6 +258,7 @@ impl Defaults {
     pub fn checked(mut self) -> Self {
         self.values
             .retain(|k, v| valid_key(k) && valid_value(v) && !SKIPPED.contains(&k.as_str()));
+        crate::game_defaults_options::canonicalize(&mut self.values);
         while self.values.len() > MAX_KEYS {
             let last = self.values.keys().next_back().cloned();
             if let Some(k) = last {
@@ -298,8 +299,8 @@ impl Defaults {
             return Ok(false);
         }
         std::fs::create_dir_all(game_dir).map_err(|e| Error::io(game_dir, e))?;
-        // A new file has no version line: keys as codes, which a newer game converts.
-        let values = crate::game_defaults_keys::for_file(&self.values, game, false);
+        let mut values = BTreeMap::new();
+        crate::game_defaults_options::apply(&self.values, &mut values, game);
         std::fs::write(&path, render(&values)).map_err(|e| Error::io(&path, e))?;
         Ok(true)
     }
@@ -308,27 +309,34 @@ impl Defaults {
     /// it stays). Refused while that game runs: it would write its own
     /// settings back on exit.
     pub fn apply_to(&self, game_dir: &Path, game: Option<&str>) -> Result<usize> {
+        self.apply_with_projection(game_dir, game)?;
+        Ok(self.values.len())
+    }
+
+    pub(crate) fn apply_with_projection(
+        &self,
+        game_dir: &Path,
+        game: Option<&str>,
+    ) -> Result<Self> {
         if crate::sharing::client::in_use(game_dir) {
             return Err(Error::Other(
                 "close that game first; it saves its own settings when it quits".into(),
             ));
         }
         let path = game_dir.join(OPTIONS);
-        let mut values = match std::fs::read_to_string(&path) {
-            Ok(text) => parse(&text),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
             Err(e) => return Err(Error::io(&path, e)),
         };
-        let order = key_order(&std::fs::read_to_string(&path).unwrap_or_default());
-        // Keys in the form the file says it holds: its version line stays the one the game that
-        // last wrote it left (1.8.9's file has none), and the next game converts from there.
-        let names = crate::game_defaults_keys::names_keys(&values);
-        for (k, v) in crate::game_defaults_keys::for_file(&self.values, game, names) {
-            values.insert(k, v);
+        let mut values = parse(&text);
+        let projected = crate::game_defaults_options::apply(&self.values, &mut values, game);
+        let rendered = render_ordered(&values, &key_order(&text));
+        if rendered != text {
+            std::fs::create_dir_all(game_dir).map_err(|e| Error::io(game_dir, e))?;
+            std::fs::write(&path, rendered).map_err(|e| Error::io(&path, e))?;
         }
-        std::fs::create_dir_all(game_dir).map_err(|e| Error::io(game_dir, e))?;
-        std::fs::write(&path, render_ordered(&values, &order)).map_err(|e| Error::io(&path, e))?;
-        Ok(self.values.len())
+        Ok(Self { values: projected })
     }
 }
 
@@ -473,6 +481,82 @@ mod tests {
         d.apply_to(dir.path(), Some("26.2")).unwrap();
         let text = std::fs::read_to_string(dir.path().join(OPTIONS)).unwrap();
         assert!(text.contains("key_key.pickItem:key.mouse.middle"), "{text}");
+    }
+
+    #[test]
+    fn defaults_use_the_cloud_and_string_formats_on_each_side_of_22w12a() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut defaults = Defaults::default();
+        defaults.set("clouds", "\"fast\"").unwrap();
+        defaults.set("mainHand", "\"left\"").unwrap();
+        defaults
+            .set("soundDevice", "\"OpenAL Soft on Speakers\"")
+            .unwrap();
+        defaults.set("graphicsMode", "0").unwrap();
+        defaults.set("ao", "2").unwrap();
+        defaults.set("lang", "fr_fr").unwrap();
+
+        for (version, clouds, hand, sound, graphics, ao, lang) in [
+            (
+                "1.8.9",
+                "fast",
+                "left",
+                "OpenAL Soft on Speakers",
+                "fancyGraphics:false",
+                "2",
+                "fr_FR",
+            ),
+            (
+                "22w11a",
+                "fast",
+                "left",
+                "OpenAL Soft on Speakers",
+                "graphicsMode:0",
+                "2",
+                "fr_fr",
+            ),
+            (
+                "22w12a",
+                "\"fast\"",
+                "\"left\"",
+                "\"OpenAL Soft on Speakers\"",
+                "graphicsMode:0",
+                "2",
+                "fr_fr",
+            ),
+            (
+                "1.19.3",
+                "\"fast\"",
+                "\"left\"",
+                "\"OpenAL Soft on Speakers\"",
+                "graphicsMode:0",
+                "true",
+                "fr_fr",
+            ),
+        ] {
+            let game = dir.path().join(version);
+            assert!(defaults.apply_if_new(&game, Some(version)).unwrap());
+            let text = std::fs::read_to_string(game.join(OPTIONS)).unwrap();
+            for line in [
+                format!("renderClouds:{clouds}"),
+                format!("mainHand:{hand}"),
+                format!("soundDevice:{sound}"),
+                graphics.to_owned(),
+                format!("ao:{ao}"),
+                format!("lang:{lang}"),
+            ] {
+                assert!(
+                    text.lines().any(|actual| actual == line),
+                    "{version}: {line}\n{text}"
+                );
+            }
+            let captured = Defaults::capture(&game).unwrap();
+            assert_eq!(captured.values["renderClouds"], "fast");
+            assert_eq!(captured.values["mainHand"], "left");
+            assert_eq!(captured.values["graphicsMode"], "fast");
+            assert_eq!(captured.values["ao"], "2");
+            assert_eq!(captured.values["lang"], "fr_fr");
+        }
     }
 
     #[test]

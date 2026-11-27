@@ -1,8 +1,10 @@
 package com.arcticlauncher.client.waypoints;
 
+
+import com.arcticlauncher.client.Lang;
 /** A named spot in one dimension of one world or server. */
 public final class Waypoint {
-	public String name = "Waypoint";
+	public String name = Lang.t("hud.waypoint");
 	public int x;
 	public int y;
 	public int z;

@@ -11,7 +11,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Switch accounts without restarting: asks the launcher that started the
  * game (over its local bridge) for the account list and for a fresh
@@ -27,11 +32,13 @@ public final class AccountSwitcher {
 	public static final class Entry {
 		public final String id;
 		public final String name;
+		private final UUID uuid;
 		public final boolean microsoft;
 
-		Entry(String id, String name, boolean microsoft) {
+		Entry(String id, String name, UUID uuid, boolean microsoft) {
 			this.id = id;
 			this.name = name;
+			this.uuid = uuid;
 			this.microsoft = microsoft;
 		}
 	}
@@ -47,6 +54,8 @@ public final class AccountSwitcher {
 	private volatile String status = "";
 	private volatile boolean signingIn;
 	private volatile long lastRefresh;
+	private volatile long minecraftRefreshAt;
+	private final AtomicBoolean renewing = new AtomicBoolean();
 	private static final long REFRESH_MS = 5000;
 	/** How long a browser sign-in may take. */
 	private static final long SIGN_IN_MS = 10 * 60 * 1000L;
@@ -56,10 +65,11 @@ public final class AccountSwitcher {
 	/** How long a switch waits for the player to answer the launcher's question. */
 	private static final long CONFIRM_MS = 60_000;
 
-	public AccountSwitcher(Platform platform, int port, String secret) {
+	public AccountSwitcher(Platform platform, int port, String secret, long minecraftRefreshAt) {
 		this.platform = platform;
 		this.bridgeUrl = port > 0 && secret != null ? "http://127.0.0.1:" + port : null;
 		this.secret = secret;
+		this.minecraftRefreshAt = minecraftRefreshAt;
 	}
 
 	/** Launched from a launcher that's still running (switching possible). */
@@ -94,9 +104,9 @@ public final class AccountSwitcher {
 				try {
 					JsonElement reply = GSON.fromJson(Http.getText(bridgeUrl + "/v1/accounts", secret), JsonElement.class);
 					accounts = parse(reply);
-					status = accounts.isEmpty() ? "The launcher has no accounts." : "";
+					status = accounts.isEmpty() ? Lang.t("social.the_launcher_has_no_accounts") : "";
 				} catch (Exception e) {
-					status = "Couldn't reach the launcher. Keep it open (or in the tray) to switch.";
+					status = Lang.t("social.couldnt_reach_the_launcher_keep_it_open_or");
 				} finally {
 					refreshing = false;
 				}
@@ -119,16 +129,16 @@ public final class AccountSwitcher {
 			return;
 		}
 		signingIn = true;
-		status = "Opening Microsoft sign-in in your browser...";
+		status = Lang.t("social.opening_microsoft_sign_in_in_your_browser");
 		background(new Runnable() {
 			@Override
 			public void run() {
 				try {
 					Http.send("POST", bridgeUrl + "/v1/accounts/add", secret, "{}");
-					status = "Finish signing in in your browser, then come back here.";
+					status = Lang.t("social.finish_signing_in_in_your_browser_then_come");
 					followSignIn();
 				} catch (Exception e) {
-					status = "Couldn't reach the launcher. Keep it open (or in the tray).";
+					status = Lang.t("social.couldnt_reach_the_launcher_keep_it_open_or_2");
 				} finally {
 					signingIn = false;
 				}
@@ -148,11 +158,11 @@ public final class AccountSwitcher {
 					JsonObject body = new JsonObject();
 					body.addProperty("name", name);
 					Http.send("POST", bridgeUrl + "/v1/accounts/offline", secret, body.toString());
-					status = "Added " + name + ".";
+					status = Lang.t("social.added") + name + ".";
 					lastRefresh = 0;
 					refresh();
 				} catch (Exception e) {
-					status = "Couldn't add it: a name is 1-16 letters, digits or _ (and the launcher must be open).";
+					status = Lang.t("social.couldnt_add_it_a_name_is_1_16_letters_digits");
 				}
 			}
 		});
@@ -173,17 +183,17 @@ public final class AccountSwitcher {
 			String state = text(o, "state");
 			if ("done".equals(state)) {
 				String name = text(o, "name");
-				status = "Added " + (name == null ? "the account" : name) + ". Click it to play as them.";
+				status = Lang.t("social.added") + (name == null ? Lang.t("social.the_account") : name) + Lang.t("social.click_it_to_play_as_them");
 				refreshNow();
 				return;
 			}
 			if ("failed".equals(state)) {
 				String why = text(o, "message");
-				status = "Sign-in didn't finish" + (why == null ? "." : ": " + why);
+				status = Lang.t("social.sign_in_didnt_finish") + (why == null ? "." : ": " + why);
 				return;
 			}
 		}
-		status = "Sign-in timed out. Try Add account again.";
+		status = Lang.t("social.sign_in_timed_out_try_add_account_again");
 	}
 
 	/** {@link #refresh()} on this thread. */
@@ -209,7 +219,7 @@ public final class AccountSwitcher {
 		if (platform.inWorld()) {
 			platform.runOnGameThread(platform::leaveWorld);
 		}
-		status = "Signing in as " + entry.name + "...";
+		status = Lang.t("social.signing_in_as") + entry.name + "...";
 		background(new Runnable() {
 			@Override
 			public void run() {
@@ -223,14 +233,14 @@ public final class AccountSwitcher {
 							break;
 						}
 						if (System.currentTimeMillis() > until) {
-							status = "Not confirmed in Arctic Launcher. Pick " + entry.name + " again to retry.";
+							status = Lang.t("social.not_confirmed_in_arctic_launcher_pick", entry.name);
 							return;
 						}
-						status = "Confirm the switch to " + entry.name + " in Arctic Launcher...";
+						status = Lang.t("social.confirm_the_switch_to", entry.name);
 					}
 					apply(reply, rejoin ? server : null);
 				} catch (Exception e) {
-					status = "Couldn't switch: " + e.getMessage();
+					status = Lang.t("social.couldnt_switch") + e.getMessage();
 				} finally {
 					busy = false;
 				}
@@ -238,62 +248,115 @@ public final class AccountSwitcher {
 		});
 	}
 
-	/**
-	 * The server said the game's session is no longer valid (it expired while
-	 * the game ran): get a fresh one for the same account from the launcher
-	 * and use it. Blocks (call it off the game thread); true if it worked.
-	 */
-	public boolean renewSession() {
-		if (!available()) {
-			return false;
-		}
-		try {
-			String me = platform.playerName();
-			Entry mine = null;
-			List<Entry> list = parse(GSON.fromJson(Http.getText(bridgeUrl + "/v1/accounts", secret), JsonElement.class));
-			for (Entry e : list) {
-				if (e.name.equalsIgnoreCase(me)) {
-					mine = e;
-				}
-			}
-			if (mine == null) {
-				return false;
-			}
-			JsonElement reply = GSON.fromJson(Http.send("POST", bridgeUrl + "/v1/accounts/" + mine.id + "/session", secret, "{}"),
-					JsonElement.class);
-			JsonObject o = reply != null && reply.isJsonObject() ? reply.getAsJsonObject() : new JsonObject();
-			final String name = text(o, "name");
-			final UUID uuid = uuid(text(o, "uuid"));
-			final String token = text(o, "access_token");
-			final String xuid = text(o, "xuid");
-			final boolean microsoft = "msa".equals(text(o, "user_type"));
-			final String arcticToken = text(o, "arctic_token");
-			if (!validName(name) || uuid == null || token == null || token.isEmpty()) {
-				return false;
-			}
-			final String[] problem = {"timed out"};
-			final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
-			platform.runOnGameThread(new Runnable() {
-				@Override
-				public void run() {
-					problem[0] = platform.switchAccount(name, uuid, token, xuid, microsoft);
-					if (problem[0] == null) {
-						ArcticClient.looks().useSession(arcticToken);
-					}
-					done.countDown();
-				}
-			});
-			done.await(RENEW_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
-			if (problem[0] != null) {
-				platform.log(true, "session renewal: " + problem[0]);
-				return false;
-			}
-			platform.log(false, "session renewed for " + name);
+	/** The game's current session, which may differ from the launcher's active account. */
+	public boolean offlineSession() {
+		if (platform.offlineSession()) {
 			return true;
-		} catch (Exception e) {
-			platform.log(true, "session renewal: " + e);
+		}
+		Entry current = findAccount(accounts, platform.playerId());
+		return current != null && !current.microsoft;
+	}
+
+	/** Off the game thread, refresh before joining only when this session is near expiry. */
+	public boolean refreshBeforeJoin() {
+		long refreshAt = minecraftRefreshAt;
+		return refreshAt > 0 && System.currentTimeMillis() / 1000 >= refreshAt && refreshSession(false);
+	}
+
+	/** Off the game thread, replace a Microsoft session that a server rejected. */
+	public boolean renewSession() {
+		return refreshSession(true);
+	}
+
+	/** Start renewal from a screen and deliver the result on the game thread. */
+	public void renewSession(Consumer<Boolean> complete) {
+		background(() -> {
+			boolean renewed = renewSession();
+			platform.runOnGameThread(() -> complete.accept(renewed));
+		});
+	}
+
+	private boolean refreshSession(boolean force) {
+		if (!available() || offlineSession() || busy || !renewing.compareAndSet(false, true)) {
 			return false;
 		}
+		long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(RENEW_MS);
+		try {
+			UUID currentId = platform.playerId();
+			List<Entry> list = parse(GSON.fromJson(Http.getText(bridgeUrl + "/v1/accounts", secret), JsonElement.class));
+			accounts = list;
+			Entry mine = findAccount(list, currentId);
+			if (mine == null || !mine.microsoft) {
+				return false;
+			}
+			long remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
+			if (remaining <= 0) {
+				return false;
+			}
+			String url = bridgeUrl + "/v1/accounts/" + mine.id + "/session" + (force ? "?force=1" : "");
+			JsonObject o = GSON.fromJson(Http.send("POST", url, secret, "{}", (int) remaining), JsonObject.class);
+			if (o == null) {
+				return false;
+			}
+			String name = text(o, "name");
+			UUID uuid = uuid(text(o, "uuid"));
+			String token = text(o, "access_token");
+			if (!validName(name) || !currentId.equals(uuid) || !renewableSession(text(o, "user_type"), token)) {
+				return false;
+			}
+			long refreshAt = refreshAt(o);
+			String xuid = text(o, "xuid");
+			FutureTask<Boolean> swap = new FutureTask<>(() -> {
+				if (System.nanoTime() >= deadline || busy || !currentId.equals(platform.playerId())
+						|| platform.isCurrentSessionToken(token)) {
+					return false;
+				}
+				if (platform.switchAccount(name, uuid, token, xuid, true) != null) {
+					return false;
+				}
+				minecraftRefreshAt = refreshAt;
+				return true;
+			});
+			platform.runOnGameThread(swap);
+			try {
+				if (swap.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS)) {
+					platform.log(false, "session renewed for " + name);
+					return true;
+				}
+				if (force) {
+					platform.log(true, "could not replace the rejected session for " + name);
+				}
+			} finally {
+				swap.cancel(false);
+			}
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		} catch (Exception e) {
+			platform.log(true, "could not refresh the Minecraft session");
+		} finally {
+			renewing.set(false);
+		}
+		return false;
+	}
+
+	static boolean renewableSession(String userType, String token) {
+		return "msa".equals(userType) && token != null && !token.isEmpty() && !"0".equals(token);
+	}
+
+	private static long refreshAt(JsonObject o) {
+		JsonElement value = o.get("minecraft_refresh_at");
+		return value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber() ? value.getAsLong() : 0;
+	}
+
+	private static Entry findAccount(List<Entry> list, UUID uuid) {
+		if (uuid != null) {
+			for (Entry entry : list) {
+				if (uuid.equals(entry.uuid)) {
+					return entry;
+				}
+			}
+		}
+		return null;
 	}
 
 	private void apply(JsonElement reply, final String rejoin) {
@@ -304,8 +367,9 @@ public final class AccountSwitcher {
 		final String xuid = text(o, "xuid");
 		final boolean microsoft = "msa".equals(text(o, "user_type"));
 		final String arcticToken = text(o, "arctic_token");
+		final long refreshAt = refreshAt(o);
 		if (!validName(name) || uuid == null || token == null || token.isEmpty()) {
-			status = "The launcher sent an unusable session.";
+			status = Lang.t("social.the_launcher_sent_an_unusable_session");
 			return;
 		}
 		platform.runOnGameThread(new Runnable() {
@@ -313,13 +377,14 @@ public final class AccountSwitcher {
 			public void run() {
 				String problem = platform.switchAccount(name, uuid, token, xuid, microsoft);
 				if (problem != null) {
-					status = "Couldn't switch: " + problem;
-					com.arcticlauncher.client.notice.Notices.post("Couldn't switch accounts", problem);
+					status = Lang.t("social.couldnt_switch") + problem;
+					com.arcticlauncher.client.notice.Notices.post(Lang.t("social.couldnt_switch_accounts"), problem);
 					return;
 				}
-				com.arcticlauncher.client.notice.Notices.post("Playing as " + name, rejoin != null ? "Joining " + rejoin + " again" : "");
+				com.arcticlauncher.client.notice.Notices.post(Lang.t("social.playing_as") + name, rejoin != null ? Lang.t("social.joining_again", rejoin) : "");
+				minecraftRefreshAt = refreshAt;
 				ArcticClient.looks().useSession(arcticToken);
-				status = "Playing as " + name + ".";
+				status = Lang.t("social.playing_as") + name + ".";
 				if (rejoin != null) {
 					platform.connectTo(rejoin);
 				}
@@ -352,7 +417,7 @@ public final class AccountSwitcher {
 			JsonElement ms = o.get("microsoft");
 			boolean microsoft = ms != null && ms.isJsonPrimitive() && ms.getAsJsonPrimitive().isBoolean() && ms.getAsBoolean();
 			if (validId(id) && validName(name)) {
-				out.add(new Entry(id, name, microsoft));
+				out.add(new Entry(id, name, uuid(text(o, "uuid")), microsoft));
 			}
 		}
 		return Collections.unmodifiableList(out);

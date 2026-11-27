@@ -38,6 +38,10 @@ final class FitTest {
 
 	/** Two shoulder pets to see both kinds (cuboid and sculpted); only one is drawn per slot, so each takes a turn. */
 	private static void script() {
+		if (System.getProperty("arctic.fit.pets") != null) {
+			petsScript(System.getProperty("arctic.fit.pets").split(","));
+			return;
+		}
 		Minecraft.getInstance().options.pauseOnLostFocus = false;
 		TIMER.scheduleAtFixedRate(() -> ArcticClient.looks().tryOn(Arrays.asList(WORN.get(0), pet), fits), 0, 200, TimeUnit.MILLISECONDS);
 		at(1, () -> {
@@ -63,6 +67,30 @@ final class FitTest {
 	}
 
 	private static volatile String pet = WORN.get(1);
+
+	/** {@code -Darctic.fit.pets=a,b,c}: each shoulder pet in turn, seen from the front, one screenshot each. */
+	private static void petsScript(String[] ids) {
+		Minecraft.getInstance().options.pauseOnLostFocus = false;
+		pet = ids[0];
+		// Hold the player in open sky so the front camera is never pulled in by terrain.
+		TIMER.scheduleAtFixedRate(() -> Minecraft.getInstance().execute(() -> Compat.sendChat("/tp @s 0.5 250 0.5 " + Integer.getInteger("arctic.fit.pets.yaw", 0) + " 10")), 0, 500, TimeUnit.MILLISECONDS);
+		TIMER.scheduleAtFixedRate(() -> ArcticClient.looks().tryOn(Arrays.asList(pet), null), 0, 50, TimeUnit.MILLISECONDS);
+		at(1, () -> {
+			Compat.setYRot(Minecraft.getInstance().player, 0);
+			Compat.setXRot(Minecraft.getInstance().player, 10);
+			Compat.setCamera(2);
+		});
+		final int wait = Integer.getInteger("arctic.fit.pets.wait", 0);
+		for (int i = 0; i < ids.length; i++) {
+			final String id = ids[i];
+			at(wait + 3 + 6 * i, () -> pet = id);
+			at(wait + 7 + 6 * i, () -> WorldTest.shot("pet-" + id));
+		}
+		at(wait + 9 + 6 * ids.length, () -> {
+			ArcticMod.LOG.info("fittest: done");
+			Minecraft.getInstance().stop();
+		});
+	}
 
 	private static void at(int seconds, Runnable r) {
 		TIMER.schedule(() -> Minecraft.getInstance().execute(r), seconds, TimeUnit.SECONDS);

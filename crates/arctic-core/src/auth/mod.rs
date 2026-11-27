@@ -77,10 +77,15 @@ impl Account {
 
     /// True when a Microsoft token is expired or about to expire.
     pub fn needs_refresh(&self, now: u64) -> bool {
+        self.minecraft_refresh_at().is_some_and(|at| now >= at)
+    }
+
+    /// Unix seconds when this Minecraft session enters the refresh window.
+    pub fn minecraft_refresh_at(&self) -> Option<u64> {
         match &self.kind {
             #[cfg(any(feature = "offline-accounts", test))]
-            AccountKind::Offline => false,
-            AccountKind::Microsoft(s) => now + REFRESH_MARGIN_SECS >= s.expires_at,
+            AccountKind::Offline => None,
+            AccountKind::Microsoft(s) => Some(s.expires_at.saturating_sub(REFRESH_MARGIN_SECS)),
         }
     }
 
@@ -168,6 +173,22 @@ impl AccountStore {
         }
     }
 
+    /// Replace a refreshed session only if its account still has the login we refreshed.
+    pub fn replace_refreshed(&mut self, previous: &Account, fresh: Account) -> bool {
+        let Some(slot) = self
+            .accounts
+            .iter_mut()
+            .find(|account| account.id == previous.id)
+        else {
+            return false;
+        };
+        if slot != previous {
+            return false;
+        }
+        *slot = fresh;
+        true
+    }
+
     /// Let a running game switch to this account without asking again.
     pub fn allow_game_switch(&mut self, id: &str) {
         if self.accounts.iter().any(|a| a.id == id) && !self.game_switch_ok.iter().any(|i| i == id)
@@ -212,11 +233,29 @@ impl AccountStore {
 /// session when it is (about to be) expired. The bool says whether it
 /// changed (and should be saved).
 pub fn ensure_fresh(dirs: &DataDirs, account: &Account) -> Result<(Account, bool)> {
-    if !account.needs_refresh(now_secs()) {
-        return Ok((account.clone(), false));
+    refresh_session(dirs, account, false)
+}
+
+/// Ensure freshness, or mint a new Microsoft token after a server rejected the session.
+pub fn refresh_session(dirs: &DataDirs, account: &Account, force: bool) -> Result<(Account, bool)> {
+    refresh_session_with(account, force, |account| {
+        let cfg = microsoft::MsaConfig::load(dirs)?;
+        microsoft::refresh(&cfg, account)
+    })
+}
+
+fn refresh_session_with(
+    account: &Account,
+    force: bool,
+    refresh: impl FnOnce(&Account) -> Result<Account>,
+) -> Result<(Account, bool)> {
+    if force && !account.is_microsoft() {
+        return Err(crate::Error::OfflineSessionRefresh);
     }
-    let cfg = microsoft::MsaConfig::load(dirs)?;
-    Ok((microsoft::refresh(&cfg, account)?, true))
+    if force || account.needs_refresh(now_secs()) {
+        return Ok((refresh(account)?, true));
+    }
+    Ok((account.clone(), false))
 }
 
 pub fn now_secs() -> u64 {
@@ -324,6 +363,42 @@ mod tests {
         assert!(acc.needs_refresh(1_000 - 60));
         assert!(!acc.needs_refresh(0));
         assert!(!offline::create("Alex").unwrap().needs_refresh(u64::MAX / 2));
+    }
+
+    #[test]
+    fn force_refresh_requests_a_new_token_before_the_refresh_window() {
+        let account = ms("u", now_secs() + 3600);
+        let (_, changed) =
+            refresh_session_with(&account, false, |_| panic!("already fresh")).unwrap();
+        assert!(!changed);
+        let (fresh, changed) = refresh_session_with(&account, true, |account| {
+            assert_eq!(account.uuid, "u");
+            Ok(ms("u", now_secs() + 7200))
+        })
+        .unwrap();
+        assert!(changed && fresh.minecraft_refresh_at() > account.minecraft_refresh_at());
+        let offline = offline::create("Alex").unwrap();
+        assert!(matches!(
+            refresh_session_with(&offline, true, |_| panic!("offline account")),
+            Err(crate::Error::OfflineSessionRefresh)
+        ));
+    }
+
+    #[test]
+    fn saving_a_refresh_preserves_selection_and_newer_logins() {
+        let mut store = AccountStore::default();
+        let previous = ms("u", 1000);
+        store.upsert(previous.clone());
+        let offline = offline::create("Alex").unwrap();
+        store.upsert(offline.clone());
+
+        let mut fresh = ms("u", 2000);
+        fresh.id.clone_from(&previous.id);
+        assert!(store.replace_refreshed(&previous, fresh.clone()));
+        assert_eq!(store.active.as_deref(), Some(offline.id.as_str()));
+        assert!(!store.replace_refreshed(&previous, fresh.clone()));
+        store.remove(&fresh.id);
+        assert!(!store.replace_refreshed(&fresh, fresh.clone()));
     }
 
     #[test]

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Watching one replay: its clock (pause, speed, jumping), the camera (free,
  * first person as recorded, following a player, or along a path) and video
@@ -19,6 +20,9 @@ public final class ReplayViewer {
 	private static final double MAX_FRAME_MS = 250;
 	/** While joining: packets handed over per frame at most. */
 	private static final int JOIN_BATCH = 4000;
+	/** An export waits this long (real ms) on the terrain screen before recorded packets are let through. */
+	private static final double LOADING_GRACE_MS = 1000;
+	static final int MAX_PACKET_FAILURES = 16;
 	/** Arrow keys jump this far (ms); with Ctrl, further. */
 	static final int SHORT_JUMP = 5_000;
 	static final int LONG_JUMP = 30_000;
@@ -27,15 +31,20 @@ public final class ReplayViewer {
 	private static final double LOW_EYES = 0.4;
 
 	public enum Mode {
-		FREE("Free camera"),
-		FIRST_PERSON("First person"),
-		FOLLOW("Following"),
-		PATH("Camera path");
+		FREE("replay.free_camera_2"),
+		FIRST_PERSON("replay.first_person"),
+		FOLLOW("replay.following_2"),
+		PATH("replay.camera_path");
 
-		public final String label;
+		/** The camera's text key. */
+		private final String key;
 
-		Mode(String label) {
-			this.label = label;
+		Mode(String key) {
+			this.key = key;
+		}
+
+		public String label() {
+			return Lang.t(key);
 		}
 	}
 
@@ -46,6 +55,8 @@ public final class ReplayViewer {
 	private final List<Keyframe> keyframes;
 	private final Runnable onKeyframesChanged;
 	private final FreeCamera free = new FreeCamera();
+	private int consecutivePacketFailures;
+	private int loggedFailures;
 	private boolean placed;
 	private double time;
 	private int cursor;
@@ -59,6 +70,10 @@ public final class ReplayViewer {
 	private int lastSelf = -1;
 	/** A jump asked for, done at the start of the next frame (so "Jumping…" shows first). */
 	private double pendingSeek = -1;
+	/** Replay time packets are fed up to while an export waits for the terrain screen (-1: not waiting). */
+	private double loadingClock = -1;
+	/** Real time an export has spent behind the terrain screen (ms). */
+	private double loadingWait;
 	/** Some game versions render recursively from a packet handler. Never advance half a seek. */
 	private boolean seeking;
 	private String status;
@@ -67,6 +82,8 @@ public final class ReplayViewer {
 	private VideoExport export;
 	private long exportFrameAt;
 	private String problem;
+	/** Why playback can't continue (set once), or null. */
+	private String failure;
 	/** When the world first showed (ms): the timeline starts here, not at the login. */
 	private int start;
 	/** Last time the player touched the controls (nanoTime), for hiding the bar. */
@@ -95,7 +112,7 @@ public final class ReplayViewer {
 			ReplayClock.stop();
 			return error;
 		}
-		final ReplayBackend.Classifier classifier = backend.classifier(data);
+		final ReplayBackend.Classifier classifier = data.classified() ? null : backend.classifier(data);
 		if (classifier != null) {
 			Thread t = new Thread(() -> {
 				long start = System.nanoTime();
@@ -106,7 +123,7 @@ public final class ReplayViewer {
 			t.setPriority(Thread.MIN_PRIORITY + 1);
 			t.start();
 		}
-		status = "Joining…";
+		status = Lang.t("replay.joining");
 		return null;
 	}
 
@@ -130,7 +147,7 @@ public final class ReplayViewer {
 
 	/** Before a frame is drawn (game thread). */
 	void frame() {
-		if (seeking) return;
+		if (seeking || failure != null) return;
 		if (export != null) {
 			// Pace rendering as well as encoding: never spin the GPU at an uncapped frame rate.
 			long wait = exportFrameAt + 1_000_000_000L / 30 - System.nanoTime();
@@ -145,9 +162,13 @@ public final class ReplayViewer {
 			return;
 		}
 		if (pendingSeek >= 0) {
-			double target = pendingSeek;
+			// A jump asked for before the world showed (an export started together with the replay) was
+			// clamped to a timeline start nobody knew yet. Before the first packet there is nothing to
+			// rebuild the world from: the restart left the login unapplied and the terrain screen up.
+			double target = Math.max(start, pendingSeek);
 			pendingSeek = -1;
 			seekNow(target);
+			if (failure != null) return;
 			// Rebuilding the world is not elapsed playback or free-camera movement.
 			realMs = 0;
 			lastFrame = System.nanoTime();
@@ -168,8 +189,32 @@ public final class ReplayViewer {
 			ReplayClock.scale(paused && export == null ? 0 : SPEEDS[speed]);
 		}
 		feed(time, false);
+		feedWhileLoading(realMs);
+		if (failure != null) return;
 		self();
 		camera(realMs / 1000.0);
+	}
+
+	/**
+	 * The terrain screen can depend on recorded packets: the first position after a login or respawn
+	 * arrives a moment after it and is what closes the screen. An export holds the clock at its frame
+	 * until the world is ready, so it never reached that packet and the screen stayed up forever. Once
+	 * the screen has outlasted {@link #LOADING_GRACE_MS} (it normally closes by itself well within that),
+	 * packets arrive at their recorded pace until it closes; the export clock catches up with them.
+	 */
+	private void feedWhileLoading(double realMs) {
+		if (export == null || !backend.loading()) {
+			loadingWait = 0;
+			loadingClock = -1;
+			return;
+		}
+		loadingWait += realMs;
+		if (loadingWait < LOADING_GRACE_MS) return;
+		if (loadingClock < 0) {
+			loadingClock = cursor > 0 ? Math.max(time, data.time(cursor - 1)) : time;
+		}
+		loadingClock += realMs;
+		feed(loadingClock, false);
 	}
 
 	/** After the frame is on screen: exporting grabs it. */
@@ -178,7 +223,7 @@ public final class ReplayViewer {
 		// seek and camera change must be applied before we capture frame zero.
 		// Seeking can rebuild the world: don't encode the terrain-loading screen
 		// or advance the export timeline while that world is still joining.
-		if (export == null || seeking || pendingSeek >= 0 || !ready()) {
+		if (export == null || seeking || failure != null || pendingSeek >= 0 || !ready()) {
 			return;
 		}
 		if (export.failed() != null) {
@@ -197,40 +242,98 @@ public final class ReplayViewer {
 	/** Log in and configure as fast as the game takes it; the clock starts once in the world. */
 	private void join() {
 		int n = 0;
-		while (!backend.ready() && cursor < data.count() && n++ < JOIN_BATCH) {
+		while (failure == null && !backend.ready() && cursor < data.count() && n++ < JOIN_BATCH) {
 			apply(cursor++, false);
 		}
+		if (failure != null) return;
 		if (backend.ready()) {
 			joined = true;
 			status = null;
 			time = cursor > 0 ? data.time(cursor - 1) : 0;
 			start = (int) time;
-		} else if (cursor >= data.count()) {
-			problem = "This replay never reaches the world.";
+			skipBootstrap();
+		} else if (failure == null && cursor >= data.count()) {
+			problem = Lang.t("replay.this_replay_never_reaches_the_world");
 			joined = true;
 		}
 	}
 
+	/**
+	 * The world as it was when the recording started arrives all at once (time 0). Older clips
+	 * carry far more of it than they need (on 1.8, every chunk the server sent since joining):
+	 * apply only what's still there at the start, like a jump.
+	 */
+	private void skipBootstrap() {
+		int to = data.indexAfter(time);
+		byte[] cats = data.category;
+		if (cats == null || to - cursor < 2) {
+			return;
+		}
+		long began = System.nanoTime();
+		// Planned from the very start (an empty world), applying what's left after the login.
+		int[] plan = SeekPlan.plan(cats, data.key, 0, to, data.removals, data.bulks);
+		int applied = 0;
+		for (int i : plan) {
+			if (i >= cursor) {
+				apply(i, true);
+				applied++;
+			}
+		}
+		platform.log(false, "replay: started with " + applied + " of " + (to - cursor) + " opening packets in "
+				+ (System.nanoTime() - began) / 1_000_000 + " ms");
+		cursor = to;
+	}
+
 	private void feed(double until, boolean jumping) {
-		while (cursor < data.count() && data.time(cursor) <= until) {
+		while (failure == null && cursor < data.count() && data.time(cursor) <= until) {
 			apply(cursor++, jumping);
 		}
 	}
 
 	private void apply(int i, boolean jumping) {
+		if (failure != null) {
+			return;
+		}
 		try {
 			backend.apply(data.packet(i), jumping);
+		} catch (ReplayBackend.Unusable e) {
+			// One line, then stop: the packets after it would all fail the same way.
+			failure = e.getMessage();
+			platform.log(true, "replay: packet " + i + " left playback unusable, stopping: " + e.getMessage());
 		} catch (RuntimeException e) {
-			if (problem == null) {
+			if (++consecutivePacketFailures == 1 && loggedFailures++ < 5) {
 				// Where it failed too: a bare NullPointerException says nothing on its own.
 				StackTraceElement[] at = e.getStackTrace();
 				StringBuilder where = new StringBuilder();
 				for (int k = 0; k < Math.min(3, at.length); k++) {
 					where.append(" at ").append(at[k]);
 				}
-				platform.log(true, "replay: packet " + i + " failed: " + e + where);
+				platform.log(true, "replay: packet " + i + " failed: " + e + where + "; cause=" + e.getCause() + "; " + evidence());
 			}
+			if (e instanceof ReplayBackend.ProtocolFailure || consecutivePacketFailures >= MAX_PACKET_FAILURES) {
+				stopPacketFeeding(Lang.t("replay.replay_playback_stopped_because_its_packets_could_not_be_read_try_another_recording"));
+			}
+			return;
 		}
+		consecutivePacketFailures = 0;
+		if (failure != null) stopPacketFeeding(failure);
+	}
+
+	/** What a bug report needs to tell a corrupt recording from a missed phase switch. */
+	private String evidence() {
+		ReplayMeta m = data.meta;
+		return "recording[mc=" + m.mcversion + " protocol=" + m.protocol + " generator=" + m.generator
+				+ " format=" + m.fileFormatVersion + " arctic=" + data.extras.version + "] " + backend.diagnostics();
+	}
+
+	private void stopPacketFeeding(String message) {
+		platform.log(true, "replay: stopped feeding packets at cursor " + cursor + " after " + consecutivePacketFailures
+				+ " consecutive failures; " + evidence());
+		paused = true;
+		status = null;
+		problem = failure = message;
+		if (export != null) cancelExport();
+		ReplayClock.scale(0);
 	}
 
 	private void self() {
@@ -319,8 +422,9 @@ public final class ReplayViewer {
 
 	/** Jump to {@code ms} (done at the start of the next frame). */
 	public void seek(double ms) {
+		if (failure != null) return;
 		pendingSeek = Math.max(start, Math.min(data.duration(), ms));
-		status = "Jumping…";
+		status = Lang.t("replay.jumping");
 		touched();
 	}
 
@@ -371,13 +475,14 @@ public final class ReplayViewer {
 			cursor = 0;
 			lastSelf = -1;
 			// The world is rebuilt from scratch: the login and configuration come first.
-			while (!backend.ready() && cursor < to) {
+			while (failure == null && !backend.ready() && cursor < to) {
 				apply(cursor++, true);
 			}
 		}
 		if (cats != null) {
-			int[] plan = SeekPlan.plan(cats, keys, cursor, to, data.removals);
+			int[] plan = SeekPlan.plan(cats, keys, cursor, to, data.removals, data.bulks);
 			for (int i : plan) {
+				if (failure != null) break;
 				apply(i, true);
 			}
 			platform.log(false, "replay: jumped " + (to - cursor) + " packets using " + plan.length + " in "
@@ -386,6 +491,7 @@ public final class ReplayViewer {
 		} else {
 			feed(target, true);
 		}
+		if (failure != null) return;
 		time = target;
 		lastSelf = data.selfIndexAt(target) - 1;
 		self();
@@ -504,7 +610,7 @@ public final class ReplayViewer {
 	public void playPath() {
 		CameraPath p = new CameraPath(keyframes);
 		if (!p.usable()) {
-			problem = "Add keyframes at two different times first (K).";
+			problem = Lang.t("replay.add_keyframes_at_two_different_times_first_k");
 			return;
 		}
 		if (mode == Mode.FOLLOW) {
@@ -540,7 +646,7 @@ public final class ReplayViewer {
 		if (camera == Mode.PATH) {
 			CameraPath p = new CameraPath(keyframes);
 			if (!p.usable()) {
-				problem = "Add keyframes at two different times first (K).";
+				problem = Lang.t("replay.add_keyframes_at_two_different_times_first_k");
 				return;
 			}
 			path = p;
@@ -623,6 +729,11 @@ public final class ReplayViewer {
 	/** What's happening ("Joining…", "Jumping…"), or null. */
 	public String status() {
 		return status;
+	}
+
+	/** Why playback can't go on (the replay should be closed), or null. */
+	public String failure() {
+		return failure;
 	}
 
 	/** Something went wrong the player should know about (then cleared), or null. */

@@ -27,8 +27,8 @@ mine = tuple(int(x) for x in ver.split("."))
 if not os.environ.get("JAVA_HOME"):
     sys.exit("JAVA_HOME is not set (javap is needed)")
 J = os.path.join(os.environ["JAVA_HOME"], "bin", "javap")
-home = os.path.expanduser("~")
-JAR = glob.glob(home + f"/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft/minecraft-merged-legacy-intermediary-1-v2/{ver}-*/*.jar")[0]
+gradle_home = os.environ.get("GRADLE_USER_HOME", os.path.expanduser("~/.gradle"))
+JAR = glob.glob(gradle_home + f"/caches/fabric-loom/minecraftMaven/net/minecraft/minecraft-merged-legacy-intermediary-1-v2/{ver}-*/*.jar")[0]
 cache = {}
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "src/main/java/com/arcticlauncher/legacy/mixin"))
 
@@ -90,7 +90,7 @@ def active(src):
 
 for f in sorted(glob.glob("*.java")):
     src = active(open(f, encoding="utf-8").read())
-    m = re.search(r"@Mixin\(([\w.]+)\.class\)", src)
+    m = re.search(r"@Mixin\(\s*(?:value\s*=\s*)?([\w.]+)\.class(?:,\s*priority\s*=\s*\d+)?\s*\)", src)
     if not m:
         print(f"({f}: not in {ver})")
         continue
@@ -155,7 +155,7 @@ def body(cls, method):
 
 for f in sorted(glob.glob("*.java")):
     src = active(open(f, encoding="utf-8").read())
-    m = re.search(r"@Mixin\(([\w.]+)\.class\)", src)
+    m = re.search(r"@Mixin\(\s*(?:value\s*=\s*)?([\w.]+)\.class(?:,\s*priority\s*=\s*\d+)?\s*\)", src)
     if not m:
         continue
     imports = dict((i.group(2), i.group(1) + "." + i.group(2)) for i in re.finditer(r"import ((?:net\.minecraft|com\.mojang)[\w.]*)\.(\w+);", src))

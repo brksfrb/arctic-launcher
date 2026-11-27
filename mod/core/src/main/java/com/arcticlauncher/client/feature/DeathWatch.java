@@ -3,6 +3,7 @@ package com.arcticlauncher.client.feature;
 import com.arcticlauncher.client.Platform;
 import com.arcticlauncher.client.notice.Notices;
 
+import com.arcticlauncher.client.Lang;
 /** Remembers where you died, and says so in a pop-up. */
 public final class DeathWatch {
 	private boolean wasDead;
@@ -22,7 +23,7 @@ public final class DeathWatch {
 				here = platform;
 				lastDeath = (int) Math.floor(p[0]) + " " + (int) Math.floor(p[1]) + " " + (int) Math.floor(p[2]);
 				if (notice) {
-					Notices.post("You died at " + lastDeath, "Your items wait there for 5 minutes");
+					Notices.post(Lang.t("hud.you_died_at") + lastDeath, Lang.t("hud.your_items_wait_there_for_5_minutes"));
 				}
 			}
 		}

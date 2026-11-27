@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 use arctic_core::instances::{self, FolderChange, Instance};
 use arctic_core::storage::location::{self, Target};
 
+use crate::t;
 use crate::tasks::{Event, Tasks};
-
 /// How often a copy reports progress.
 const PROGRESS_EVERY: Duration = Duration::from_millis(100);
 
@@ -40,7 +40,7 @@ impl Tasks {
     pub fn storage_pick(&self, from: PathBuf) {
         self.run(move |t| {
             let picked = rfd::FileDialog::new()
-                .set_title("Where should Arctic keep its files?")
+                .set_title(t!("tasks.where_should_arctic_keep_its_files"))
                 .pick_folder();
             t.note_if_picker_missing(&picked);
             if let Some(to) = picked {
@@ -83,7 +83,7 @@ impl Tasks {
     pub fn instance_folder_pick(&self, id: String) {
         self.run(move |t| {
             let picked = rfd::FileDialog::new()
-                .set_title("Game folder for this instance")
+                .set_title(t!("tasks.game_folder_for_this_instance"))
                 .pick_folder();
             t.note_if_picker_missing(&picked);
             if let Some(folder) = picked {

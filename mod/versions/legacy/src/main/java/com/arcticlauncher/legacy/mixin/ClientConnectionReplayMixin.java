@@ -70,6 +70,13 @@ abstract class ClientConnectionReplayMixin implements LegacyReplayConnection {
 	}
 
 	@Override
+	public void arctic$attach(Recorder.Take take) {
+		if (!arctic$replay && arctic$take == null) {
+			arctic$take = take;
+		}
+	}
+
+	@Override
 	public void arctic$retire() {
 		arctic$retired = true;
 	}

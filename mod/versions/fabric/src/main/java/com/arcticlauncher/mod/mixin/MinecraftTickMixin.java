@@ -13,7 +13,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 abstract class MinecraftTickMixin {
 	@Inject(method = "tick", at = @At("HEAD"))
 	private void arctic$tick(CallbackInfo ci) {
+		com.arcticlauncher.client.feature.ArmorHider.tick(Minecraft.getInstance().player,
+				Minecraft.getInstance().player == null ? 0 : Minecraft.getInstance().player.hurtTime);
 		ArcticClient.tick(Compat.screen() != null);
+		com.arcticlauncher.mod.GlassCtm.tick();
 		com.arcticlauncher.mod.ServerMenus.tick();
 		com.arcticlauncher.mod.HitboxSync.tick();
 		com.arcticlauncher.mod.ChunkBorderSync.tick();
@@ -26,6 +29,7 @@ abstract class MinecraftTickMixin {
 		//#endif
 		//#if MC >= 1.13
 		com.arcticlauncher.mod.replay.ReplayRecording.tick();
+		com.arcticlauncher.mod.BadgeTexture.onTick();
 		//#endif
 		//#if MC >= 26.1
 		com.arcticlauncher.mod.ArcticPacks.checkFontScale();

@@ -1,0 +1,8 @@
+{
+  "accounts.accounts": "アカウント",
+  "accounts.add_account": "アカウントを追加",
+  "accounts.click_an_account_to_play_as_it_sign_ins_stay": "アカウントをクリックするとそのアカウントでプレイします。サインイン情報はこのPCに、あなたのユーザー向けに暗号化して保存されます。",
+  "accounts.offline": "オフライン",
+  "accounts.playing_as": "{username} としてプレイ中",
+  "accounts.remove_account": "アカウントを削除"
+}

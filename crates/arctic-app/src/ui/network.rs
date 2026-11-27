@@ -7,7 +7,7 @@ use crate::app::ArcticApp;
 use crate::theme::Palette;
 use crate::toasts::Kind;
 use crate::widgets;
-
+use crate::{t, tf};
 /// State of the "Test proxy" check.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum ProxyCheck {
@@ -30,40 +30,38 @@ pub struct NetworkUi {
 impl ArcticApp {
     pub(crate) fn network_section(&mut self, ui: &mut egui::Ui, p: &Palette) {
         ui.label(
-            RichText::new(
-                "Send the launcher and the game through a SOCKS5 or HTTP proxy. Server connections go through it with the Arctic Client (Vanilla and Fabric instances); other instances only proxy Minecraft's login services.",
-            )
-            .small()
-            .color(p.muted),
+            RichText::new(t!("settings.send_the_launcher_and_the_game_through_a_2"))
+                .small()
+                .color(p.muted),
         );
         ui.add_space(6.0);
         let draft = &mut self.network.draft;
-        ui.checkbox(&mut draft.enabled, "Use a proxy");
+        ui.checkbox(&mut draft.enabled, t!("settings.use_a_proxy"));
         ui.add_enabled_ui(draft.enabled, |ui| {
             widgets::field_row(ui, |ui| {
-                ui.label("Type");
+                ui.label(t!("settings.type"));
                 for kind in [ProxyKind::Socks5, ProxyKind::Http] {
                     ui.selectable_value(&mut draft.kind, kind, kind.label());
                 }
             });
             widgets::field_row(ui, |ui| {
-                ui.label("Address");
+                ui.label(t!("settings.address"));
                 ui.add(
                     widgets::text_field(&mut draft.host)
-                        .hint_text("127.0.0.1 or proxy.example.com")
+                        .hint_text(t!("settings.127_0_0_1_or_proxy_example_com"))
                         .desired_width(220.0),
                 );
-                ui.label("Port");
+                ui.label(t!("settings.port"));
                 ui.add(egui::DragValue::new(&mut draft.port).range(1..=u16::MAX));
             });
             widgets::field_row(ui, |ui| {
-                ui.label("User name");
+                ui.label(t!("settings.user_name"));
                 ui.add(
                     widgets::text_field(&mut draft.username)
                         .hint_text("optional")
                         .desired_width(160.0),
                 );
-                ui.label("Password");
+                ui.label(t!("settings.password"));
                 ui.add(
                     widgets::text_field(&mut draft.password)
                         .password(true)
@@ -73,11 +71,9 @@ impl ArcticApp {
             });
         });
         ui.label(
-            RichText::new(
-                "Some servers block proxies and VPNs and may refuse to let you join. The password is kept on this PC only.",
-            )
-            .small()
-            .color(p.warn),
+            RichText::new(t!("settings.some_servers_block_proxies_and_vpns_and_may"))
+                .small()
+                .color(p.warn),
         );
         ui.add_space(4.0);
         let changed = self.network.draft != self.proxy;
@@ -90,7 +86,9 @@ impl ArcticApp {
         crate::widgets::row(ui, |ui| {
             let can_save = changed && problem.is_none();
             if ui
-                .add_enabled_ui(can_save, |ui| widgets::button(ui, p, None, "Save", true))
+                .add_enabled_ui(can_save, |ui| {
+                    widgets::button(ui, p, None, t!("settings.save"), true)
+                })
                 .inner
                 .clicked()
             {
@@ -101,24 +99,28 @@ impl ArcticApp {
                 && self.network.check != ProxyCheck::Running;
             if ui
                 .add_enabled_ui(can_test, |ui| {
-                    widgets::button(ui, p, None, "Test proxy", false)
-                        .on_hover_text("Reach Mojang's services through the proxy")
+                    widgets::button(ui, p, None, t!("settings.test_proxy"), false)
+                        .on_hover_text(t!("settings.reach_mojangs_services_through_the_proxy"))
                 })
                 .inner
                 .clicked()
             {
                 self.test_proxy();
             }
-            if changed && ui.link("Undo").clicked() {
+            if changed && ui.link(t!("settings.undo")).clicked() {
                 self.network.draft = self.proxy.clone();
                 self.network.check = ProxyCheck::Idle;
             }
         });
         let status = match (&problem, &self.network.check) {
             (Some(why), _) => Some((why.clone(), p.warn)),
-            (None, ProxyCheck::Running) => Some(("Testing…".to_owned(), p.muted)),
-            (None, ProxyCheck::Works) => Some(("The proxy works.".to_owned(), p.accent)),
-            (None, ProxyCheck::Failed(e)) => Some((format!("The proxy didn't work: {e}"), p.warn)),
+            (None, ProxyCheck::Running) => Some((t!("settings.testing").to_owned(), p.muted)),
+            (None, ProxyCheck::Works) => {
+                Some((t!("settings.the_proxy_works").to_owned(), p.accent))
+            }
+            (None, ProxyCheck::Failed(e)) => {
+                Some((tf!("settings.the_proxy_didnt_work", e = e), p.warn))
+            }
             (None, ProxyCheck::Idle) => None,
         };
         if let Some((text, color)) = status {
@@ -134,18 +136,24 @@ impl ArcticApp {
         }
         next.set = arctic_core::auth::now_secs();
         if let Err(e) = next.save(&self.dirs) {
-            self.toasts
-                .push(Kind::Error, "Could not save the proxy", e.to_string());
+            self.toasts.push(
+                Kind::Error,
+                t!("settings.could_not_save_the_proxy"),
+                e.to_string(),
+            );
             return;
         }
         if let Err(e) = arctic_core::net::set_proxy(next.active()) {
-            self.toasts
-                .push(Kind::Error, "The proxy can't be used", e.to_string());
+            self.toasts.push(
+                Kind::Error,
+                t!("settings.the_proxy_cant_be_used"),
+                e.to_string(),
+            );
         }
         let message = if next.active().is_some() {
-            "Proxy on. Games started from now on use it."
+            t!("settings.proxy_on_games_started_from_now_on_use_it")
         } else {
-            "Proxy off."
+            t!("settings.proxy_off")
         };
         self.toasts.push(Kind::Success, message, "");
         self.proxy = next.clone();

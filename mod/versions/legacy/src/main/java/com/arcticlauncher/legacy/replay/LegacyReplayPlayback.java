@@ -37,6 +37,7 @@ import net.minecraft.network.packet.s2c.play.GameStateChangeS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlayerRespawnS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlayerSpawnS2CPacket;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Playing a replay on old versions: the same approach as newer ones (a
  * connection that goes nowhere, fed the recording on the game thread), with
@@ -45,7 +46,7 @@ import net.minecraft.network.packet.s2c.play.PlayerSpawnS2CPacket;
 public final class LegacyReplayPlayback implements ReplayBackend {
 	static final int CAMERA_ID = -1_789_435;
 	private static final GameProfile CAMERA = new GameProfile(
-			UUID.nameUUIDFromBytes("arctic:replay-camera".getBytes(StandardCharsets.UTF_8)), "Replay");
+			UUID.nameUUIDFromBytes("arctic:replay-camera".getBytes(StandardCharsets.UTF_8)), "Replay"); // i18n-ignore: a game profile name
 	private static final int BODY_STEP_MS = 50;
 	private static final int BODY_JUMP_MS = 1000;
 	/** Game state change reasons: game mode, credits, demo. */
@@ -140,13 +141,14 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 			LegacyReplayView.fov = 0;
 			ClientConnection conn = new ClientConnection(NetworkSide.CLIENTBOUND);
 			((LegacyReplayConnection) conn).arctic$markReplay();
-			channel = new EmbeddedChannel(conn);
+			// Named "packet_handler" like a real connection: Forge adds its handshake handler before that name.
+			channel = com.arcticlauncher.client.replay.ReplayChannel.open(conn);
 			connection = conn;
 			conn.setState(NetworkState.LOGIN);
 			conn.setPacketListener(new ClientLoginNetworkHandler(conn, mc, new TitleScreen()));
 			return null;
 		} catch (RuntimeException e) {
-			return "Couldn't start the replay: " + e;
+			return Lang.t("platform.couldnt_start_the_replay") + e;
 		}
 	}
 
@@ -194,6 +196,15 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 			packet.apply(listener);
 		} catch (OffThreadException ignored) {
 			// Queued for the game thread by the game itself.
+		} catch (RuntimeException e) {
+			// Still at the login handler after a failure: every later packet would fail too.
+			if (connection.getPacketListener() instanceof ClientLoginNetworkHandler) {
+				throw new Unusable("The game didn't leave the login step (" + e + ").");
+			}
+			throw e;
+		}
+		if ("game_profile".equals(name) && connection.getPacketListener() instanceof ClientLoginNetworkHandler) {
+			throw new Unusable("The game didn't accept the replay's login.");
 		}
 	}
 
@@ -290,7 +301,7 @@ public final class LegacyReplayPlayback implements ReplayBackend {
 			return;
 		}
 		if (body == null || body.world != world || body.removed || bodyHidden) {
-			GameProfile profile = new GameProfile(uuid != null ? uuid : UUID.randomUUID(), name != null ? name : "Player");
+			GameProfile profile = new GameProfile(uuid != null ? uuid : UUID.randomUUID(), name != null ? name : "Player"); // i18n-ignore: a game profile name
 			body = new OtherClientPlayerEntity(world, profile);
 			body.setEntityId(selfId);
 			body.refreshPositionAndAngles(s.x, s.y, s.z, s.yaw, s.pitch);

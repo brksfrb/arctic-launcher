@@ -53,6 +53,94 @@ pub fn keep_hidden(ctx: &eframe::egui::Context) {
     }
 }
 
+/// Let show, hide and close reach the window. Call once, as soon as there is a context: the Linux
+/// tray does it too, but a PC with no system tray still needs the window to be reachable (the
+/// watchdog below, and a second start handed over by [`crate::single_instance`]).
+#[cfg(not(windows))]
+pub fn remember_context(ctx: &eframe::egui::Context) {
+    imp::set_context(ctx);
+}
+
+/// Windows reaches its window through the handle [`remember`] keeps, so there is nothing to note.
+#[cfg(windows)]
+pub fn remember_context(_ctx: &eframe::egui::Context) {}
+
+/// Frames painted so far (eframe shows the window after the first one).
+static PAINTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Called from every painted frame.
+pub fn painted() {
+    PAINTS.fetch_add(1, Ordering::Relaxed);
+}
+
+/// The watchdog's first look: by now a window that is coming up has come up.
+const SHOW_GRACE: std::time::Duration = std::time::Duration::from_millis(600);
+/// How often it looks after that.
+const SHOW_EVERY: std::time::Duration = std::time::Duration::from_millis(250);
+/// It keeps frames coming this long after the start, even once one has been painted.
+const SHOW_SETTLE: std::time::Duration = std::time::Duration::from_secs(3);
+/// With nothing painted by now, something else is wrong; the log says so and it stops.
+const SHOW_FOR: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Make sure the window really comes up.
+///
+/// eframe creates it hidden and shows it only once the first frame has been painted (so no white
+/// flash). Where frames stop coming the window never appears and the launcher looks like it never
+/// started, which is what happens on a Wayland session: a compositor gives no frame callbacks to a
+/// surface it is not showing, so winit asks for no redraw, and nothing else asks either — no input
+/// reaches a window that isn't on screen, and the animated backdrop only paces frames when it is
+/// switched on. egui is told to paint on demand, so one frame is where it stops. (On X11 the same
+/// knot ties itself differently: egui paints nothing at all while it believes the window is
+/// minimized or occluded, which an unmapped window reads as.)
+///
+/// So this watches from its own thread — the only place a repaint can be asked for while no egui
+/// pass is running, and the way eframe documents for waking it — and for the first seconds keeps
+/// frames coming and, while nothing has been painted, asks for the window outright.
+///
+/// A start hidden in the tray (`--hidden`) is left alone.
+pub fn watch_until_painted(ctx: &eframe::egui::Context) {
+    use eframe::egui::ViewportCommand;
+    let ctx = ctx.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(SHOW_GRACE);
+        let started = std::time::Instant::now();
+        let mut asked = 0u32;
+        loop {
+            if HIDDEN.load(Ordering::Relaxed) {
+                return;
+            }
+            let painted = PAINTS.load(Ordering::Relaxed) > 0;
+            let waited = started.elapsed();
+            if painted {
+                if waited > SHOW_SETTLE {
+                    if asked > 0 {
+                        log::info!("the window came up after {asked} nudge(s)");
+                    }
+                    return;
+                }
+                // A painted frame is not the same as a window on screen: keep asking for frames
+                // for a moment, so the compositor has something to show.
+                ctx.request_repaint();
+            } else {
+                if waited > SHOW_FOR {
+                    log::error!(
+                        "no frame has been painted in {waited:?}: the window may not be on screen"
+                    );
+                    return;
+                }
+                asked += 1;
+                if asked == 1 {
+                    log::warn!("nothing painted yet: asking for the window again");
+                }
+                ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
+                ctx.send_viewport_cmd(ViewportCommand::Visible(true));
+                ctx.request_repaint();
+            }
+            std::thread::sleep(SHOW_EVERY);
+        }
+    });
+}
+
 #[cfg(windows)]
 mod imp {
     use windows_sys::Win32::UI::WindowsAndMessaging::{

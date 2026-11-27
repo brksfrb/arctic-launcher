@@ -28,6 +28,8 @@ pub struct Libraries {
     pub jobs: Vec<DownloadJob>,
     /// Small loader dependencies checked even without a previous crash report.
     pub bootstrap: Vec<DownloadJob>,
+    /// Downloadable library that supplies the profile's Java entry point, and its class entry.
+    pub main_class: Option<(PathBuf, String)>,
 }
 
 /// Work out which library files apply on this platform.
@@ -46,16 +48,24 @@ pub fn resolve_libraries(dirs: &DataDirs, version: &VersionJson, env: &RuleEnv) 
             out.classpath.push(job.dest.clone());
             // Locally generated files (no URL) are on the classpath only.
             if !job.url.is_empty() {
-                if job.sha1.is_some()
-                    && [
-                        "net.fabricmc:",
-                        "net.legacyfabric:",
-                        "org.quiltmc:",
-                        "org.ow2.asm:",
-                        "org.spongepowered:",
-                    ]
-                    .iter()
-                    .any(|prefix| lib.name.starts_with(prefix))
+                let entrypoint = supplies_main_class(&lib.name, &version.main_class);
+                if entrypoint {
+                    out.main_class = Some((
+                        job.dest.clone(),
+                        format!("{}.class", version.main_class.replace('.', "/")),
+                    ));
+                }
+                if entrypoint
+                    || (job.sha1.is_some()
+                        && [
+                            "net.fabricmc:",
+                            "net.legacyfabric:",
+                            "org.quiltmc:",
+                            "org.ow2.asm:",
+                            "org.spongepowered:",
+                        ]
+                        .iter()
+                        .any(|prefix| lib.name.starts_with(prefix)))
                 {
                     out.bootstrap.push(job.clone());
                 }
@@ -75,6 +85,52 @@ pub fn resolve_libraries(dirs: &DataDirs, version: &VersionJson, env: &RuleEnv) 
         }
     }
     out
+}
+
+/// Identify the entry-point artifact without opening every jar on the classpath.
+fn supplies_main_class(library: &str, main_class: &str) -> bool {
+    [
+        ("net.fabricmc:fabric-loader:", "net.fabricmc.loader."),
+        ("net.legacyfabric:fabric-loader:", "net.fabricmc.loader."),
+        ("org.quiltmc:quilt-loader:", "org.quiltmc.loader."),
+        ("cpw.mods:bootstraplauncher:", "cpw.mods.bootstraplauncher."),
+        ("cpw.mods:modlauncher:", "cpw.mods.modlauncher."),
+        ("net.neoforged:modlauncher:", "cpw.mods.modlauncher."),
+        (
+            "net.minecraft:launchwrapper:",
+            "net.minecraft.launchwrapper.",
+        ),
+    ]
+    .iter()
+    .any(|(artifact, package)| library.starts_with(artifact) && main_class.starts_with(package))
+}
+
+/// Read only the ZIP directory and the main class, including its CRC, not the entire loader.
+pub(super) fn jar_has_main_class(path: &Path, entry: &str) -> bool {
+    let Ok(file) = fs::File::open(path) else {
+        return false;
+    };
+    let Ok(mut jar) = zip::ZipArchive::new(file) else {
+        return false;
+    };
+    let Ok(mut class) = jar.by_name(entry) else {
+        return false;
+    };
+    class.is_file() && class.size() > 0 && std::io::copy(&mut class, &mut std::io::sink()).is_ok()
+}
+
+/// Also reject an invalid replacement from a Maven server that supplies no checksum.
+pub(super) fn verify_main_class(main_class: Option<&(PathBuf, String)>) -> Result<()> {
+    if let Some((path, entry)) = main_class
+        && !jar_has_main_class(path, entry)
+    {
+        fs::remove_file(path).at(path)?;
+        return Err(Error::Other(format!(
+            "The loader jar {} does not contain a readable {entry}. Arctic will download it again on the next Play.",
+            path.display()
+        )));
+    }
+    Ok(())
 }
 
 /// Asked for after a crash that points at a damaged game file (see `crash::Diagnosis::repair`).
@@ -97,6 +153,39 @@ pub fn request_repair(dirs: &DataDirs) {
 pub(super) struct LibraryRepair {
     mark: PathBuf,
     request: Option<Vec<u8>>,
+    /// Where the checksums taken at earlier starts are kept ([`Checked`]).
+    checked: PathBuf,
+}
+
+/// Checksums of the loader's small libraries as they were found at an earlier start, by path:
+/// a file with the same size and modification time is not read and hashed again at every
+/// start. A repair asked for after a crash reads everything, and starts this record afresh.
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+struct Checked {
+    files: std::collections::BTreeMap<String, CheckedFile>,
+}
+
+#[derive(PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct CheckedFile {
+    size: u64,
+    /// Modification time, nanoseconds since 1970.
+    modified: String,
+    sha1: String,
+}
+
+impl CheckedFile {
+    fn of(meta: &fs::Metadata, sha1: &str) -> Option<Self> {
+        let modified = meta
+            .modified()
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?;
+        Some(Self {
+            size: meta.len(),
+            modified: modified.as_nanos().to_string(),
+            sha1: sha1.to_ascii_lowercase(),
+        })
+    }
 }
 
 impl LibraryRepair {
@@ -107,10 +196,20 @@ impl LibraryRepair {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
             Err(e) => return Err(Error::io(&mark, e)),
         };
-        Ok(Self { mark, request })
+        let checked = dirs.cache().join("library-checksums.json");
+        Ok(Self {
+            mark,
+            request,
+            checked,
+        })
     }
 
-    pub(super) fn check(&self, jobs: &[DownloadJob], bootstrap: &[DownloadJob]) -> Result<()> {
+    pub(super) fn check(
+        &self,
+        jobs: &[DownloadJob],
+        bootstrap: &[DownloadJob],
+        main_class: Option<&(PathBuf, String)>,
+    ) -> Result<()> {
         // Older launchers sometimes failed to request repair. Always check the small loader
         // dependencies, especially Mixin, so the next Play can recover without another crash.
         let selected = if self.request.is_some() {
@@ -118,13 +217,26 @@ impl LibraryRepair {
         } else {
             bootstrap
         };
-        let (mut checked, mut replaced) = (0, 0);
+        let (mut checked, mut replaced, mut unchanged) = (0, 0, 0);
+        let mut known = if self.request.is_some() {
+            // After a crash nothing is taken on trust.
+            let _ = fs::remove_file(&self.checked);
+            None
+        } else {
+            Some(
+                load_json::<Checked>(&self.checked)
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default(),
+            )
+        };
+        let mut learned = false;
         for job in selected {
             if job.url.is_empty() {
                 continue; // Locally generated Forge files cannot be downloaded again here.
             }
-            match fs::metadata(&job.dest) {
-                Ok(meta) if meta.is_file() => {}
+            let meta = match fs::metadata(&job.dest) {
+                Ok(meta) if meta.is_file() => meta,
                 Ok(_) => {
                     return Err(Error::Other(format!(
                         "A game file is blocked by a folder: {}",
@@ -133,13 +245,31 @@ impl LibraryRepair {
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(e) => return Err(Error::io(&job.dest, e)),
-            }
+            };
             if let Some(want) = &job.sha1 {
                 checked += 1;
-                let have = crate::net::sha1_file(&job.dest)?;
-                if have.eq_ignore_ascii_case(want) {
+                let path = job.dest.to_string_lossy().into_owned();
+                let now = CheckedFile::of(&meta, want);
+                if let (Some(known), Some(now)) = (&known, &now)
+                    && known.files.get(&path) == Some(now)
+                {
+                    unchanged += 1;
                     continue;
                 }
+                let have = crate::net::sha1_file(&job.dest)?;
+                if have.eq_ignore_ascii_case(want) {
+                    if let (Some(known), Some(now)) = (&mut known, now) {
+                        known.files.insert(path, now);
+                        learned = true;
+                    }
+                    continue;
+                }
+            } else if self.request.is_none()
+                && let Some((path, entry)) = main_class
+                && job.dest == *path
+                && jar_has_main_class(path, entry)
+            {
+                continue;
             }
             // A repair also refreshes downloadable libraries whose metadata has no checksum.
             // A failed removal must stop preparation instead of reusing the broken file.
@@ -147,8 +277,16 @@ impl LibraryRepair {
             fs::remove_file(&job.dest).at(&job.dest)?;
             replaced += 1;
         }
+        if learned
+            && let Some(known) = &known
+            && let Err(e) = crate::storage::save_json(&self.checked, known)
+        {
+            log::debug!("library check: couldn't keep the checksums: {e}");
+        }
         if !selected.is_empty() {
-            log::info!("library check: {checked} checksummed, {replaced} fetched again");
+            log::info!(
+                "library check: {checked} checksummed ({unchanged} unchanged since an earlier check), {replaced} fetched again"
+            );
         }
         Ok(())
     }
@@ -233,6 +371,7 @@ fn library_job(
         sha1: artifact.sha1.clone(),
         size: artifact.size,
         lzma: None,
+        md5: None,
     })
 }
 
@@ -251,6 +390,7 @@ pub fn client_job(dirs: &DataDirs, version: &VersionJson) -> Result<DownloadJob>
         sha1: Some(client.sha1.clone()),
         size: Some(client.size),
         lzma: None,
+        md5: None,
     })
 }
 
@@ -263,6 +403,7 @@ pub fn logging_job(dirs: &DataDirs, version: &VersionJson) -> Option<(DownloadJo
         sha1: Some(client.file.sha1.clone()),
         size: Some(client.file.size),
         lzma: None,
+        md5: None,
     };
     Some((job, client.argument.clone()))
 }
@@ -330,6 +471,7 @@ pub fn plan_assets(dirs: &DataDirs, version: &VersionJson, game_dir: &Path) -> R
         sha1: Some(index_ref.sha1.clone()),
         size: Some(index_ref.size),
         lzma: None,
+        md5: None,
     };
     download_all("Asset index", vec![index_job], &|_| {})?;
     let index: AssetIndex = load_json(&index_path)?
@@ -348,6 +490,7 @@ pub fn plan_assets(dirs: &DataDirs, version: &VersionJson, game_dir: &Path) -> R
             sha1: Some(o.hash.clone()),
             size: Some(o.size),
             lzma: None,
+            md5: None,
         };
         if !legacy && can_wait(name, &language) {
             later.push(job);
@@ -532,6 +675,60 @@ mod tests {
     }
 
     #[test]
+    fn entrypoint_libraries_are_checked_even_without_checksums() {
+        let dirs = DataDirs::new("root");
+        for (library, main_class) in [
+            (
+                "net.fabricmc:fabric-loader:0.20.1",
+                "net.fabricmc.loader.impl.launch.knot.KnotClient",
+            ),
+            (
+                "net.legacyfabric:fabric-loader:0.18.0",
+                "net.fabricmc.loader.launch.knot.KnotClient",
+            ),
+            (
+                "org.quiltmc:quilt-loader:0.29.1",
+                "org.quiltmc.loader.impl.launch.knot.KnotClient",
+            ),
+            (
+                "cpw.mods:bootstraplauncher:2.0.2",
+                "cpw.mods.bootstraplauncher.BootstrapLauncher",
+            ),
+            (
+                "cpw.mods:modlauncher:10.0.9",
+                "cpw.mods.modlauncher.Launcher",
+            ),
+            (
+                "net.neoforged:modlauncher:11.0.5",
+                "cpw.mods.modlauncher.Launcher",
+            ),
+            (
+                "net.minecraft:launchwrapper:1.12",
+                "net.minecraft.launchwrapper.Launch",
+            ),
+        ] {
+            let version: VersionJson = serde_json::from_value(serde_json::json!({
+                "id": "loader", "mainClass": main_class,
+                "libraries": [
+                    {"name": library, "url": "https://example.invalid/"},
+                    {"name": "example:unrelated:1", "url": "https://example.invalid/"}
+                ]
+            }))
+            .unwrap();
+            let libs = resolve_libraries(&dirs, &version, &env());
+            assert_eq!(libs.bootstrap.len(), 1, "{library}");
+            assert!(libs.bootstrap[0].sha1.is_none());
+            assert_eq!(
+                libs.main_class,
+                Some((
+                    dirs.libraries().join(maven_path(library).unwrap()),
+                    format!("{}.class", main_class.replace('.', "/")),
+                ))
+            );
+        }
+    }
+
+    #[test]
     fn maven_style_natives_resolve() {
         let dirs = DataDirs::new("root");
         let v: VersionJson = serde_json::from_str(
@@ -599,21 +796,22 @@ mod tests {
             }),
             size: Some(5),
             lzma: None,
+            md5: None,
         };
         let jobs = [job(&good, b"right"), job(&bad, b"right")];
         // Not asked: nothing is hashed or removed.
         LibraryRepair::new(&dirs)
             .unwrap()
-            .check(&jobs, &[])
+            .check(&jobs, &[], None)
             .unwrap();
         assert!(bad.is_file());
         request_repair(&dirs);
         // Versions before request IDs used an empty marker.
         fs::write(dirs.cache().join(REPAIR_MARK), b"").unwrap();
         let repair = LibraryRepair::new(&dirs).unwrap();
-        repair.check(&jobs[..1], &[]).unwrap();
+        repair.check(&jobs[..1], &[], None).unwrap();
         assert!(dirs.cache().join(REPAIR_MARK).is_file());
-        repair.check(&jobs, &[]).unwrap();
+        repair.check(&jobs, &[], None).unwrap();
         assert!(good.is_file());
         assert!(!bad.is_file(), "same size, wrong contents: fetched again");
         repair.finish();
@@ -621,9 +819,70 @@ mod tests {
         std::fs::write(&bad, b"wrong").unwrap();
         LibraryRepair::new(&dirs)
             .unwrap()
-            .check(&jobs, &[])
+            .check(&jobs, &[], None)
             .unwrap();
         assert!(bad.is_file());
+    }
+
+    #[test]
+    fn a_loader_library_is_hashed_again_only_when_the_file_changed() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        let mixin = dir.path().join("sponge-mixin.jar");
+        std::fs::write(&mixin, b"right").unwrap();
+        let job = crate::net::DownloadJob {
+            url: "u".into(),
+            dest: mixin.clone(),
+            sha1: Some({
+                use sha1::Digest;
+                hex::encode(sha1::Sha1::digest(b"right"))
+            }),
+            size: Some(5),
+            lzma: None,
+            md5: None,
+        };
+        let check = || {
+            let repair = LibraryRepair::new(&dirs).unwrap();
+            repair.check(&[], std::slice::from_ref(&job), None).unwrap();
+            repair.finish();
+        };
+        let known = || {
+            load_json::<Checked>(&dirs.cache().join("library-checksums.json"))
+                .unwrap()
+                .unwrap_or_default()
+                .files
+                .len()
+        };
+        check();
+        assert_eq!(known(), 1);
+
+        // Written again (another time), with other contents of the same size: read and replaced.
+        std::fs::write(&mixin, b"wrong").unwrap();
+        let file = fs::File::options().write(true).open(&mixin).unwrap();
+        file.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(5))
+            .unwrap();
+        drop(file);
+        check();
+        assert!(!mixin.exists(), "fetched again");
+
+        // The limit of going by size and time: a change that keeps both is only found by the
+        // full check a crash asks for, which trusts nothing noted before.
+        std::fs::write(&mixin, b"right").unwrap();
+        check();
+        let time = fs::metadata(&mixin).unwrap().modified().unwrap();
+        std::fs::write(&mixin, b"wrong").unwrap();
+        let file = fs::File::options().write(true).open(&mixin).unwrap();
+        file.set_modified(time).unwrap();
+        drop(file);
+        check();
+        assert!(mixin.exists());
+        request_repair(&dirs);
+        let repair = LibraryRepair::new(&dirs).unwrap();
+        repair
+            .check(std::slice::from_ref(&job), std::slice::from_ref(&job), None)
+            .unwrap();
+        assert!(!mixin.exists(), "fetched again");
+        assert_eq!(known(), 0);
     }
 
     #[test]
@@ -658,12 +917,13 @@ mod tests {
                 sha1: None,
                 size: None,
                 lzma: None,
+                md5: None,
             });
         }
         request_repair(&dirs);
         LibraryRepair::new(&dirs)
             .unwrap()
-            .check(&jobs, &[])
+            .check(&jobs, &[], None)
             .unwrap();
         assert!(!jobs[0].dest.exists());
         assert_eq!(fs::read(&jobs[1].dest).unwrap(), b"broken");
@@ -681,10 +941,11 @@ mod tests {
             sha1: None,
             size: None,
             lzma: None,
+            md5: None,
         };
         request_repair(&dirs);
         let repair = LibraryRepair::new(&dirs).unwrap();
-        assert!(repair.check(&[job], &[]).is_err());
+        assert!(repair.check(&[job], &[], None).is_err());
         drop(repair);
         assert!(dirs.cache().join(REPAIR_MARK).is_file());
     }

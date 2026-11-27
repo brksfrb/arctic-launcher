@@ -47,7 +47,7 @@ Press Right Shift in game for the client menu. The client is on by default for V
 - **Every release.** Pick a version and press Play. Arctic downloads the game and the Java that version needs.
 - **Mod loaders, mods and modpacks.** Fabric, Quilt, NeoForge and Forge instances. Search Modrinth and install mods with their dependencies, or install a modpack. Each instance keeps its own version, mods, worlds and Java settings. Move an instance to another Minecraft version and its mods come along (updated where Modrinth has a build, switched off where it does not).
 - **Clashes before you play.** The same mod twice, a mod that breaks another, a missing or too-old requirement, a mod made for another version. Fix each in one click, or play anyway.
-- **Import.** Arctic finds the Minecraft Launcher, Prism, PolyMC, MultiMC, the Modrinth App, CurseForge, ATLauncher, GDLauncher (current and old), TLauncher, SKlauncher, Lunar, Badlion, Feather, LabyMod, Fast Client and Silent Client, and copies instances, worlds, servers and settings. The originals stay. Import one world from a folder or a .zip, and back worlds up.
+- **Import.** Arctic finds the Minecraft Launcher, Prism, PolyMC, MultiMC, the Modrinth App, ATLauncher, GDLauncher (current and old), TLauncher, SKlauncher, Lunar, Badlion, Feather, LabyMod, Fast Client and Silent Client, and copies instances, worlds, servers and settings. The originals stay. Import one world from a folder or a .zip, and back worlds up.
 - **Servers.** The multiplayer screen on every version: drag to reorder, icons, MOTD, players and ping, LAN worlds, and Discover servers (a public list). Reconnect in one click, or turn on Auto Reconnect.
 - **Bedrock Edition** on Windows, Release and Preview. Switch version (GDK builds from 1.21.120 on, and older UWP builds), import and export worlds (`.mcworld`), packs and add-ons (`.mcpack`, `.mcaddon`), back worlds up, and keep a server list with player counts and ping.
 - **Accounts.** Microsoft sign-in in the browser or with a short code, or an offline account (any name) for singleplayer, LAN and offline-mode servers. Several accounts, switched in one click. Sign-ins stay on the PC, encrypted for that user, and go only to Microsoft and Mojang. Servers that check accounts still need a Microsoft account that owns Minecraft: Java Edition.
@@ -100,7 +100,7 @@ These **53 HUD widgets** are part of the 128. Minimap, Cooldowns, Horse stats, S
 
 One switch, on by default, adds optimization mods from Modrinth for that Minecraft version: ModernFix, Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core and BadOptimizations. It applies to Vanilla (which runs on Fabric underneath) and to Fabric and Quilt instances, and it skips a mod you already have, or one that does the same job. A mod with no build for that version is skipped.
 
-The same switch installs **Polarium** where the launcher has a build: 1.8.9 on Fabric, and 26.1.2, 26.2 and 26.3. Polarium draws entities on the GPU and spreads their work across CPU cores, for servers with a lot of players. Forge 1.8.9 uses Patcher and EntityCulling instead. Wavey Capes is a separate optional mod, not part of this set.
+The same switch installs **Polarium** where the launcher has a build: 1.8.9 on Fabric, and 26.1.2, 26.2 and 26.3. Polarium draws entities on the GPU and spreads their work across CPU cores, for servers with a lot of players. Forge 1.8.9 gets EntityCulling instead (Patcher and OneConfig are no longer installed; copies an older launcher put there are removed at launch, ones you added yourself stay). Wavey Capes is a separate optional mod, not part of this set.
 
 ### Social
 
@@ -129,6 +129,8 @@ The skin gallery is skins other players shared. Search by name or creator, wear 
 1. Download **`arctic-launcher-windows-x64.exe`** from the
    [latest release](https://github.com/brksfrb/arctic-launcher/releases/latest).
 2. Run it. There is no installer; put it wherever you like.
+
+To check which source commit built your download, see [Verify a download](VERIFY.md).
 
 ### macOS
 

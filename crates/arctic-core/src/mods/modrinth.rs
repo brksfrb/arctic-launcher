@@ -7,7 +7,7 @@
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
-use super::{ProjectHit, SearchPage, SearchQuery, SortBy};
+use super::{Environment, ProjectHit, ProjectType, SearchPage, SearchQuery, SortBy};
 use crate::loaders::LoaderKind;
 use crate::net::{agent, read_json_any_status};
 use crate::{Error, Result};
@@ -52,9 +52,15 @@ pub(super) struct SearchHit {
     #[serde(default)]
     pub downloads: u64,
     #[serde(default)]
+    pub follows: u64,
+    #[serde(default)]
     pub icon_url: Option<String>,
     #[serde(default)]
+    pub featured_gallery: Option<String>,
+    #[serde(default)]
     pub categories: Vec<String>,
+    #[serde(default, rename = "versions")]
+    pub game_versions: Vec<String>,
 }
 
 impl SearchResponse {
@@ -75,8 +81,11 @@ impl SearchHit {
             description: self.description,
             author: self.author,
             downloads: self.downloads,
+            follows: self.follows,
             icon_url: non_empty(self.icon_url),
+            featured_gallery: non_empty(self.featured_gallery),
             categories: self.categories,
+            game_versions: self.game_versions,
         }
     }
 }
@@ -85,6 +94,10 @@ impl SearchHit {
 pub(super) struct Version {
     pub id: String,
     pub project_id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub downloads: u64,
     #[serde(default)]
     pub version_number: String,
     #[serde(default)]
@@ -134,8 +147,16 @@ pub(super) struct Project {
     pub id: String,
     #[serde(default)]
     pub title: String,
+    /// The short summary.
+    #[serde(default)]
+    pub description: String,
     #[serde(default)]
     pub icon_url: Option<String>,
+    /// "required", "optional", "unsupported" or "unknown".
+    #[serde(default)]
+    pub client_side: String,
+    #[serde(default)]
+    pub server_side: String,
 }
 
 impl Version {
@@ -161,7 +182,7 @@ pub(super) fn non_empty(s: Option<String>) -> Option<String> {
 // ---------------------------------------------------------- version choice
 
 /// Lower is better: releases first, then betas, then alphas.
-fn channel_rank(version_type: &str) -> u8 {
+pub(super) fn channel_rank(version_type: &str) -> u8 {
     match version_type {
         "release" => 0,
         "beta" => 1,
@@ -225,13 +246,22 @@ fn sort_index(sort: SortBy) -> &'static str {
         SortBy::Downloads => "downloads",
         SortBy::Updated => "updated",
         SortBy::Newest => "newest",
+        SortBy::Follows => "follows",
     }
 }
 
-fn search_facets(query: &SearchQuery) -> String {
+pub(super) fn search_facets(query: &SearchQuery) -> String {
     let kind = query.project_type.id();
     let mut facets = vec![vec![format!("project_type:{kind}")]];
-    if !query.game_version.trim().is_empty() {
+    if query.project_type == ProjectType::DataPack {
+        facets.push(vec!["categories:datapack".into()]);
+    }
+    if (matches!(
+        query.project_type,
+        ProjectType::Mod | ProjectType::Modpack | ProjectType::DataPack
+    ) || query.strict_version)
+        && !query.game_version.trim().is_empty()
+    {
         facets.push(vec![format!("versions:{}", query.game_version.trim())]);
     }
     if let Some(loader) = query.loader {
@@ -240,6 +270,33 @@ fn search_facets(query: &SearchQuery) -> String {
             .map(|l| format!("categories:{l}"))
             .collect();
         facets.push(any_of);
+    }
+    let loaders: Vec<String> = query
+        .loaders
+        .iter()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .map(|l| format!("categories:{l}"))
+        .collect();
+    if !loaders.is_empty() {
+        facets.push(loaders);
+    }
+    // Each category is its own group, so they all have to match.
+    for category in query.categories.iter().map(|c| c.trim()) {
+        if !category.is_empty() {
+            facets.push(vec![format!("categories:{category}")]);
+        }
+    }
+    match query.environment {
+        Some(Environment::Client) => facets.push(vec![
+            "client_side:required".into(),
+            "client_side:optional".into(),
+        ]),
+        Some(Environment::Server) => facets.push(vec![
+            "server_side:required".into(),
+            "server_side:optional".into(),
+        ]),
+        None => {}
     }
     serde_json::Value::from(facets).to_string()
 }
@@ -260,10 +317,17 @@ pub(super) fn search_url(query: &SearchQuery) -> String {
 
 pub(super) fn project_versions_url(project_id: &str, loaders: &[&str], game: &str) -> String {
     format!(
-        "{API}/project/{}/version?loaders={}&game_versions={}",
+        "{}&game_versions={}",
+        project_versions_any_game_url(project_id, loaders),
+        encode(&json_list(&[game])),
+    )
+}
+
+pub(super) fn project_versions_any_game_url(project_id: &str, loaders: &[&str]) -> String {
+    format!(
+        "{API}/project/{}/version?loaders={}",
         encode(project_id),
         encode(&json_list(loaders)),
-        encode(&json_list(&[game])),
     )
 }
 

@@ -12,7 +12,7 @@ use super::modrinth::{self, Version};
 use crate::error::IoContext;
 use crate::instances::{self, Instance, Loader};
 use crate::loaders::LoaderKind;
-use crate::net::{DownloadJob, download_all};
+use crate::net::{DownloadAlternates, DownloadJob, download_all, download_all_with_alternates};
 use crate::storage::DataDirs;
 use crate::{Error, Progress, ProgressInfo, Result};
 
@@ -80,6 +80,7 @@ pub struct PackVersion {
 }
 
 fn pack_versions_raw(project_id: &str) -> Result<Vec<Version>> {
+    crate::curseforge::check_link(project_id)?;
     modrinth::get_api(
         &format!(
             "https://api.modrinth.com/v2/project/{}/version",
@@ -189,6 +190,7 @@ pub fn install_version(
             sha1,
             size,
             lzma: None,
+            md5: None,
         }],
         progress,
     )?;
@@ -205,6 +207,7 @@ pub fn is_modrinth_pack(path: &Path) -> bool {
 }
 
 pub fn install_file(dirs: &DataDirs, pack: &Path, progress: Progress) -> Result<Instance> {
+    crate::curseforge::check_file(pack)?;
     let size = fs::metadata(pack).at(pack)?.len();
     if size > MAX_PACK_BYTES {
         return Err(Error::Other("the modpack file is too large".into()));
@@ -212,16 +215,9 @@ pub fn install_file(dirs: &DataDirs, pack: &Path, progress: Progress) -> Result<
     let mut zip = zip::ZipArchive::new(fs::File::open(pack).at(pack)?)
         .map_err(|e| Error::Other(format!("not a modpack file: {e}")))?;
     let index: PackIndex = {
-        let curseforge = zip.file_names().any(|n| n == "manifest.json");
         let entry = zip
             .by_name(INDEX)
-            .map_err(|_| {
-                if curseforge {
-                    Error::Other("this is a CurseForge modpack; Arctic installs Modrinth modpacks (.mrpack). Look for the pack on Modrinth".into())
-                } else {
-                    Error::Other("not a Modrinth modpack (no modrinth.index.json)".into())
-                }
-            })?;
+            .map_err(|_| Error::Other("not a Modrinth modpack (no modrinth.index.json)".into()))?;
         serde_json::from_reader(entry)?
     };
     let (game, loader) = index.target()?;
@@ -249,8 +245,8 @@ fn populate(
     game_dir: &Path,
     progress: Progress,
 ) -> Result<()> {
-    let jobs = download_jobs(index, game_dir)?;
-    download_all("Downloading mods", jobs, progress)?;
+    let (jobs, alternates) = plan_downloads(index, game_dir)?;
+    download_all_with_alternates("Downloading mods", jobs, &alternates, progress)?;
     progress(ProgressInfo::stage("Copying modpack files"));
     extract_overrides(zip, "overrides/", game_dir)?;
     extract_overrides(zip, "client-overrides/", game_dir)
@@ -258,7 +254,15 @@ fn populate(
 
 /// Download jobs for every client file, with path and host checks.
 pub fn download_jobs(index: &PackIndex, game_dir: &Path) -> Result<Vec<DownloadJob>> {
+    plan_downloads(index, game_dir).map(|(jobs, _)| jobs)
+}
+
+fn plan_downloads(
+    index: &PackIndex,
+    game_dir: &Path,
+) -> Result<(Vec<DownloadJob>, DownloadAlternates)> {
     let mut jobs = Vec::with_capacity(index.files.len());
+    let mut alternates = DownloadAlternates::new();
     for file in &index.files {
         let client = file
             .env
@@ -269,24 +273,35 @@ pub fn download_jobs(index: &PackIndex, game_dir: &Path) -> Result<Vec<DownloadJ
             continue;
         }
         let dest = game_dir.join(safe_relative(&file.path)?);
-        let url = file
-            .downloads
-            .iter()
-            .find(|u| check_url(u).is_ok())
+        let mut urls = file.downloads.iter().filter(|u| check_url(u).is_ok());
+        let url = urls
+            .next()
             .ok_or_else(|| Error::Other(format!("{} has no allowed download link", file.path)))?;
+        if file.hashes.contains_key("sha1") {
+            let official: Vec<String> = urls
+                .filter(|alternate| {
+                    *alternate != url && alternate.starts_with("https://cdn.modrinth.com/")
+                })
+                .cloned()
+                .collect();
+            if !official.is_empty() {
+                alternates.entry(dest.clone()).or_insert(official);
+            }
+        }
         jobs.push(DownloadJob {
             url: url.clone(),
             dest,
             sha1: file.hashes.get("sha1").cloned(),
             size: file.file_size,
             lzma: None,
+            md5: None,
         });
     }
-    Ok(jobs)
+    Ok((jobs, alternates))
 }
 
 /// Only https downloads from the hosts the pack format allows.
-fn check_url(url: &str) -> Result<()> {
+pub(super) fn check_url(url: &str) -> Result<()> {
     let host = url
         .strip_prefix("https://")
         .and_then(|rest| rest.split(['/', '?', '#']).next())
@@ -341,7 +356,7 @@ fn extract_overrides(
     Ok(())
 }
 
-fn sanitize(name: &str) -> String {
+pub(super) fn sanitize(name: &str) -> String {
     name.chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || ".-_".contains(c) {
@@ -382,6 +397,32 @@ mod tests {
         assert_eq!(jobs.len(), 1);
         assert!(jobs[0].dest.ends_with("mods/a.jar"));
         assert_eq!(jobs[0].sha1.as_deref(), Some("aa"));
+    }
+
+    #[test]
+    fn plans_only_official_modrinth_alternates_for_the_same_file() {
+        let mut idx = index(PACK);
+        let file = &mut idx.files[0];
+        file.downloads.extend([
+            "https://github.com/user/repo/releases/download/v1/a.jar".into(),
+            "https://cdn.modrinth.com.evil.example/a.jar".into(),
+            "https://cdn.modrinth.com/data/alternate/a.jar".into(),
+            "https://cdn.modrinth.com/data/a.jar".into(),
+        ]);
+        let (jobs, alternates) = plan_downloads(&idx, Path::new("game")).unwrap();
+        assert_eq!(jobs[0].url, "https://cdn.modrinth.com/data/a.jar");
+        assert_eq!(
+            alternates[&jobs[0].dest],
+            ["https://cdn.modrinth.com/data/alternate/a.jar"]
+        );
+
+        idx.files[0].hashes.remove("sha1");
+        assert!(
+            plan_downloads(&idx, Path::new("game"))
+                .unwrap()
+                .1
+                .is_empty()
+        );
     }
 
     #[test]

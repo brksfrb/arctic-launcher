@@ -14,12 +14,13 @@ const SEARCH_SAMPLE: &str = r#"{
      "author": "jellysquid3", "title": "Sodium",
      "description": "The fastest rendering optimization mod",
      "categories": ["fabric", "neoforge", "optimization"],
+     "versions": ["1.21.4", "1.21.5"],
      "downloads": 70000000, "follows": 30000,
      "icon_url": "https://cdn.modrinth.com/data/AANobbMI/icon.png",
      "date_created": "2021-01-03T00:53:34Z", "latest_version": "mc1.21.4-0.6.5",
      "license": "LicenseRef-Polyform-Shield-1.0.0", "gallery": []},
     {"project_id": "xyz", "slug": "plain", "title": "Plain", "description": "",
-     "author": "someone", "downloads": 5, "icon_url": "", "categories": []},
+     "author": "someone", "downloads": 5, "icon_url": "", "categories": [], "versions": []},
     {"project_id": "nulls", "icon_url": null}
   ],
   "offset": 0, "limit": 20, "total_hits": 123
@@ -39,9 +40,78 @@ fn search_response_maps_to_page() {
     assert_eq!(sodium.author, "jellysquid3");
     assert_eq!(sodium.downloads, 70_000_000);
     assert_eq!(sodium.categories, ["fabric", "neoforge", "optimization"]);
+    assert_eq!(sodium.game_versions, ["1.21.4", "1.21.5"]);
     assert!(sodium.icon_url.as_deref().unwrap().ends_with("icon.png"));
     assert_eq!(page.hits[1].icon_url, None, "empty icon URL is no icon");
     assert_eq!(page.hits[2].title, "");
+    assert!(page.hits[2].game_versions.is_empty());
+}
+
+#[test]
+fn search_hits_accept_present_null_and_missing_featured_gallery() {
+    let response: modrinth::SearchResponse = serde_json::from_value(json!({
+        "hits": [
+            {"project_id": "a", "featured_gallery": "https://cdn.example/a.webp"},
+            {"project_id": "b", "featured_gallery": null},
+            {"project_id": "c"}
+        ]
+    }))
+    .unwrap();
+    let page = response.into_page();
+    assert_eq!(
+        page.hits[0].featured_gallery.as_deref(),
+        Some("https://cdn.example/a.webp")
+    );
+    assert!(page.hits[1].featured_gallery.is_none());
+    assert!(page.hits[2].featured_gallery.is_none());
+}
+
+#[test]
+fn search_hits_only_mark_known_version_mismatches_incompatible() {
+    let page = serde_json::from_str::<SearchResponse>(SEARCH_SAMPLE)
+        .unwrap()
+        .into_page();
+    let hit = &page.hits[0];
+    assert!(!hit.is_incompatible("1.21.4"));
+    assert!(!hit.is_incompatible(""));
+    assert!(!hit.is_incompatible("  "));
+    for game in ["1.21.11", "26.2", "26.3"] {
+        assert!(hit.is_incompatible(game));
+        assert!(!page.hits[1].is_incompatible(game));
+        assert!(!page.hits[2].is_incompatible(game));
+    }
+}
+
+#[test]
+fn pack_search_omits_game_version_facets_and_keeps_sort_and_offset() {
+    for kind in [ProjectType::Shader, ProjectType::ResourcePack] {
+        for game in ["1.21.11", "26.3"] {
+            let query = SearchQuery {
+                game_version: game.into(),
+                project_type: kind,
+                sort: SortBy::Updated,
+                offset: 40,
+                ..SearchQuery::default()
+            };
+            assert_eq!(
+                modrinth::search_url(&query),
+                format!(
+                    "https://api.modrinth.com/v2/search?query=&facets={}&index=updated&offset=40&limit=20",
+                    encode(&format!(r#"[["project_type:{}"]]"#, kind.id()))
+                )
+            );
+        }
+    }
+}
+
+#[test]
+fn modpack_search_still_requires_the_game_version() {
+    let url = modrinth::search_url(&SearchQuery {
+        game_version: "26.3".into(),
+        project_type: ProjectType::Modpack,
+        ..SearchQuery::default()
+    });
+    assert!(url.contains(&encode(r#"[["project_type:modpack"],["versions:26.3"]]"#)));
 }
 
 #[test]
@@ -54,6 +124,7 @@ fn search_url_encodes_query_facets_and_clamps_limit() {
         offset: 40,
         limit: 500,
         project_type: super::ProjectType::Mod,
+        ..SearchQuery::default()
     };
     let url = modrinth::search_url(&q);
     let facets = encode(r#"[["project_type:mod"],["versions:1.21.4"],["categories:fabric"]]"#);
@@ -75,6 +146,28 @@ fn search_url_encodes_query_facets_and_clamps_limit() {
 }
 
 #[test]
+fn data_pack_categories_form_separate_facets_with_type_loader_and_game() {
+    let query = SearchQuery {
+        game_version: "26.3".into(),
+        project_type: ProjectType::DataPack,
+        categories: vec![" adventure ".into(), "worldgen".into(), "".into()],
+        ..SearchQuery::default()
+    };
+    let expected = json!([
+        ["project_type:datapack"],
+        ["categories:datapack"],
+        ["versions:26.3"],
+        ["categories:adventure"],
+        ["categories:worldgen"],
+    ]);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&modrinth::search_facets(&query)).unwrap(),
+        expected
+    );
+    assert!(modrinth::search_url(&query).contains(&encode(&expected.to_string())));
+}
+
+#[test]
 fn encoder_keeps_unreserved_and_escapes_utf8() {
     assert_eq!(encode("aZ09-_.~"), "aZ09-_.~");
     assert_eq!(encode("a b/\"ç"), "a%20b%2F%22%C3%A7");
@@ -82,6 +175,10 @@ fn encoder_keeps_unreserved_and_escapes_utf8() {
         modrinth::project_versions_url("P1", &["fabric"], "1.21.4"),
         "https://api.modrinth.com/v2/project/P1/version?loaders=%5B%22fabric%22%5D\
          &game_versions=%5B%221.21.4%22%5D"
+    );
+    assert_eq!(
+        modrinth::project_versions_any_game_url("P/1", &["iris", "optifine"]),
+        "https://api.modrinth.com/v2/project/P%2F1/version?loaders=%5B%22iris%22%2C%22optifine%22%5D"
     );
 }
 
@@ -163,6 +260,9 @@ fn falls_back_to_beta_then_alpha_and_filters_incompatible() {
         "alpha"
     );
     assert!(pick_version(&all, &["quilt"], "1.21.4").is_none());
+    for game in ["1.21.11", "26.2", "26.3"] {
+        assert!(pick_version(&all, &["fabric"], game).is_none());
+    }
     assert_eq!(
         pick_version(&all, &["quilt", "fabric"], "1.21.4")
             .unwrap()
@@ -282,4 +382,82 @@ fn project_preview_accepts_projects_without_gallery_and_optional_captions() {
     assert!(project.gallery[0].title.is_none());
     assert_eq!(project.loaders, ["iris"]);
     assert_eq!(project.game_versions, ["1.21.1"]);
+}
+
+#[test]
+fn project_banner_prefers_featured_then_first_gallery_image() {
+    let mut project: super::ProjectDetail = serde_json::from_value(json!({
+        "id": "test",
+        "gallery": [
+            {"url": "https://cdn.example/first.webp"},
+            {"url": "https://cdn.example/featured.webp", "featured": true}
+        ]
+    }))
+    .unwrap();
+    assert_eq!(
+        project.banner_url(),
+        Some("https://cdn.example/featured.webp")
+    );
+    project.gallery[1].featured = false;
+    assert_eq!(project.banner_url(), Some("https://cdn.example/first.webp"));
+    project.gallery.clear();
+    assert_eq!(project.banner_url(), None);
+}
+
+#[test]
+fn discovery_facets_combine_filters_and_follow_sort() {
+    use super::{Environment, ProjectType};
+    let q = SearchQuery {
+        game_version: "1.21.1".into(),
+        project_type: ProjectType::Shader,
+        strict_version: true,
+        loaders: vec!["iris".into(), " ".into()],
+        categories: vec!["realistic".into(), "".into(), "cartoon".into()],
+        environment: Some(Environment::Client),
+        sort: SortBy::Follows,
+        ..SearchQuery::default()
+    };
+    let url = modrinth::search_url(&q);
+    let facets = encode(
+        r#"[["project_type:shader"],["versions:1.21.1"],["categories:iris"],["categories:realistic"],["categories:cartoon"],["client_side:required","client_side:optional"]]"#,
+    );
+    assert!(url.contains(&format!("facets={facets}")), "{url}");
+    assert!(url.contains("&index=follows&"), "{url}");
+    // Packs and shaders ignore the game version unless the filter is explicit.
+    let loose = modrinth::search_facets(&SearchQuery {
+        game_version: "1.21.1".into(),
+        project_type: ProjectType::ResourcePack,
+        environment: Some(Environment::Server),
+        ..SearchQuery::default()
+    });
+    assert_eq!(
+        loose,
+        r#"[["project_type:resourcepack"],["server_side:required","server_side:optional"]]"#
+    );
+}
+
+#[test]
+fn selected_mod_plan_targets_only_the_chosen_instance_and_replaces_newer_version() {
+    let dir = tempfile::tempdir().unwrap();
+    let selected = dir.path().join("selected").join("mods");
+    let other = dir.path().join("other").join("mods");
+    fs::create_dir_all(&selected).unwrap();
+    fs::create_dir_all(&other).unwrap();
+    let version: Version = serde_json::from_value(json!({
+        "id": "older", "project_id": "A", "version_number": "1.0",
+        "files": [{"url": "https://cdn/older.jar", "filename": "older.jar", "primary": true}]
+    }))
+    .unwrap();
+    let (entry, job) = prepare_one(&version, false, &selected).unwrap();
+    assert_eq!(entry.version_id, "older");
+    assert_eq!(job.dest, selected.join("older.jar"));
+    fs::write(selected.join("newer.jar"), b"newer").unwrap();
+    fs::write(other.join("newer.jar"), b"unrelated").unwrap();
+    fs::write(&job.dest, b"older").unwrap();
+    let current = ModIndex::default().with(tracked("A", "newer.jar"));
+    let updated = record(&current, &[entry], &selected).unwrap();
+    assert_eq!(updated.mods[0].version_id, "older");
+    assert!(!selected.join("newer.jar").exists());
+    assert!(selected.join("older.jar").is_file());
+    assert_eq!(fs::read(other.join("newer.jar")).unwrap(), b"unrelated");
 }

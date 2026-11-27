@@ -264,8 +264,8 @@ public abstract class Page {
 				focusNext();
 				return true;
 			}
-			// Typing (Right Shift is just Shift here).
-			return focused.keyPressed(key) || key == Keys.RIGHT_SHIFT;
+			// Typing (the menu key is just a key here: it types, and never opens the menu).
+			return focused.keyPressed(key);
 		}
 		if (key == Keys.TAB) {
 			focusNext();
@@ -282,8 +282,8 @@ public abstract class Page {
 				return true;
 			}
 		}
-		if (key == Keys.RIGHT_SHIFT) {
-			return rightShift();
+		if (key == Keys.MENU) {
+			return menuKey();
 		}
 		return false;
 	}
@@ -293,8 +293,8 @@ public abstract class Page {
 		return focused != null;
 	}
 
-	/** Right Shift: opens the Arctic menu over this page. */
-	protected boolean rightShift() {
+	/** The menu key: opens the Arctic menu over this page. */
+	protected boolean menuKey() {
 		ArcticClient.platform().openPageOver(ArcticClient.arcticMenu());
 		return true;
 	}

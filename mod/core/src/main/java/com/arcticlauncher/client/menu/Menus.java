@@ -4,14 +4,14 @@ import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.ui.Page;
 
 /**
- * Where the Arctic menu opens: Right Shift in a world shows the HUD screen
+ * Where the Arctic menu opens: the menu key in a world shows the HUD screen
  * (drag widgets, then Mods); elsewhere it's straight to the Mods screen.
  * Pages can also be opened by name ("friends", "packs", a mod's id…).
  */
 public final class Menus {
 	private Menus() {}
 
-	/** What Right Shift opens right now. */
+	/** What the menu key opens right now. */
 	public static Page home() {
 		if (ArcticClient.platform().inWorld() && ArcticClient.platform().hasFeatures()) {
 			return new HudEditor();

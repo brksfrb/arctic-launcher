@@ -4,6 +4,7 @@ import java.util.Locale;
 
 import com.arcticlauncher.client.Platform;
 
+import com.arcticlauncher.client.Lang;
 /**
  * Auto GG: when a minigame ends (the end-of-game lines of common servers),
  * say "gg" once, a moment later.
@@ -11,11 +12,11 @@ import com.arcticlauncher.client.Platform;
 public final class AutoGg {
 	/** End-of-game lines start with these (lower case; the servers center them). */
 	private static final String[] STARTS = {
-			"1st killer - ", "winner: ", "winners: ", "winning team: ", "you won!", "reward summary", "1st place - ",
-			"your team won", "victory!", "game over!",
+			"1st killer - ", "winner: ", "winners: ", "winning team: ", "you won!", "reward summary", "1st place - ", // i18n-ignore
+			"your team won", "victory!", "game over!", // i18n-ignore
 	};
 	/** …or say this anywhere, outside player chat. */
-	private static final String[] ANYWHERE = {" has won the game", " won the game!"};
+	private static final String[] ANYWHERE = {" has won the game", " won the game!"}; // i18n-ignore // i18n-ignore
 	/** At most once in this long (one game's summary has several matching lines). */
 	private static final long QUIET_MS = 10_000;
 	private static final long DELAY_MS = 800;

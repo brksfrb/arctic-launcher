@@ -3,18 +3,21 @@
 //! launcher UI never waits on the game.
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Seek, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use super::LaunchPlan;
+use super::exit_diagnostics::{ChildOutput, ExitDiagnostics};
 use super::logparse::{LogLine, LogParser};
-use super::priority;
+use super::session::GameSession;
+use super::{priority, runtime_repair};
 use crate::Result;
 use crate::error::IoContext;
+use crate::java;
 
 /// How often the watcher checks for exit or a kill request.
 const WATCH_INTERVAL: Duration = Duration::from_millis(250);
@@ -27,8 +30,15 @@ const WINDOW_MARKERS: [&str; 3] = ["Backend library:", "LWJGL Version:", "Sound 
 pub enum GameEvent {
     /// The game window is (about to be) visible.
     WindowReady,
-    /// The process ended. `code` is `None` if it was killed by a signal.
-    Exited { code: Option<i32> },
+    /// The process ended. `killed` means the launcher requested a force close;
+    /// its nonzero exit code must not be treated as a crash.
+    Exited {
+        code: Option<i32>,
+        killed: bool,
+        played: Duration,
+        ended_at: SystemTime,
+        diagnostics: ExitDiagnostics,
+    },
     /// Parsed output lines (one raw line may expand to several).
     Output(Vec<LogLine>),
 }
@@ -38,6 +48,8 @@ pub enum GameEvent {
 pub struct GameHandle {
     pid: u32,
     kill: Arc<AtomicBool>,
+    game_dir: PathBuf,
+    started_at: SystemTime,
 }
 
 impl GameHandle {
@@ -45,9 +57,18 @@ impl GameHandle {
         self.pid
     }
 
+    pub fn game_dir(&self) -> &Path {
+        &self.game_dir
+    }
+
+    pub fn started_at(&self) -> SystemTime {
+        self.started_at
+    }
+
     /// End the game now, without waiting for the watcher (the launcher is
     /// quitting and its threads go with it).
     pub fn terminate(&self) {
+        self.kill();
         terminate(self.pid);
     }
 
@@ -80,10 +101,25 @@ pub fn spawn(
     plan: &LaunchPlan,
     on_event: impl Fn(GameEvent) + Send + Sync + 'static,
 ) -> Result<GameHandle> {
+    spawn_with_session(plan, None, on_event)
+}
+
+pub(super) fn spawn_with_session(
+    plan: &LaunchPlan,
+    session: Option<GameSession>,
+    on_event: impl Fn(GameEvent) + Send + Sync + 'static,
+) -> Result<GameHandle> {
+    let spawn_started = std::time::Instant::now();
     log::info!("launching: {}", plan.redacted_command());
+    let runtime_lock = lock_launch_runtime(plan)?;
+    if let Some(parent) = plan.log_file.parent() {
+        std::fs::create_dir_all(parent).at(parent)?;
+    }
     rotate_game_log(&plan.log_file);
     let log = Arc::new(Mutex::new(File::create(&plan.log_file).at(&plan.log_file)?));
-    let (args, argfile) = command_args(plan)?;
+    let launch_id = super::instance_probe::new_launch_id();
+    let (args, argfile) = command_args(plan, &launch_id)?;
+    let other_instance = super::instance_probe::running_on(&plan.game_dir);
     let start = |exe: &Path| {
         let mut cmd = Command::new(exe);
         cmd.args(&args)
@@ -95,7 +131,10 @@ pub fn spawn(
         priority::boost(&mut cmd);
         cmd.spawn()
     };
-    let exe = game_exe(plan);
+    let (mut exe, versions) = game_exe(plan);
+    writeln!(log.lock().unwrap(), "{versions}").ok();
+    let started = std::time::Instant::now();
+    let launched_at = std::time::SystemTime::now();
     let mut child = match start(&exe) {
         Ok(child) => child,
         // The branded copy would not start: run the runtime's own Java.
@@ -105,6 +144,8 @@ pub fn spawn(
                 exe.display(),
                 plan.java.display()
             );
+            exe = plan.java.clone();
+            crate::gpu_preference::apply(&exe, plan.high_performance_gpu);
             match start(&plan.java) {
                 Ok(child) => child,
                 Err(e) => {
@@ -123,6 +164,40 @@ pub fn spawn(
             return Err(crate::Error::io(&plan.java, e));
         }
     };
+    drop(runtime_lock);
+    log::info!(
+        "[startup] Java process started in {} ms (pid {})",
+        spawn_started.elapsed().as_millis(),
+        child.id()
+    );
+    super::instance_probe::record(&plan.game_dir, child.id(), &launch_id);
+    let ids = launch_ids_line(&launch_id, child.id(), &plan.args, other_instance.as_ref());
+    writeln!(log.lock().unwrap(), "{ids}").ok();
+    on_event(GameEvent::Output(vec![LogLine {
+        level: super::logparse::Level::Info,
+        text: ids,
+    }]));
+    let launch_context = format!(
+        "[Arctic diagnostics] runtime: agent={}; executable={}; high_performance_gpu={}",
+        plan.args
+            .iter()
+            .any(|a| a.starts_with("-javaagent:") && a.contains("arctic")),
+        if exe == plan.java {
+            "runtime java"
+        } else {
+            "branded Arctic Client"
+        },
+        plan.high_performance_gpu
+    );
+    let launch_context = format!(
+        "{launch_context}; {}",
+        crate::gpu_preference::diagnostics(&exe)
+    );
+    writeln!(log.lock().unwrap(), "{launch_context}").ok();
+    on_event(GameEvent::Output(vec![LogLine {
+        level: super::logparse::Level::Info,
+        text: launch_context,
+    }]));
     super::game_window::on_spawn(child.id(), plan.maximize_window);
 
     let on_event = Arc::new(on_event);
@@ -130,7 +205,9 @@ pub fn spawn(
     let ready_seen = Arc::new(AtomicBool::new(false));
     priority::settle_when_ready(child.id(), ready_seen.clone(), window_seen.clone());
     let secrets: Arc<[String]> = plan.log_secrets().into();
-    let tee = |stream: Box<dyn Read + Send>| {
+    let output = Arc::new(Mutex::new(ChildOutput::default()));
+    let tee = |stream: Box<dyn Read + Send>, name| {
+        let output = output.clone();
         let (log, seen, on_event) = (log.clone(), window_seen.clone(), on_event.clone());
         let (ready, secrets) = (ready_seen.clone(), secrets.clone());
         std::thread::spawn(move || {
@@ -138,25 +215,36 @@ pub fn spawn(
                 window: &seen,
                 ready: &ready,
             };
-            tee_output(stream, &log, seen, &secrets, &*on_event)
-        });
+            tee_output(stream, (&output, name), &log, seen, &secrets, &*on_event)
+        })
     };
-    if let Some(out) = child.stdout.take() {
-        tee(Box::new(out));
-    }
-    if let Some(err) = child.stderr.take() {
-        tee(Box::new(err));
-    }
+    let out_reader = child.stdout.take().map(|out| tee(Box::new(out), "stdout"));
+    let err_reader = child.stderr.take().map(|err| tee(Box::new(err), "stderr"));
 
     let kill = Arc::new(AtomicBool::new(false));
     let handle = GameHandle {
         pid: child.id(),
         kill: kill.clone(),
+        game_dir: plan.game_dir.clone(),
+        started_at: launched_at,
     };
     let game_dir = plan.game_dir.clone();
+    let managed_runtime = plan.managed_runtime.clone();
+    let log_path = plan.log_file.clone();
+    let (game_pid, watcher_window) = (child.id(), window_seen.clone());
+    #[cfg(windows)]
+    let (source, high_performance_gpu) = (plan.java.clone(), plan.high_performance_gpu);
     std::thread::spawn(move || {
+        let mut killed = false;
         let code = loop {
             if kill.swap(false, Ordering::Relaxed) {
+                killed = true;
+                let message = "[Arctic diagnostics] launcher force-close requested";
+                writeln!(log.lock().unwrap(), "{message}").ok();
+                on_event(GameEvent::Output(vec![LogLine {
+                    level: super::logparse::Level::Info,
+                    text: message.into(),
+                }]));
                 let _ = child.kill();
             }
             match child.try_wait() {
@@ -168,16 +256,248 @@ pub fn spawn(
                 }
             }
         };
-        if code.is_some_and(|c| c != 0) {
-            super::startup_cache::drop_pack(&game_dir);
+        let runtime = started.elapsed();
+        let exited_at = SystemTime::now();
+        // Save settings before slower crash diagnostics or pipe drainage can reorder exits.
+        if let Some(session) = session
+            && let Err(e) = session.finish()
+        {
+            log::warn!("saving game settings: {e}");
         }
+        drain_readers([out_reader, err_reader].into_iter().flatten().collect());
+        killed |= kill.load(Ordering::Relaxed);
+        if let Some(c) = code {
+            let hook = std::fs::read_to_string(&log_path)
+                .map(|log| crate::crash::ShutdownHook::from_log(&log))
+                .unwrap_or(crate::crash::ShutdownHook::NotInstalled);
+            let summary = ended_line(
+                runtime.as_millis(),
+                c,
+                game_pid,
+                &launch_id,
+                hook,
+                watcher_window.load(Ordering::Relaxed),
+            );
+            writeln!(log.lock().unwrap(), "{summary}").ok();
+            on_event(GameEvent::Output(vec![LogLine {
+                level: super::logparse::Level::Info,
+                text: summary,
+            }]));
+        }
+        #[cfg(windows)]
+        if !killed && code.is_some_and(crate::native_crash::is_native) {
+            let fresh = |dir: &std::path::Path, prefix: &str| {
+                std::fs::read_dir(dir)
+                    .ok()
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .any(|e| {
+                        e.file_name().to_string_lossy().starts_with(prefix)
+                            && e.metadata()
+                                .and_then(|m| m.modified())
+                                .is_ok_and(|t| t >= launched_at)
+                    })
+            };
+            if !fresh(&game_dir, "hs_err_pid") && !fresh(&game_dir.join("crash-reports"), "crash-")
+            {
+                // Finish on the watcher before Exited triggers the UI's diagnosis.
+                let evidence = crate::native_crash::collect(
+                    child.id(),
+                    &exe,
+                    launched_at,
+                    exited_at,
+                    &game_dir.join("mods"),
+                );
+                writeln!(log.lock().unwrap(), "{evidence}").ok();
+                on_event(GameEvent::Output(vec![LogLine {
+                    level: super::logparse::Level::Info,
+                    text: evidence,
+                }]));
+            }
+        }
+        let missing_dll = cfg!(windows) && code == Some(super::exit_diagnostics::DLL_NOT_FOUND);
+        if !killed
+            && !missing_dll
+            && code.is_some_and(|c| c != 0)
+            && runtime < Duration::from_secs(5)
+        {
+            let probe = runtime_probe_diagnostic(&exe);
+            writeln!(log.lock().unwrap(), "{probe}").ok();
+            on_event(GameEvent::Output(vec![LogLine {
+                level: super::logparse::Level::Info,
+                text: probe,
+            }]));
+        }
+        if !killed && code.is_some_and(|c| c != 0) {
+            super::startup_cache::drop_pack(&game_dir);
+            if let Some(runtime) = &managed_runtime
+                && let Some(line) =
+                    runtime_repair::mark_after_crash(runtime, &log_path, &game_dir, launched_at)
+            {
+                let evidence = format!("[Arctic diagnostics] Java runtime failure: {line}");
+                writeln!(log.lock().unwrap(), "{evidence}").ok();
+                on_event(GameEvent::Output(vec![LogLine {
+                    level: super::logparse::Level::Error,
+                    text: evidence,
+                }]));
+            }
+        }
+        super::instance_probe::clear(&game_dir, &launch_id);
         if let Some(file) = argfile {
             // It holds the access token: gone with the game.
             let _ = std::fs::remove_file(file);
         }
-        on_event(GameEvent::Exited { code });
+        // Keep startup output and diagnostic markers even after the UI's ring buffer rolls over.
+        if let Ok(file) = File::open(&log_path) {
+            let mut evidence = String::new();
+            let mut initial = 0;
+            for line in BufReader::new(file)
+                .lines()
+                .map_while(std::result::Result::ok)
+            {
+                let keep = line.contains("[Arctic diagnostics]")
+                    || line.contains("pack metadata")
+                    || line.contains("Missing metadata in pack")
+                    || line.contains("MalformedJsonException") && line.contains("$.pack");
+                if initial < 2048 || keep {
+                    initial += line.len();
+                    if evidence.len() < 64 * 1024 {
+                        evidence.push_str(&line);
+                        evidence.push('\n');
+                    }
+                }
+            }
+            let _ = std::fs::write(game_dir.join("arctic-launch-diagnostics.txt"), &evidence);
+            on_event(GameEvent::Output(vec![LogLine {
+                level: super::logparse::Level::Info,
+                text: evidence,
+            }]));
+        }
+        let mut diagnostics = ExitDiagnostics::default();
+        if !killed && code.is_some_and(|c| c != 0) {
+            diagnostics.output = std::mem::take(&mut *output.lock().unwrap());
+            #[cfg(windows)]
+            if missing_dll {
+                diagnostics.check_dlls(&source, &exe, |path| {
+                    let mut probe = Command::new(path);
+                    probe
+                        .current_dir(game_cwd(&game_dir))
+                        .envs(crate::gpu_preference::env(high_performance_gpu));
+                    probe
+                });
+            }
+        }
+        on_event(GameEvent::Exited {
+            code,
+            killed,
+            played: runtime,
+            ended_at: exited_at,
+            diagnostics,
+        });
     });
     Ok(handle)
+}
+
+/// Descendants may inherit pipes: EOF is not guaranteed when the game exits.
+fn drain_readers(readers: Vec<std::thread::JoinHandle<()>>) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while readers.iter().any(|reader| !reader.is_finished()) && std::time::Instant::now() < deadline
+    {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    for reader in readers {
+        if reader.is_finished() {
+            let _ = reader.join();
+        }
+        // Dropping an unfinished handle detaches it; exit reporting must proceed.
+    }
+}
+
+/// Bounded and invisible: same executable, no game or account arguments.
+fn runtime_probe(exe: &Path) -> io::Result<Option<(ExitStatus, String)>> {
+    runtime_probe_command(Command::new(exe))
+}
+
+pub(super) fn runtime_probe_command(mut cmd: Command) -> io::Result<Option<(ExitStatus, String)>> {
+    // A wrapper can leave a child holding stdout or stderr open. A file lets us
+    // read the completed probe's output without waiting for that child.
+    let mut output = tempfile::tempfile()?;
+    cmd.arg("-version")
+        .stdin(Stdio::null())
+        .stdout(output.try_clone()?)
+        .stderr(output.try_clone()?);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    let mut probe = cmd.spawn()?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    loop {
+        if let Some(status) = probe.try_wait()? {
+            output.rewind()?;
+            let mut bytes = Vec::new();
+            output.take(8 * 1024).read_to_end(&mut bytes)?;
+            return Ok(Some((status, String::from_utf8_lossy(&bytes).into_owned())));
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = probe.kill();
+            let _ = probe.wait();
+            return Ok(None);
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+const RUNTIME_PROBE_PREFIX: &str = "[Arctic diagnostics] same-runtime java -version: ";
+
+fn runtime_probe_diagnostic(exe: &Path) -> String {
+    let result = match runtime_probe(exe) {
+        Ok(Some((status, output))) => {
+            // The scrubber can mistake a four-part Java version for an IP address.
+            let major = status
+                .success()
+                .then(|| parse_java_major_version(&output))
+                .flatten()
+                .map_or_else(String::new, |major| format!("Java {major}; "));
+            format!(
+                "{major}status={status}; {}",
+                crate::crash::scrubbed_tail(&output, 2048).replace('\n', " | ")
+            )
+        }
+        Ok(None) => "timed out after 3 s".into(),
+        Err(e) => format!("failed: {e}"),
+    };
+    format!("{RUNTIME_PROBE_PREFIX}{result}")
+}
+
+pub(crate) fn diagnosed_runtime_major(line: &str) -> Option<u32> {
+    let (status, output) = line.strip_prefix(RUNTIME_PROBE_PREFIX)?.split_once("; ")?;
+    status
+        .strip_prefix("Java ")
+        .and_then(|major| major.parse().ok())
+        .or_else(|| output.split(" | ").find_map(parse_java_major_version))
+}
+
+pub(crate) fn runtime_major_version(exe: &Path) -> Option<u32> {
+    let (status, output) = runtime_probe(exe).ok()??;
+    if !status.success() {
+        return None;
+    }
+    parse_java_major_version(&output)
+}
+
+fn parse_java_major_version(output: &str) -> Option<u32> {
+    output.lines().find_map(|line| {
+        let line = line.trim_start();
+        let (version, _) = line
+            .strip_prefix("openjdk version \"")
+            .or_else(|| line.strip_prefix("java version \""))?
+            .split_once('"')?;
+        let version = version.strip_prefix("1.").unwrap_or(version);
+        version.split(['.', '-', '+']).next()?.parse().ok()
+    })
 }
 
 /// The game's exit code; a game the system stopped with a signal (Linux, macOS) counts as 128 plus the
@@ -209,10 +529,26 @@ fn exit_code(status: &std::process::ExitStatus) -> Option<i32> {
 /// after a short-lived caller (e.g. the CLI) exits. Returns the pid.
 pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     log::info!("launching (detached): {}", plan.redacted_command());
+    let runtime_lock = lock_launch_runtime(plan)?;
+    if let Some(parent) = plan.log_file.parent() {
+        std::fs::create_dir_all(parent).at(parent)?;
+    }
     rotate_game_log(&plan.log_file);
-    let log = File::create(&plan.log_file).at(&plan.log_file)?;
+    let mut log = File::create(&plan.log_file).at(&plan.log_file)?;
+    let (exe, versions) = game_exe(plan);
+    if plan.managed_runtime.is_some() {
+        let id = uuid::Uuid::new_v4();
+        let at = std::time::UNIX_EPOCH
+            .elapsed()
+            .unwrap_or_default()
+            .as_millis();
+        writeln!(log, "{}{id} {at}", runtime_repair::DETACHED).at(&plan.log_file)?;
+    }
+    writeln!(log, "{versions}").at(&plan.log_file)?;
     let log_err = log.try_clone().at(&plan.log_file)?;
-    let (args, argfile) = command_args(plan)?;
+    let launch_id = super::instance_probe::new_launch_id();
+    let (args, argfile) = command_args(plan, &launch_id)?;
+    let other_instance = super::instance_probe::running_on(&plan.game_dir);
     let start = |exe: &Path| {
         Command::new(exe)
             .args(&args)
@@ -223,7 +559,6 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
             .stderr(log_err.try_clone()?)
             .spawn()
     };
-    let exe = game_exe(plan);
     let spawned = start(&exe).or_else(|e| {
         if exe == plan.java {
             return Err(e);
@@ -236,7 +571,11 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
         );
         start(&plan.java)
     });
+    drop(runtime_lock);
     if let Ok(child) = &spawned {
+        super::instance_probe::record(&plan.game_dir, child.id(), &launch_id);
+        let ids = launch_ids_line(&launch_id, child.id(), &plan.args, other_instance.as_ref());
+        writeln!(log, "{ids}").ok();
         // Grant foreground permission before waiting for Java to read its argument file.
         super::game_window::on_spawn(child.id(), plan.maximize_window);
     }
@@ -301,15 +640,77 @@ const ARGFILE_READ_TIME: Duration = Duration::from_secs(5);
 /// The arguments to start Java with, and the `@argfile` that holds them when the command line would be too
 /// long for Windows (a Forge or NeoForge classpath of 100+ libraries under a long data folder). Java 9+ reads
 /// `@file`; Java 8 can't, and gets a message about moving the data folder instead of an obscure spawn error.
-fn command_args(plan: &LaunchPlan) -> Result<(Vec<String>, Option<PathBuf>)> {
-    let length = plan
-        .args
+/// The ids and launch-time signals: which game this is, its heap, and whether another game was
+/// still running on the same directory. No account data.
+fn launch_ids_line(
+    launch_id: &str,
+    pid: u32,
+    args: &[String],
+    other: Option<&super::instance_probe::OtherInstance>,
+) -> String {
+    let heap = args
         .iter()
-        .map(|a| a.chars().count() + 3)
-        .sum::<usize>()
-        + plan.java.as_os_str().len();
+        .rev()
+        .find_map(|a| a.strip_prefix("-Xmx"))
+        .map_or_else(
+            || "JVM default".to_owned(),
+            |size| match super::args::heap_size_mb(size) {
+                Some(mb) => format!("{mb} MB"),
+                None => size.to_owned(),
+            },
+        );
+    let other = other.map_or_else(
+        || "none".to_owned(),
+        |o| format!("pid {} (launch {})", o.pid, o.launch),
+    );
+    format!(
+        "[Arctic diagnostics] launch id={launch_id} pid={pid} heap={}; other game instance on this directory: {other}",
+        heap.replace(' ', "_")
+    )
+}
+
+/// The exit summary, tagged with the game pid and launch id and the shutdown-hook verdict.
+fn ended_line(
+    ms: u128,
+    code: i32,
+    pid: u32,
+    launch_id: &str,
+    hook: crate::crash::ShutdownHook,
+    window_opened: bool,
+) -> String {
+    format!(
+        "[Arctic diagnostics] process ended after {ms} ms; exit code {}; pid={pid} launch={launch_id}; shutdown hook: {}; window {}",
+        crate::crash::exit_description(code),
+        hook.describe(),
+        if window_opened {
+            "opened"
+        } else {
+            "not opened"
+        }
+    )
+}
+
+fn command_args(plan: &LaunchPlan, launch_id: &str) -> Result<(Vec<String>, Option<PathBuf>)> {
+    // Portal instances run with home as cwd; keep diagnostics in the instance.
+    let dir = std::path::absolute(&plan.game_dir).at(&plan.game_dir)?;
+    let mut args = vec![
+        format!(
+            "-Darctic.diagnostics.hangFile={}",
+            dir.join("arctic-hang.txt").display()
+        ),
+        format!("-Darctic.launch.id={launch_id}"),
+    ];
+    if !plan.args.iter().any(|a| a.starts_with("-XX:ErrorFile=")) {
+        args.push(format!(
+            "-XX:ErrorFile={}",
+            dir.join("hs_err_pid%p.log").display()
+        ));
+    }
+    args.extend_from_slice(&plan.args);
+    let length =
+        args.iter().map(|a| a.chars().count() + 3).sum::<usize>() + plan.java.as_os_str().len();
     if !cfg!(windows) || length <= MAX_COMMAND_CHARS {
-        return Ok((plan.args.clone(), None));
+        return Ok((args, None));
     }
     if !java_reads_argfiles(&plan.java) {
         return Err(crate::Error::Other(format!(
@@ -319,7 +720,7 @@ fn command_args(plan: &LaunchPlan) -> Result<(Vec<String>, Option<PathBuf>)> {
         )));
     }
     let file = plan.log_file.with_extension("args");
-    std::fs::write(&file, argfile_text(&plan.args)).at(&file)?;
+    std::fs::write(&file, argfile_text(&args)).at(&file)?;
     log::info!(
         "command line of {length} characters: arguments passed in {}",
         file.display()
@@ -348,20 +749,14 @@ fn argfile_text(args: &[String]) -> String {
 
 /// Whether the Java at `java` (`<runtime>/bin/java`) is version 9 or newer, from the runtime's `release` file.
 fn java_reads_argfiles(java: &Path) -> bool {
-    java.parent()
-        .and_then(Path::parent)
-        .and_then(|runtime| std::fs::read_to_string(runtime.join("release")).ok())
+    read_release(java)
         .and_then(|release| java_major(&release))
         .is_some_and(|major| major >= 9)
 }
 
 /// The major version in a runtime's `release` file (`JAVA_VERSION="1.8.0_402"` is 8, `"17.0.9"` is 17).
 fn java_major(release: &str) -> Option<u32> {
-    let version = release
-        .lines()
-        .find_map(|l| l.strip_prefix("JAVA_VERSION="))?
-        .trim()
-        .trim_matches('"');
+    let version = java_version(release)?;
     let mut parts = version.split(['.', '-', '+', '_']);
     let first: u32 = parts.next()?.parse().ok()?;
     if first == 1 {
@@ -369,6 +764,25 @@ fn java_major(release: &str) -> Option<u32> {
     } else {
         Some(first)
     }
+}
+
+fn java_version(release: &str) -> Option<&str> {
+    release.lines().find_map(|line| {
+        line.strip_prefix("JAVA_VERSION=")
+            .map(|v| v.trim().trim_matches('"'))
+    })
+}
+
+fn read_release(java: &Path) -> Option<String> {
+    let release = java.parent()?.parent()?.join("release");
+    java::file_metadata(&release).ok()??;
+    std::fs::read_to_string(release).ok()
+}
+
+fn release_version(java: &Path) -> String {
+    read_release(java)
+        .and_then(|release| java_version(&release).map(str::to_owned))
+        .unwrap_or_else(|| "unknown".into())
 }
 
 /// The folder the game process starts in. Minecraft gets its folders as absolute arguments, but Java
@@ -398,10 +812,52 @@ fn is_portal_path(path: &Path) -> bool {
         && parts.next().is_some_and(|p| p == "doc")
 }
 
-fn game_exe(plan: &LaunchPlan) -> PathBuf {
-    let exe = branded_java(&plan.java);
+fn lock_launch_runtime(plan: &LaunchPlan) -> Result<Option<File>> {
+    plan.managed_runtime
+        .as_deref()
+        .map(|runtime| {
+            let lock = java::lock_runtime(runtime)?;
+            java::check_runtime_ready(runtime)?;
+            Ok(lock)
+        })
+        .transpose()
+}
+
+fn game_exe(plan: &LaunchPlan) -> (PathBuf, String) {
+    let (exe, named_version, rebuilt) = choose_game_exe(plan);
     crate::gpu_preference::apply(&exe, plan.high_performance_gpu);
-    exe
+    let source = release_version(&plan.java);
+    let versions = format!(
+        "[Arctic diagnostics] runtime release: source JAVA_VERSION={source}; named JAVA_VERSION={named_version}; named rebuilt={rebuilt}"
+    );
+    log::info!("{versions}");
+    (exe, versions)
+}
+
+fn choose_game_exe(plan: &LaunchPlan) -> (PathBuf, String, bool) {
+    #[cfg(windows)]
+    if let Some(runtime) = &plan.managed_runtime {
+        let started = std::time::Instant::now();
+        return match super::named_runtime::prepare(runtime, &plan.java) {
+            Ok((exe, rebuilt)) => {
+                log::info!(
+                    "[startup] named Java runtime {} in {} ms",
+                    if rebuilt { "rebuilt" } else { "checked" },
+                    started.elapsed().as_millis()
+                );
+                let version = release_version(&exe);
+                (exe, version, rebuilt)
+            }
+            Err(e) => {
+                log::warn!(
+                    "named copy of the Java runtime unavailable, using {}: {e}",
+                    plan.java.display()
+                );
+                (plan.java.clone(), "unavailable".into(), false)
+            }
+        };
+    }
+    (branded_java(&plan.java), "none".into(), false)
 }
 
 fn branded_java(java: &Path) -> PathBuf {
@@ -413,153 +869,27 @@ fn branded_java(java: &Path) -> PathBuf {
         return java.to_path_buf();
     }
     let copy = java.with_file_name(CLIENT_PROCESS);
-    let same = |a: &Path, b: &Path| match (std::fs::metadata(a), std::fs::metadata(b)) {
-        (Ok(a), Ok(b)) => a.len() == b.len() && a.modified().ok() <= b.modified().ok(),
-        _ => false,
+    let refresh = || -> std::io::Result<()> {
+        let bin = java.parent().unwrap();
+        java::require_directory(bin)?;
+        let source = java::file_metadata(java)?.ok_or(std::io::ErrorKind::NotFound)?;
+        if java::file_metadata(&copy)?.is_some_and(|dest| {
+            source.len() == dest.len() && source.modified().ok() <= dest.modified().ok()
+        }) {
+            return Ok(());
+        }
+        let staged = tempfile::NamedTempFile::new_in(bin)?;
+        std::fs::copy(java, staged.path())?;
+        staged.persist(&copy).map_err(|e| e.error)?;
+        Ok(())
     };
-    if !same(java, &copy)
-        && let Err(e) = std::fs::copy(java, &copy)
-    {
-        log::info!("running the game as {}: {e}", java.display());
-        return java.to_path_buf();
-    }
-    in_named_folder(&copy)
-}
-
-/// NVIDIA's recorder files clips under the name of the folder that holds
-/// `bin`, which is the runtime's (`java-runtime-delta`). The game is started
-/// from a copy of the runtime named after the client instead,
-/// `runtimes/.named/<runtime>/Arctic Client`, made of hard links (no extra
-/// space). Java works out its home from that path, so nothing else changes.
-/// (A junction isn't enough: recorders see the path it leads to.)
-#[cfg(windows)]
-fn in_named_folder(exe: &Path) -> PathBuf {
-    const NAME: &str = "Arctic Client";
-    let named = (|| {
-        let bin = exe.parent()?;
-        let runtime = bin.parent()?;
-        if bin.file_name()? != "bin" || runtime.file_name()? == NAME {
-            return None;
-        }
-        let named = runtime
-            .parent()?
-            .join(".named")
-            .join(runtime.file_name()?)
-            .join(NAME);
-        // Earlier versions made a junction here: remove the link itself, never what it leads to.
-        if junction::exists(&named).unwrap_or(false) {
-            std::fs::remove_dir(&named)
-                .inspect_err(|e| log::info!("old junction for the game's name: {e}"))
-                .ok()?;
-        }
-        remove_system_dlls(&named);
-        mirror_tree(runtime, &named)
-            .inspect_err(|e| log::info!("named copy of the Java runtime: {e}"))
-            .ok()?;
-        Some(named.join("bin").join(exe.file_name()?))
-    })();
-    named.unwrap_or_else(|| exe.to_path_buf())
-}
-
-/// Files with the names of Windows' own C runtime (`ucrtbase.dll`, `api-ms-win-*.dll`). Mojang's
-/// runtimes bundle them in `bin`; the named copy leaves them out (Windows 10/11 have them in
-/// System32), so the launcher never writes a file under a system DLL's name.
-#[cfg(any(windows, test))]
-fn is_system_dll(name: &std::ffi::OsStr) -> bool {
-    let name = name.to_string_lossy().to_ascii_lowercase();
-    name == "ucrtbase.dll" || (name.starts_with("api-ms-win-") && name.ends_with(".dll"))
-}
-
-#[cfg(any(windows, test))]
-fn is_link(path: &Path) -> bool {
-    let Ok(meta) = std::fs::symlink_metadata(path) else {
-        return false;
-    };
-    if meta.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    if junction::exists(path).unwrap_or(false) {
-        return true;
-    }
-    false
-}
-
-/// Delete the system-named DLLs an older version left in the named copy's `bin` (hard links or
-/// copies; removing a link only removes that name, never the runtime's file). Only inside a
-/// `.named` folder, and never through a symlink or junction. Failures (a file in use) are logged.
-#[cfg(any(windows, test))]
-fn remove_system_dlls(named: &Path) {
-    let under_named = named
-        .ancestors()
-        .skip(1)
-        .any(|a| a.file_name().is_some_and(|n| n == ".named"));
-    let bin = named.join("bin");
-    if !under_named || is_link(named) || is_link(&bin) || !bin.is_dir() {
-        return;
-    }
-    // Every ancestor up to `.named` must be a real folder too.
-    for a in named.ancestors().skip(1) {
-        if a.file_name().is_some_and(|n| n == ".named") {
-            break;
-        }
-        if is_link(a) {
-            return;
+    match refresh() {
+        Ok(()) => copy,
+        Err(e) => {
+            log::info!("running the game as {}: {e}", java.display());
+            java.to_path_buf()
         }
     }
-    let Ok(entries) = std::fs::read_dir(&bin) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let is_file = entry.file_type().is_ok_and(|t| t.is_file());
-        if is_file && is_system_dll(&entry.file_name()) {
-            let _ = std::fs::remove_file(&path)
-                .inspect_err(|e| log::info!("old {} in the named copy: {e}", path.display()));
-        }
-    }
-}
-
-/// Make `dst` hold every file of `src` as a hard link (a plain copy where a link can't be
-/// made). Files already linked are left alone, so this is quick once done; a file the runtime
-/// replaced is linked again.
-#[cfg(any(windows, test))]
-fn mirror_tree(src: &Path, dst: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let (from, to) = (entry.path(), dst.join(entry.file_name()));
-        let kind = entry.file_type()?;
-        if kind.is_dir() {
-            mirror_tree(&from, &to)?;
-            continue;
-        }
-        if !kind.is_file() || same_file(&from, &to) {
-            continue;
-        }
-        if dst.file_name().is_some_and(|n| n == "bin") && is_system_dll(&entry.file_name()) {
-            continue;
-        }
-        let _ = std::fs::remove_file(&to);
-        if std::fs::hard_link(&from, &to).is_err() {
-            std::fs::copy(&from, &to)?;
-        }
-    }
-    Ok(())
-}
-
-/// Already the same file (a hard link of it), or a copy as large and as new.
-#[cfg(any(windows, test))]
-fn same_file(a: &Path, b: &Path) -> bool {
-    match (std::fs::metadata(a), std::fs::metadata(b)) {
-        (Ok(a), Ok(b)) => a.len() == b.len() && a.modified().ok() == b.modified().ok(),
-        _ => false,
-    }
-}
-
-#[cfg(not(windows))]
-fn in_named_folder(exe: &Path) -> PathBuf {
-    exe.to_path_buf()
 }
 
 /// What the output readers of both streams have seen so far.
@@ -575,6 +905,7 @@ struct Seen<'a> {
 /// the log or the launcher (1.8 prints its session token, for one).
 fn tee_output(
     stream: Box<dyn Read + Send>,
+    output: (&Mutex<ChildOutput>, &str),
     log: &Mutex<File>,
     seen: Seen,
     secrets: &[String],
@@ -596,6 +927,8 @@ fn tee_output(
             Ok(_) => {}
         }
         redact(&mut line, secrets);
+        let text = String::from_utf8_lossy(&line);
+        output.0.lock().unwrap().push(output.1, &text);
         if let Ok(mut file) = log.lock() {
             let _ = file.write_all(&line);
         }
@@ -604,10 +937,10 @@ fn tee_output(
         if is_window_marker(&line) && !seen.window.swap(true, Ordering::Relaxed) {
             on_event(GameEvent::WindowReady);
         }
-        if String::from_utf8_lossy(&line).contains(priority::READY_MARKER) {
+        if text.contains(priority::READY_MARKER) {
             seen.ready.store(true, Ordering::Relaxed);
         }
-        let parsed = parser.feed(&String::from_utf8_lossy(&line));
+        let parsed = parser.feed(&text);
         if !parsed.is_empty() {
             on_event(GameEvent::Output(parsed));
         }
@@ -630,6 +963,289 @@ fn is_window_marker(line: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn exit_and_launch_lines_carry_ids_heap_and_other_instance() {
+        use crate::crash::ShutdownHook;
+        let other = super::super::instance_probe::OtherInstance {
+            pid: 99,
+            launch: "old-1".into(),
+        };
+        let ids = launch_ids_line(
+            "new-2",
+            100,
+            &[
+                "-Xms256M".into(),
+                "-Xmx512M".into(),
+                "--accessToken=SECRET".into(),
+            ],
+            Some(&other),
+        );
+        assert!(ids.contains("launch id=new-2 pid=100 heap=512_MB"), "{ids}");
+        assert!(ids.contains("other game instance on this directory: pid 99 (launch old-1)"));
+        assert!(!ids.contains("SECRET"));
+        assert!(launch_ids_line("a", 1, &[], None).contains("directory: none"));
+        let ended = ended_line(8000, 77, 100, "new-2", ShutdownHook::DidNotRun, false);
+        assert!(ended.contains("exit code 77"), "{ended}");
+        assert!(ended.contains("pid=100 launch=new-2"));
+        assert!(ended.contains("shutdown hook: did not run"));
+        assert!(ended.contains("window not opened"));
+        let ran = ended_line(8000, 0, 100, "new-2", ShutdownHook::Ran, true);
+        assert!(ran.contains("shutdown hook: ran;") && ran.contains("window opened"));
+    }
+
+    #[test]
+    fn parses_java_major_versions() {
+        use super::parse_java_major_version;
+
+        for (output, major) in [
+            (r#"openjdk version "1.8.0_452""#, 8),
+            (r#"java version "1.8.0_452""#, 8),
+            (r#"openjdk version "11.0.26""#, 11),
+            (r#"openjdk version "17.0.15""#, 17),
+            (r#"openjdk version "21.0.7" 2025-04-15 LTS"#, 21),
+            (r#"openjdk version "25.0.1""#, 25),
+            (r#"openjdk version "27-ea""#, 27),
+        ] {
+            assert_eq!(parse_java_major_version(output), Some(major));
+        }
+        assert_eq!(
+            parse_java_major_version("wrapper warning\r\nopenjdk version \"21.0.7\"\r\n"),
+            Some(21)
+        );
+        for output in [
+            "",
+            "Java(TM) Runtime Environment (build 21.0.7)",
+            "openjdk version \"17",
+        ] {
+            assert_eq!(parse_java_major_version(output), None);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn runtime_version_requires_a_successful_probe() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("java");
+        assert_eq!(super::runtime_major_version(&exe), None);
+        for (exit, major) in [(0, Some(21)), (1, None)] {
+            std::fs::write(
+                &exe,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' 'openjdk version \"21.0.7.1\"' >&2\nexit {exit}\n"
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
+            assert_eq!(super::runtime_major_version(&exe), major);
+            if exit == 0 {
+                let diagnostic = super::runtime_probe_diagnostic(&exe);
+                assert!(diagnostic.contains("openjdk version \"<ip>\""));
+                assert_eq!(super::diagnosed_runtime_major(&diagnostic), major);
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    fn test_process(
+        script: &str,
+    ) -> (
+        tempfile::TempDir,
+        GameHandle,
+        std::sync::mpsc::Receiver<GameEvent>,
+    ) {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("test-game");
+        std::fs::write(&exe, format!("#!/bin/sh\n{script}\n")).unwrap();
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let plan = LaunchPlan {
+            java: exe,
+            args: Vec::new(),
+            game_dir: dir.path().into(),
+            log_file: dir.path().join("game.log"),
+            high_performance_gpu: false,
+            maximize_window: false,
+            managed_runtime: None,
+            custom_max_heap: false,
+            secrets: Vec::new(),
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let game = spawn(&plan, move |event| {
+            let _ = tx.send(event);
+        })
+        .unwrap();
+        (dir, game, rx)
+    }
+
+    #[cfg(unix)]
+    fn process_exit(rx: &std::sync::mpsc::Receiver<GameEvent>) -> (Option<i32>, bool) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            if let GameEvent::Exited { code, killed, .. } = rx
+                .recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+                .expect("the watcher must report an exit")
+            {
+                return (code, killed);
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn crash_report_includes_output_from_both_child_pipes() {
+        use crate::crash::{Report, ReportRun};
+
+        let (_dir, _game, rx) = test_process(
+            "printf 'first line\\n\\nsecond line\\n'; printf 'error one\\nerror two' >&2; exit 1",
+        );
+        let diagnostics = loop {
+            if let GameEvent::Exited { diagnostics, .. } =
+                rx.recv_timeout(Duration::from_secs(10)).unwrap()
+            {
+                break diagnostics;
+            }
+        };
+        assert_eq!(diagnostics.output.count(), 5);
+        let report = Report::build_with_run(
+            "26.3",
+            "",
+            "",
+            &["Launcher banner"],
+            &[],
+            None,
+            ReportRun {
+                diagnostics: Some(&diagnostics),
+                ..Default::default()
+            },
+        );
+        assert!(report.log.contains("---- child stdout/stderr ----"));
+        for line in [
+            "[stdout] first line",
+            "[stdout] \n",
+            "[stdout] second line",
+            "[stderr] error one",
+            "[stderr] error two",
+        ] {
+            assert!(
+                report.log.contains(line),
+                "{line:?} missing from {}",
+                report.log
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn force_close_is_preserved_by_the_process_watcher() {
+        let (dir, game, rx) = test_process("exec sleep 30");
+        game.kill();
+        let (code, killed) = process_exit(&rx);
+        assert!(killed);
+        assert_eq!(code, Some(137));
+        let log = std::fs::read_to_string(dir.path().join("game.log")).unwrap();
+        assert!(log.contains("launcher force-close requested"));
+        assert!(!log.contains("same-runtime java -version"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn force_close_only_stops_the_requested_process() {
+        let (_first_dir, first, first_rx) = test_process("exec sleep 30");
+        let (_second_dir, second, second_rx) = test_process("exec sleep 30");
+        assert_ne!(first.pid(), second.pid());
+        first.kill();
+        assert_eq!(process_exit(&first_rx), (Some(137), true));
+        assert!(
+            second_rx
+                .try_iter()
+                .all(|event| !matches!(event, GameEvent::Exited { .. }))
+        );
+        second.kill();
+        assert_eq!(process_exit(&second_rx), (Some(137), true));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn launcher_shutdown_is_also_a_requested_stop() {
+        let (_dir, game, rx) = test_process("exec sleep 30");
+        game.terminate();
+        assert!(process_exit(&rx).1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn nonzero_exit_is_not_marked_as_a_requested_stop() {
+        let (_dir, _game, rx) = test_process("exit 1");
+        assert_eq!(process_exit(&rx), (Some(1), false));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn inherited_pipe_does_not_block_exit_drain() {
+        let mut child = Command::new("sh")
+            .args(["-c", "sleep 8 & exit 0"])
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut out = child.stdout.take().unwrap();
+        let reader = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            out.read_to_end(&mut bytes).unwrap();
+        });
+        child.wait().unwrap();
+        let started = std::time::Instant::now();
+        drain_readers(vec![reader]);
+        assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn hang_and_fatal_error_logs_stay_in_the_instance() {
+        let game_dir = std::env::temp_dir().join("portal instance");
+        let mut plan = LaunchPlan {
+            java: PathBuf::from("java"),
+            args: vec!["net.minecraft.client.Main".into()],
+            game_dir: game_dir.clone(),
+            log_file: game_dir.join("game.log"),
+            high_performance_gpu: false,
+            maximize_window: false,
+            managed_runtime: None,
+            custom_max_heap: false,
+            secrets: Vec::new(),
+        };
+        let (args, file) = command_args(&plan, "test-launch").unwrap();
+        assert!(file.is_none());
+        assert_eq!(
+            args[0],
+            format!(
+                "-Darctic.diagnostics.hangFile={}",
+                game_dir.join("arctic-hang.txt").display()
+            )
+        );
+        assert_eq!(args[1], "-Darctic.launch.id=test-launch");
+        assert_eq!(
+            args[2],
+            format!(
+                "-XX:ErrorFile={}",
+                game_dir.join("hs_err_pid%p.log").display()
+            )
+        );
+        assert_eq!(args[3], "net.minecraft.client.Main");
+
+        plan.args
+            .insert(0, "-XX:ErrorFile=custom file-%p.log".into());
+        let (args, _) = command_args(&plan, "test-launch").unwrap();
+        assert_eq!(
+            &args[2..],
+            [
+                "-XX:ErrorFile=custom file-%p.log",
+                "net.minecraft.client.Main"
+            ]
+        );
+    }
+
     #[test]
     fn portal_folders_are_recognized() {
         assert!(is_portal_path(Path::new(
@@ -702,116 +1318,11 @@ mod tests {
         assert_eq!(java_major("nothing here"), None);
     }
 
-    #[test]
-    fn named_runtime_copy_links_every_file_and_updates_changed_ones() {
-        let dir = tempfile::tempdir().unwrap();
-        let runtime = dir.path().join("java-runtime-delta");
-        std::fs::create_dir_all(runtime.join("bin")).unwrap();
-        std::fs::create_dir_all(runtime.join("lib/security")).unwrap();
-        std::fs::write(runtime.join("bin/javaw.exe"), b"java").unwrap();
-        std::fs::write(runtime.join("lib/security/cacerts"), b"certs").unwrap();
-        let named = dir.path().join(".named/java-runtime-delta/Arctic Client");
-        mirror_tree(&runtime, &named).unwrap();
-        assert_eq!(std::fs::read(named.join("bin/javaw.exe")).unwrap(), b"java");
-        assert_eq!(
-            std::fs::read(named.join("lib/security/cacerts")).unwrap(),
-            b"certs"
-        );
-        // A runtime update replaces a file: the copy follows.
-        std::fs::remove_file(runtime.join("lib/security/cacerts")).unwrap();
-        std::fs::write(runtime.join("lib/security/cacerts"), b"newer certs").unwrap();
-        mirror_tree(&runtime, &named).unwrap();
-        assert_eq!(
-            std::fs::read(named.join("lib/security/cacerts")).unwrap(),
-            b"newer certs"
-        );
-    }
-
     use super::*;
 
-    #[test]
-    fn system_dlls_are_not_mirrored_and_old_ones_are_removed() {
-        let dir = tempfile::tempdir().unwrap();
-        let runtime = dir.path().join("java-runtime-delta");
-        std::fs::create_dir_all(runtime.join("bin")).unwrap();
-        for f in [
-            "javaw.exe",
-            "UCRTBASE.dll",
-            "api-ms-win-core-file-l1-1-0.dll",
-            "jli.dll",
-        ] {
-            std::fs::write(runtime.join("bin").join(f), b"x").unwrap();
-        }
-        std::fs::create_dir_all(runtime.join("lib")).unwrap();
-        std::fs::write(runtime.join("lib/api-ms-win-x.dll"), b"x").unwrap();
-        let named = dir.path().join(".named/java-runtime-delta/Arctic Client");
-        // An older version had linked everything.
-        mirror_tree(&runtime, &named).unwrap();
-        std::fs::write(named.join("bin/ucrtbase.dll"), b"old").unwrap();
-        std::fs::write(named.join("bin/API-MS-WIN-core-x.DLL"), b"old").unwrap();
-        remove_system_dlls(&named);
-        mirror_tree(&runtime, &named).unwrap();
-        let has = |f: &str| named.join(f).exists();
-        assert!(has("bin/javaw.exe") && has("bin/jli.dll"));
-        assert!(!has("bin/ucrtbase.dll") && !has("bin/UCRTBASE.dll"));
-        assert!(!has("bin/api-ms-win-core-file-l1-1-0.dll") && !has("bin/API-MS-WIN-core-x.DLL"));
-        // Only bin is filtered.
-        assert!(has("lib/api-ms-win-x.dll"));
-        // The runtime itself is untouched.
-        assert!(runtime.join("bin/UCRTBASE.dll").exists());
-        assert!(runtime.join("bin/api-ms-win-core-file-l1-1-0.dll").exists());
-    }
-
-    #[test]
-    fn cleanup_stays_inside_the_named_folder() {
-        let dir = tempfile::tempdir().unwrap();
-        // Not under .named: nothing is deleted.
-        let plain = dir.path().join("Arctic Client");
-        std::fs::create_dir_all(plain.join("bin")).unwrap();
-        std::fs::write(plain.join("bin/ucrtbase.dll"), b"x").unwrap();
-        remove_system_dlls(&plain);
-        assert!(plain.join("bin/ucrtbase.dll").exists());
-        // A hard link is removed by name only.
-        let runtime = dir.path().join("rt");
-        std::fs::create_dir_all(runtime.join("bin")).unwrap();
-        std::fs::write(runtime.join("bin/ucrtbase.dll"), b"x").unwrap();
-        let named = dir.path().join(".named/rt/Arctic Client");
-        std::fs::create_dir_all(named.join("bin")).unwrap();
-        std::fs::hard_link(
-            runtime.join("bin/ucrtbase.dll"),
-            named.join("bin/ucrtbase.dll"),
-        )
-        .unwrap();
-        remove_system_dlls(&named);
-        assert!(!named.join("bin/ucrtbase.dll").exists());
-        assert!(runtime.join("bin/ucrtbase.dll").exists());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn cleanup_does_not_follow_links() {
-        let dir = tempfile::tempdir().unwrap();
-        let runtime = dir.path().join("rt");
-        std::fs::create_dir_all(runtime.join("bin")).unwrap();
-        std::fs::write(runtime.join("bin/ucrtbase.dll"), b"x").unwrap();
-        // The named folder is a link to the real runtime (like the old junction).
-        let named = dir.path().join(".named/rt/Arctic Client");
-        std::fs::create_dir_all(named.parent().unwrap()).unwrap();
-        std::os::unix::fs::symlink(&runtime, &named).unwrap();
-        remove_system_dlls(&named);
-        assert!(runtime.join("bin/ucrtbase.dll").exists());
-        // Same for a linked bin.
-        let named2 = dir.path().join(".named/rt2/Arctic Client");
-        std::fs::create_dir_all(&named2).unwrap();
-        std::os::unix::fs::symlink(runtime.join("bin"), named2.join("bin")).unwrap();
-        remove_system_dlls(&named2);
-        assert!(runtime.join("bin/ucrtbase.dll").exists());
-    }
-
-    /// Run by the Windows CI job against a real Mojang runtime (`ARCTIC_RUNTIME_DIR`, with
-    /// `ARCTIC_HELLO_DIR` holding a compiled `Hello` class): the named copy has no bundled
-    /// `ucrtbase.dll`/`api-ms-win-*.dll` and still starts Java.
-    #[cfg(windows)]
+    /// Run against a real runtime (`ARCTIC_RUNTIME_DIR`) and a compiled `Hello` class
+    /// (`ARCTIC_HELLO_DIR`) which initializes Java's native management library.
+    #[cfg(any(windows, target_os = "linux"))]
     #[test]
     #[ignore = "needs a downloaded Mojang runtime"]
     fn named_runtime_without_system_dlls_starts_java() {
@@ -821,15 +1332,22 @@ mod tests {
             std::fs::read_dir(dir.join("bin"))
                 .unwrap()
                 .flatten()
-                .filter(|e| is_system_dll(&e.file_name()))
+                .filter(|e| super::super::named_runtime::is_system_dll(&e.file_name()))
                 .count()
         };
-        assert!(bundled(&runtime) > 0, "the runtime should ship the DLLs");
-        let java = runtime.join("bin").join("java.exe");
+        if cfg!(windows) {
+            assert!(bundled(&runtime) > 0, "the runtime should ship the DLLs");
+        }
+        let java = runtime
+            .join("bin")
+            .join(if cfg!(windows) { "java.exe" } else { "java" });
         // Run twice: the second pass is the "already mirrored" launch.
-        for _ in 0..2 {
-            let named = in_named_folder(&java);
-            assert_ne!(named, java, "the named copy was not made");
+        for launch in 0..2 {
+            let (named, rebuilt) = super::super::named_runtime::prepare(&runtime, &java).unwrap();
+            if launch == 1 {
+                assert!(!rebuilt, "second launch should reuse the named runtime");
+            }
+            assert_eq!(release_version(&java), release_version(&named));
             assert!(named.starts_with(runtime.parent().unwrap().join(".named")));
             assert_eq!(bundled(named.parent().unwrap().parent().unwrap()), 0);
             let version = Command::new(&named).arg("-version").output().unwrap();
@@ -882,23 +1400,6 @@ mod tests {
             std::fs::read(branded_java(&java)).unwrap(),
             b"java v2 (longer)"
         );
-        // Started from a folder named after the client (for recorders).
-        let runtime = dir.path().join("java-runtime-delta");
-        let bin = runtime.join("bin");
-        std::fs::create_dir_all(&bin).unwrap();
-        std::fs::write(bin.join(java.file_name().unwrap()), b"java").unwrap();
-        let named = branded_java(&bin.join(java.file_name().unwrap()));
-        if cfg!(windows) {
-            assert!(
-                named.ends_with(format!("Arctic Client/bin/{CLIENT_PROCESS}")),
-                "{}",
-                named.display()
-            );
-            assert!(named.starts_with(dir.path().join(".named").join("java-runtime-delta")));
-            assert_eq!(std::fs::read(&named).unwrap(), b"java");
-            // A second launch reuses the same junction.
-            assert_eq!(branded_java(&bin.join(java.file_name().unwrap())), named);
-        }
         // Anything that isn't the Java launcher is left alone.
         let other = dir.path().join("custom-java.exe");
         assert_eq!(branded_java(&other), other);
@@ -931,8 +1432,10 @@ mod tests {
         let fired = Mutex::new(Vec::new());
         let input =
             b"a\nLWJGL Version: 2\nLWJGL Version: 2\n[Arctic startup] ready 9000 ms\nz".to_vec();
+        let captured = Mutex::new(ChildOutput::default());
         tee_output(
             Box::new(std::io::Cursor::new(input.clone())),
+            (&captured, "stdout"),
             &log,
             seen,
             &[],
@@ -971,8 +1474,10 @@ ok SECRET SECRET
 "
         .to_vec();
         let shown = Mutex::new(Vec::new());
+        let captured = Mutex::new(ChildOutput::default());
         tee_output(
             Box::new(std::io::Cursor::new(input)),
+            (&captured, "stdout"),
             &log,
             seen,
             &["eyJ.SECRET".to_owned(), "SECRET".to_owned()],
@@ -989,6 +1494,9 @@ ok SECRET SECRET
         let written = std::fs::read_to_string(&path).unwrap();
         assert!(!written.contains("SECRET"), "{written}");
         assert!(written.contains("token:<redacted>:15ca"));
+        let captured = captured.into_inner().unwrap().report();
+        assert!(!captured.contains("SECRET"));
+        assert!(captured.contains("token:<redacted>:15ca"));
         assert!(
             shown
                 .into_inner()

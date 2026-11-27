@@ -5,6 +5,7 @@ import com.arcticlauncher.client.account.AccountSwitcher;
 import com.arcticlauncher.client.gfx.Gfx;
 import com.arcticlauncher.client.style.Style;
 
+import com.arcticlauncher.client.Lang;
 /** Accounts and the proxy as a page. */
 final class AccountPage implements MenuTab {
 	private final AccountTab account = new AccountTab();
@@ -13,12 +14,12 @@ final class AccountPage implements MenuTab {
 
 	@Override
 	public String title() {
-		return "Account";
+		return Lang.t("social.account");
 	}
 
 	@Override
 	public String hint() {
-		return "Switch accounts, or connect through a proxy.";
+		return Lang.t("social.switch_accounts_or_connect_through_a_proxy");
 	}
 
 	@Override

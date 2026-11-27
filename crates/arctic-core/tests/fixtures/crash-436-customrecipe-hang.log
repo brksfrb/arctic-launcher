@@ -1,0 +1,32 @@
+---- full mod list (id version) ----
+c2me 0.4.2-alpha.0.88+26.3
+c2me-rewrites-chunk-system 0.4.2-alpha.0.88+26.3
+customrecipe 1.5.2+26.3
+
+---- game log ----
+[12:34:15] [main/WARN] @Mixin target ca/spottedleaf/starlight/common/integration/v0/ChunkSystemHooks was not found c2me-rewrites-chunk-system.mixins.json:scalablelux.MixinChunkSystemHooks from mod c2me-rewrites-chunk-system
+
+---- logs/arctic-freezes/freeze-436.txt ----
+Arctic: game froze for 52.6s, mostly in java.base/java.util.zip.Inflater.inflateBytesBytes(Native Method)
+duration: 52.59s (still frozen when written)
+samples: 97 client-thread stacks, one per ~500 ms; thread state at last sample RUNNABLE
+heap: 480 MB used of 3584 MB max at start
+
+== Where the time went (frames present in the most samples) ==
+  100%  knot//net.minecraft.client.Minecraft.wrapOperation$eff000$polarium$runTick(Minecraft.java:15691)
+  100%  net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+   94%  knot//fr.zazac1.customrecipe.client.VanillaRecipesScreen.findLocalRecipes(VanillaRecipesScreen.java:391)
+   94%  knot//fr.zazac1.customrecipe.client.VanillaRecipesScreen.preloadAtStartup(VanillaRecipesScreen.java:210)
+   94%  knot//fr.zazac1.customrecipe.client.ClientInit.lambda$onInitializeClient$4(ClientInit.java:69)
+   94%  knot//net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.lambda$static$3(ClientTickEvents.java:43)
+
+== Distinct client-thread stacks (count of samples) ==
+[9x] stack 1
+    at java.base/java.util.zip.Inflater.inflateBytesBytes(Native Method)
+    at java.base/java.util.jar.JarFile.getInputStream(JarFile.java:837)
+    at knot//fr.zazac1.customrecipe.client.VanillaRecipesScreen.readLocalRecipeJson(VanillaRecipesScreen.java:689)
+
+Hang at exit: client hung for at least 52.59s in java.base/java.util.zip.Inflater.inflateBytesBytes(Native Method); still frozen at the last watchdog snapshot, no recovery recorded.
+
+---- diagnostics ----
+[Arctic diagnostics] hang begin; no render progress for 30027 ms

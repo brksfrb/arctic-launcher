@@ -1,0 +1,94 @@
+---- full mod list (id version) ----
+minecraft 1.20.1
+necronomicon 1.6.0
+particle_core 0.3.3+1.20.1
+sodium 0.5.11+mc1.20.1
+
+---- mixin failure context ----
+agent installed; cache=off; preloader requested=false; replay requested=false
+failure begin
+class=net.minecraft.class_3940; thread=Render thread; role=main
+cache lookup=miss; input=live pre-mixin bytes; cache=off
+agent lock=1; preloader started=false; setup replay succeeded=false; replay plugin calls attempted=0; completed=0; shouldApply decisions attempted=0; completed=0; replay reason=
+error=org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error was encountered
+pre-mixin methods (name+descriptor):
+<init>(Lnet/minecraft/class_638;DDD)V
+<init>(Lnet/minecraft/class_638;DDDDDD)V
+method_3074(Lnet/minecraft/class_4588;Lnet/minecraft/class_4184;F)V
+method_18132(F)F
+method_3087(F)Lnet/minecraft/class_703;
+method_18133()F
+method_18134()F
+method_18135()F
+method_18136()F
+targeting mixins (config:class; includes failing mixin):
+selected target mixin count=2
+particle_core.mixins.json:me.fzzyhmstrs.particle_core.mixins.BillboardParticleVertexMixin
+sodium.mixins.json:me.jellysquid.mods.sodium.mixin.features.render.particle.BillboardParticleMixin
+failure end
+
+[17:44:56] [Render thread/WARN]: Method overwrite conflict for getKey in balm.mixins.json:KeyMappingAccessor from mod balm-fabric, previously written by committee.nova.mkb.mixin.MixinKeyBinding. Skipping method.
+[17:44:56] [Render thread/WARN]: Method overwrite conflict for getKey in kuma_api.mixins.json:KeyMappingAccessor from mod kuma_api, previously written by committee.nova.mkb.mixin.MixinKeyBinding. Skipping method.
+[17:44:58] [Render thread/INFO]: Necronomicon Initialized
+[17:44:58] [Render thread/INFO]: File exists, reading config for elocindev.necronomicon.NecronomiconConfig.
+[17:44:58] [Render thread/INFO]: Config for elocindev.necronomicon.NecronomiconConfig read successfully.
+
+---- crash report ----
+---- Minecraft Crash Report ----
+// Don't be sad, have a hug! <3
+
+Time: 2026-11-14 17:45:01
+Description: Initializing game
+
+java.lang.RuntimeException: Could not execute entrypoint stage 'main' due to errors, provided by 'glitchcore' at 'glitchcore.fabric.core.GlitchCoreFabric'!
+	at net.fabricmc.loader.impl.FabricLoaderImpl.lambda$invokeEntrypoints$0(FabricLoaderImpl.java:418)
+	at net.fabricmc.loader.impl.util.ExceptionUtil.gatherExceptions(ExceptionUtil.java:33)
+	at net.fabricmc.loader.impl.FabricLoaderImpl.invokeEntrypoints(FabricLoaderImpl.java:416)
+	at net.fabricmc.loader.impl.game.minecraft.Hooks.startClient(Hooks.java:52)
+	at knot//net.minecraft.class_310.<init>(class_310.java:458)
+	at knot//net.minecraft.client.main.Main.main(Main.java:211)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:517)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+Caused by: java.lang.RuntimeException: Mixin transformation of net.minecraft.class_3940 failed
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray$arctic(KnotClassDelegate.java:441)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray(KnotClassDelegate.java)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.tryLoadClass(KnotClassDelegate.java:337)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.loadClass$arctic(KnotClassDelegate.java:232)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.loadClass(KnotClassDelegate.java)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassLoader.loadClass(KnotClassLoader.java:119)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:525)
+	at java.base/java.lang.ClassLoader.defineClass1(Native Method)
+	at java.base/java.lang.ClassLoader.defineClass(ClassLoader.java:1017)
+	at java.base/java.security.SecureClassLoader.defineClass(SecureClassLoader.java:150)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassLoader.defineClassFwd(KnotClassLoader.java:165)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.tryLoadClass(KnotClassDelegate.java:369)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.loadClass$arctic(KnotClassDelegate.java:232)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.loadClass(KnotClassDelegate.java)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassLoader.loadClass(KnotClassLoader.java:119)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:525)
+	at java.base/java.lang.ClassLoader.defineClass1(Native Method)
+	at java.base/java.lang.ClassLoader.defineClass(ClassLoader.java:1017)
+	at java.base/java.security.SecureClassLoader.defineClass(SecureClassLoader.java:150)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassLoader.defineClassFwd(KnotClassLoader.java:165)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.tryLoadClass(KnotClassDelegate.java:369)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.loadClass$arctic(KnotClassDelegate.java:232)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.loadClass(KnotClassDelegate.java)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassLoader.loadClass(KnotClassLoader.java:119)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:525)
+	at knot//biomesoplenty.core.BiomesOPlenty.addHandlers(BiomesOPlenty.java:56)
+	at knot//biomesoplenty.core.BiomesOPlenty.init(BiomesOPlenty.java:31)
+	at knot//biomesoplenty.fabric.core.BiomesOPlentyFabric.onInitialize(BiomesOPlentyFabric.java:18)
+	at knot//glitchcore.fabric.core.GlitchCoreFabric.lambda$onInitialize$0(GlitchCoreFabric.java:39)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at knot//glitchcore.fabric.core.GlitchCoreFabric.onInitialize(GlitchCoreFabric.java:37)
+	at net.fabricmc.loader.impl.FabricLoaderImpl.invokeEntrypoints(FabricLoaderImpl.java:414)
+	... 6 more
+Caused by: org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error was encountered
+	at org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:380)
+	at org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClass(MixinTransformer.java:237)
+	at org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClassBytes(MixinTransformer.java:202)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.arctic$transformWithDiagnostics(KnotClassDelegate.java)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray$arctic(KnotClassDelegate.java:436)
+	... 37 more
+Caused by: org.spongepowered.asm.mixin.injection.throwables.InjectionError: Critical injection failure: Callback method particle_core_gatherVertexVertexes(Lnet/minecraft/class_4588;DDDLcom/llamalad7/mixinextras/injector/wrapoperation/Operation;Lcom/llamalad7/mixinextras/sugar/ref/LocalRef;)Lnet/minecraft/class_4588; in particle_core.mixins.json:BillboardParticleVertexMixin from mod particle_core failed injection check, (0/1) succeeded. Scanned 0 target(s). Using refmap particle_core-refmap.json

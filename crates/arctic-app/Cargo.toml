@@ -13,11 +13,15 @@ arctic-core = { path = "../arctic-core" }
 arctic-share = { path = "../arctic-share" }
 arctic-voice = { path = "../arctic-voice" }
 memmap2 = "0.9"
+lzma-rs = "0.3.0"
+skrifa = "0.44.0"
 # glow (OpenGL) instead of the default wgpu backend keeps the binary small.
-eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "default_fonts", "glow", "links", "wayland", "x11"] }
+eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "glow", "links", "wayland", "x11"] }
 egui_extras = { version = "0.36", default-features = false, features = ["file", "image"] }
 discord-rich-presence = "1.1.0"
-arboard = { version = "3.6.1", default-features = false, features = ["image-data"] }
+# `wayland-data-control`: without it arboard only ever speaks X11, so copying a screenshot or
+# an address does nothing on a Wayland session (and only reaches X clients under XWayland).
+arboard = { version = "3.6.1", default-features = false, features = ["image-data", "wayland-data-control"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
 log = "0.4.34"
 open = "5.4.4"
@@ -25,6 +29,7 @@ rfd = "0.17.2"
 raw-window-handle = "0.6"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+tempfile = "3.27.0"
 uuid = { version = "1.26.1", features = ["v4"] }
 egui_commonmark = { version = "0.25", default-features = false }
 egui_commonmark_backend = { version = "0.25", default-features = false }
@@ -33,7 +38,7 @@ pulldown-cmark = { version = "0.13", default-features = false }
 
 [dev-dependencies]
 aes-gcm = "0.10.3"
-tempfile = "3.27.0"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [features]
 default = ["offline-accounts"]
@@ -45,7 +50,9 @@ name = "arctic-launcher"
 path = "src/main.rs"
 
 [build-dependencies]
+png = "0.18.1"
 winresource = "0.1.31"
+xz2 = { version = "0.1.7", features = ["static"] }
 
 # The Linux tray (StatusNotifierItem over D-Bus; no GTK needed).
 [target."cfg(target_os = \"linux\")".dependencies]
@@ -53,7 +60,7 @@ ksni = { version = "0.3", default-features = false, features = ["async-io", "blo
 libc = "0.2"
 
 [target."cfg(windows)".dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_System_Memory", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Dwm", "Win32_Security_Cryptography_Catalog", "Win32_Security_Cryptography_Sip", "Win32_Security_WinTrust", "Win32_System_Memory", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 tray-icon = { version = "0.25.1", default-features = false }
 # Windows' own H.264 encoder, for replay videos without FFmpeg; the Start menu shortcut (Shell).
 windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_UI_Shell"] }

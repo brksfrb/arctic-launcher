@@ -42,15 +42,16 @@ pub fn run(ctx: &Ctx, command: &PacksCommand) -> Result<i32> {
             let kind = kind_of(*kind);
             let inst = instance_or_default(ctx, instance.as_deref())?;
             let game_dir = inst.game_dir(&ctx.dirs);
+            let game = game(ctx, &inst);
             if kind == PackKind::Shader {
                 shader_support(ctx, &inst)?;
             }
             let progress = |p: arctic_core::ProgressInfo| ctx.out.progress(p);
-            let file = packs::install(kind, project, &game(ctx, &inst), &game_dir, &progress);
+            let file = packs::install(kind, project, &game, &game_dir, &progress);
             ctx.out.end_progress();
-            let file = file?;
+            let file = file?.file_name;
             if !keep_off {
-                packs::set_active(kind, &game_dir, &file, true)?;
+                packs::set_active(kind, &game_dir, &game, &file, true)?;
             }
             ctx.out.emit(
                 json!({"event": "installed", "file": file, "active": !keep_off}),
@@ -64,7 +65,7 @@ pub fn run(ctx: &Ctx, command: &PacksCommand) -> Result<i32> {
         }
         PacksCommand::List { kind, instance } => {
             let inst = instance_or_default(ctx, instance.as_deref())?;
-            for p in packs::list(kind_of(*kind), &inst.game_dir(&ctx.dirs)) {
+            for p in packs::list(kind_of(*kind), &inst.game_dir(&ctx.dirs), &game(ctx, &inst)) {
                 ctx.out.emit(
                     json!({"file": p.file_name, "active": p.active, "size": p.size}),
                     || format!("{} {}", if p.active { "on " } else { "off" }, p.file_name),
@@ -79,7 +80,13 @@ pub fn run(ctx: &Ctx, command: &PacksCommand) -> Result<i32> {
         } => {
             let inst = instance_or_default(ctx, instance.as_deref())?;
             let on = state == "on";
-            packs::set_active(kind_of(*kind), &inst.game_dir(&ctx.dirs), file, on)?;
+            packs::set_active(
+                kind_of(*kind),
+                &inst.game_dir(&ctx.dirs),
+                &game(ctx, &inst),
+                file,
+                on,
+            )?;
             ctx.out.emit(
                 json!({"event": "toggled", "file": file, "active": on}),
                 || format!("{file} is now {}", if on { "on" } else { "off" }),
@@ -91,7 +98,12 @@ pub fn run(ctx: &Ctx, command: &PacksCommand) -> Result<i32> {
             instance,
         } => {
             let inst = instance_or_default(ctx, instance.as_deref())?;
-            packs::remove(kind_of(*kind), &inst.game_dir(&ctx.dirs), file)?;
+            packs::remove(
+                kind_of(*kind),
+                &inst.game_dir(&ctx.dirs),
+                &game(ctx, &inst),
+                file,
+            )?;
             ctx.out.emit(json!({"event": "removed", "file": file}), || {
                 format!("Removed {file}")
             });
@@ -107,7 +119,7 @@ fn kind_of(arg: PackKindArg) -> PackKind {
     }
 }
 
-/// The instance's Minecraft version (Vanilla follows the Play tab choice).
+/// The instance's Minecraft version (Arctic follows the Play tab choice).
 fn game(ctx: &Ctx, inst: &Instance) -> String {
     inst.version.clone().unwrap_or_else(|| {
         arctic_core::settings::Settings::load(&ctx.dirs)

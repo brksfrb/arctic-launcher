@@ -5,14 +5,15 @@ Writes mod/dist/arctic-forge-1.8.9.jar.
 
 The client is written against Yarn names for Legacy Fabric. Forge 1.8.9 runs mods against SRG names
 (net/minecraft/client/Minecraft, func_71410_x...), so the Forge flavour of the legacy build (gradle
--Pforge=true: the three mixins that use MixinExtras are replaced) is remapped Yarn -> SRG with
+-Pforge=true: loader-specific mixins are replaced) is remapped Yarn -> SRG with
 tiny-remapper, mixin annotations included, then packed with:
   - a few stand-in classes for the Fabric Loader calls the client makes (forge/shim),
-  - Sponge's Mixin 0.7.11 (what Forge 1.8.9 mods use; ASM 5 compatible), started by its tweaker,
+  - Essential's build of Sponge Mixin for legacy Forge (with relocated Guava), and MixinExtras,
   - a manifest that makes Forge load the jar as a mod and Mixin read arctic-legacy.mixins.json.
 Everything downloaded is kept under mod/build/forge-cache.
 """
 import hashlib
+import os
 import subprocess
 import sys
 import urllib.request
@@ -25,13 +26,11 @@ CACHE = MOD / "build" / "forge-cache"
 DIST = MOD / "dist"
 MC = "1.8.9"
 FORGE = "1.8.9-11.15.1.2318-1.8.9"
-GRADLE_CACHE = Path.home() / ".gradle" / "caches"
+GRADLE_CACHE = Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle")) / "caches"
 YARN_BUILD = "1.8.9+build.604-v2"
 
 # name: (url, SHA-256). Checked on download and on every use of the cached file, because the Mixin classes
-# and services below end up inside the jar players run. The published SHA-1 of each file (the Maven
-# repositories') matched when these were pinned. The Mixin file is a timestamped snapshot build, which
-# cannot change under its name; the pin makes sure of it.
+# and services below end up inside the jar players run.
 DOWNLOADS = {
     "forge-universal.jar": (
         f"https://maven.minecraftforge.net/net/minecraftforge/forge/{FORGE}/forge-{FORGE}-universal.jar",
@@ -45,10 +44,22 @@ DOWNLOADS = {
         "https://maven.fabricmc.net/net/fabricmc/tiny-remapper/0.10.4/tiny-remapper-0.10.4-fat.jar",
         "aff82c3e052d031be8cba33f97a5e4d1b0098f6a9e942f4457706f751b4032b2",
     ),
-    "mixin.jar": (
-        "https://repo.spongepowered.org/repository/maven-public/org/spongepowered/mixin/0.7.11-SNAPSHOT/"
-        "mixin-0.7.11-20180703.121122-1.jar",
-        "da3d6e47b9c12b5a312d89b67bc27e2429d823c09cde8a90299e9fdcc4eefc20",
+    "mixin-0.2.0+mixin.0.8.7.jar": (
+        "https://repo.essential.gg/repository/maven-public/gg/essential/mixin/0.2.0+mixin.0.8.7/"
+        "mixin-0.2.0+mixin.0.8.7.jar",
+        "f30dc144a343989e06b4f379be55efa0cd37d4e038b161665b73e7d0388a5df6",
+    ),
+    "mixinextras-common-0.3.5.jar": (
+        "https://repo.maven.apache.org/maven2/io/github/llamalad7/mixinextras-common/0.3.5/mixinextras-common-0.3.5.jar",
+        "03abee14a54beea63cd89414716f45af2d096f12919ffe4d1df28df847341ab2",
+    ),
+    "LICENSE_EssentialLoader": (
+        "https://raw.githubusercontent.com/SparkUniverse/EssentialLoader/4157cb5cf2acce9147b3882c68a8c2af4caafc5a/LICENSE",
+        "cb2ddbe45204d25ca565cc530b181bbadd396ef3223350045955f056a5a9747d",
+    ),
+    "LICENSE_Guava": (
+        "https://raw.githubusercontent.com/google/guava/v21.0/COPYING",
+        "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
     ),
 }
 MIXIN_SERVICES = {
@@ -129,7 +140,9 @@ def build():
     forge_jar = fetch("forge-universal.jar")
     srg_zip = fetch("mcp-srg.zip")
     remapper_jar = fetch("tiny-remapper.jar")
-    mixin_jar = fetch("mixin.jar")
+    mixin_jar = fetch("mixin-0.2.0+mixin.0.8.7.jar")
+    extras_jar = fetch("mixinextras-common-0.3.5.jar")
+    licenses = [fetch("LICENSE_EssentialLoader"), fetch("LICENSE_Guava"), HERE / "NOTICE"]
 
     sys.path.insert(0, str(HERE))
     import mappings
@@ -150,6 +163,8 @@ def build():
                      f"{MC}-net.legacyfabric.yarn.1_8_9.{YARN_BUILD}/*.jar")
     sep = ";" if sys.platform == "win32" else ":"
     remapped = CACHE / "arctic-srg.jar"
+    # Tiny Remapper updates an existing zip, retaining removed development classes.
+    remapped.unlink(missing_ok=True)
     run(["java", "-cp", sep.join([str(remapper_jar), str(tool_classes)]), "Remap", str(dev_jar), str(remapped),
          str(tiny), "named", "srg", str(named_mc), *map(str, libraries())])
 
@@ -171,6 +186,9 @@ def build():
                 seen.add(name)
                 z.writestr(name, data)
 
+        for notice in licenses:
+            add(notice.name, notice.read_bytes())
+        add("LICENSE_GPL-3.0", (MOD.parent / "LICENSE").read_bytes())
         with zipfile.ZipFile(remapped) as src:
             for info in src.infolist():
                 # Fabric's own metadata and signature files have no use on Forge.
@@ -181,12 +199,18 @@ def build():
             add(path.relative_to(shim_classes).as_posix(), path.read_bytes())
         with zipfile.ZipFile(mixin_jar) as src:
             for info in src.infolist():
-                if info.filename.startswith("org/spongepowered/") or info.filename.startswith("mixin"):
+                # The launcher supplies ASM 5.2 on the classpath. Keep the
+                # patched Mixin and its relocated runtime classes from the jar.
+                if info.filename.startswith(("org/spongepowered/", "mixin", "gg/essential/", "LICENSE")):
                     add(info.filename, src.read(info))
                 # Mixin finds its launch service through these registrations: without them the game
                 # stops at "ServiceNotAvailableError: No mixin host service is available". (Its signature
                 # files stay out: they would not match a repacked jar.)
                 elif info.filename in MIXIN_SERVICES:
+                    add(info.filename, src.read(info))
+        with zipfile.ZipFile(extras_jar) as src:
+            for info in src.infolist():
+                if info.filename.startswith(("com/llamalad7/", "LICENSE")):
                     add(info.filename, src.read(info))
     with zipfile.ZipFile(out) as packed:
         missing = [name for name in MIXIN_SERVICES if name not in packed.namelist()]

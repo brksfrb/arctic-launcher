@@ -10,8 +10,8 @@ use arctic_core::instances::InstanceIcon;
 
 use crate::art::flakes;
 use crate::art::{hash01, lerp_color, snowflake};
+use crate::t;
 use crate::theme::Palette;
-
 const RUNNING_FRAME: std::time::Duration = std::time::Duration::from_millis(50);
 
 /// What the big Play button shows.
@@ -73,9 +73,9 @@ pub fn play_button(ui: &mut Ui, p: &Palette, state: PlayState, size: Vec2) -> Re
     painter.rect_filled(rect, radius, base);
 
     let (text_color, label) = match &state {
-        PlayState::Ready => (p.on_accent, "PLAY"),
-        PlayState::Blocked => (p.muted, "PLAY"),
-        PlayState::Running => (p.on_accent, "PLAYING"),
+        PlayState::Ready => (p.on_accent, t!("nav.play_2")),
+        PlayState::Blocked => (p.muted, t!("nav.play_2")),
+        PlayState::Running => (p.on_accent, t!("nav.playing")),
         PlayState::Progress { label, .. } => (p.text, *label),
     };
     if let PlayState::Progress { fraction, .. } = state {
@@ -270,6 +270,17 @@ pub fn button(
     label: &str,
     primary: bool,
 ) -> Response {
+    button_with_height(ui, p, icon, label, primary, BUTTON_HEIGHT)
+}
+
+fn button_with_height(
+    ui: &mut Ui,
+    p: &Palette,
+    icon: Option<Icon>,
+    label: &str,
+    primary: bool,
+    height: f32,
+) -> Response {
     let (fg, bg) = if primary {
         (p.on_accent, p.accent)
     } else {
@@ -279,7 +290,7 @@ pub fn button(
         .painter()
         .layout_no_wrap(label.to_owned(), FontId::proportional(14.0), fg);
     let icon_w = if icon.is_some() { 22.0 } else { 0.0 };
-    let size = vec2(galley.size().x + icon_w + 28.0, BUTTON_HEIGHT);
+    let size = vec2(galley.size().x + icon_w + 28.0, height);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     let hover = ui
         .ctx()
@@ -345,11 +356,33 @@ pub fn hover_card(ui: &mut Ui, p: &Palette, size: Vec2, selected: bool) -> (Rect
 
 /// Heading + optional subtitle used at the top of every tab.
 pub fn page_header(ui: &mut Ui, p: &Palette, title: &str, subtitle: &str) {
+    page_title(ui, p, title);
+    page_subtitle(ui, p, subtitle);
+}
+
+pub fn page_header_with_action(
+    ui: &mut Ui,
+    p: &Palette,
+    title: &str,
+    subtitle: &str,
+    action: impl FnOnce(&mut Ui),
+) {
+    ui.horizontal(|ui| {
+        page_title(ui, p, title);
+        action(ui);
+    });
+    page_subtitle(ui, p, subtitle);
+}
+
+fn page_title(ui: &mut Ui, p: &Palette, title: &str) {
     ui.label(
         egui::RichText::new(title)
             .font(crate::fonts::heading(30.0))
             .color(p.text),
     );
+}
+
+fn page_subtitle(ui: &mut Ui, p: &Palette, subtitle: &str) {
     if !subtitle.is_empty() {
         ui.label(egui::RichText::new(subtitle).color(p.muted));
     }
@@ -404,7 +437,7 @@ pub fn instance_emblem(ui: &mut Ui, p: &Palette, icon: &InstanceIcon, size: f32)
     let t = ui.input(|i| i.time) as f32;
     paint_emblem_with_hover(ui.painter(), p, icon, rect, t, hover);
     response
-        .on_hover_text("Change icon")
+        .on_hover_text(t!("nav.change_icon"))
         .on_hover_cursor(CursorIcon::PointingHand)
 }
 
@@ -421,7 +454,7 @@ pub fn emblem_at(
     let t = ui.input(|i| i.time) as f32;
     paint_emblem_with_hover(ui.painter(), p, icon, rect, t, hover);
     response
-        .on_hover_text("Change icon")
+        .on_hover_text(t!("nav.change_icon"))
         .on_hover_cursor(CursorIcon::PointingHand)
 }
 
@@ -483,6 +516,21 @@ fn paint_emblem_with_hover(
 
 /// Height of text fields, and of controls placed next to them.
 pub const FIELD_HEIGHT: f32 = 36.0;
+
+/// Text button as tall as a text field.
+pub fn field_button(ui: &mut Ui, p: &Palette, label: &str, primary: bool) -> Response {
+    button_with_height(ui, p, None, label, primary, FIELD_HEIGHT)
+}
+
+/// Single-line dropdown as tall as a text field.
+pub fn field_combo(ui: &mut Ui, combo: egui::ComboBox, items: impl FnOnce(&mut Ui)) -> Response {
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = FIELD_HEIGHT;
+        ui.spacing_mut().button_padding.y = 9.0;
+        combo.truncate().show_ui(ui, items).response
+    })
+    .inner
+}
 
 /// A row as tall as a text field, with its contents vertically centered
 /// (so a label lines up with the field next to it).

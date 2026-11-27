@@ -13,9 +13,9 @@ use std::net::IpAddr;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::t;
 use discord_rich_presence::activity::{Activity, ActivityType, Assets, Button, Timestamps};
 use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
-
 /// Discord application "Arctic Launcher".
 const APP_ID: &str = "1553107151306760263";
 /// Discord application "Arctic Client", shown while the game runs (Discord
@@ -31,13 +31,11 @@ const LINE_MAX: usize = 128;
 /// What the game calls a world that isn't a multiplayer server.
 const SINGLEPLAYER: &str = "Singleplayer";
 /// Shown instead of an IP, localhost, or a private/LAN name.
-pub(crate) const PRIVATE_SERVER: &str = "Private server";
+pub(crate) const PRIVATE_SERVER: &str = "Private server"; // i18n-ignore: other people read it on Discord
 
-/// Hover text for the setting that reveals the server.
-pub(crate) const SHOW_SERVER_TIP: &str = "While you're in multiplayer, Discord shows the server \
-     address on top and keeps the Minecraft version and loader underneath. Singleplayer says \
-     Singleplayer; the menus are unchanged. An IP address, localhost, or a LAN address shows as \
-     \"Private server\".";
+/// Hover text for the setting that reveals the server (a text key).
+pub(crate) const SHOW_SERVER_TIP: &str =
+    "settings.while_you_re_in_multiplayer_discord_shows_the_se";
 
 /// What the presence should show.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -161,7 +159,7 @@ fn presence_for(
             }
         }
         None => Presence {
-            details: "In the launcher".into(),
+            details: t!("tasks.in_the_launcher").into(),
             state: None,
             large_text: "Arctic Launcher".into(),
             since: launcher_since,
@@ -358,7 +356,7 @@ fn worker(rx: Receiver<Option<Presence>>) {
         // Read Discord's reply so errors are visible and replies don't pile up.
         match c.set_activity(activity(presence)).and_then(|()| c.recv()) {
             Ok((_, reply)) => {
-                if reply["evt"] == "ERROR" {
+                if reply["evt"] == /* i18n-ignore */ "ERROR" {
                     log::warn!("discord presence rejected: {}", reply["data"]);
                 }
                 shown = Some(presence.clone());
@@ -385,7 +383,7 @@ fn activity(p: &Presence) -> Activity<'_> {
                 .large_image(LOGO)
                 .large_text(p.large_text.as_str()),
         )
-        .buttons(vec![Button::new("Get Arctic Launcher", SITE)]);
+        .buttons(vec![Button::new(t!("tasks.get_arctic_launcher"), SITE)]);
     if let Some(state) = &p.state {
         activity = activity.state(state.as_str());
     }

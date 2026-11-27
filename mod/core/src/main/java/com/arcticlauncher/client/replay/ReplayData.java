@@ -49,6 +49,8 @@ public final class ReplayData implements Closeable {
 	volatile long[] key;
 	/** Published with category; old clips also benefit from skipping retired entity lifetimes. */
 	java.util.Map<Integer, int[]> removals = java.util.Collections.emptyMap();
+	/** Published with category: the chunks in each 1.8 chunk bulk. */
+	java.util.Map<Integer, long[]> bulks = java.util.Collections.emptyMap();
 
 	private ReplayData(File file, ReplayMeta meta, ReplayMeta.Extras extras, RandomAccessFile raf, File cacheFile,
 			int count, int[] time, long[] offset, int[] length, SelfSample[] self) {
@@ -244,6 +246,7 @@ public final class ReplayData implements Closeable {
 		long[] keys = new long[count];
 		long[] out = new long[1];
 		java.util.Map<Integer, int[]> removed = new java.util.HashMap<Integer, int[]>();
+		java.util.Map<Integer, long[]> bulked = new java.util.HashMap<Integer, long[]>();
 		try (DataInputStream in = new DataInputStream(new BufferedInputStream(new java.io.FileInputStream(cacheFile), 1 << 18))) {
 			byte[] buf = new byte[1 << 16];
 			for (int i = 0; i < count; i++) {
@@ -259,15 +262,19 @@ public final class ReplayData implements Closeable {
 				if (cat[i] == Category.ENTITY_REMOVE) {
 					int[] ids = classifier.removedEntities(packet);
 					if (ids != null) removed.put(i, ids);
+				} else if (cat[i] == Category.CHUNK_BULK) {
+					long[] chunks = classifier.bulkChunks(packet);
+					if (chunks != null) bulked.put(i, chunks);
 				}
 				keys[i] = out[0];
 			}
-		} catch (IOException | RuntimeException e) {
+		} catch (IOException | RuntimeException | OutOfMemoryError e) {
 			// Jumps stay on the slow path.
 			return;
 		}
 		key = keys;
 		removals = removed;
+		bulks = bulked;
 		category = cat;
 	}
 

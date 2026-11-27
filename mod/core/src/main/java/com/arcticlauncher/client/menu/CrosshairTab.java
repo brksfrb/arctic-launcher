@@ -10,24 +10,25 @@ import com.arcticlauncher.client.share.Shares;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Button;
 
+import com.arcticlauncher.client.Lang;
 /** The crosshair: shape, size, color and target colors, with a live preview. */
 final class CrosshairTab implements MenuTab {
 	private static final int PREVIEW = 80;
 	private static final int GAP = 10;
 	private static final int BTN_H = 18;
-	private static final String[] SHAPES = {"Cross", "Dot", "Circle", "Both", "Picture"};
+	private static final String[] SHAPES = {"mods.crosshair.shape.cross", "mods.crosshair.shape.dot", "mods.crosshair.shape.circle", "mods.crosshair.shape.both", "mods.crosshair.shape.picture"};
 
 	private int bx;
 	private int by;
 
 	@Override
 	public String title() {
-		return "Crosshair";
+		return Lang.t("mods.crosshair");
 	}
 
 	@Override
 	public String hint() {
-		return "Your own crosshair: shape, size, color.";
+		return Lang.t("mods.your_own_crosshair_shape_size_color");
 	}
 
 	@Override
@@ -40,29 +41,29 @@ final class CrosshairTab implements MenuTab {
 	public void build(final Host host, int x, int top, int w, int bottom) {
 		final CrosshairConfig c = ArcticClient.config().crosshair;
 		Form f = new Form(host, x, top, w - PREVIEW - GAP, bottom);
-		f.section("Shape");
-		f.choice("Shape", SHAPES, () -> indexOf(c.style), i -> c.style = CrosshairConfig.STYLES[i]);
+		f.section(Lang.t("mods.shape"));
+		f.choice(Lang.t("mods.shape"), Lang.all(SHAPES), () -> indexOf(c.style), i -> c.style = CrosshairConfig.STYLES[i]);
 		if ("image".equals(c.style)) {
 			int row = f.row(BTN_H + 4);
-			f.put(new Button("Open the folder for " + CrosshairConfig.IMAGE_FILE, () -> {
+			f.put(new Button(Lang.t("mods.open_the_folder_for", CrosshairConfig.IMAGE_FILE), () -> {
 				com.arcticlauncher.client.feature.FolderOpener.open(Crosshair.imageFile().getParentFile());
 			}), f.x, row, f.w, BTN_H);
 		}
-		f.stepper("Size", () -> c.size, v -> c.size = (int) v, 1, 12, 1, "%.0f");
-		f.stepper("Gap", () -> c.gap, v -> c.gap = (int) v, 0, 8, 1, "%.0f");
-		f.stepper("Thickness", () -> c.thickness, v -> c.thickness = (int) v, 1, 4, 1, "%.0f");
-		f.section("Color");
-		f.swatches("Color", CrosshairConfig.COLORS, () -> c.color, v -> c.color = v);
-		f.toggle("Outline", "A dark edge so it shows on bright blocks", () -> c.outline, on -> c.outline = on);
-		f.toggle("Color by target", "Red on players, orange on hostile mobs, green on others",
+		f.stepper(Lang.t("mods.size"), () -> c.size, v -> c.size = (int) v, 1, 12, 1, "%.0f");
+		f.stepper(Lang.t("mods.gap"), () -> c.gap, v -> c.gap = (int) v, 0, 8, 1, "%.0f");
+		f.stepper(Lang.t("mods.thickness"), () -> c.thickness, v -> c.thickness = (int) v, 1, 4, 1, "%.0f");
+		f.section(Lang.t("mods.color"));
+		f.swatches(Lang.t("mods.color"), CrosshairConfig.COLORS, () -> c.color, v -> c.color = v);
+		f.toggle(Lang.t("mods.outline"), Lang.t("mods.a_dark_edge_so_it_shows_on_bright_blocks"), () -> c.outline, on -> c.outline = on);
+		f.toggle(Lang.t("mods.color_by_target"), Lang.t("mods.red_on_players_orange_on_hostile_mobs_green"),
 				() -> c.targetColors, on -> c.targetColors = on);
 		f.done();
 		bx = x + w - PREVIEW;
 		by = top;
-		Button share = new Button("Share", () -> ShareService.share(Shares.CROSSHAIR));
+		Button share = new Button(Lang.t("mods.share"), () -> ShareService.share(Shares.CROSSHAIR));
 		share.enabled = !ShareService.busy();
 		host.add(share).bounds(bx, by + PREVIEW + 8, PREVIEW, BTN_H);
-		host.add(new Button("Use a code", () -> ArcticClient.platform().openPage(new SharePage())))
+		host.add(new Button(Lang.t("mods.use_a_code"), () -> ArcticClient.platform().openPage(new SharePage())))
 				.bounds(bx, by + PREVIEW + 8 + BTN_H + 4, PREVIEW, BTN_H);
 	}
 

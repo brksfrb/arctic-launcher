@@ -62,7 +62,7 @@ fn build(ctx: &Ctx, args: &ShareArgs) -> Result<(Bundle, Vec<String>)> {
             let e = InstancePack::export(&ctx.dirs, &instance, play.as_deref(), false)?;
             if e.pack.game_version.is_none() {
                 return Err(Error::Other(
-                    "pick a version on the Play tab first (the Vanilla instance follows it)".into(),
+                    "pick a version on the Play tab first (the Arctic instance follows it)".into(),
                 ));
             }
             Ok((Bundle::Instance(e.pack), e.left_out))

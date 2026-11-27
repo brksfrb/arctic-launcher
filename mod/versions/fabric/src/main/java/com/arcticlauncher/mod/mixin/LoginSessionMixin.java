@@ -2,42 +2,44 @@ package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.account.AccountSwitcher;
+import com.arcticlauncher.client.account.InvalidSession;
+import com.arcticlauncher.client.together.OfflineJoin;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.Connection;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.chat.Component;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.Unique;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-
-/**
- * "Invalid session" when joining a server (the game's sign-in expired while
- * it ran): a fresh session comes from the launcher and the join is tried
- * once more, instead of asking the player to restart everything.
- */
+/** Refresh the Minecraft session before Mojang authentication, or once after a rejection. */
 @Mixin(ClientHandshakePacketListenerImpl.class)
 abstract class LoginSessionMixin {
-	@Unique
-	private boolean arctic$renewed;
-
 	@Shadow
-	private Component authenticateServer(String serverId) {
-		throw new AssertionError();
-	}
+	@Final
+	private Connection connection;
 
-	@Inject(method = "authenticateServer", at = @At("RETURN"), cancellable = true)
-	private void arctic$renewSession(String serverId, CallbackInfoReturnable<Component> cir) {
-		Component error = cir.getReturnValue();
-		// The message is "disconnect.loginFailedInfo" around
-		// "disconnect.loginFailedInfo.invalidSession".
-		if (error == null || arctic$renewed || !String.valueOf(error).contains("invalidSession")) {
-			return;
+	@WrapMethod(method = "authenticateServer")
+	private Component arctic$authenticate(String serverId, Operation<Component> original) {
+		SocketAddress remote = connection.getRemoteAddress();
+		boolean loopback = remote instanceof InetSocketAddress && OfflineJoin.loopback(((InetSocketAddress) remote).getAddress());
+		String token = Minecraft.getInstance().getUser().getAccessToken();
+		if (OfflineJoin.skipJoinAuth(token, loopback)) {
+			return null;
 		}
-		arctic$renewed = true;
 		AccountSwitcher accounts = ArcticClient.accounts();
-		if (accounts != null && accounts.renewSession()) {
-			cir.setReturnValue(authenticateServer(serverId));
+		if (accounts != null) {
+			accounts.refreshBeforeJoin();
 		}
+		Component error = original.call(serverId);
+		// The component retains the invalidSession translation key in every language.
+		if (accounts != null && error != null && (InvalidSession.matches(error.toString()) || InvalidSession.matches(error.getString()))
+				&& accounts.renewSession()) {
+			return original.call(serverId);
+		}
+		return error;
 	}
 }

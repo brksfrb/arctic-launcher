@@ -8,6 +8,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.Identifier;
 
+import com.arcticlauncher.client.Lang;
 /**
  * White anti-aliased circles, one per radius in screen pixels: a rounded
  * panel's four corners are its quarters, tinted to the panel's color.
@@ -29,7 +30,7 @@ final class RoundedCorners {
 		Identifier id = TEXTURES.get(r);
 		if (id == null) {
 			id = Compat.id(ArcticMod.ID, "dyn/corner_" + r);
-			DynamicTexture texture = Compat.texture("Arctic rounded corner", circle(r));
+			DynamicTexture texture = Compat.texture(Lang.t("platform.arctic_rounded_corner"), circle(r));
 			Minecraft.getInstance().getTextureManager().register(id, texture);
 			TEXTURES.put(r, id);
 		}

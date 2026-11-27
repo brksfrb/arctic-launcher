@@ -10,10 +10,14 @@ public final class ChatCopyComponents {
 	private ChatCopyComponents() {}
 
 	public static MutableComponent tag(Component message, String text, boolean target) {
+		return tag(message, new ChatCopy.Data(text, target));
+	}
+
+	public static MutableComponent tag(Component message, ChatCopy.Data data) {
 		//#if MC >= 1.16
-		return tag(message, Style.EMPTY, new ChatCopy.Data(text, target));
+		return tag(message, Style.EMPTY, data);
 		//#else
-		return tag(message, new Style(), new ChatCopy.Data(text, target));
+		return tag(message, new Style(), data);
 		//#endif
 	}
 

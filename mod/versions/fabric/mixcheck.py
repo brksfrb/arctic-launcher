@@ -7,9 +7,10 @@ gradlew compileJava), so its preprocessed sources and Loom's named jar exist.
 
 Prints, per version, every hooked method, accessor, INVOKE target and
 @Shadow member that doesn't exist, and every INVOKE target the hooked method
-never calls: each of those crashes the game at startup (or silently does
-nothing). Mixins a version leaves out of arctic.mixins.json are skipped when
-the expanded config is available. Exit code 1 if anything is wrong.
+never calls, as well as mismatched @Inject callback descriptors. These can crash
+the game at startup or silently do nothing. Mixins excluded from the expanded
+arctic.mixins.json are skipped. Also rejects instance handlers at constructor
+HEAD, which runs before super(). Exit code 1 if anything is wrong.
 """
 import glob
 import json
@@ -21,10 +22,44 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 JAVAP = os.path.join(os.environ.get("JAVA_HOME", ""), "bin", "javap")
-LOOM = os.path.expanduser("~/.gradle/caches/fabric-loom/minecraftMaven/net/minecraft")
+GRADLE_HOME = os.environ.get("GRADLE_USER_HOME", os.path.expanduser("~/.gradle"))
+LOOM = os.path.join(GRADLE_HOME, "caches/fabric-loom/minecraftMaven/net/minecraft")
 # Methods a mixin target inherits from classes it doesn't declare; javap -p on
 # the target alone can't see them, so only these are looked up the hierarchy.
 MAX_SUPERS = 6
+INJECTIONS = re.compile(r"@(?:Inject|Redirect|ModifyArg|ModifyArgs|ModifyVariable|ModifyConstant|WrapOperation|WrapWithCondition|ModifyExpressionValue)\((.*?)\)\n\s*(?://[^\n]*\n\s*)*(?:private|public|protected)([^{;]*)", re.S)
+CALLBACK = "org.spongepowered.asm.mixin.injection.callback.CallbackInfo"
+PRIMITIVES = dict(zip("ZBCSIJFDV", ("boolean", "byte", "char", "short", "int", "long", "float", "double", "void")))
+JVM_TYPE = re.compile(r"\[*(?:L[^;]+;|[ZBCSIJFDV])")
+
+
+def method_selectors(annotation, consts):
+    method = re.search(r'method\s*=\s*("[^"]+"|\{[^}]+\}|\w+)', annotation)
+    if method:
+        value = method.group(1)
+        return re.findall(r'"([^"]+)"', value) or ([consts[value]] if value in consts else [])
+    return []
+
+
+def constructor_head_problems(src):
+    """Constructor HEAD is before super(): invoking an instance handler is illegal.
+
+    Run on preprocessed sources so inactive version branches don't cause failures.
+    This is a source guard, not a substitute for applying mixins in a real client.
+    """
+    consts = dict(re.findall(r'String (\w+) = "([^"]+)"', src))
+    problems = []
+    for ann in INJECTIONS.finditer(src):
+        annotation, handler = ann.groups()
+        if not any(s.split("(")[0] == "<init>" for s in method_selectors(annotation, consts)):
+            continue
+        if not re.search(r'@At\(\s*(?:value\s*=\s*)?"HEAD"', annotation):
+            continue
+        declaration = handler.split("(", 1)[0]
+        if not re.search(r"\bstatic\b", declaration):
+            name = declaration.split()[-1]
+            problems.append(f"{name}: handler at <init> HEAD must be static (before super())")
+    return problems
 
 
 def jar_for(version):
@@ -33,7 +68,7 @@ def jar_for(version):
     found += [j for j in glob.glob(f"{LOOM}/minecraft-merged-legacy*/{version}-*/*.jar")
               if not os.path.basename(os.path.dirname(os.path.dirname(j))).endswith("-intermediary")]
     found = [j for j in found if not j.endswith("-sources.jar")]
-    return found[0] if found else None
+    return max(found, key=os.path.getmtime) if found else None
 
 
 class Jar:
@@ -81,6 +116,21 @@ class Jar:
         pat = re.compile(r"[ .]" + re.escape(name) + r"(\(|;)")
         return any(pat.search(self.members(c)) for c in self.hierarchy(cls))
 
+    def method_descriptors(self, cls, selector):
+        name, paren, desc = selector.partition("(")
+        pattern = self.selector_pattern(selector)
+        simple = cls.rsplit(".", 1)[-1]
+        for member, descriptor in re.findall(r"^  [^\n]*?([\w.$]+)\([^\n]*\n    descriptor: (\S+)",
+                                             self.members(cls), re.M):
+            member = "<init>" if member == cls or member == simple else member
+            if pattern is not None:
+                if pattern.fullmatch(member):
+                    yield descriptor
+            elif name == member and (not paren or descriptor == paren + desc):
+                yield descriptor
+        if name == "<clinit>" and "static {};" in self.members(cls):
+            yield "()V"
+
     def body(self, cls, method):
         if cls not in self.code_cache:
             self.code_cache[cls] = subprocess.run([JAVAP, "-cp", self.path, "-p", "-c", cls], capture_output=True, text=True).stdout
@@ -106,7 +156,17 @@ def build_dir(version):
 
 
 def active_mixins(version):
-    """Mixin names this version's expanded config lists (from the built jar), or None when unknown."""
+    """Mixin names from this version's processed resources, or the built jar as a fallback."""
+    resources = os.path.join(build_dir(version), "build", "resources", "main")
+    try:
+        # A Gradle project shares its processed resources between Minecraft targets.
+        with open(os.path.join(resources, "fabric.mod.json"), encoding="utf-8") as f:
+            covers = json.load(f).get("depends", {}).get("minecraft", [])
+        if version in covers:
+            with open(os.path.join(resources, "arctic.mixins.json"), encoding="utf-8") as f:
+                return set(json.load(f).get("client", []))
+    except (OSError, ValueError):
+        pass
     jar = os.path.join(HERE, "..", "..", "dist", f"arctic-mod-{version}.jar")
     if not os.path.isfile(jar):
         return None
@@ -121,14 +181,8 @@ def listed_without_class(version, src_dir):
     """Mixins the version's expanded arctic.mixins.json lists whose class its sources don't make (a mixin
     file wrapped in //#if for other versions, but listed for all): Mixin throws ClassNotFoundException and
     the game dies at startup ("A mod crashed on startup")."""
-    config = os.path.join(build_dir(version), "build", "resources", "main", "arctic.mixins.json")
-    try:
-        with open(config, encoding="utf-8") as f:
-            names = json.load(f).get("client", [])
-    except (OSError, ValueError):
-        names = sorted(active_mixins(version) or [])
     missing = []
-    for name in names:
+    for name in sorted(active_mixins(version) or []):
         path = os.path.join(src_dir, *name.split(".")) + ".java"
         try:
             with open(path, encoding="utf-8") as f:
@@ -138,6 +192,66 @@ def listed_without_class(version, src_dir):
             pass
         missing.append(name)
     return missing
+
+
+def java_type(descriptor):
+    base = descriptor.lstrip("[")
+    name = base[1:-1].replace("/", ".").replace("$", ".") if base.startswith("L") else PRIMITIVES[base]
+    return name.removeprefix("java.lang.") + "[]" * (len(descriptor) - len(base))
+
+
+def qualified_type(name, imports):
+    root, dot, rest = name.partition(".")
+    return imports.get(root, root) + dot + rest
+
+
+def target_class(name, imports):
+    root, dot, rest = name.partition(".")
+    if dot and root in imports:
+        return imports[root] + "$" + rest.replace(".", "$")
+    return qualified_type(name, imports)
+
+
+def callback_problems(jar, cls, src, imports, consts):
+    """Check @Inject's captured arguments and callback type before Mixin applies it."""
+    problems = []
+    for ann in INJECTIONS.finditer(src):
+        if not ann[0].startswith("@Inject("):
+            continue
+        annotation, handler = ann.groups()
+        # Mixin can adapt a coerced argument. Check uncoerced handlers here.
+        if re.search(r"@(?:[\w.]+\.)?Coerce\b", handler):
+            continue
+        declaration = re.sub(r"@[\w.]+(?:\([^)]*\))?\s*", "", handler)
+        while re.search(r"<[^<>]*>", declaration):
+            declaration = re.sub(r"<[^<>]*>", "", declaration)
+        match = re.fullmatch(r"\s*(.*?)\s+([\w$]+)\s*\((.*?)\)\s*(?:throws\s+.*)?", declaration, re.S)
+        if not match:
+            continue
+        modifiers, name, params = match.groups()
+        types = [qualified_type(param.replace("...", "[]"), imports).removeprefix("java.lang.")
+                 for param in re.findall(r"([\w.$]+(?:\[\]|\.\.\.)*)\s+\w+\s*(?:,|$)", params)]
+        captures_locals = re.search(r"\blocals\s*=\s*LocalCapture\.CAPTURE_", annotation) or re.search(
+            r"@(?:[\w.]+\.)?Local\b", handler
+        )
+        for selector in method_selectors(annotation, consts):
+            descriptors = list(jar.method_descriptors(cls, selector))
+            if not descriptors:
+                continue
+            for desc in descriptors:
+                args, result = desc[1:].split(")")
+                expected = [java_type(p) for p in JVM_TYPE.findall(args)]
+                callback = CALLBACK if result == "V" else CALLBACK + "Returnable"
+                prefixes = ([callback], expected + [callback])
+                if modifiers.split()[-1] == "void" and any(
+                    types[:len(prefix)] == prefix and (len(types) == len(prefix) or captures_locals)
+                    for prefix in prefixes
+                ):
+                    break
+            else:
+                problems.append(f"{name}: incompatible @Inject descriptor for {cls}.{selector} "
+                                f"(target descriptors: {', '.join(descriptors)})")
+    return problems
 
 
 def check(version):
@@ -154,23 +268,27 @@ def check(version):
     for path in sorted(glob.glob(os.path.join(src_dir, "*.java"))):
         f = os.path.basename(path)
         src = open(path, encoding="utf-8").read()
-        m = re.search(r"@Mixin\(([\w.]+)\.class\)", src)
-        if not m:
-            continue
         if listed is not None and f[:-5] not in listed:
             continue
-        imports = dict((i.group(2), i.group(1) + "." + i.group(2))
-                       for i in re.finditer(r"import ((?:net\.minecraft|com\.mojang)[\w.]*)\.(\w+);", src))
-        target = m.group(1)
-        cls = imports.get(target.split(".")[0], target)
-        if "." in target and target.split(".")[0] in imports:
-            cls = imports[target.split(".")[0]] + "$" + ".".join(target.split(".")[1:]).replace(".", "$")
-        if not jar.members(cls):
-            problems.append(f"{f}: target class missing {cls}")
-            continue
+        problems.extend(f"{f}: {p}" for p in constructor_head_problems(src))
+        imports = {i.group(2): i.group(1) + "." + i.group(2)
+                   for i in re.finditer(r"import ([\w.]*)\.(\w+);", src)}
         # "a" + "b" (kept apart so the version renames leave the name alone) is one string.
         src = re.sub(r'"\s*\+\s*"', "", src)
         consts = dict(re.findall(r'String (\w+) = "([^"]+)"', src))
+        mixin = re.search(r"@Mixin\(([^)]+)\)", src)
+        if mixin:
+            targets = [target_class(t, imports) for t in re.findall(r"([\w.]+)\.class", mixin[1])]
+            targets += re.findall(r'"((?:net\.minecraft|com\.mojang)\.[\w.$]+)"', mixin[1])
+            for cls in targets:
+                problems.extend(f"{f}: {p}" for p in callback_problems(jar, cls, src, imports, consts))
+        m = re.search(r"@Mixin\(\s*(?:value\s*=\s*)?([\w.]+)\.class(?:,\s*priority\s*=\s*\d+)?\s*\)", src)
+        if not m:
+            continue
+        cls = target_class(m.group(1), imports)
+        if not jar.members(cls):
+            problems.append(f"{f}: target class missing {cls}")
+            continue
         methods = re.findall(r'method\s*=\s*"([^"]+)"', src)
         for grp in re.findall(r"method\s*=\s*\{([^}]+)\}", src):
             methods += re.findall(r'"([^"]+)"', grp)
@@ -202,7 +320,7 @@ def check(version):
                 problems.append(f"{f}: target class missing {owner}")
             elif not jar.has_member(owner_cls, name):
                 problems.append(f"{f}: field target {owner}.{name} missing")
-        for ann in re.finditer(r"@(?:Inject|Redirect|ModifyArg|ModifyArgs|ModifyVariable|WrapOperation|WrapWithCondition|ModifyExpressionValue)\((.*?)\)\n\s*(?://[^\n]*\n\s*)*(?:private|public|protected)([^{;]*)", src, re.S):
+        for ann in INJECTIONS.finditer(src):
             a = ann.group(1)
             mm = re.search(r'method\s*=\s*(?:"([^"]+)"|(\w+))', a)
             # @Local(argsOnly = true) needs the hooked method to take an argument of that type.

@@ -42,6 +42,7 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 
+import com.arcticlauncher.client.Lang;
 /** {@link Platform} for Minecraft 26.3. */
 final class FabricPlatform implements Platform {
 	private static Minecraft mc() {
@@ -72,6 +73,11 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public String gameLanguage() {
+		return mc().options.languageCode;
+	}
+
+	@Override
 	public void log(boolean warning, String message) {
 		if (warning) {
 			ArcticMod.LOG.warn(message);
@@ -93,7 +99,7 @@ final class FabricPlatform implements Platform {
 			return -1;
 		}
 		PlayerInfo info = connection.getPlayerInfo(mc.player.getUUID());
-		return info == null ? -1 : info.getLatency();
+		return com.arcticlauncher.client.net.MeasuredPing.value(server(), info == null ? -1 : info.getLatency());
 	}
 
 	@Override
@@ -103,6 +109,8 @@ final class FabricPlatform implements Platform {
 		if (connection == null || mc.hasSingleplayerServer()) {
 			return -1;
 		}
+		// Our own entry: the measured round trip, as the ping widget shows.
+		if (mc.player != null && player.equals(mc.player.getUUID())) return ping();
 		PlayerInfo info = connection.getPlayerInfo(player);
 		return info == null ? -1 : info.getLatency();
 	}
@@ -119,6 +127,12 @@ final class FabricPlatform implements Platform {
 		//#else
 		return org.lwjgl.glfw.GLFW.glfwGetWindowAttrib(Compat.windowHandle(), org.lwjgl.glfw.GLFW.GLFW_FOCUSED) == org.lwjgl.glfw.GLFW.GLFW_TRUE;
 		//#endif
+	}
+
+	@Override
+	public String screenClassName() {
+		Screen screen = Compat.screen();
+		return screen == null ? "none" : screen.getClass().getName();
 	}
 
 	@Override
@@ -336,6 +350,21 @@ final class FabricPlatform implements Platform {
 		return Compat.keyName(nativeKey);
 	}
 
+	@Override
+	public String menuKeyBinding() {
+		return MenuKeyMapping.key();
+	}
+
+	@Override
+	public void setMenuKeyBinding(String key) {
+		MenuKeyMapping.set(key);
+	}
+
+	@Override
+	public String keyUsedBy(String key) {
+		return Compat.keyUsedBy(key);
+	}
+
 	/** The camera before Freelook switched to third person (-1: none). */
 	private int before = -1;
 
@@ -475,11 +504,11 @@ final class FabricPlatform implements Platform {
 		com.arcticlauncher.client.gfx.RenderWork.post(() -> {
 			try {
 				net.minecraft.resources.Identifier texture = GfxImpl.look("cosmetic/" + id);
-				mc().getTextureManager().register(texture, Compat.texture("Arctic cosmetic " + id, image));
+				mc().getTextureManager().register(texture, Compat.texture(Lang.t("platform.arctic_cosmetic") + id, image));
 				net.minecraft.resources.Identifier glow = null;
 				if (glowFinal != null) {
 					glow = GfxImpl.look("cosmetic/" + id + "_glow");
-					mc().getTextureManager().register(glow, Compat.texture("Arctic cosmetic glow " + id, glowFinal));
+					mc().getTextureManager().register(glow, Compat.texture(Lang.t("platform.arctic_cosmetic_glow") + id, glowFinal));
 				}
 				com.arcticlauncher.mod.cosmetic.CosmeticModels.bake(id, geometry, item == null ? null : item.idle, texture, glow);
 				ArcticClient.looks().cosmetics().ready(id);
@@ -722,6 +751,21 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean offlineSession() {
+		User user = mc().getUser();
+		//#if MC >= 1.18 && MC < 1.21.9
+		return "0".equals(user.getAccessToken()) || user.getType() != User.Type.MSA;
+		//#else
+		return "0".equals(user.getAccessToken());
+		//#endif
+	}
+
+	@Override
+	public boolean isCurrentSessionToken(String token) {
+		return token.equals(mc().getUser().getAccessToken());
+	}
+
+	@Override
 	public String playerName() {
 		return mc().getUser().getName();
 	}
@@ -748,15 +792,18 @@ final class FabricPlatform implements Platform {
 		}
 		List<NativeImage> parts = splitFrames(image, frames);
 		image.close();
-		com.arcticlauncher.client.gfx.RenderWork.post(() -> {
-			boolean ok = true;
-			for (int i = 0; i < parts.size(); i++) {
-				ok &= register(hash + "/" + i, parts.get(i));
-			}
-			if (ok) {
-				ArcticClient.looks().textureReady(hash, parts.size());
-			}
-		});
+		// One upload per job (frame), so a long animated cape is spread over frames like everything else;
+		// it shows once the last frame is up, as before.
+		boolean[] ok = {true};
+		for (int i = 0; i < parts.size(); i++) {
+			int frame = i;
+			com.arcticlauncher.client.gfx.RenderWork.post(() -> {
+				ok[0] &= register(hash + "/" + frame, parts.get(frame));
+				if (frame == parts.size() - 1 && ok[0]) {
+					ArcticClient.looks().textureReady(hash, parts.size());
+				}
+			});
+		}
 	}
 
 	/** Upload on the render thread; a failure is logged, never thrown into the game loop. */
@@ -814,10 +861,10 @@ final class FabricPlatform implements Platform {
 		}
 		//#else
 		String kind = String.valueOf(mc.hitResult.type);
-		if ("BLOCK".equals(kind)) {
+		if ("BLOCK".equals(kind)) { // i18n-ignore: enum name
 			return mc.level.getBlockState(mc.hitResult.getBlockPos()).getBlock().getName().getString();
 		}
-		if ("ENTITY".equals(kind)) {
+		if ("ENTITY".equals(kind)) { // i18n-ignore: enum name
 			return mc.hitResult.entity.getName().getString();
 		}
 		//#endif
@@ -835,7 +882,7 @@ final class FabricPlatform implements Platform {
 		net.minecraft.world.entity.Entity e = hit.getEntity();
 		//#else
 		// 1.13 has one kind of hit result, with the entity in it.
-		if (mc.hitResult == null || !"ENTITY".equals(String.valueOf(mc.hitResult.type))) {
+		if (mc.hitResult == null || !"ENTITY".equals(String.valueOf(mc.hitResult.type))) { // i18n-ignore: enum name
 			return 0;
 		}
 		net.minecraft.world.entity.Entity e = mc.hitResult.entity;
@@ -1168,8 +1215,8 @@ final class FabricPlatform implements Platform {
 		mc.execute(() -> {
 			leaveWorld(mc);
 			// One duel world at a time: earlier ones are thrown away (they're only arenas).
-			WorldStats.deleteWorlds(new java.io.File(mc.gameDirectory, "saves"), "Arctic Duel ");
-			String name = "Arctic Duel " + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date());
+			WorldStats.deleteWorlds(new java.io.File(mc.gameDirectory, "saves"), "Arctic Duel "); // i18n-ignore
+			String name = "Arctic Duel " + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date()); // i18n-ignore
 			//#if MC >= 26.1
 			net.minecraft.world.level.LevelSettings settings = new net.minecraft.world.level.LevelSettings(name,
 					net.minecraft.world.level.GameType.SURVIVAL,
@@ -1218,7 +1265,7 @@ final class FabricPlatform implements Platform {
 		Minecraft mc = mc();
 		mc.execute(() -> {
 			leaveWorld(mc);
-			WorldStats.deleteWorlds(new java.io.File(mc.gameDirectory, "saves"), "Arctic Duel ");
+			WorldStats.deleteWorlds(new java.io.File(mc.gameDirectory, "saves"), "Arctic Duel "); // i18n-ignore
 			//#if MC >= 1.19
 			net.minecraft.client.gui.screens.worldselection.CreateWorldScreen.openFresh(mc, null);
 			//#elif MC >= 1.18
@@ -1252,7 +1299,7 @@ final class FabricPlatform implements Platform {
 			return;
 		}
 		com.arcticlauncher.mod.mixin.CreateWorldScreenAccess screen = (com.arcticlauncher.mod.mixin.CreateWorldScreenAccess) Compat.screen();
-		screen.arctic$nameEdit().setValue("Arctic Duel " + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date()));
+		screen.arctic$nameEdit().setValue("Arctic Duel " + com.arcticlauncher.client.LocalClock.formatter("MM-dd HH.mm").format(new java.util.Date())); // i18n-ignore
 		screen.arctic$setCommands(true);
 		screen.arctic$setCommandsChanged(true);
 		screen.arctic$create();
@@ -1422,6 +1469,22 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean lightOverlayWorks() {
+		//#if MC >= 1.21.11 && MC < 26.1
+		return true;
+		//#else
+		return false;
+		//#endif
+	}
+
+	//#if MC >= 1.21.11 && MC < 26.1
+	@Override
+	public com.arcticlauncher.client.feature.LightOverlay.Probe lightProbe() {
+		return LightOverlayDraw.probe();
+	}
+	//#endif
+
+	@Override
 	public boolean itemPhysicsWorks() {
 		return true;
 	}
@@ -1492,6 +1555,26 @@ final class FabricPlatform implements Platform {
 	@Override
 	public void sendChat(String text) {
 		WorldStats.sendChat(text);
+	}
+
+	@Override
+	public java.util.Collection<UUID> onlinePlayerIds() {
+		ClientPacketListener connection = mc().getConnection();
+		if (connection == null) {
+			return java.util.Collections.emptyList();
+		}
+		java.util.List<UUID> ids = new java.util.ArrayList<UUID>();
+		//#if MC >= 1.19.3
+		for (net.minecraft.client.multiplayer.PlayerInfo info : connection.getListedOnlinePlayers()) {
+		//#else
+		for (net.minecraft.client.multiplayer.PlayerInfo info : connection.getOnlinePlayers()) {
+		//#endif
+			UUID id = Compat.profileId(info.getProfile());
+			if (id != null) {
+				ids.add(id);
+			}
+		}
+		return ids;
 	}
 
 	@Override

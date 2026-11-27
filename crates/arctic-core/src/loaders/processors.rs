@@ -1,6 +1,7 @@
 //! Running the client-side "processors" of a Forge/NeoForge installer
 //! (the steps that deobfuscate and patch the vanilla client jar).
 
+use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
@@ -11,6 +12,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::IoContext;
+use crate::launch::{args::java4shell_flags, process::runtime_major_version};
 use crate::net::{DownloadJob, download_all, sha1_file};
 use crate::storage::load_json;
 use crate::versions::maven_path;
@@ -117,6 +119,7 @@ impl Context {
 /// Run every client processor in order, skipping ones whose outputs are
 /// already present and verified.
 pub fn run_all(ctx: &Context, processors: &[&Processor], progress: Progress) -> Result<()> {
+    let jvm_flags = OnceCell::new();
     for (i, p) in processors.iter().enumerate() {
         let stage = format!("Patching Minecraft ({}/{})", i + 1, processors.len());
         progress(ProgressInfo {
@@ -136,7 +139,14 @@ pub fn run_all(ctx: &Context, processors: &[&Processor], progress: Progress) -> 
             .map(|a| ctx.resolve(a))
             .collect::<Result<Vec<_>>>()?;
         if !download_mojmaps(ctx, &args, progress)? {
-            run_one(ctx, p, &args)?;
+            let flags = jvm_flags.get_or_init(|| {
+                let native_x86_64 = crate::java::native_x86_64();
+                let major = native_x86_64
+                    .then(|| runtime_major_version(&ctx.java))
+                    .flatten();
+                java4shell_flags(major, native_x86_64, &[])
+            });
+            run_one(ctx, p, &args, flags)?;
         }
         verify_outputs(p, &outputs)?;
     }
@@ -158,7 +168,7 @@ fn verify_outputs(p: &Processor, outputs: &[(PathBuf, String)]) -> Result<()> {
     }
 }
 
-fn run_one(ctx: &Context, p: &Processor, args: &[String]) -> Result<()> {
+fn run_one(ctx: &Context, p: &Processor, args: &[String], jvm_flags: &[&str]) -> Result<()> {
     let jar = lib_path(&ctx.libraries, &p.jar)?;
     let main = main_class(&jar)?;
     let mut classpath = vec![jar];
@@ -168,7 +178,11 @@ fn run_one(ctx: &Context, p: &Processor, args: &[String]) -> Result<()> {
     let classpath = std::env::join_paths(&classpath)
         .map_err(|e| Error::Other(format!("invalid installer classpath: {e}")))?;
     let mut cmd = Command::new(&ctx.java);
-    cmd.arg("-cp").arg(classpath).arg(&main).args(args);
+    cmd.args(jvm_flags)
+        .arg("-cp")
+        .arg(classpath)
+        .arg(&main)
+        .args(args);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -258,6 +272,7 @@ fn mappings_job(vanilla: &Value, side: &str, dest: &Path) -> Option<DownloadJob>
         size: m.get("size").and_then(Value::as_u64),
         dest: dest.to_path_buf(),
         lzma: None,
+        md5: None,
     })
 }
 
