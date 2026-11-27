@@ -42,6 +42,8 @@ public final class Features {
 	private boolean freelook;
 	/** Snaplook: held, the camera swings round to face you in third person (the player doesn't turn). */
 	private boolean snap;
+	/** Boat look: riding a boat with the setting on, the camera has its own angles and the player's (clamped, vanilla) angles are untouched. */
+	private boolean boatLook;
 	/** The camera is in third person for your emote (see {@link #emoteView}). */
 	private boolean emoteView;
 	/** The server we last said bans Freelook (said once per server). */
@@ -99,6 +101,11 @@ public final class Features {
 		}
 		if (wantLook != freelook) {
 			setFreelook(wantLook);
+		}
+		boolean wantBoat = inGame && platform.freelookWorks() && config.boatFreeLook && platform.ridingBoat()
+				&& ServerRules.allowed(ServerRules.FREELOOK, platform.server());
+		if (wantBoat != boatLook) {
+			setBoatLook(wantBoat);
 		}
 		boolean wantSnap = inGame && platform.freelookWorks() && !freelook && config.snaplookEnabled && down(config.snaplookKey);
 		if (wantSnap != snap) {
@@ -164,11 +171,24 @@ public final class Features {
 			platform.setThirdPerson(false);
 		}
 		freelook = on;
-		if (on) {
+		// Already looking round from a boat: keep those angles, so the key neither jumps nor snaps back.
+		if (on && !boatLook) {
 			lookYaw = (float) p[3];
 			lookPitch = (float) p[4];
 		}
 		platform.setThirdPerson(on);
+	}
+
+	private void setBoatLook(boolean on) {
+		double[] p = platform.position();
+		if (on && p == null) {
+			return;
+		}
+		boatLook = on;
+		if (on && !freelook) {
+			lookYaw = (float) p[3];
+			lookPitch = (float) p[4];
+		}
 	}
 
 	/** For the self-test: act as if the Zoom/Freelook keys were held. */
@@ -327,12 +347,13 @@ public final class Features {
 	// ---- Freelook --------------------------------------------------------------
 
 	public boolean freelook() {
-		return freelook || snap;
+		return freelook || snap || boatLook;
 	}
 
 	/** Mouse movement while freelooking turns the camera, not the player. */
 	public boolean turn(double dx, double dy) {
-		if (!freelook) {
+		// Snaplook held (without Freelook) shows the front view: the mouse turns the player as before.
+		if (!freelook && (!boatLook || snap)) {
 			return false;
 		}
 		lookYaw += (float) (dx * TURN_SCALE);

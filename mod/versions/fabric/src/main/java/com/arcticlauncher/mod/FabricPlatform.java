@@ -385,6 +385,28 @@ final class FabricPlatform implements Platform {
 	}
 
 	@Override
+	public boolean boatLookWorks() {
+		return freelookWorks();
+	}
+
+	@Override
+	public boolean ridingBoat() {
+		LocalPlayer p = mc().player;
+		if (p == null) {
+			return false;
+		}
+		net.minecraft.world.entity.Entity v = p.getVehicle();
+		// Boat, chest boat and raft: one base class.
+		//#if MC >= 1.21.11
+		return v instanceof net.minecraft.world.entity.vehicle.boat.AbstractBoat;
+		//#elif MC >= 1.21.2
+		return v instanceof net.minecraft.world.entity.vehicle.AbstractBoat;
+		//#else
+		return v instanceof net.minecraft.world.entity.vehicle.Boat;
+		//#endif
+	}
+
+	@Override
 	public boolean freelookWorks() {
 		// 1.13 sets the view up in GameRenderer/Camera code without the hooks Freelook needs.
 		//#if MC >= 1.14

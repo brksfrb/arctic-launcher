@@ -116,6 +116,16 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return true;
 	}
 
+	/** Boat look can work here (versions where vanilla limits a boat rider's head turn, and the camera hooks exist). */
+	default boolean boatLookWorks() {
+		return false;
+	}
+
+	/** The player rides a boat, chest boat or raft (vanilla turns the rider's head only within a limit of the boat). False on versions without that limit. */
+	default boolean ridingBoat() {
+		return false;
+	}
+
 	/** The smooth font pack is on. */
 	boolean smoothFont();
 

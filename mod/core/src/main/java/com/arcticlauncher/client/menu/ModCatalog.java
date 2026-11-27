@@ -265,6 +265,11 @@ final class ModCatalog {
 						f.section(Lang.t("mods.key"));
 						f.key(Lang.t("mods.freelook_key"), Lang.t("mods.hold_it_to_look_around"), Form.key(() -> c.freelookKey, k -> c.freelookKey = k));
 						f.note(Lang.t("mods.some_servers_like_hypixel_dont_allow_it_it"));
+						if (p.boatLookWorks()) {
+							f.section(Lang.t("mods.boat_look"));
+							f.toggle(Lang.t("mods.boat_look"), Lang.t("mods.look_all_the_way_round_from_a_boat"), () -> c.boatFreeLook, on -> c.boatFreeLook = on);
+							f.note(Lang.t("mods.boat_look_note"));
+						}
 					}));
 			out.add(new Mod("snaplook", Lang.t("mods.snaplook"), Lang.t("mods.hold_a_key_to_see_yourself_from_the_front"), "snaplook", Category.GAMEPLAY,
 					"front view third person behind look back mirror")
