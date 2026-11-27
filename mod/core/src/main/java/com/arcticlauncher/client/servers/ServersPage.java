@@ -11,6 +11,7 @@ import com.arcticlauncher.client.ui.Button;
 import com.arcticlauncher.client.ui.Hints;
 import com.arcticlauncher.client.ui.Page;
 import com.arcticlauncher.client.ui.TextField;
+import com.arcticlauncher.client.ui.Widget;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,12 +32,6 @@ public final class ServersPage extends Page {
 	private static final int BUTTONS_H = 52;
 	private static final int BUTTON_H = 20;
 	private static final int GAP = 4;
-	private static final int FORM_PADDING = 10;
-	private static final int FORM_MARGIN = 6;
-	private static final int FORM_TITLE_H = 14;
-	private static final int COPY_W = 44;
-	private static final int ADD_TO_LIST_W = 120;
-	private static final int MIN_ADDRESS_W = 96;
 	/** Pixels the mouse moves before a press becomes a drag. */
 	private static final int DRAG_START = 4;
 	private static final long DOUBLE_CLICK_NS = 350_000_000L;
@@ -60,13 +55,9 @@ public final class ServersPage extends Page {
 	private String selectedLan;
 	private float scroll;
 	private Mode mode = Mode.LIST;
+	private ServerFormLayout formLayout;
 	private TextField nameField;
 	private TextField addressField;
-	private int formX;
-	private int formY;
-	private int formWidth;
-	private int formHeight;
-	private int formTitleY;
 
 	// The row being pressed or dragged.
 	private int pressed = -1;
@@ -272,51 +263,26 @@ public final class ServersPage extends Page {
 		t.start();
 	}
 
-	/** Add, edit or direct connect: a small form over the list. */
 	private void buildForm() {
 		boolean direct = mode == Mode.DIRECT;
-		int inset = Math.min(FORM_MARGIN + FORM_PADDING, width / 4);
-		int w = Math.min(direct ? 340 : 240, width - 2 * inset);
-		int x = (width - w) / 2;
-		int padding = Math.min(FORM_PADDING, inset);
-		int colGap = Math.min(GAP, w / 4);
-		boolean stack = direct && w < MIN_ADDRESS_W + ADD_TO_LIST_W + COPY_W + 2 * GAP;
-		// Add/Edit have a name row. Compact Direct has a separate row for address actions.
-		int rows = !direct || stack ? 3 : 2;
-		int verticalPadding = Math.min(FORM_PADDING, height / 12);
-		int titleH = Math.min(FORM_TITLE_H, height / 4);
-		int rowGap = Math.min(GAP, height / 16);
-		int buttonH = Math.min(BUTTON_H, (height - 2 * verticalPadding - titleH - rows * rowGap) / rows);
-		formWidth = w + 2 * padding;
-		formHeight = 2 * verticalPadding + titleH + rows * (buttonH + rowGap);
-		formX = x - padding;
-		formY = (height - formHeight) / 2;
-		formTitleY = formY + verticalPadding;
-		int y = formTitleY + titleH;
-		Servers.Entry editing = mode == Mode.EDIT && selected >= 0 ? entries.get(selected) : null;
+		formLayout = new ServerFormLayout(width, height, direct, BUTTON_H, GAP);
+		boolean newForm = addressField == null;
+		if (newForm) {
+			initForm(direct);
+		}
 		if (!direct) {
-			nameField = add(new TextField(tr("addServer.enterName", Lang.t("servers.server_name_2")), 64, TextField.ANY));
-			nameField.bounds(x, y, w, buttonH);
-			if (editing != null) {
-				nameField.text(editing.name);
-			}
-			y += buttonH + rowGap;
+			add(nameField, formLayout.name);
 		}
-		addressField = add(new TextField(tr("addServer.enterIp", Lang.t("servers.server_address")), 256, TextField.ANY));
-		int copyW = Math.min(COPY_W, (w - colGap) / 2);
-		int addW = direct ? (stack ? w - colGap - copyW : ADD_TO_LIST_W) : 0;
-		int addressW = stack ? w : w - copyW - colGap - (direct ? addW + colGap : 0);
-		addressField.bounds(x, y, addressW, buttonH);
-		if (stack) {
-			y += buttonH + rowGap;
+		add(addressField, formLayout.address);
+		if (newForm) {
+			focus(direct ? addressField : nameField);
 		}
-		addressField.onEnter(this::submit);
 		add(new Button(Lang.t("servers.copy"), () -> {
 			String a = addressField.text().trim();
 			if (!a.isEmpty()) {
 				platform.setClipboard(a);
 			}
-		})).bounds(x + w - copyW, y, copyW, buttonH);
+		}), formLayout.copy);
 		if (direct) {
 			add(new Button(Lang.t("servers.add_to_list"), () -> {
 				String address = addressField.text().trim();
@@ -325,23 +291,39 @@ public final class ServersPage extends Page {
 					servers.ping(address);
 					open(Mode.LIST);
 				}
-			})).bounds(x + w - copyW - colGap - addW, y, addW, buttonH);
+			}), formLayout.addToList);
 		}
+		String ok = direct ? tr("selectServer.select", Lang.t("servers.join_server")) : tr("gui.done", Lang.t("servers.done"));
+		add(new Button(ok, this::submit).primary(), formLayout.submit);
+		add(new Button(tr("gui.cancel", Lang.t("servers.cancel")), () -> open(Mode.LIST)), formLayout.cancel);
+	}
+
+	private void add(Widget widget, ServerFormLayout.Bounds bounds) {
+		add(widget).bounds(bounds.x, bounds.y, bounds.width, bounds.height);
+	}
+
+	private void initForm(boolean direct) {
+		if (!direct) {
+			nameField = new TextField(tr("addServer.enterName", Lang.t("servers.server_name_2")), 64, TextField.ANY);
+		}
+		addressField = new TextField(tr("addServer.enterIp", Lang.t("servers.server_address")), 256, TextField.ANY)
+				.onEnter(this::submit);
+		Servers.Entry editing = mode == Mode.EDIT && selected >= 0 ? entries.get(selected) : null;
 		if (editing != null) {
+			nameField.text(editing.name);
 			addressField.text(editing.address);
 		} else if (direct && ArcticClient.config().lastDirect != null) {
 			addressField.text(ArcticClient.config().lastDirect);
 		}
-		focus(direct ? addressField : nameField);
-		y += buttonH + rowGap;
-		int bw = (w - colGap) / 2;
-		String ok = direct ? tr("selectServer.select", Lang.t("servers.join_server")) : tr("gui.done", Lang.t("servers.done"));
-		add(new Button(ok, this::submit).primary()).bounds(x, y, bw, buttonH);
-		add(new Button(tr("gui.cancel", Lang.t("servers.cancel")), () -> open(Mode.LIST))).bounds(x + bw + colGap, y, w - bw - colGap, buttonH);
 	}
 
 	private void open(Mode m) {
 		mode = m;
+		nameField = null;
+		addressField = null;
+		pressed = -1;
+		dragging = false;
+		lastClickAt = 0;
 		rebuild();
 	}
 
@@ -444,12 +426,23 @@ public final class ServersPage extends Page {
 	// ---- Drawing -------------------------------------------------------------------------
 
 	@Override
+	protected boolean animatesIn() {
+		return mode == Mode.LIST;
+	}
+
+	@Override
 	protected void drawAbove(Gfx g, Style s, int mx, int my) {
-		drawTip(g, s);
+		if (mode == Mode.LIST) {
+			drawTip(g, s);
+		}
 	}
 
 	@Override
 	protected void drawBehind(Gfx g, Style s, int mx, int my) {
+		if (mode != Mode.LIST) {
+			drawForm(g, s);
+			return;
+		}
 		tip = null;
 		tipX = mx;
 		tipY = my;
@@ -488,7 +481,7 @@ public final class ServersPage extends Page {
 			if (ry + ROW_H < top - 4 || ry > bottom + 4) {
 				continue;
 			}
-			boolean over = mode == Mode.LIST && !dragging && mx >= left && mx < left + LIST_W && my >= ry && my < ry + ROW_H
+			boolean over = !dragging && mx >= left && mx < left + LIST_W && my >= ry && my < ry + ROW_H
 					&& my >= top && my < bottom;
 			playHint = true;
 			row(g, s, left, ry, e.name, e.address, i == selected, over);
@@ -508,14 +501,17 @@ public final class ServersPage extends Page {
 		if (entries.isEmpty() && lan.worlds().isEmpty()) {
 			Draw.centered(g, Lang.t("servers.no_servers_yet_add_server_or_direct"), width / 2, (top + bottom) / 2 - 4, s.muted, false);
 		}
-		if (mode != Mode.LIST) {
-			g.fill(0, 0, width, height, 0x88000000);
-			Skin.panel(g, s, formX, formY, formX + formWidth, formY + formHeight);
-			String title = mode == Mode.DIRECT ? tr("selectServer.direct", Lang.t("servers.direct_connection"))
-					: mode == Mode.EDIT ? tr("selectServer.edit", Lang.t("servers.edit")) : tr("selectServer.add", Lang.t("servers.add_server"));
-			int titleX = formX + formWidth / 2;
-			Draw.centered(g, Draw.fitCentered(g, title, formWidth - 8, titleX, formTitleY), titleX, formTitleY, s.text, false);
-		}
+	}
+
+	private void drawForm(Gfx g, Style s) {
+		g.fill(0, 0, width, height, 0x88000000);
+		ServerFormLayout.Bounds panel = formLayout.panel;
+		Skin.panel(g, s, panel.x, panel.y, panel.right(), panel.bottom());
+		String title = mode == Mode.DIRECT ? tr("selectServer.direct", Lang.t("servers.direct_connection"))
+				: mode == Mode.EDIT ? tr("selectServer.edit", Lang.t("servers.edit")) : tr("selectServer.add", Lang.t("servers.add_server"));
+		ServerFormLayout.Bounds titleBox = formLayout.title;
+		int titleX = panel.x + panel.width / 2;
+		Draw.centered(g, Draw.fitCentered(g, title, panel.width - 8, titleX, titleBox.y), titleX, titleBox.y, s.text, false);
 	}
 
 	private void drawDiscover(Gfx g, Style s, int left, int top, int bottom, int mx, int my) {
@@ -557,7 +553,7 @@ public final class ServersPage extends Page {
 		y += 14;
 		for (LanScan.World w : worlds) {
 			int ry = Math.round(top + y - scroll);
-			boolean over = mode == Mode.LIST && !dragging && mx >= left && mx < left + LIST_W && my >= ry && my < ry + ROW_H;
+			boolean over = !dragging && mx >= left && mx < left + LIST_W && my >= ry && my < ry + ROW_H;
 			lanRow(g, s, left, ry, w, w.address.equals(selectedLan), over);
 			y += ROW_H + ROW_GAP;
 		}
@@ -874,7 +870,7 @@ public final class ServersPage extends Page {
 	@Override
 	public boolean mouseDragged(double mx, double my, int button) {
 		if (pressed < 0) {
-			return super.mouseDragged(mx, my, button);
+			return super.mouseDragged(mx, my, button) || mode != Mode.LIST;
 		}
 		mouseY = my;
 		if (!dragging && (Math.abs(my - pressY) > DRAG_START || Math.abs(mx - pressX) > DRAG_START)) {
@@ -886,7 +882,7 @@ public final class ServersPage extends Page {
 	@Override
 	public boolean mouseReleased(double mx, double my, int button) {
 		if (pressed < 0) {
-			return super.mouseReleased(mx, my, button);
+			return super.mouseReleased(mx, my, button) || mode != Mode.LIST;
 		}
 		if (dragging) {
 			int to = dropIndex();
@@ -909,7 +905,7 @@ public final class ServersPage extends Page {
 	@Override
 	public boolean mouseScrolled(double mx, double my, double amount) {
 		if (mode != Mode.LIST) {
-			return false;
+			return true;
 		}
 		scroll -= (float) amount * (ROW_H + ROW_GAP);
 		if (!discover) {
