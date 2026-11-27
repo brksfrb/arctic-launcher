@@ -1157,8 +1157,22 @@ fn sign_in_microsoft(base: &str, access_token: &str, uuid: &str, name: &str) -> 
 
 #[cfg(any(feature = "offline-accounts", test))]
 fn sign_in_offline(base: &str, name: &str, key: &str) -> Result<Session> {
-    let mut resp = agent()
-        .post(&format!("{base}/v1/auth/offline"))
+    sign_in_offline_with(base, name, key, crate::device::hint().as_deref())
+}
+
+/// Offline sign-in, with the PC's device hint when there is one. Only this endpoint gets the header: the
+/// server uses it to enroll this PC for the name and to give a lost key back to an enrolled PC. A server
+/// that doesn't know the header ignores it.
+#[cfg(any(feature = "offline-accounts", test))]
+fn sign_in_offline_with(base: &str, name: &str, key: &str, hint: Option<&str>) -> Result<Session> {
+    let request = agent().post(&format!("{base}/v1/auth/offline"));
+    let request = match hint
+        .filter(|h| h.len() == 64 && h.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
+    {
+        Some(hint) => request.header("X-Arctic-Device", hint),
+        None => request,
+    };
+    let mut resp = request
         .config()
         .http_status_as_error(false)
         .build()
@@ -1377,9 +1391,14 @@ mod tests {
 
     /// A tiny Arctic server: offline sign-in (numbered tokens, the keys it was given are recorded) and
     /// `/v1/look`, which refuses the tokens in `refuse`.
+    /// A request's path and its `X-Arctic-Device` header.
+    type DeviceSeen = std::sync::Arc<std::sync::Mutex<Vec<(String, Option<String>)>>>;
+
     struct FakeServer {
         base: String,
         keys: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+        /// Every request's path and its `X-Arctic-Device` header (None when absent).
+        device: DeviceSeen,
     }
 
     fn fake_server(refuse: &'static [&'static str]) -> FakeServer {
@@ -1388,12 +1407,15 @@ mod tests {
         let base = format!("http://{}", listener.local_addr().unwrap());
         let keys = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let seen = keys.clone();
+        let device = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let device_seen = device.clone();
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
                 let mut reader = BufReader::new(stream);
                 let mut line = String::new();
                 reader.read_line(&mut line).unwrap_or(0);
                 let (mut length, mut auth) = (0usize, String::new());
+                let mut device_header = None;
                 loop {
                     let mut header = String::new();
                     if reader.read_line(&mut header).unwrap_or(0) == 0 || header.trim().is_empty() {
@@ -1403,12 +1425,19 @@ mod tests {
                     if let Some(v) = lower.strip_prefix("content-length:") {
                         length = v.trim().parse().unwrap_or(0);
                     }
+                    if lower.starts_with("x-arctic-device:") {
+                        device_header = Some(header["x-arctic-device:".len()..].trim().to_owned());
+                    }
                     if lower.starts_with("authorization:") {
                         auth = header["authorization:".len()..].trim().to_owned();
                     }
                 }
                 let mut body = vec![0; length];
                 reader.read_exact(&mut body).ok();
+                device_seen.lock().unwrap().push((
+                    line.split_whitespace().nth(1).unwrap_or("").to_owned(),
+                    device_header,
+                ));
                 let (status, reply) = if line.starts_with("POST /v1/auth/offline") {
                     let sent: serde_json::Value = serde_json::from_slice(&body).unwrap();
                     let mut seen = seen.lock().unwrap();
@@ -1438,7 +1467,56 @@ mod tests {
                 );
             }
         });
-        FakeServer { base, keys }
+        FakeServer { base, keys, device }
+    }
+
+    #[test]
+    fn the_device_hint_goes_to_offline_sign_in_only_and_only_when_there_is_one() {
+        let server = fake_server(&[]);
+        let hint = "ab".repeat(32);
+        sign_in_offline_with(&server.base, "Alex", &"cd".repeat(32), Some(&hint)).unwrap();
+        sign_in_offline_with(&server.base, "Alex", &"cd".repeat(32), None).unwrap();
+        // Not a hint (wrong length, upper case): never sent.
+        sign_in_offline_with(&server.base, "Alex", &"cd".repeat(32), Some("ABC")).unwrap();
+        sign_in_offline_with(
+            &server.base,
+            "Alex",
+            &"cd".repeat(32),
+            Some(&hint.to_uppercase()),
+        )
+        .unwrap();
+        // Other endpoints, whatever the hint is.
+        look(&server.base, "tok").unwrap();
+        let _ = sign_in_microsoft(&server.base, "mc-token", "uuid", "Alex");
+        let _ = post::<serde_json::Value>(
+            &format!("{}/v1/auth/recover", server.base),
+            &serde_json::json!({}),
+        );
+        let seen = server.device.lock().unwrap().clone();
+        assert_eq!(seen[0], ("/v1/auth/offline".to_owned(), Some(hint)));
+        assert_eq!(seen[1], ("/v1/auth/offline".to_owned(), None));
+        assert_eq!(seen[2], ("/v1/auth/offline".to_owned(), None));
+        assert_eq!(seen[3], ("/v1/auth/offline".to_owned(), None));
+        assert!(seen.len() > 4);
+        for (path, header) in &seen[4..] {
+            assert!(header.is_none(), "{path} must not get the device header");
+        }
+    }
+
+    /// The real sign-in path sends whatever `device::hint()` says, and still works either way.
+    #[test]
+    fn a_full_sign_in_sends_the_machines_hint_when_it_has_one() {
+        let (_dir, dirs) = key_dirs();
+        let server = fake_server(&[]);
+        let account = crate::auth::offline::create("Alex").unwrap();
+        token_for_locked(&dirs, &server.base, &account).unwrap();
+        let seen = server.device.lock().unwrap().clone();
+        let (path, header) = seen
+            .iter()
+            .find(|(p, _)| p == "/v1/auth/offline")
+            .expect("a sign-in");
+        assert_eq!(path, "/v1/auth/offline");
+        assert_eq!(*header, crate::device::hint());
     }
 
     fn look(base: &str, token: &str) -> Result<serde_json::Value> {
