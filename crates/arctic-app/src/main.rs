@@ -105,6 +105,9 @@ fn main() -> eframe::Result {
         tray_host::run(&dirs, forwarded);
     }
     logbook::init(dirs.launcher_logs().join("launcher.log"));
+    // Ask the system which PC this is now (it takes a moment on Windows), so an Arctic sign-in doesn't wait.
+    #[cfg(feature = "offline-accounts")]
+    arctic_core::device::warm();
     // Hidden copies of old launchers that a cut-short update left beside this one.
     std::thread::spawn(|| {
         let removed = arctic_core::update::remove_update_leftovers();

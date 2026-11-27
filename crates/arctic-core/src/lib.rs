@@ -15,6 +15,7 @@ pub mod crash_conflicts;
 pub mod crash_fix;
 pub mod crash_suspect;
 pub mod curseforge;
+pub mod device;
 pub mod error;
 pub mod ffmpeg;
 pub mod friends;
