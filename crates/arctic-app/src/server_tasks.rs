@@ -49,6 +49,20 @@ impl Tasks {
         });
     }
 
+    /// Fetch favicons directly from the listed Minecraft servers.
+    pub fn public_server_icons(&self, addresses: Vec<String>) {
+        self.run(move |t| {
+            let proxy = ProxySettings::load(t.dirs());
+            servers::ping_each(&addresses, proxy.active(), |i, status| {
+                if let Ok(status) = status
+                    && let Some(png) = status.icon
+                {
+                    t.send(Event::PublicServerIcon(addresses[i].clone(), png));
+                }
+            });
+        });
+    }
+
     /// Submit the player's own server. It waits for a moderator.
     pub fn public_submit(&self, account: arctic_core::auth::Account, form: SubmitForm) {
         self.run(move |t| {

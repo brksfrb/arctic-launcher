@@ -254,6 +254,7 @@ pub enum Event {
     /// A new recovery code (shown once; offline accounts only).
     #[cfg(feature = "offline-accounts")]
     RecoveryCode(Outcome<String>),
+    PublicServerIcon(String, Vec<u8>),
     PublicServers(Outcome<Vec<arctic_core::servers::public::PublicServer>>),
     ServerSubmitted(Outcome<arctic_core::servers::public::Submitted>),
     /// A Bedrock tab job (see `bedrock_tasks`).
