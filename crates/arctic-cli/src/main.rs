@@ -22,8 +22,6 @@ fn main() {
         log::set_logger(&STDERR_LOGGER).ok();
         log::set_max_level(log::LevelFilter::Info);
     }
-    // Ask the system which PC this is now, so an Arctic sign-in doesn't wait for it.
-    arctic_core::device::warm();
     let out = Out::new(cli.json);
     let code = match run(&cli, out) {
         Ok(code) => code,

@@ -7,6 +7,9 @@
 //! doesn't survive a reinstall and isn't hardware). When neither firmware value is usable there is no hint
 //! and nothing is sent. The server stores a hash of the hash and only compares it. Neither the raw ids nor
 //! the hash are ever logged.
+//!
+//! On most Linux distros `product_uuid` and `board_serial` are root-only, so unprivileged users get no hint;
+//! there is deliberately no `/etc/machine-id` fallback (it doesn't survive a reinstall and isn't hardware).
 
 use std::sync::OnceLock;
 
@@ -119,7 +122,7 @@ fn raw() -> Option<String> {
     use std::os::windows::process::CommandExt;
     use std::process::{Command, Stdio};
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let script = "$ErrorActionPreference='Stop'; \
+    let script = "$ErrorActionPreference='SilentlyContinue'; \
                   'UUID=' + (Get-CimInstance Win32_ComputerSystemProduct).UUID; \
                   'BOARD=' + (Get-CimInstance Win32_BaseBoard).SerialNumber";
     // The system's own PowerShell, not whichever one a search path finds first.
@@ -148,8 +151,9 @@ fn raw() -> Option<String> {
     let start = std::time::Instant::now();
     loop {
         match child.try_wait() {
-            Ok(Some(status)) if status.success() => break,
-            Ok(Some(_)) | Err(_) => return None,
+            // Whatever the exit status: each query is independent and a failed one prints an empty value.
+            Ok(Some(_)) => break,
+            Err(_) => return None,
             Ok(None) if start.elapsed() >= LOOKUP_TIMEOUT => {
                 let _ = child.kill();
                 let _ = child.wait();

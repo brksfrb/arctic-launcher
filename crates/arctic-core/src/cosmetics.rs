@@ -822,26 +822,29 @@ fn token_for_locked(dirs: &DataDirs, base: &str, account: &Account) -> Result<St
             // a backup): all are tried before the key counts as lost.
             let mut keys = vec![key.clone()];
             keys.extend(other_keys(dirs, &account.uuid, &key));
-            let mut outcome = sign_in_offline(base, &account.username, &key);
-            for other in keys.iter().skip(1) {
-                if !outcome.as_ref().is_err_and(wrong_key) {
-                    break;
-                }
-                log::info!("Arctic: trying another saved key for {}", account.username);
-                if let Ok(session) = sign_in_offline(base, &account.username, other) {
-                    // This is the key that works: it becomes the newest everywhere.
-                    if let Err(e) =
-                        crate::offline_keys::remember(dirs, &account.uuid, &account.username, other)
-                    {
-                        log::warn!("couldn't save the working offline key: {e}");
+            let hint = crate::device::hint();
+            let outcome = match sign_in_with_keys(base, &account.username, &keys, hint.as_deref()) {
+                Ok((session, used)) => {
+                    if used > 0 {
+                        // This is the key that works: it becomes the newest everywhere.
+                        let other = &keys[used];
+                        if let Err(e) = crate::offline_keys::remember(
+                            dirs,
+                            &account.uuid,
+                            &account.username,
+                            other,
+                        ) {
+                            log::warn!("couldn't save the working offline key: {e}");
+                        }
+                        let mut fresh: Credentials = load_json(&path)?.unwrap_or_default();
+                        fresh.accounts.entry(account.uuid.clone()).or_default().key =
+                            Some(other.clone());
+                        save_json(&path, &fresh)?;
                     }
-                    let mut fresh: Credentials = load_json(&path)?.unwrap_or_default();
-                    fresh.accounts.entry(account.uuid.clone()).or_default().key =
-                        Some(other.clone());
-                    save_json(&path, &fresh)?;
-                    outcome = Ok(session);
+                    Ok(session)
                 }
-            }
+                Err(e) => Err(e),
+            };
             match outcome {
                 Ok(session) => {
                     creds = load_json(&path)?.unwrap_or_default();
@@ -1155,9 +1158,47 @@ fn sign_in_microsoft(base: &str, access_token: &str, uuid: &str, name: &str) -> 
     )
 }
 
+/// Sign in with the first of `keys` that the server accepts; returns the session and the key's index.
+///
+/// The device header makes the server swap the stored key for any non-matching key from an enrolled PC
+/// (and counts a reclaim, 3 per name per day). So with several saved keys, all are tried WITHOUT the header
+/// first; only when none matches, the first (newest) key is sent WITH it as the last attempt, which is the
+/// reclaim. A key that matched headerless is sent once more with the header (best effort) to enroll this PC.
+/// A single key is one request, with the header.
 #[cfg(any(feature = "offline-accounts", test))]
-fn sign_in_offline(base: &str, name: &str, key: &str) -> Result<Session> {
-    sign_in_offline_with(base, name, key, crate::device::hint().as_deref())
+fn sign_in_with_keys(
+    base: &str,
+    name: &str,
+    keys: &[String],
+    hint: Option<&str>,
+) -> Result<(Session, usize)> {
+    let keys = &keys[..keys.len().min(MAX_KEY_TRIES)];
+    if keys.len() <= 1 {
+        let key = keys.first().map_or("", String::as_str);
+        return sign_in_offline_with(base, name, key, hint).map(|s| (s, 0));
+    }
+    let mut last = None;
+    for (i, key) in keys.iter().enumerate() {
+        if i > 0 {
+            log::info!("Arctic: trying another saved key for {name}");
+        }
+        match sign_in_offline_with(base, name, key, None) {
+            Ok(session) => {
+                if hint.is_some() {
+                    // Enrolls this PC; the session above is the one used.
+                    let _ = sign_in_offline_with(base, name, key, hint);
+                }
+                return Ok((session, i));
+            }
+            Err(e) if wrong_key(&e) => last = Some(e),
+            Err(e) => return Err(e),
+        }
+    }
+    if hint.is_some() {
+        // No saved key matches: the newest one with the header is the reclaim for an enrolled PC.
+        return sign_in_offline_with(base, name, &keys[0], hint).map(|s| (s, 0));
+    }
+    Err(last.expect("at least two keys were tried"))
 }
 
 /// Offline sign-in, with the PC's device hint when there is one. Only this endpoint gets the header: the
@@ -1468,6 +1509,150 @@ mod tests {
             }
         });
         FakeServer { base, keys, device }
+    }
+
+    /// A server that behaves like the real one for offline keys: a mismatching key from an enrolled device
+    /// swaps the stored key and counts a reclaim; from any other device it is a 403 "used by another".
+    struct KeyServer {
+        base: String,
+        /// (key, had the device header) per request.
+        requests: std::sync::Arc<std::sync::Mutex<Vec<(String, bool)>>>,
+        reclaims: std::sync::Arc<std::sync::Mutex<u32>>,
+        stored: std::sync::Arc<std::sync::Mutex<String>>,
+    }
+
+    fn key_server(stored: &str, enrolled: bool) -> KeyServer {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let requests = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let reclaims = std::sync::Arc::new(std::sync::Mutex::new(0u32));
+        let stored = std::sync::Arc::new(std::sync::Mutex::new(stored.to_owned()));
+        let (r, c, st) = (requests.clone(), reclaims.clone(), stored.clone());
+        std::thread::spawn(move || {
+            let mut enrolled = enrolled;
+            for stream in listener.incoming().flatten() {
+                let mut reader = BufReader::new(stream);
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap_or(0);
+                let (mut length, mut header_seen) = (0usize, false);
+                loop {
+                    let mut h = String::new();
+                    if reader.read_line(&mut h).unwrap_or(0) == 0 || h.trim().is_empty() {
+                        break;
+                    }
+                    let lower = h.to_ascii_lowercase();
+                    if let Some(v) = lower.strip_prefix("content-length:") {
+                        length = v.trim().parse().unwrap_or(0);
+                    }
+                    header_seen |= lower.starts_with("x-arctic-device:");
+                }
+                let mut body = vec![0; length];
+                reader.read_exact(&mut body).ok();
+                let sent: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                let key = sent["key"].as_str().unwrap_or("").to_owned();
+                r.lock().unwrap().push((key.clone(), header_seen));
+                let mut stored = st.lock().unwrap();
+                let (status, reply) = if key == *stored {
+                    enrolled |= header_seen;
+                    (
+                        200,
+                        format!(r#"{{"token":"t","expires":{}}}"#, now_secs() + 86400),
+                    )
+                } else if header_seen && enrolled {
+                    *c.lock().unwrap() += 1;
+                    *stored = key;
+                    (
+                        200,
+                        format!(r#"{{"token":"t","expires":{}}}"#, now_secs() + 86400),
+                    )
+                } else {
+                    (
+                        403,
+                        r#"{"error":"this name is used by another Arctic player"}"#.to_owned(),
+                    )
+                };
+                let _ = write!(
+                    reader.get_mut(),
+                    "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                    reply.len()
+                );
+            }
+        });
+        KeyServer {
+            base,
+            requests,
+            reclaims,
+            stored,
+        }
+    }
+
+    fn keys_of(n: usize) -> Vec<String> {
+        (0..n)
+            .map(|i| format!("{i:x}").repeat(64)[..64].to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn a_single_matching_key_is_one_request_with_the_header() {
+        let keys = keys_of(1);
+        let server = key_server(&keys[0], false);
+        let hint = "ab".repeat(32);
+        let (_, used) = sign_in_with_keys(&server.base, "Alex", &keys, Some(&hint)).unwrap();
+        assert_eq!(used, 0);
+        assert_eq!(
+            *server.requests.lock().unwrap(),
+            vec![(keys[0].clone(), true)]
+        );
+    }
+
+    #[test]
+    fn a_matching_backup_key_never_triggers_a_reclaim() {
+        let keys = keys_of(3);
+        // The server holds the last key; the PC is enrolled, so a headed mismatch would swap it.
+        let server = key_server(&keys[2], true);
+        let hint = "ab".repeat(32);
+        let (_, used) = sign_in_with_keys(&server.base, "Alex", &keys, Some(&hint)).unwrap();
+        assert_eq!(used, 2);
+        assert_eq!(*server.reclaims.lock().unwrap(), 0);
+        assert_eq!(*server.stored.lock().unwrap(), keys[2]);
+        let seen = server.requests.lock().unwrap().clone();
+        // Headerless tries first, then one headed request with the key that matched.
+        assert_eq!(
+            seen,
+            vec![
+                (keys[0].clone(), false),
+                (keys[1].clone(), false),
+                (keys[2].clone(), false),
+                (keys[2].clone(), true)
+            ]
+        );
+    }
+
+    #[test]
+    fn the_reclaim_is_only_the_last_attempt_and_uses_the_first_key() {
+        let keys = keys_of(3);
+        let server = key_server(&"ff".repeat(32), true);
+        let hint = "ab".repeat(32);
+        let (_, used) = sign_in_with_keys(&server.base, "Alex", &keys, Some(&hint)).unwrap();
+        assert_eq!(used, 0);
+        assert_eq!(*server.reclaims.lock().unwrap(), 1);
+        let seen = server.requests.lock().unwrap().clone();
+        assert_eq!(seen.len(), 4);
+        assert!(seen[..3].iter().all(|(_, h)| !h));
+        assert_eq!(seen[3], (keys[0].clone(), true));
+    }
+
+    #[test]
+    fn an_unenrolled_pc_with_no_matching_key_gets_the_used_by_another_error() {
+        let keys = keys_of(2);
+        let server = key_server(&"ff".repeat(32), false);
+        let hint = "ab".repeat(32);
+        let Err(err) = sign_in_with_keys(&server.base, "Alex", &keys, Some(&hint)) else {
+            panic!("no key matches")
+        };
+        assert!(err.to_string().contains("used by another"));
+        assert_eq!(*server.reclaims.lock().unwrap(), 0);
     }
 
     #[test]
