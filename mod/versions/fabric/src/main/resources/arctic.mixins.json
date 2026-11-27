@@ -109,7 +109,8 @@
 		"ScaledTextStateMixin",
 		"TextProjectionMixin",
 		"TextProjectionBufferMixin",<% } %><% if (worldTextScale) { %>
-		"WorldTextScaleMixin",<% } %><% if (nameTagTextScale) { %>
+		"WorldTextScaleMixin",
+		"WorldTextOutlineMixin",<% } %><% if (nameTagTextScale) { %>
 		"NameTagTextScaleMixin",<% } %><% if (oldScaledFont) { %>
 		"ScaledFontSetMixin",
 		"BadgeQuadMixin",<% } %><% if (badgeSnap) { %>
