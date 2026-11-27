@@ -94,6 +94,7 @@
 		"ScreenNoticesLegacyMixin",
 		"DebugScaleLegacyMixin",
 		"NoHurtCamLegacyMixin",
+		"MenuFrostMixin",
 		"FramerateLimitLegacyMixin",
 		"HeldItemTweakMixin",
 <% if (mc18) { %>		"OldAnimationsMixin",

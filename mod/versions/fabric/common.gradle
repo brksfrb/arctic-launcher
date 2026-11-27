@@ -406,6 +406,8 @@ processResources {
 			slotLocks: atLeast('1.14'),
 			// No Hurt Shake hooks GameRenderer.bobHurt (every version; 26.1 changed its arguments).
 			hurtCam: atLeast('1.13'),
+			// Menu Blur overrides the game's own menu background blur (Options.getMenuBackgroundBlurriness, 1.20.5 and newer).
+			menuBlur: atLeast('1.20.5'),
 			// Dynamic FPS: the frame rate limit lives in Minecraft before 1.21.2, in the limit tracker after.
 			framerateLimit: atLeast('1.14') && !atLeast('1.21.2'),
 			framerateTracker: atLeast('1.21.2'),

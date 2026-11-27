@@ -357,8 +357,12 @@ final class ModCatalog {
 				Category.GAMEPLAY, "reach range crosshair hit attack distance pvp")
 				.toggle(() -> c.rangeIndicator, on -> c.rangeIndicator = on));
 		out.add(new Mod("pickupfeed", Lang.t("mods.pickup_display"), Lang.t("mods.items_you_pick_up_are_listed_at_the_right_of"), "items",
-				Category.GAMEPLAY, "pickup picked up item loot feed hud collect")
-				.toggle(() -> c.pickupFeed, on -> c.pickupFeed = on));
+				Category.GAMEPLAY, "pickup picked up item loot feed hud collect enchant enchantment enchanted book info")
+				.toggle(() -> c.pickupFeed, on -> c.pickupFeed = on)
+				.settings((host, f) -> {
+					f.toggle(Lang.t("mods.show_enchantments"), Lang.t("mods.a_small_line_with_the_enchantments_of_an_item_you"), () -> c.pickupEnchants,
+							on -> c.pickupEnchants = on);
+				}));
 		out.add(new Mod("hitboxes", Lang.t("mods.hitboxes"), Lang.t("mods.every_players_and_mobs_hitbox_as_a_box_like"), "hitboxes",
 				Category.GAMEPLAY, "hitbox combat box f3 reach")
 				.toggle(() -> c.hitboxes, on -> c.hitboxes = on));
@@ -606,6 +610,18 @@ final class ModCatalog {
 						f.note(Lang.t("mods.the_hud_and_menus_stay_sharp"));
 					}));
 		}
+		out.add(new Mod("menublur", Lang.t("mods.menu_blur"), Lang.t("mods.blur_the_world_behind_menus_the_inventory_and_the"), "motionblur",
+				Category.VISUAL, "background blur menu inventory pause screen frosted glass gui")
+				.toggle(() -> c.menuBlur, on -> c.menuBlur = on)
+				.settings((host, f) -> {
+					f.section(Lang.t("mods.blur"));
+					f.slider(Lang.t("mods.strength"), () -> c.menuBlurStrength, v -> c.menuBlurStrength = (int) v, 0, com.arcticlauncher.client.feature.MenuBlur.MAX, 1, "%.0f");
+					if (p.menuBlurWorks()) {
+						f.note(Lang.t("mods.the_game_has_its_own_blur_setting_in_video"));
+					} else {
+						f.note(Lang.t("mods.this_version_has_no_menu_blur_so_the_world_behind"));
+					}
+				}));
 		if (p.itemPhysicsWorks()) {
 			out.add(new Mod("itemphysics", Lang.t("mods.item_physics"), Lang.t("mods.dropped_items_lie_flat_and_tumble_as_they"), "itemphysics",
 					Category.VISUAL, "drops ground realistic")
@@ -792,7 +808,7 @@ final class ModCatalog {
 
 	private static void chat(List<Mod> out, final ClientConfig c) {
 		out.add(new Mod("chat", Lang.t("mods.chat"), Lang.t("mods.timestamps_stacked_lines_mentions"), "chat", Category.CHAT,
-				"timestamp stack mention ping copy clipboard")
+				"timestamp stack mention ping copy clipboard clear chat key wipe empty")
 				.settings((host, f) -> {
 					f.section(Lang.t("mods.chat"));
 					f.toggle(Lang.t("mods.copy_chat_messages"), Lang.t("mods.click_the_timestamp_or_copy_shift_right"), () -> c.chatCopy, on -> c.chatCopy = on);
@@ -821,6 +837,8 @@ final class ModCatalog {
 					f.section(Lang.t("mods.show"));
 					f.toggle(Lang.t("mods.hide_the_chat"), Lang.t("mods.no_chat_lines_on_screen_you_can_still_type"), () -> c.chatOff,
 							on -> c.chatOff = on);
+					f.key(Lang.t("mods.clear_chat_key"), Lang.t("mods.empties_the_chat_on_screen_the_saved_history_stays"),
+							Form.key(() -> c.clearChatKey, k -> c.clearChatKey = k));
 					f.section(Lang.t("mods.keep"));
 					f.toggle(Lang.t("mods.save_chat_across_restarts"), Lang.t("mods.keep_all_messages_and_sent_history_in_this"), () -> c.chatPersistent,
 							on -> c.chatPersistent = on);

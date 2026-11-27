@@ -49,6 +49,8 @@
 		"ScreenNoticesMixin",
 		"DebugScaleMixin",
 <% if (hurtCam) { %>		"NoHurtCamMixin",
+<% } %><% if (menuBlur) { %>		"MenuBlurMixin",
+<% } %><% if (!menuBlur) { %>		"MenuFrostMixin",
 <% } %><% if (framerateLimit) { %>		"FramerateLimitMixin",
 <% } %>		"LightmapRefreshMixin",
 <% if (framerateTracker) { %>		"FramerateTrackerMixin",

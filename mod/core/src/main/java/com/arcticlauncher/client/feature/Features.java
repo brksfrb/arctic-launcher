@@ -51,6 +51,7 @@ public final class Features {
 
 	private boolean fullbrightKeyWasDown;
 	private boolean streamerKeyWasDown;
+	private boolean clearChatKeyWasDown;
 	private boolean emoteKeyWasDown;
 	/** Held keys simulated by the self-test (no keyboard there). */
 	private boolean simulatedZoom;
@@ -127,6 +128,11 @@ public final class Features {
 			platform.openPage(new com.arcticlauncher.client.menu.EmoteWheel(config.emoteWheelHold));
 		}
 		emoteKeyWasDown = emoteDown;
+		boolean clearDown = inGame && down(config.clearChatKey);
+		if (clearDown && !clearChatKeyWasDown) {
+			platform.clearChat();
+		}
+		clearChatKeyWasDown = clearDown;
 	}
 
 	private boolean down(String key) {

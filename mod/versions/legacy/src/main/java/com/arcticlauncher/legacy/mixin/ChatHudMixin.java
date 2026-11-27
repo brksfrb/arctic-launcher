@@ -195,7 +195,7 @@ abstract class ChatHudMixin implements PersistentChat.Hud {
 	@Inject(method = {"clear()V", "clear(Z)V"}, at = @At("HEAD"), cancellable = true, require = 1)
 	private void arctic$keep(CallbackInfo ci) {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
-		if (c != null && c.chatKeep) {
+		if (c != null && c.chatKeep && !com.arcticlauncher.client.feature.ChatClear.forced()) {
 			ci.cancel();
 		}
 	}

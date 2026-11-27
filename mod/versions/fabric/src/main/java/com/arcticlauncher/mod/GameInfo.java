@@ -175,7 +175,7 @@ public final class GameInfo {
 				continue;
 			}
 			String name = it.getHoverName().getString();
-			String key = System.identityHashCode(it.getItem()) + ":" + name;
+			String key = System.identityHashCode(it.getItem()) + ":" + name + (it.isEnchanted() ? "+" : "");
 			Object[] row = kinds.get(key);
 			if (row == null) {
 				kinds.put(key, new Object[] {key, it.copy(), name, it.getCount()});

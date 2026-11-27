@@ -92,6 +92,8 @@ public final class ClientConfig {
 	public String streamerName = Lang.t("hud.streamer");
 	/** Switches streamer mode. */
 	public String streamerKey = "key.keyboard.unknown";
+	/** Clear chat: empties the chat on screen (unbound by default; the saved history stays). */
+	public String clearChatKey = "key.keyboard.unknown";
 	/** Drops a waypoint where you stand. */
 	public String waypointKey = "key.keyboard.unknown";
 	/** Starts, stops and clears the stopwatch widget. */
@@ -120,6 +122,9 @@ public final class ClientConfig {
 	public boolean oldItemPosition;
 	public boolean oldThirdPerson;
 	public boolean clearWeather;
+	/** Menu Blur: blur the world behind menus with this strength (0 to 10) instead of the game's own setting. */
+	public boolean menuBlur;
+	public int menuBlurStrength = 5;
 	/** Motion blur, and how strong (1 low to 4 max). */
 	public boolean motionBlur;
 	public int motionBlurStrength = 2;
@@ -261,6 +266,8 @@ public final class ClientConfig {
 	public boolean rangeIndicator;
 	/** Items you pick up are listed on the HUD for a moment. */
 	public boolean pickupFeed;
+	/** The pickup list adds a small line with the item's enchantments. */
+	public boolean pickupEnchants = true;
 	/** A key in an inventory sorts the container under the mouse. */
 	public boolean inventorySort;
 	/** The game key name that sorts ("key.keyboard.r"). */
@@ -549,6 +556,9 @@ public final class ClientConfig {
 		}
 		if (emoteKey == null) {
 			emoteKey = "key.keyboard.b";
+		}
+		if (clearChatKey == null) {
+			clearChatKey = "key.keyboard.unknown";
 		}
 		if (streamerKey == null) {
 			streamerKey = "key.keyboard.unknown";
