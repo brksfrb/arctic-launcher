@@ -106,7 +106,8 @@ public final class LegacyKeys {
 			int button = code - MOUSE_OFFSET;
 			return MOUSE + (button == 0 ? "left" : button == 1 ? "right" : button == 2 ? "middle" : String.valueOf(button + 1));
 		}
-		String lwjgl = code == 0 ? null : Keyboard.getKeyName(code);
+		// Keyboard.getKeyName indexes an array of KEYBOARD_SIZE names and throws outside it.
+		String lwjgl = code == 0 || code >= Keyboard.KEYBOARD_SIZE ? null : Keyboard.getKeyName(code);
 		if (lwjgl == null || "NONE".equals(lwjgl)) {
 			return KEYBOARD + "unknown";
 		}
@@ -133,7 +134,7 @@ public final class LegacyKeys {
 	/** What the game calls the key ("C", "Button 4"). */
 	public static String label(String name) {
 		int code = code(name);
-		return code == 0 ? Lang.t("platform.none") : GameOptions.getFormattedNameForKeyCode(code);
+		return code == 0 || code >= Keyboard.KEYBOARD_SIZE ? Lang.t("platform.none") : GameOptions.getFormattedNameForKeyCode(code);
 	}
 
 	/** The core's key code for an LWJGL 2 key (the few it acts on). */
