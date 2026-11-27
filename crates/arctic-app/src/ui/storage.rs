@@ -328,6 +328,7 @@ impl ArcticApp {
                 }
             }
         }
+        portal_path_warning(ui, p, &c.to);
         ui.add_space(10.0);
         widgets::row(ui, |ui| {
             match (c.problem.is_some(), c.target) {
@@ -494,6 +495,7 @@ impl ArcticApp {
                     },
                 );
                 ui.label(path_text(p, &target));
+                portal_path_warning(ui, p, &target);
                 if empty {
                     note(
                         ui,
@@ -545,6 +547,12 @@ impl ArcticApp {
             Some(None) => self.storage.folder = None,
             None => {}
         }
+    }
+}
+
+fn portal_path_warning(ui: &mut egui::Ui, p: &Palette, folder: &Path) {
+    if location::is_document_portal_path(folder) {
+        ui.label(RichText::new(t!("settings.temporary_portal_folder")).color(p.warn));
     }
 }
 

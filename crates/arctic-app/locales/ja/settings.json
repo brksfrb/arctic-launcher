@@ -177,6 +177,7 @@
   "settings.start_the_launcher_maximized": "ランチャーを最大化して起動",
   "settings.storage": "ストレージ",
   "settings.supported_by_flash_hosting_in_the_sidebar": "サイドバー、情報、一緒にプレイに「提供: Flash Hosting」を表示します。",
+  "settings.temporary_portal_folder": "このフォルダーは Linux の一時的なドキュメントポータルを使用しています。セッションが変わるとアクセスできなくなることがあります。可能なら通常のフォルダーを選んでください。",
   "settings.test_proxy": "プロキシをテスト",
   "settings.testing": "テスト中…",
   "settings.the_file_cant_be_read_as_a_picture": "このファイルは画像として読み込めません（{e}）。",

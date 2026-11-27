@@ -18,6 +18,7 @@ use super::{priority, runtime_repair};
 use crate::Result;
 use crate::error::IoContext;
 use crate::java;
+use crate::storage::location::is_document_portal_path;
 
 /// How often the watcher checks for exit or a kill request.
 const WATCH_INTERVAL: Duration = Duration::from_millis(250);
@@ -111,6 +112,7 @@ pub(super) fn spawn_with_session(
 ) -> Result<GameHandle> {
     let spawn_started = std::time::Instant::now();
     log::info!("launching: {}", plan.redacted_command());
+    let (cwd, canonical_cwd) = validated_game_cwd(&plan.game_dir)?;
     let runtime_lock = lock_launch_runtime(plan)?;
     if let Some(parent) = plan.log_file.parent() {
         std::fs::create_dir_all(parent).at(parent)?;
@@ -124,7 +126,7 @@ pub(super) fn spawn_with_session(
         let mut cmd = Command::new(exe);
         cmd.args(&args)
             .envs(crate::gpu_preference::env(plan.high_performance_gpu))
-            .current_dir(game_cwd(&plan.game_dir))
+            .current_dir(&cwd)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -165,6 +167,7 @@ pub(super) fn spawn_with_session(
         }
     };
     drop(runtime_lock);
+    let cwd_diagnostics = game_cwd_diagnostics(&cwd, &canonical_cwd, &exe);
     log::info!(
         "[startup] Java process started in {} ms (pid {})",
         spawn_started.elapsed().as_millis(),
@@ -193,11 +196,16 @@ pub(super) fn spawn_with_session(
         "{launch_context}; {}",
         crate::gpu_preference::diagnostics(&exe)
     );
-    writeln!(log.lock().unwrap(), "{launch_context}").ok();
-    on_event(GameEvent::Output(vec![LogLine {
-        level: super::logparse::Level::Info,
-        text: launch_context,
-    }]));
+    writeln!(log.lock().unwrap(), "{cwd_diagnostics}\n{launch_context}").ok();
+    on_event(GameEvent::Output(
+        [cwd_diagnostics, launch_context]
+            .into_iter()
+            .map(|text| LogLine {
+                level: super::logparse::Level::Info,
+                text,
+            })
+            .collect(),
+    ));
     super::game_window::on_spawn(child.id(), plan.maximize_window);
 
     let on_event = Arc::new(on_event);
@@ -382,7 +390,7 @@ pub(super) fn spawn_with_session(
                 diagnostics.check_dlls(&source, &exe, |path| {
                     let mut probe = Command::new(path);
                     probe
-                        .current_dir(game_cwd(&game_dir))
+                        .current_dir(&game_dir)
                         .envs(crate::gpu_preference::env(high_performance_gpu));
                     probe
                 });
@@ -529,6 +537,7 @@ fn exit_code(status: &std::process::ExitStatus) -> Option<i32> {
 /// after a short-lived caller (e.g. the CLI) exits. Returns the pid.
 pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     log::info!("launching (detached): {}", plan.redacted_command());
+    let (cwd, canonical_cwd) = validated_game_cwd(&plan.game_dir)?;
     let runtime_lock = lock_launch_runtime(plan)?;
     if let Some(parent) = plan.log_file.parent() {
         std::fs::create_dir_all(parent).at(parent)?;
@@ -550,10 +559,11 @@ pub fn spawn_detached(plan: &LaunchPlan) -> Result<u32> {
     let (args, argfile) = command_args(plan, &launch_id)?;
     let other_instance = super::instance_probe::running_on(&plan.game_dir);
     let start = |exe: &Path| {
+        writeln!(&log, "{}", game_cwd_diagnostics(&cwd, &canonical_cwd, exe))?;
         Command::new(exe)
             .args(&args)
             .envs(crate::gpu_preference::env(plan.high_performance_gpu))
-            .current_dir(game_cwd(&plan.game_dir))
+            .current_dir(&cwd)
             .stdin(Stdio::null())
             .stdout(log.try_clone()?)
             .stderr(log_err.try_clone()?)
@@ -785,31 +795,54 @@ fn release_version(java: &Path) -> String {
         .unwrap_or_else(|| "unknown".into())
 }
 
-/// The folder the game process starts in. Minecraft gets its folders as absolute arguments, but Java
-/// itself fails at startup ("Could not determine current working directory") when it starts inside a
-/// Flatpak document-portal mount (`/run/user/<uid>/doc/...`, where a data folder picked in the file
-/// chooser lives), because the mount can't answer `getcwd`. There it starts in the home folder instead.
-fn game_cwd(game_dir: &Path) -> PathBuf {
-    if cfg!(target_os = "linux") && is_portal_path(game_dir) {
+/// Minecraft gets its folders as absolute arguments. On a document-portal mount, Java can still
+/// fail to resolve its own working directory, so start it in the home folder when available.
+fn validated_game_cwd(game_dir: &Path) -> Result<(PathBuf, PathBuf)> {
+    let canonical = listable_canonical_dir(game_dir)?;
+    if is_document_portal_path(game_dir) || is_document_portal_path(&canonical) {
         let home = std::env::var_os("HOME").map(PathBuf::from);
         if let Some(home) = home.filter(|h| h.is_dir()) {
+            let canonical_home = listable_canonical_dir(&home)?;
             log::warn!(
                 "{} is a document-portal folder; starting the game in {} so Java can read its working directory",
                 game_dir.display(),
                 home.display()
             );
-            return home;
+            return Ok((home, canonical_home));
         }
     }
-    game_dir.to_path_buf()
+    Ok((game_dir.to_path_buf(), canonical))
 }
 
-fn is_portal_path(path: &Path) -> bool {
-    let mut parts = path.components().skip(1).map(|c| c.as_os_str());
-    parts.next().is_some_and(|p| p == "run")
-        && parts.next().is_some_and(|p| p == "user")
-        && parts.next().is_some()
-        && parts.next().is_some_and(|p| p == "doc")
+fn listable_canonical_dir(path: &Path) -> Result<PathBuf> {
+    let folder_error = |source| crate::Error::GameWorkingDirectory {
+        path: path.to_path_buf(),
+        source,
+    };
+    let canonical = path.canonicalize().map_err(folder_error)?;
+    // A trailing "." also checks search permission on Unix, even for an empty directory.
+    std::fs::read_dir(path.join("."))
+        .and_then(|mut entries| entries.next().transpose())
+        .map_err(folder_error)?;
+    Ok(canonical)
+}
+
+fn game_cwd_diagnostics(cwd: &Path, canonical: &Path, exe: &Path) -> String {
+    let major = exe
+        .canonicalize()
+        .ok()
+        .as_deref()
+        .and_then(read_release)
+        .or_else(|| read_release(exe))
+        .and_then(|release| java_major(&release))
+        .map_or_else(|| "unknown".to_owned(), |major| major.to_string());
+    format!(
+        "[Arctic diagnostics] cwd={}; canonical cwd={}; Java executable={}; Java major={major}",
+        cwd.display(),
+        canonical.display(),
+        exe.display()
+    )
+    .replace(['\r', '\n'], " ")
 }
 
 fn lock_launch_runtime(plan: &LaunchPlan) -> Result<Option<File>> {
@@ -1178,8 +1211,15 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn nonzero_exit_is_not_marked_as_a_requested_stop() {
-        let (_dir, _game, rx) = test_process("exit 1");
+        let (dir, _game, rx) = test_process("exit 1");
         assert_eq!(process_exit(&rx), (Some(1), false));
+        let log = std::fs::read_to_string(dir.path().join("game.log")).unwrap();
+        assert!(log.contains(&format!(
+            "[Arctic diagnostics] cwd={}; canonical cwd={}; Java executable={}; Java major=unknown",
+            dir.path().display(),
+            dir.path().canonicalize().unwrap().display(),
+            dir.path().join("test-game").display()
+        )));
     }
 
     #[cfg(unix)]
@@ -1246,13 +1286,49 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn portal_folders_are_recognized() {
-        assert!(is_portal_path(Path::new(
+        assert!(is_document_portal_path(Path::new(
             "/run/user/1000/doc/AbC/Minecraft/Arctic Launcher"
         )));
-        assert!(!is_portal_path(Path::new("/run/user/1000/gvfs/x")));
-        assert!(!is_portal_path(Path::new("/home/u/.var/app/doc/x")));
+        for path in [
+            "run/user/1000/doc/x",
+            "/run/user/alice/doc/x",
+            "/run/user/1000/gvfs/x",
+        ] {
+            assert!(!is_document_portal_path(Path::new(path)));
+        }
+    }
+
+    #[test]
+    fn both_launch_paths_reject_a_missing_or_non_directory_cwd() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("file");
+        std::fs::write(&file, "").unwrap();
+        for game_dir in [dir.path().join("missing"), file] {
+            let plan = LaunchPlan {
+                java: dir.path().join("java"),
+                args: Vec::new(),
+                game_dir: game_dir.clone(),
+                log_file: dir.path().join("game.log"),
+                high_performance_gpu: false,
+                maximize_window: false,
+                managed_runtime: None,
+                custom_max_heap: false,
+                secrets: Vec::new(),
+            };
+            for error in [
+                spawn(&plan, |_| {}).unwrap_err(),
+                spawn_detached(&plan).unwrap_err(),
+            ] {
+                assert!(matches!(
+                    error,
+                    crate::Error::GameWorkingDirectory { path, .. } if path == game_dir
+                ));
+            }
+            assert!(!plan.log_file.exists());
+        }
     }
 
     #[test]

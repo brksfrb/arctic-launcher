@@ -956,6 +956,10 @@ impl ArcticApp {
                     detail,
                 )
             }
+            "Java couldn't open the game folder" => (
+                t!("tasks.java_couldnt_open_the_game_folder").into(),
+                t!("tasks.java_game_folder_help").into(),
+            ),
             "Minecraft ran out of memory and froze" => {
                 let mut detail = t!("tasks.the_game_froze_with_memory_pressure").to_string();
                 if d.detail.contains("Arctic capped the memory") {

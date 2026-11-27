@@ -21,6 +21,13 @@ pub enum Error {
         source: std::io::Error,
     },
 
+    #[error("Could not open the game's working folder at {path}. {source}")]
+    GameWorkingDirectory {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
     #[error("invalid data: {0}")]
     Json(#[from] serde_json::Error),
 
