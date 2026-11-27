@@ -17,17 +17,31 @@ fn sha1(bytes: &[u8]) -> String {
 }
 
 fn prepare_with_damaged_library(request_repair: bool, library: &str, failed_download: bool) {
+    let good = jar_with_class("example/Library.class");
+    let mut bad = good.clone();
+    let payload = bad
+        .windows(4)
+        .position(|b| b == b"\xca\xfe\xba\xbe")
+        .unwrap();
+    bad[payload] ^= 1;
     prepare_with_library(
+        LibraryTarget::Fabric,
         request_repair,
         library,
         failed_download,
-        b"wrong",
-        b"right",
+        &bad,
+        &good,
         true,
     );
 }
 
+enum LibraryTarget<'a> {
+    Vanilla(&'a str),
+    Fabric,
+}
+
 fn prepare_with_library(
+    target: LibraryTarget,
     request_repair: bool,
     library: &str,
     failed_download: bool,
@@ -43,11 +57,10 @@ fn prepare_with_library(
     let url = format!("http://{}/", listener.local_addr().unwrap());
     let stopped = Arc::new(AtomicBool::new(false));
     let stop_server = stopped.clone();
-    let response = if failed_download {
-        b"wrong".to_vec()
-    } else {
-        replacement.to_vec()
-    };
+    let mut response = replacement.to_vec();
+    if failed_download {
+        response[0] ^= 1;
+    }
     let server = std::thread::spawn(move || {
         let mut downloads = 0;
         while !stop_server.load(Ordering::Relaxed) {
@@ -85,29 +98,59 @@ fn prepare_with_library(
     let index = br#"{"objects":{}}"#;
     fs::create_dir_all(dirs.assets().join("indexes")).unwrap();
     fs::write(dirs.assets().join("indexes/test.json"), index).unwrap();
-    let vanilla = json!({
-        "id": "1.21.4", "mainClass": "net.minecraft.client.main.Main",
+    let (version, loader) = match target {
+        LibraryTarget::Vanilla(version) => (version, Loader::Vanilla),
+        LibraryTarget::Fabric => (
+            "1.21.4",
+            Loader::Fabric {
+                version: "0.19.5".into(),
+            },
+        ),
+    };
+    let client = jar_with_class("net/minecraft/client/main/Main.class");
+    let mut vanilla = json!({
+        "id": version, "mainClass": "net.minecraft.client.main.Main",
         "arguments": {"jvm": ["-cp", "${classpath}"], "game": []},
         "javaVersion": {"component": "java-runtime-delta", "majorVersion": 21},
         "assetIndex": {"id": "test", "url": url, "sha1": sha1(index), "size": index.len()},
-        "downloads": {"client": {"url": url, "sha1": sha1(b"right"), "size": 5}},
+        "downloads": {"client": {"url": url, "sha1": sha1(&client), "size": client.len()}},
         "libraries": []
     });
     let loader_id = "fabric-loader-0.19.5-1.21.4";
-    let mut profile = json!({
-        "id": loader_id, "inheritsFrom": "1.21.4",
-        "mainClass": "net.fabricmc.loader.impl.launch.knot.KnotClient",
-        "libraries": [{"name": library, "url": url}]
-    });
-    if checksummed {
-        profile["libraries"][0]["sha1"] = json!(sha1(replacement));
-        profile["libraries"][0]["size"] = json!(replacement.len());
+    let mut library_entry = json!({"name": library, "url": url});
+    if matches!(target, LibraryTarget::Vanilla(_)) {
+        library_entry = json!({
+            "name": library,
+            "downloads": {"artifact": {"url": url, "sha1": sha1(replacement), "size": replacement.len()}},
+        });
+        vanilla["libraries"] = json!([library_entry]);
+    } else {
+        if checksummed {
+            library_entry["sha1"] = json!(sha1(replacement));
+            library_entry["size"] = json!(replacement.len());
+        }
+        let profile = json!({
+            "id": loader_id, "inheritsFrom": version,
+            "mainClass": "net.fabricmc.loader.impl.launch.knot.KnotClient",
+            "libraries": [library_entry],
+        });
+        fs::create_dir_all(dirs.version_dir(loader_id)).unwrap();
+        save_json(
+            &dirs
+                .version_dir(loader_id)
+                .join(format!("{loader_id}.json")),
+            &profile,
+        )
+        .unwrap();
     }
-    for (id, metadata) in [("1.21.4", &vanilla), (loader_id, &profile)] {
-        fs::create_dir_all(dirs.version_dir(id)).unwrap();
-        save_json(&dirs.version_dir(id).join(format!("{id}.json")), metadata).unwrap();
-        fs::write(dirs.version_dir(id).join(format!("{id}.jar")), b"right").unwrap();
-    }
+    fs::create_dir_all(dirs.version_dir(version)).unwrap();
+    let version_json = dirs.version_dir(version).join(format!("{version}.json"));
+    save_json(&version_json, &vanilla).unwrap();
+    fs::write(
+        dirs.version_dir(version).join(format!("{version}.jar")),
+        client,
+    )
+    .unwrap();
     let jar = dirs
         .libraries()
         .join(crate::versions::maven_path(library).unwrap());
@@ -117,21 +160,20 @@ fn prepare_with_library(
     fs::write(&java, b"not executed").unwrap();
     let instance = Instance {
         id: "repair-test".into(),
-        loader: Loader::Fabric {
-            version: "0.19.5".into(),
-        },
+        loader,
         arctic_mod: false,
         performance: false,
         own_settings: true,
         java_path: Some(java),
-        ..Instance::vanilla_default()
+        builtin: false,
+        ..Instance::arctic_default()
     };
     let entry = VersionEntry {
-        id: "1.21.4".into(),
+        id: version.into(),
         kind: VersionKind::Release,
         url,
         release_time: String::new(),
-        sha1: crate::net::sha1_file(&dirs.version_dir("1.21.4").join("1.21.4.json")).unwrap(),
+        sha1: crate::net::sha1_file(&version_json).unwrap(),
     };
     let account = crate::auth::offline::create("RepairTest").unwrap();
     let settings = Settings::default();
@@ -171,7 +213,7 @@ fn prepare_with_library(
     assert_eq!(
         fs::read(&jar).unwrap(),
         replacement,
-        "loader library must be repaired after the vanilla pass"
+        "repair the library before giving its path to Java"
     );
     assert_eq!(
         downloads,
@@ -205,7 +247,31 @@ fn a_failed_loader_download_keeps_repair_pending() {
     prepare_with_damaged_library(true, "example:loader-dependency:1", true);
 }
 
-fn jar_with_class(entry: &str) -> Vec<u8> {
+#[test]
+fn same_size_jar_with_a_damaged_zip_end_is_replaced_on_play() {
+    let good = jar_with_class("org/apache/logging/log4j/core/Logger.class");
+    let mut broken = good.clone();
+    let end_record = broken.len() - 22;
+    assert_eq!(&broken[end_record..end_record + 4], b"PK\x05\x06");
+    broken[end_record..].fill(0);
+    for target in [
+        LibraryTarget::Vanilla("1.8.9"),
+        LibraryTarget::Vanilla("1.21.1"),
+        LibraryTarget::Fabric,
+    ] {
+        prepare_with_library(
+            target,
+            false,
+            "org.apache.logging.log4j:log4j-core:2.22.1",
+            false,
+            &broken,
+            &good,
+            true,
+        );
+    }
+}
+
+pub(super) fn jar_with_class(entry: &str) -> Vec<u8> {
     let mut jar = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     jar.start_file(
         entry,
@@ -234,6 +300,7 @@ fn damaged_unhashed_loader_is_replaced_without_a_repair_request() {
         &bad_crc,
     ] {
         prepare_with_library(
+            LibraryTarget::Fabric,
             false,
             "net.fabricmc:fabric-loader:0.20.1",
             false,
@@ -248,6 +315,7 @@ fn damaged_unhashed_loader_is_replaced_without_a_repair_request() {
 fn a_healthy_unhashed_loader_is_not_downloaded_again() {
     let good = jar_with_class("net/fabricmc/loader/impl/launch/knot/KnotClient.class");
     prepare_with_library(
+        LibraryTarget::Fabric,
         false,
         "net.fabricmc:fabric-loader:0.20.1",
         false,
@@ -262,6 +330,7 @@ fn a_checksummed_loader_is_repaired_without_a_repair_request() {
     let good = jar_with_class("net/fabricmc/loader/impl/launch/knot/KnotClient.class");
     let broken = vec![0; good.len()];
     prepare_with_library(
+        LibraryTarget::Fabric,
         false,
         "net.fabricmc:fabric-loader:0.20.1",
         false,
@@ -275,6 +344,7 @@ fn a_checksummed_loader_is_repaired_without_a_repair_request() {
 fn an_invalid_unhashed_replacement_stops_launch_and_keeps_repair_pending() {
     let good = jar_with_class("net/fabricmc/loader/impl/launch/knot/KnotClient.class");
     prepare_with_library(
+        LibraryTarget::Fabric,
         true,
         "net.fabricmc:fabric-loader:0.20.1",
         true,

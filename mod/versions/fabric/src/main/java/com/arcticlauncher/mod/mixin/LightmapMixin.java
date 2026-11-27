@@ -2,13 +2,13 @@ package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.feature.Features;
+//#if MC >= 1.19
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.client.Minecraft;
-//#if MC >= 1.19
 import net.minecraft.client.OptionInstance;
 //#else
-import org.spongepowered.asm.mixin.injection.Redirect;
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 //#endif
 //#if MC >= 26.1
 import net.minecraft.client.renderer.LightmapRenderStateExtractor;
@@ -45,10 +45,10 @@ abstract class LightmapMixin {
 	}
 	//#else
 	/** Before 1.19 brightness was a plain number on the options. */
-	@Redirect(method = "updateLightTexture",
+	@ModifyExpressionValue(method = "updateLightTexture",
 			at = @At(value = "FIELD", target = "Lnet/minecraft/client/Options;gamma:D"))
-	private double arctic$gamma(net.minecraft.client.Options options) {
-		return ArcticClient.features().fullbright() ? Features.FULLBRIGHT_GAMMA : options.gamma;
+	private double arctic$gamma(double gamma) {
+		return ArcticClient.features().fullbright() ? Features.FULLBRIGHT_GAMMA : gamma;
 	}
 	//#endif
 }

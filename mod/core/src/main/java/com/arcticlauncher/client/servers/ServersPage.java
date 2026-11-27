@@ -265,7 +265,7 @@ public final class ServersPage extends Page {
 
 	private void buildForm() {
 		boolean direct = mode == Mode.DIRECT;
-		formLayout = new ServerFormLayout(width, height, direct);
+		formLayout = new ServerFormLayout(width, height, direct, BUTTON_H, GAP);
 		boolean newForm = addressField == null;
 		if (newForm) {
 			initForm(direct);
@@ -510,8 +510,8 @@ public final class ServersPage extends Page {
 		String title = mode == Mode.DIRECT ? tr("selectServer.direct", Lang.t("servers.direct_connection"))
 				: mode == Mode.EDIT ? tr("selectServer.edit", Lang.t("servers.edit")) : tr("selectServer.add", Lang.t("servers.add_server"));
 		ServerFormLayout.Bounds titleBox = formLayout.title;
-		Draw.centered(g, Draw.fit(g, title, titleBox.width), titleBox.x + titleBox.width / 2,
-				titleBox.y + (titleBox.height - 8) / 2, s.text, false);
+		int titleX = panel.x + panel.width / 2;
+		Draw.centered(g, Draw.fitCentered(g, title, panel.width - 8, titleX, titleBox.y), titleX, titleBox.y, s.text, false);
 	}
 
 	private void drawDiscover(Gfx g, Style s, int left, int top, int bottom, int mx, int my) {

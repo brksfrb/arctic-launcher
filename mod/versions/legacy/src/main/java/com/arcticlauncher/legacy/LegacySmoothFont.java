@@ -32,6 +32,8 @@ public final class LegacySmoothFont {
 	private static final float SIZE = 8.5f;
 	/** Where the baseline sits below the top of a line, in GUI pixels (Minecraft's font: 7). */
 	private static final float BASELINE = 7f;
+	private static final float BITMAP_CAP_HEIGHT = 7f;
+	private static final float UNICODE_CAP_HEIGHT = 5f;
 	/** Inter's space is narrow for Minecraft text; the newer versions use this too. */
 	private static final float SPACE = 2.5f;
 	private static final int PAD = 1;
@@ -97,16 +99,33 @@ public final class LegacySmoothFont {
 	public static void beginDraw() {
 		// The GUI-size atlas establishes the divisor, including the first draw after a GUI-scale change.
 		ready();
+		readTextTransform();
+	}
+
+	private static void readTextTransform() {
 		GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, MODEL);
 		GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, PROJECTION);
 		GL11.glGetInteger(GL11.GL_VIEWPORT, VIEWPORT);
 		com.arcticlauncher.client.feature.TextPixelScale.multiply(PROJECTION, MODEL, CLIP);
 	}
 
+	static boolean snapOrigin(float x, float y, float[] out) {
+		return com.arcticlauncher.client.feature.TextPixelScale.snapOrigin(
+				CLIP, x, y, VIEWPORT.get(2), VIEWPORT.get(3), out);
+	}
+
+	static float badgePixels(float x, float y) {
+		readTextTransform();
+		return projectedPixels(x, y);
+	}
+
+	private static float projectedPixels(float x, float y) {
+		return com.arcticlauncher.client.feature.TextPixelScale.projected(CLIP, x, y, VIEWPORT.get(2), VIEWPORT.get(3));
+	}
+
 	/** Each layer keeps its own anchor for the perspective divide, without another driver read. */
 	public static void preparing(float x, float y) {
-		drawScale = com.arcticlauncher.client.feature.TextPixelScale.projected(CLIP, x, y,
-				VIEWPORT.get(2), VIEWPORT.get(3)) / Math.max(1, scale);
+		drawScale = projectedPixels(x, y) / Math.max(1, scale);
 	}
 
 	/**
@@ -228,6 +247,15 @@ public final class LegacySmoothFont {
 			return null;
 		}
 		return c < glyphs.length ? glyphs[c] : null;
+	}
+
+	static float tabCapCenter(boolean unicode) {
+		// PlayerListHud passes the row's top to TextRenderer. The 9-pixel row
+		// pitch includes a gap, and the 8-pixel bitmap cell includes blank rows.
+		// Both vanilla atlases put the bottom edge of a capital at y + 7.
+		if (unicode) return BASELINE - UNICODE_CAP_HEIGHT / 2f;
+		Glyph cap = glyph('H');
+		return cap == null ? BASELINE - BITMAP_CAP_HEIGHT / 2f : BASELINE - cap.top + cap.height / 2f;
 	}
 
 	public static float advance(char c) {

@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::time::{Instant, SystemTime};
 
 use arctic_core::crash::{self, Diagnosis};
+use arctic_core::launch::exit_diagnostics::{DLL_NOT_FOUND, ExitDiagnostics};
 use arctic_core::launch::logparse::{Level, LogLine};
 use arctic_core::launch::startup::Stage;
 use arctic_core::launch::{GameEvent, GameHandle};
@@ -60,6 +61,7 @@ pub struct Run {
     early: Vec<GameEvent>,
     /// The crash, ready to send if the player agrees.
     crash_report: Option<crash::Report>,
+    exit_diagnostics: ExitDiagnostics,
     /// How Java was started (flags, classpath files), for the crash report.
     pub java: Option<String>,
     /// The player requested a stop; the resulting exit is not a crash.
@@ -146,8 +148,8 @@ impl Run {
         if let Some(summary) = &hang_at_exit {
             lines.push(summary);
         }
-        let written = newest_crash_report(&self.game_dir, self.started)
-            .or_else(|| newest_hs_err(&self.game_dir, self.started));
+        let written = newest_hs_err(&self.game_dir, self.started)
+            .or_else(|| newest_crash_report(&self.game_dir, self.started));
         // What the launcher itself logged (a failed sign-in, a download, a launch step) often explains
         // a crash the game's own log doesn't.
         let launcher = crate::logbook::snapshot_if_changed(0)
@@ -163,14 +165,17 @@ impl Run {
             ),
             None => format!("{j}\n{}", self.run_summary(written.is_some())),
         });
-        crash::Report::build(
+        crash::Report::build_with_run(
             &self.version,
             "",
             title,
             &lines,
             &launcher,
             written.as_deref(),
-            java.as_deref(),
+            crash::ReportRun {
+                java: java.as_deref(),
+                diagnostics: Some(&self.exit_diagnostics),
+            },
         )
     }
 
@@ -190,7 +195,7 @@ impl Run {
         format!(
             "run: ended after {lived} s; {count} lines printed; logs/latest.log: {own}; crash report or hs_err: {value}", // i18n-ignore: diagnostics
             lived = lived,
-            count = self.log.len(),
+            count = self.exit_diagnostics.output.count(),
             own = own,
             value = if has_report { "yes" } else { "none" }
         )
@@ -211,6 +216,9 @@ impl Run {
 
     fn exit_diagnosis(&self, code: Option<i32>, shutdown_watchdog: bool) -> Option<Diagnosis> {
         let code = code.filter(|c| *c != 0 && !shutdown_watchdog)?;
+        if code == DLL_NOT_FOUND {
+            return Some(self.exit_diagnostics.dll_diagnosis());
+        }
         arctic_core::crash_conflicts::diagnose_exit_in_with_java(
             &self.crash_text(),
             code,
@@ -229,12 +237,6 @@ impl Run {
             .map(|l| l.text.as_str())
             .collect::<Vec<_>>()
             .join("\n");
-        if let Some(report) = newest_crash_report(&self.game_dir, self.started)
-            .or_else(|| newest_hs_err(&self.game_dir, self.started))
-        {
-            text.push('\n');
-            text.push_str(&report);
-        }
         let own_log = latest_log_tail(&self.game_dir, self.started);
         if !own_log.is_empty() {
             text.push('\n');
@@ -257,6 +259,12 @@ impl Run {
             }) {
                 text.push_str(&format!("\n{}", line.text));
             }
+        }
+        if let Some(report) = newest_hs_err(&self.game_dir, self.started)
+            .or_else(|| newest_crash_report(&self.game_dir, self.started))
+        {
+            text.push('\n');
+            text.push_str(&report);
         }
         text
     }
@@ -316,38 +324,146 @@ fn fresh_freeze_files(game_dir: &std::path::Path, since: SystemTime) -> Vec<Stri
 }
 
 /// Keep the header and lock/deadlock evidence before spending bytes on sampled stacks.
-/// An unusually large owner stack can itself exceed the budget; its lock and cycle edges come first.
+/// For a parked client without a known owner, retain likely worker stacks alongside the hot frames.
 fn freeze_snapshot(text: &str) -> String {
     const LIMIT: usize = 3 * 1024;
     // i18n-ignore: crash-report diagnostic, not UI text
     const TRUNCATED: &str = "\n[snapshot truncated; full file saved locally]";
+    const WORKER_HEADING: &str = "\n== Likely awaited threads (from the first sample) ==\n"; // i18n-ignore: diagnostics
+    const MIN_WORKER_BYTES: usize = 128;
     if text.len() <= LIMIT {
         return text.to_owned();
     }
     let budget = LIMIT - TRUNCATED.len();
     let header_end = text.find("\n== ").unwrap_or(text.len());
     let (header, body) = text.split_at(header_end);
-    let blocked_start = body.find("\n== Blocked on ==");
+    let blocked = freeze_section(body, "\n== Blocked on ==");
     let mut snapshot = String::with_capacity(LIMIT);
-    if let Some(start) = blocked_start {
-        let end = body[start + 1..]
-            .find("\n== ")
-            .map_or(body.len(), |offset| start + 1 + offset);
-        // Keep both in full whenever they fit; reserve lock evidence for oversized headers/stacks.
-        let header_limit = if header.len() + end - start <= budget {
-            budget
-        } else {
-            budget.min(1024)
-        };
-        append_snapshot_part(&mut snapshot, header, header_limit);
-        append_snapshot_part(&mut snapshot, &body[start..end], budget);
-        append_snapshot_part(&mut snapshot, &body[..start], budget);
-        append_snapshot_part(&mut snapshot, &body[end..], budget);
+    // Keep both in full whenever they fit; reserve lock evidence for oversized headers/stacks.
+    let header_limit = if blocked.is_some_and(|(_, section)| header.len() + section.len() > budget)
+    {
+        1024
     } else {
-        append_snapshot_part(&mut snapshot, text, budget);
+        budget
+    };
+    append_snapshot_part(&mut snapshot, header, header_limit);
+    if let Some((_, section)) = blocked {
+        append_snapshot_part(&mut snapshot, section, budget);
+    }
+    let parked = header.lines().next().is_some_and(|line| {
+        line.split_once(", mostly in ").is_some_and(|(_, frame)| {
+            frame.contains(".Unsafe.park(") || frame.contains(".LockSupport.park")
+        })
+    });
+    let owner_known = blocked.is_some_and(|(_, section)| section.contains("\n  Owner \""));
+    if parked
+        && !owner_known
+        && budget - snapshot.len() >= 2 * (WORKER_HEADING.len() + MIN_WORKER_BYTES)
+        && let Some(workers) = freeze_section(body, "\n== All other threads")
+            .map(|(_, others)| awaited_worker_stacks(others))
+            .filter(|workers| !workers.is_empty())
+    {
+        let hot = freeze_section(body, "\n== Where the time went");
+        if let Some((_, section)) = hot {
+            let hot_limit = snapshot.len() + (budget - snapshot.len()).div_ceil(2);
+            append_snapshot_lines(&mut snapshot, section, hot_limit);
+        }
+        snapshot.push_str(WORKER_HEADING);
+        let worker_bytes = budget - snapshot.len();
+        let worker_count = workers.len().min(worker_bytes / MIN_WORKER_BYTES);
+        let worker_budget = worker_bytes / worker_count;
+        for worker in workers.into_iter().take(worker_count) {
+            let limit = snapshot.len() + worker_budget;
+            append_snapshot_lines(&mut snapshot, worker, limit);
+        }
+        if let Some((_, section)) = freeze_section(body, "\n== Distinct client-thread stacks") {
+            append_snapshot_part(&mut snapshot, section, budget);
+        }
+    } else if let Some((start, section)) = blocked {
+        append_snapshot_part(&mut snapshot, &body[..start], budget);
+        append_snapshot_part(&mut snapshot, &body[start + section.len()..], budget);
+    } else {
+        append_snapshot_part(&mut snapshot, body, budget);
     }
     snapshot.push_str(TRUNCATED);
     snapshot
+}
+
+fn freeze_section<'a>(body: &'a str, heading: &str) -> Option<(usize, &'a str)> {
+    let start = body.find(heading)?;
+    let end = body[start + 1..]
+        .find("\n== ")
+        .map_or(body.len(), |offset| start + 1 + offset);
+    Some((start, &body[start..end]))
+}
+
+fn awaited_worker_stacks(others: &str) -> Vec<&str> {
+    let mut workers = Vec::new();
+    for (start, _) in others.match_indices("\nthread \"") {
+        let rest = &others[start + 1..];
+        let stack = rest
+            .find("\nthread \"")
+            .map_or(rest, |end| &rest[..end + 1]);
+        let Some((header, frames)) = stack.split_once('\n') else {
+            continue;
+        };
+        let Some((name, state)) = header
+            .strip_prefix("thread \"")
+            .and_then(|header| header.rsplit_once("\" "))
+        else {
+            continue;
+        };
+        let kind = if name.starts_with("Worker-Main") {
+            0
+        } else if name == "Server thread" {
+            1
+        } else if name.starts_with("Download")
+            || name.starts_with("IO-Worker")
+            || name.starts_with("Worker-IO")
+        {
+            2
+        } else {
+            continue;
+        };
+        if frames.is_empty()
+            || ["ForkJoinPool.awaitWork(", "ThreadPoolExecutor.getTask("]
+                .iter()
+                .any(|idle| frames.contains(idle))
+        {
+            continue;
+        }
+        workers.push((state != "RUNNABLE", kind, name, stack));
+    }
+    workers.sort_unstable();
+    let mut seen = [false; 3];
+    let mut selected = Vec::new();
+    // Keep one from each pool first, then use any slots left for additional workers.
+    workers.retain(|&(_, kind, _, stack)| {
+        if std::mem::replace(&mut seen[kind], true) {
+            return true;
+        }
+        selected.push(stack);
+        false
+    });
+    selected.extend(
+        workers
+            .into_iter()
+            .take(3 - selected.len())
+            .map(|(_, _, _, stack)| stack),
+    );
+    selected
+}
+
+fn append_snapshot_lines(snapshot: &mut String, part: &str, limit: usize) {
+    for line in part
+        .split_inclusive('\n')
+        .take_while(|line| line.ends_with('\n'))
+    {
+        if snapshot.len() + line.len() > limit {
+            break;
+        }
+        snapshot.push_str(line);
+    }
 }
 
 fn append_snapshot_part(snapshot: &mut String, part: &str, limit: usize) {
@@ -530,10 +646,15 @@ impl Runs {
             started: SystemTime::now(),
             early: Vec::new(),
             crash_report: None,
+            exit_diagnostics: ExitDiagnostics::default(),
             java: None,
             killed: false,
         });
         self.next_id
+    }
+
+    pub fn cancel(&mut self, id: LaunchId) {
+        self.list.retain(|run| run.id != id);
     }
 
     pub fn get(&self, id: LaunchId) -> Option<&Run> {
@@ -585,6 +706,13 @@ impl Runs {
     /// A game process is up (not just preparing).
     pub fn any_game(&self) -> bool {
         self.list.iter().any(|r| r.game().is_some())
+    }
+
+    /// A game process of this instance is up (not just preparing).
+    pub fn game_running(&self, instance_id: &str) -> bool {
+        self.list
+            .iter()
+            .any(|r| r.instance_id == instance_id && r.game().is_some())
     }
 
     pub fn instance_active(&self, instance_id: &str) -> bool {
@@ -690,17 +818,24 @@ impl ArcticApp {
                 killed,
                 played,
                 ended_at,
+                diagnostics,
             } => {
                 if run.game().is_none() {
                     return;
                 }
                 let code = run.reported_exit_code(code, killed);
+                run.exit_diagnostics = diagnostics;
                 run.state = RunState::Ended;
+                let instance_id = run.instance_id.clone();
                 self.bridge.forget_launch(id);
                 // The game threw its unfinished recording away itself unless it crashed or
                 // was killed; either way nothing is writing it now (unless another copy of
                 // the instance still runs in the same folder).
                 let game_dir = run.game_dir.clone();
+                let still_running = self.runs.game_running(&instance_id);
+                self.inst
+                    .restart_pending
+                    .exited(&instance_id, still_running);
                 if !self
                     .runs
                     .list
@@ -736,9 +871,16 @@ impl ArcticApp {
                 }
                 self.playtime = arctic_core::playtime::Stats::load(&self.dirs);
                 let diagnosis = run.exit_diagnosis(code, watchdog);
+                let shader_loading = diagnosis
+                    .as_ref()
+                    .is_some_and(|d| d.title == crash::IRIS_SHADER_LOADING_TITLE);
                 if let Some(d) = &diagnosis {
                     run.push_log([LogLine {
-                        level: Level::Error,
+                        level: if shader_loading {
+                            Level::Warn
+                        } else {
+                            Level::Error
+                        },
                         text: format!("──── Arctic: {} — {} ────", d.title, d.detail),
                     }]);
                     if d.repair {
@@ -748,7 +890,8 @@ impl ArcticApp {
                         arctic_core::launch::startup_cache::turn_off(&run.game_dir);
                     }
                 }
-                let crashed = matches!(code, Some(c) if c != 0 && !watchdog);
+                let reportable = matches!(code, Some(c) if c != 0 && !watchdog);
+                let crashed = reportable && !shader_loading;
                 let native_place = crashed
                     .then(|| arctic_core::stability::place(&run.crash_text()))
                     .flatten();
@@ -758,6 +901,8 @@ impl ArcticApp {
                         text: "Need help with this crash? Join our Discord: https://discord.arcticlauncher.com"
                             .into(),
                     }]);
+                }
+                if reportable {
                     let report =
                         run.crash_report(diagnosis.as_ref().map_or("", |d| d.title.as_str()), code);
                     self.offer_crash_report(id, report);
@@ -801,6 +946,16 @@ impl ArcticApp {
             return (tf!("tasks.mod_crashed_the_game", name = name), detail);
         }
         match d.title.as_str() {
+            crash::IRIS_SHADER_LOADING_TITLE => {
+                let mut detail = t!("tasks.iris_shader_loading_detail").to_string();
+                if let Some(extra) = d.detail.strip_prefix(crash::IRIS_SHADER_LOADING_DETAIL) {
+                    detail.push_str(extra);
+                }
+                (
+                    t!("tasks.closed_while_iris_was_loading_shaders").into(),
+                    detail,
+                )
+            }
             "Minecraft ran out of memory and froze" => {
                 let mut detail = t!("tasks.the_game_froze_with_memory_pressure").to_string();
                 if d.detail.contains("Arctic capped the memory") {
@@ -865,12 +1020,21 @@ impl ArcticApp {
             Some(c) => {
                 // A crash the launcher can fix gets a "Fix it" button instead of the logs one.
                 let fix = diagnosis.as_ref().and_then(|d| d.fix.clone());
-                let (heading, body) = match diagnosis {
+                let (kind, heading, body) = match diagnosis {
                     Some(d) => {
                         let (title2, body) = Self::localized_diagnosis(&d);
-                        (tf!("tasks.crashed", title = title, title2 = title2), body)
+                        if d.title == crash::IRIS_SHADER_LOADING_TITLE {
+                            (Kind::Info, title2, body)
+                        } else {
+                            (
+                                Kind::Error,
+                                tf!("tasks.crashed", title = title, title2 = title2),
+                                body,
+                            )
+                        }
                     }
                     None => (
+                        Kind::Error,
                         tf!("tasks.closed_unexpectedly", title = title),
                         tf!("tasks.exit_code", c = c),
                     ),
@@ -883,7 +1047,7 @@ impl ArcticApp {
                     None => ToastAction::ShowLogs(id),
                 };
                 self.toasts
-                    .push_with_action(Kind::Error, heading, body, Some(action));
+                    .push_with_action(kind, heading, body, Some(action));
             }
             None => self
                 .toasts
@@ -905,12 +1069,17 @@ impl ArcticApp {
             CrashReports::Never => {}
             CrashReports::Always => self.tasks.send_crash_report(report),
             CrashReports::Ask => {
+                let heading = if report.title == crash::IRIS_SHADER_LOADING_TITLE {
+                    t!("tasks.help_diagnose_this_freeze")
+                } else {
+                    t!("tasks.help_fix_this_crash")
+                };
                 if let Some(run) = self.runs.get_mut(id) {
                     run.crash_report = Some(report);
                 }
                 self.toasts.push_with_action(
                     Kind::Info,
-                    t!("tasks.help_fix_this_crash"),
+                    heading,
                     t!("tasks.send_the_log_to_arctic_your_name_folders_and"),
                     Some(ToastAction::SendCrash(id)),
                 );
@@ -1062,6 +1231,74 @@ mod tests {
     }
 
     #[test]
+    fn threading_dump_and_crash_stacks_survive_a_busy_run_upload() {
+        let dir = tempfile::tempdir().unwrap();
+        let reports = dir.path().join("crash-reports");
+        std::fs::create_dir(&reports).unwrap();
+        let written =
+            include_str!("../../arctic-core/tests/fixtures/threading-detector-with-worker.log")
+                .replace(
+                    "Caused by: java.lang.IllegalStateException: Example inner cause",
+                    &format!(
+                        "{}Caused by: java.lang.IllegalStateException: Example inner cause",
+                        "\tat knot//net.minecraft.class_638.method_2941(class_638.java:364)\r\n"
+                            .repeat(400)
+                    ),
+                )
+                .replace(
+                    "-- Thread dumps --",
+                    &format!(
+                        "-- Affected level --\nDetails:\n\t{}\n\n-- Thread dumps --",
+                        "verbose world state 💠 ".repeat(4000)
+                    ),
+                );
+        std::fs::write(reports.join("crash.txt"), written).unwrap();
+
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.20.1", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        run.java = Some(format!(
+            "Java java, flags: -Xmx4096M {}",
+            "flag ".repeat(1500)
+        ));
+        let noise = format!("[Render thread/INFO]: {}", "frame 💠 ".repeat(140));
+        run.push_log((0..600).map(|_| LogLine {
+            level: Level::Info,
+            text: noise.clone(),
+        }));
+
+        let diagnosis = run.exit_diagnosis(Some(-1), false).unwrap();
+        assert_eq!(diagnosis.mods, ["spark_particles"]);
+        let report = run.crash_report(&diagnosis.title, Some(-1));
+        assert!(report.log.len() <= 47 * 1024);
+        let (_, attachment) = report.log.split_once("---- crash report ----\n").unwrap();
+        for required in [
+            "Description: Accessing PalettedContainer from multiple threads",
+            "Caused by: java.lang.IllegalStateException: Accessing PalettedContainer from multiple threads",
+            "Caused by: java.lang.IllegalStateException: Example inner cause",
+            "class_638.method_2943(class_638.java:383)",
+            "-- Head --\nThread: Render thread\nStacktrace:",
+            "-- Thread dumps --",
+            "BlockSampler.sample(BlockSampler.java:17)",
+            "Mixins in Stacktrace:",
+            "ClientWorldMixin (render.mixins.json)",
+            "Suspected Mods: Render Hooks (render_hooks)",
+        ] {
+            assert!(attachment.contains(required), "missing {required}");
+        }
+        assert_eq!(attachment.matches("method_2941").count(), 400);
+        assert!(!attachment.contains("verbose world state"));
+        assert!(!attachment.contains("Operating System:"));
+        assert!(!attachment.contains("Fabric Mods:"));
+        assert!(report.log.contains("spark_particles 2.0.0"));
+        assert_eq!(
+            crash::diagnose(&report.log).unwrap().mods,
+            ["spark_particles"]
+        );
+    }
+
+    #[test]
     fn registry_warnings_before_latest_log_tail_reach_diagnosis_and_upload() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("logs")).unwrap();
@@ -1098,6 +1335,108 @@ mod tests {
         assert!(
             latest_log_tail(dir.path(), SystemTime::now() + Duration::from_secs(60)).is_empty()
         );
+    }
+
+    #[test]
+    fn report_414_uses_the_jvm_crash_over_the_pehkui_warning() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.16.5", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        let warning = "[16:53:41] [main/WARN]: @Mixin target net.minecraft.block.entity.LecternBlockEntity$1 was not found pehkui.mixins.json:reach.LecternBlockEntityMixin";
+        run.push_log([LogLine {
+            level: Level::Warn,
+            text: warning.into(),
+        }]);
+
+        std::fs::create_dir(dir.path().join("logs")).unwrap();
+        std::fs::write(
+            dir.path().join("logs/latest.log"),
+            format!(
+                "[16:53:40] [main/WARN]: Error loading class: slimeknights/mantle/client/model/connected/ConnectedModel$Baked (java.lang.ClassNotFoundException: null)\n{warning}"
+            ),
+        )
+        .unwrap();
+        let hs_err = r#"#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  EXCEPTION_ACCESS_VIOLATION (0xc0000005) at pc=0x0000004c206fb350, pid=6832, tid=0x0000000000001efc
+#
+# JRE version: OpenJDK Runtime Environment (8.0_512-b09) (build 1.8.0_512-b09)
+# Problematic frame:
+# C  0x0000004c206fb350
+#
+---------------  T H R E A D  ---------------
+
+Current thread (0x000001ad6162a800):  JavaThread "C2 CompilerThread5" daemon [_thread_in_native, id=7932]
+
+Current CompileTask:
+C2:  13971 9500       4       org.objectweb.asm.tree.AnnotationNode::accept (134 bytes)
+"#;
+        std::fs::write(dir.path().join("hs_err_pid6832.log"), hs_err).unwrap();
+
+        let diagnosis = run.exit_diagnosis(Some(1), false).unwrap();
+        assert_eq!(diagnosis.title, "Java's JIT compiler crashed");
+        assert!(diagnosis.mods.is_empty());
+        assert!(!diagnosis.detail.to_lowercase().contains("pehkui"));
+        assert!(
+            diagnosis
+                .detail
+                .contains("org.objectweb.asm.tree.AnnotationNode::accept")
+        );
+        let report = run.crash_report(&diagnosis.title, Some(1));
+        assert_eq!(report.title, diagnosis.title);
+        assert!(
+            report.log.starts_with(
+                "\n---- first error ----\n#  EXCEPTION_ACCESS_VIOLATION (0xc0000005)\n"
+            )
+        );
+        assert!(
+            report
+                .log
+                .contains("matched: #  EXCEPTION_ACCESS_VIOLATION")
+        );
+        assert!(report.log.contains(warning));
+    }
+
+    #[test]
+    fn report_441_uses_the_mod_native_crash_over_earlier_log_errors() {
+        let fixture = include_str!("../../arctic-core/tests/fixtures/crash-441-native-mod.log");
+        let (log, hs_err) = fixture.split_once("\n---- crash report ----\n").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.21.11", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        std::fs::create_dir(dir.path().join("logs")).unwrap();
+        std::fs::write(dir.path().join("logs/latest.log"), log).unwrap();
+        std::fs::write(dir.path().join("hs_err_pid11989.log"), hs_err).unwrap();
+
+        let diagnosis = run.exit_diagnosis(Some(134), false).unwrap();
+        assert_eq!(
+            diagnosis.title,
+            "super_resolution crashed in native library libSuperResolution+linux64+release.so"
+        );
+        assert_eq!(diagnosis.mods, ["super_resolution"]);
+        assert!(
+            diagnosis
+                .detail
+                .contains("Intel(R) Pentium(R) Silver N5000")
+        );
+        assert!(diagnosis.detail.contains("doesn't support"));
+        assert!(
+            diagnosis
+                .detail
+                .contains("Remove super_resolution or replace it")
+        );
+
+        let report = run.crash_report("oωo failed to change the game", Some(134));
+        assert_eq!(report.title, diagnosis.title);
+        assert!(report.log.starts_with(
+            "\n---- first error ----\n#  SIGILL (0x4) in libSuperResolution+linux64+release.so\nJava frame: io.homo.superresolution.thirdparty.nanovg.NanoVGContext.nCreateContextEx\n"
+        ));
+        assert!(report.log.contains("matched: #  SIGILL"));
     }
 
     #[test]
@@ -1260,6 +1599,90 @@ mod tests {
         }
     }
 
+    #[test]
+    fn create_world_report_keeps_likely_workers_within_the_snapshot_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let freezes = dir.path().join("logs/arctic-freezes");
+        std::fs::create_dir_all(&freezes).unwrap();
+        let client =
+            include_str!("../../arctic-core/tests/fixtures/crash-440-create-world-freeze.log");
+        // Report 440 lost the worker section. Add representative first-sample stacks to replay
+        // the upload path from the untrimmed sidecar.
+        let idle = "thread \"Worker-Main-1\" WAITING\n    at java.base/java.util.concurrent.ForkJoinPool.awaitWork(ForkJoinPool.java:1726)\n";
+        let workers = [
+            (
+                "Worker-Main-4",
+                "    at example.PackLoader.read(PackLoader.java:42)",
+            ),
+            (
+                "Server thread",
+                "    at example.WorldSetup.start(WorldSetup.java:12)",
+            ),
+            (
+                "Download-2",
+                "    at example.Download.get(Download.java:42)",
+            ),
+        ];
+        let mut full = format!(
+            "{client}{}\n== All other threads (captured once, at the first sample) ==\n{idle}{}",
+            "    at example.Game.open(Game.java:42)\n".repeat(50),
+            "thread \"Reference Handler\" RUNNABLE\n    at java.base/java.lang.ref.Reference.waitForReferencePendingList(Native Method)\n".repeat(30),
+        );
+        for (name, frame) in workers {
+            full.push_str(&format!("thread \"{name}\" RUNNABLE\n{frame}\n"));
+        }
+        std::fs::write(freezes.join("freeze-440.txt"), full).unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.21.11", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        run.java = Some("Java 21".into());
+
+        run.push_log((1..=3).map(|task| LogLine {
+            level: Level::Error,
+            text: format!(
+                "[15:57:49] [Download-2/ERROR] Task {task} failed\n    java.io.IOException: background error\n{}",
+                "    at example.downloads.BackgroundDownloadWorker.retryRequestAfterTransientFailure(BackgroundDownloadWorker.java:100)\n".repeat(25),
+            ),
+        }));
+        run.push_log([LogLine {
+            level: Level::Info,
+            text: "[15:57:50] [Render thread/INFO] Returned to title screen".into(),
+        }]);
+
+        let snapshots = fresh_freeze_files(dir.path(), run.started);
+        let (_, snapshot) = snapshots[0].split_once('\n').unwrap();
+        assert!(snapshot.len() <= 3 * 1024);
+        assert!(snapshot.contains("Owner unavailable"));
+        assert!(
+            snapshot.find("== Likely awaited threads").unwrap()
+                < snapshot.find("== Distinct client-thread stacks").unwrap()
+        );
+        assert!(!snapshot.contains("Worker-Main-1"));
+        assert!(!snapshot.contains("Reference Handler"));
+        let code = Some(-805306369);
+        let diagnosis = run.exit_diagnosis(code, false).unwrap();
+        let report = run.crash_report(&diagnosis.title, code);
+        assert!(report.title.contains("Create World"));
+        assert!(
+            report
+                .log
+                .contains("duration: 3.00s (still frozen when written)")
+        );
+        assert!(
+            report
+                .log
+                .contains("Hang at exit: client hung for at least 3.00s")
+        );
+        for (name, frame) in workers {
+            assert!(
+                report
+                    .log
+                    .contains(&format!("thread \"{name}\" RUNNABLE\n{frame}"))
+            );
+        }
+    }
+
     const UNFINISHED_FREEZE: &str = "Arctic: game froze for 3.1s, mostly in org.lwjgl.vulkan.VK10.vkQueuePresentKHR(Native Method) [not in a world (menu/loading) - may be normal]\nstarted: 2026-11-13 12:00:00.000\nduration: 3.12s (still frozen when written)\nsamples: 3 client-thread stacks\n== Distinct client-thread stacks (count of samples) ==\n[3x] stack 1\n    at org.lwjgl.vulkan.VK10.vkQueuePresentKHR(Native Method)\n    at example.Game.render(Game.java:42)\n== All other threads (captured once, at the first sample) ==\nthread \"worker\" WAITING\n";
 
     #[test]
@@ -1343,6 +1766,95 @@ mod tests {
         run.killed = true;
         let code = run.reported_exit_code(Some(-805306369), true);
         assert!(run.exit_diagnosis(code, false).is_none());
+    }
+
+    #[test]
+    fn report_436_resolves_the_sampled_package_to_the_installed_mod() {
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let mods = dir.path().join("mods");
+        let freezes = dir.path().join("logs/arctic-freezes");
+        std::fs::create_dir(&mods).unwrap();
+        std::fs::create_dir_all(&freezes).unwrap();
+        let mut jar = zip::ZipWriter::new(
+            std::fs::File::create(mods.join("customrecipe-1.5.2+26.3.jar")).unwrap(),
+        );
+        let options = zip::write::SimpleFileOptions::default();
+        jar.start_file("fabric.mod.json", options).unwrap();
+        jar.write_all(br#"{"id":"customrecipe","name":"Custom Recipe","version":"1.5.2+26.3"}"#)
+            .unwrap();
+        jar.start_file(
+            "fr/zazac1/customrecipe/client/VanillaRecipesScreen.class",
+            options,
+        )
+        .unwrap();
+        jar.finish().unwrap();
+
+        let fixture =
+            include_str!("../../arctic-core/tests/fixtures/crash-436-customrecipe-hang.log");
+        let (_, log) = fixture.split_once("---- game log ----\n").unwrap();
+        let (log, snapshot) = log
+            .split_once("---- logs/arctic-freezes/freeze-436.txt ----\n")
+            .unwrap();
+        let (snapshot, _) = snapshot.split_once("Hang at exit:").unwrap();
+        std::fs::write(freezes.join("freeze-436.txt"), snapshot).unwrap();
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "26.3", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        run.push_log([LogLine {
+            level: Level::Warn,
+            text: log.trim().into(),
+        }]);
+        let code = Some(-805306369);
+        let diagnosis = run.exit_diagnosis(code, false).unwrap();
+        assert_eq!(diagnosis.title, "Custom Recipe froze the game");
+        assert_eq!(diagnosis.mods, ["customrecipe"]);
+        assert!(
+            diagnosis
+                .detail
+                .contains("VanillaRecipesScreen.findLocalRecipes")
+        );
+        let report = run.crash_report(&diagnosis.title, code);
+        assert_eq!(report.title, diagnosis.title);
+        assert!(!report.title.contains("c2me"));
+    }
+
+    #[test]
+    fn report_487_explains_iris_loading_from_the_freeze_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let freezes = dir.path().join("logs/arctic-freezes");
+        std::fs::create_dir_all(&freezes).unwrap();
+        let fixture =
+            include_str!("../../arctic-core/tests/fixtures/crash-487-iris-shader-hang.log");
+        let (log, snapshot) = fixture
+            .split_once("---- logs/arctic-freezes/freeze-20261122-080544.txt ----\n")
+            .unwrap();
+        let (snapshot, _) = snapshot.split_once("Hang at exit:").unwrap();
+        std::fs::write(freezes.join("freeze-20261122-080544.txt"), snapshot).unwrap();
+        std::fs::write(dir.path().join("logs/latest.log"), log).unwrap();
+
+        let mut runs = Runs::default();
+        let id = runs.start("pack", "1.21.11", "Pack".into(), dir.path().into());
+        let run = runs.get_mut(id).unwrap();
+        run.started = SystemTime::now() - Duration::from_secs(60);
+        run.java = Some("Java 21".into());
+        let code = Some(-805306369);
+        let diagnosis = run.exit_diagnosis(code, false).unwrap();
+        assert_eq!(diagnosis.title, crash::IRIS_SHADER_LOADING_TITLE);
+        let (heading, detail) = ArcticApp::localized_diagnosis(&diagnosis);
+        assert_eq!(heading, crash::IRIS_SHADER_LOADING_TITLE);
+        assert_eq!(detail, crash::IRIS_SHADER_LOADING_DETAIL);
+
+        let report = run.crash_report(&diagnosis.title, code);
+        assert_eq!(report.title, diagnosis.title);
+        assert!(
+            report
+                .log
+                .contains("Hang at exit: client hung for at least 7.01s")
+        );
+        assert!(!report.log.contains("---- first error ----"));
     }
 
     #[test]

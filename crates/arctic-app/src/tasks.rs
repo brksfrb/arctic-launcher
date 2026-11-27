@@ -2,6 +2,7 @@
 //! back through `Event`s, so the UI thread never blocks on the network or
 //! the game process.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -11,12 +12,13 @@ use std::sync::mpsc::Sender;
 use crate::t;
 use arctic_core::auth::avatar::{self, Face};
 use arctic_core::auth::microsoft::{self, DeviceCode, MsaConfig};
-use arctic_core::auth::{Account, now_secs};
+use arctic_core::auth::{self, Account, now_secs};
+use arctic_core::cosmetics::{self, SuggestionReceipt, SuggestionReplies};
 use arctic_core::instances::Instance;
 use arctic_core::launch::progress::{LaunchProgress, LaunchSteps};
 use arctic_core::launch::{self, GameEvent, GameHandle, LaunchRequest};
 use arctic_core::loaders::{self, LoaderKind, LoaderVersion};
-use arctic_core::mods::{self, InstalledMod, SearchPage, SearchQuery};
+use arctic_core::mods::{self, InstalledMod, SearchPage, SearchQuery, malware};
 use arctic_core::settings::Settings;
 use arctic_core::storage::DataDirs;
 use arctic_core::update::{self, UpdateChannel, UpdateInfo};
@@ -80,14 +82,34 @@ pub struct Retargeted {
     pub failed: Vec<String>,
 }
 
+pub(crate) enum MalwareAction {
+    Disable(usize),
+    Dismiss(usize),
+    Proceed,
+    Cancel,
+}
+
+pub(crate) struct ModMalwareWarning {
+    pub instance: String,
+    pub findings: Vec<malware::Finding>,
+    pub disable_error: Option<String>,
+    pub dismiss_error: Option<String>,
+    pub respond: Sender<MalwareAction>,
+}
+
 pub enum Event {
     /// A file dialog never appeared (no desktop portal or zenity on Linux).
     PickerMissing,
     Manifest(Outcome<VersionManifest>),
     /// Preparing a launch (id, progress).
     LaunchProgress(LaunchId, ProgressSnapshot),
+    ModMalwareWarning(ModMalwareWarning),
+    LaunchCancelled(LaunchId),
     UpdateProgress(ProgressSnapshot),
-    AccountRefreshed(Account),
+    AccountRefreshed {
+        previous: Account,
+        fresh: Account,
+    },
     /// Game process started (window not necessarily up yet). Carries the
     /// version id that was actually launched.
     /// The game, its log file, its version and how Java was started.
@@ -149,21 +171,33 @@ pub enum Event {
     LoaderSwitched(String, LoaderKind, Outcome<Retargeted>),
     /// Icon bytes for a URL.
     ModIcon(String, Outcome<Vec<u8>>),
-    ModGalleryImage(String, Outcome<Vec<u8>>),
+    ModGalleryImage(String, Outcome<Arc<[u8]>>),
+    /// Fallback gallery URL for a Discover project with no featured search image.
+    HubBanner(String, Option<String>),
     /// Skin and capes of an account (account id, result).
     SkinAccount(String, Outcome<crate::skin_tasks::AccountSkin>),
+    MinecraftSkinSynced(
+        PathBuf,
+        String,
+        Outcome<crate::skin_tasks::SyncedMinecraftSkin>,
+    ),
     /// Another player's skin by name.
     PlayerSkin(String, Outcome<(Vec<u8>, arctic_core::skins::Variant)>),
-    /// The Arctic look of an account (account id, result).
-    ArcticLook(String, Outcome<crate::skin_tasks::ArcticState>),
+    /// The Arctic look and catalog (account id, result).
+    ArcticLook(String, Outcome<crate::skin_tasks::LoadedArcticState>),
+    /// The result of publishing a change to an account's look.
+    ArcticLookSaved(String, Outcome<crate::skin_tasks::ArcticState>),
     /// Public capes and cosmetics, available without an account.
-    ArcticCatalog(Outcome<crate::skin_tasks::ArcticState>),
+    ArcticCatalog(Outcome<crate::skin_tasks::LoadedArcticState>),
     /// A picked cape image, or `None` if cancelled.
     CapeFile(Outcome<Option<Vec<u8>>>),
+    /// A GIF chosen as a cape, already converted to the cape strip (shown as a preview first).
+    CapeGif(Outcome<Option<Vec<u8>>>),
     /// The OptiFine cape of a player name (a Minecraft-layout PNG), `None` when there is none.
     OptifineCape(String, Outcome<Option<Vec<u8>>>),
     /// A picked skin file (name, bytes), or `None` if cancelled.
     SkinFile(Outcome<Option<(String, Vec<u8>)>>),
+    SkinPngSaved(Outcome<Option<()>>),
     /// A world import, backup or other world job finished (instance id, message).
     WorldsDone(String, Outcome<String>),
     /// A modpack install or import finished (`None` = file dialog cancelled).
@@ -173,12 +207,20 @@ pub enum Event {
     /// Gallery search results (request id, result).
     Gallery(u64, Outcome<crate::gallery_tasks::GalleryResult>),
     /// A gallery skin was downloaded: (name, PNG, model, wear it).
-    GalleryTaken(Outcome<(String, Vec<u8>, arctic_core::skins::Variant, bool)>),
+    GalleryTaken(
+        Option<uuid::Uuid>,
+        Outcome<(String, Vec<u8>, arctic_core::skins::Variant)>,
+    ),
     /// A gallery share or report finished (message).
     GalleryDone(Outcome<String>),
     /// A crash report was sent.
     CrashReportSent(Outcome<()>),
-    SuggestionSent(Outcome<()>),
+    SuggestionSent(PathBuf, Outcome<(Option<crate::ui::suggest::Report>, bool)>),
+    SuggestionReplies(
+        uuid::Uuid,
+        Vec<(uuid::Uuid, Option<SuggestionReplies>)>,
+        bool,
+    ),
     /// A log sent to the staff: the code to give them.
     LogSent(Outcome<String>),
     /// Other launchers looked through (the folder, if one was picked).
@@ -212,6 +254,7 @@ pub enum Event {
     /// A new recovery code (shown once; offline accounts only).
     #[cfg(feature = "offline-accounts")]
     RecoveryCode(Outcome<String>),
+    PublicServerIcon(String, Vec<u8>),
     PublicServers(Outcome<Vec<arctic_core::servers::public::PublicServer>>),
     ServerSubmitted(Outcome<arctic_core::servers::public::Submitted>),
     /// A Bedrock tab job (see `bedrock_tasks`).
@@ -241,6 +284,14 @@ pub enum Event {
     Share(arctic_share::SessionId, arctic_share::ShareEvent),
 }
 
+#[derive(Default)]
+struct AccountRefresh {
+    /// The account from the UI and its replacement, while other jobs may still have the old copy.
+    last: Option<(Account, Account)>,
+}
+
+type AccountRefreshes = HashMap<String, Arc<Mutex<AccountRefresh>>>;
+
 /// Handle used by the UI to start background jobs.
 #[derive(Clone)]
 pub struct Tasks {
@@ -250,6 +301,7 @@ pub struct Tasks {
     /// The in-game account switcher's bridge, passed to launched games.
     bridge: Option<Arc<arctic_core::bridge::BridgeInfo>>,
     content_lock: Arc<Mutex<()>>,
+    account_refreshes: Arc<Mutex<AccountRefreshes>>,
 }
 
 /// How a game starts beyond its instance: which copy it is, and where it
@@ -270,6 +322,7 @@ impl Tasks {
             dirs,
             bridge: None,
             content_lock: Arc::default(),
+            account_refreshes: Arc::default(),
         }
     }
 
@@ -281,6 +334,7 @@ impl Tasks {
             dirs,
             bridge: self.bridge.clone(),
             content_lock: Arc::clone(&self.content_lock),
+            account_refreshes: Arc::default(),
         }
     }
 
@@ -292,6 +346,47 @@ impl Tasks {
     /// Installs that share a mod index or pack settings must not race.
     pub(crate) fn content_lock(&self) -> std::sync::MutexGuard<'_, ()> {
         self.content_lock.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub(crate) fn fresh_account(&self, account: Account) -> Result<Account> {
+        self.refresh_account(account, false)
+    }
+
+    /// Serialize refresh for each Microsoft account across game requests, launches and other jobs.
+    pub(crate) fn refresh_account(&self, account: Account, force: bool) -> Result<Account> {
+        if !account.is_microsoft() {
+            return if force {
+                Err(arctic_core::Error::OfflineSessionRefresh)
+            } else {
+                Ok(account)
+            };
+        }
+        let slot = {
+            let mut refreshes = self
+                .account_refreshes
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            Arc::clone(refreshes.entry(account.id.clone()).or_default())
+        };
+        let mut refresh = slot.lock().unwrap_or_else(|e| e.into_inner());
+        let current = match &refresh.last {
+            Some((previous, fresh)) if previous == &account => {
+                if !fresh.needs_refresh(now_secs()) {
+                    return Ok(fresh.clone());
+                }
+                fresh
+            }
+            _ => &account,
+        };
+        let (fresh, changed) = auth::refresh_session(&self.dirs, current, force)?;
+        if changed {
+            self.send(Event::AccountRefreshed {
+                previous: current.clone(),
+                fresh: fresh.clone(),
+            });
+            refresh.last = Some((account, fresh.clone()));
+        }
+        Ok(fresh)
     }
 
     pub(crate) fn dirs(&self) -> &DataDirs {
@@ -317,7 +412,7 @@ impl Tasks {
     pub fn send_log(&self, source: String, game: String, text: String) {
         self.run(move |t| {
             let base = arctic_core::cosmetics::base_url();
-            let log = arctic_core::crash::scrubbed_tail(&text, SENT_LOG_BYTES);
+            let log = arctic_core::crash::scrubbed_shared_log(&text, SENT_LOG_BYTES);
             let result = arctic_core::cosmetics::send_log(
                 &base,
                 &arctic_core::cosmetics::SharedLog {
@@ -336,10 +431,49 @@ impl Tasks {
     /// Send an idea or bug report in the background.
     pub fn send_suggestion(&self, suggestion: arctic_core::cosmetics::Suggestion) {
         self.run(move |t| {
-            let base = arctic_core::cosmetics::base_url();
-            let result = arctic_core::cosmetics::send_suggestion(&base, &suggestion)
+            let base = cosmetics::base_url();
+            let result = cosmetics::send_suggestion(&base, &suggestion)
+                .map(|receipt| {
+                    let Some(receipt) = receipt else {
+                        return (None, false);
+                    };
+                    let report = crate::ui::suggest::Report::new(base, receipt, suggestion);
+                    let saved = match report.save(&t.dirs) {
+                        Ok(()) => true,
+                        Err(e) => {
+                            log::warn!("could not save sent report: {e}");
+                            false
+                        }
+                    };
+                    (Some(report), saved)
+                })
                 .map_err(|e| e.to_string());
-            t.send(Event::SuggestionSent(result));
+            t.send(Event::SuggestionSent(
+                t.dirs.profile_root().to_owned(),
+                result,
+            ));
+        });
+    }
+
+    pub(crate) fn check_suggestion_replies(
+        &self,
+        request: uuid::Uuid,
+        reports: Vec<(uuid::Uuid, String, SuggestionReceipt)>,
+    ) {
+        self.run(move |t| {
+            let mut updates = Vec::new();
+            let mut failed = false;
+            for (key, server, receipt) in reports {
+                match cosmetics::suggestion_replies(&server, &receipt) {
+                    Ok(replies) => updates.push((key, replies)),
+                    Err(e) => {
+                        log::debug!("could not check report replies: {e}");
+                        failed = true;
+                        break;
+                    }
+                }
+            }
+            t.send(Event::SuggestionReplies(request, updates, failed));
         });
     }
 
@@ -381,7 +515,7 @@ impl Tasks {
             if let Some(manifest) = cached {
                 t.send(Event::Manifest(Ok(manifest)));
             }
-            match VersionManifest::fetch(&t.dirs) {
+            match VersionManifest::fetch_for_launch(&t.dirs) {
                 Ok(manifest) => t.send(Event::Manifest(Ok(manifest))),
                 // Offline with a copy on screen: keep using it.
                 Err(_) if have_cached => {}
@@ -408,9 +542,16 @@ impl Tasks {
                     play_started.elapsed().as_millis()
                 );
             }
-            let result = result.map(|(game, log, java)| (game, log, version.id.clone(), java));
             // The toast shows this string; it has to be the whole cause chain, not just Display.
-            t.send(Event::Launched(id, result.map_err(|e| e.chain())));
+            let result = match result {
+                Ok(Some((game, log, java))) => Ok((game, log, version.id.clone(), java)),
+                Ok(None) => {
+                    t.send(Event::LaunchCancelled(id));
+                    return;
+                }
+                Err(err) => Err(err.chain()),
+            };
+            t.send(Event::Launched(id, result));
         });
     }
 
@@ -422,9 +563,9 @@ impl Tasks {
         account: Account,
         settings: &Settings,
         start: StartAt,
-    ) -> Result<(GameHandle, PathBuf, String)> {
+    ) -> Result<Option<(GameHandle, PathBuf, String)>> {
         // Launches can share installer caches, and a new copy snapshots the instance's mods.
-        let _content = self.content_lock();
+        let mut content = self.content_lock();
         let tracker = Mutex::new(LaunchProgress::new(LaunchSteps::from_instance(instance)));
         let progress = |p: ProgressInfo| {
             let percent = tracker
@@ -435,15 +576,10 @@ impl Tasks {
             snapshot.percent = Some(percent);
             self.send(Event::LaunchProgress(id, snapshot));
         };
-        let account = if account.needs_refresh(now_secs()) {
+        if account.needs_refresh(now_secs()) {
             progress(ProgressInfo::stage(t!("tasks.refreshing_microsoft_login")));
-            let cfg = MsaConfig::load(&self.dirs)?;
-            let fresh = microsoft::refresh(&cfg, &account)?;
-            self.send(Event::AccountRefreshed(fresh.clone()));
-            fresh
-        } else {
-            account
-        };
+        }
+        let account = self.fresh_account(account)?;
         let req = LaunchRequest {
             dirs: &self.dirs,
             version,
@@ -455,6 +591,59 @@ impl Tasks {
             quick_play: start.quick_play,
         };
         let prepared = launch::prepare_watched(&req, &progress)?;
+        if settings.check_mods_for_malware {
+            progress(ProgressInfo::stage(t!("tasks.checking_mods_for_malware")));
+            let mods = prepared.plan.game_dir.join("mods");
+            let instance_mods = instance.game_dir(&self.dirs).join("mods");
+            let mut findings = malware::scan_for_launch(&self.dirs, &mods);
+            let mut disable_error = None;
+            let mut dismiss_error = None;
+            if !findings.is_empty() {
+                loop {
+                    let (respond, decision) = std::sync::mpsc::channel();
+                    self.send(Event::ModMalwareWarning(ModMalwareWarning {
+                        instance: instance.name.clone(),
+                        findings: findings.clone(),
+                        disable_error: disable_error.take(),
+                        dismiss_error: dismiss_error.take(),
+                        respond,
+                    }));
+                    // Keep the game directory reserved while the dialog is open,
+                    // but let other launches and content operations proceed.
+                    drop(content);
+                    let action = decision.recv().unwrap_or(MalwareAction::Cancel);
+                    if matches!(action, MalwareAction::Cancel) {
+                        return Ok(None);
+                    }
+                    content = self.content_lock();
+                    if let MalwareAction::Disable(index) = action
+                        && let Some(finding) = findings.get(index)
+                    {
+                        disable_error = malware::disable(finding, &instance_mods)
+                            .err()
+                            .map(|err| err.to_string());
+                    }
+                    if let MalwareAction::Dismiss(index) = action
+                        && let Some(finding) = findings.get(index)
+                    {
+                        // Failing to save a dismissal must not abort the launch.
+                        dismiss_error = malware::dismiss(&self.dirs, finding)
+                            .err()
+                            .map(|err| err.to_string());
+                    }
+                    let current = malware::scan_for_launch(&self.dirs, &mods);
+                    if matches!(action, MalwareAction::Dismiss(_)) && current.is_empty() {
+                        break;
+                    }
+                    if matches!(action, MalwareAction::Proceed)
+                        && current.iter().all(|finding| findings.contains(finding))
+                    {
+                        break;
+                    }
+                    findings = current;
+                }
+            }
+        }
         let log_file = prepared.plan.log_file.clone();
         let java = prepared.plan.java_summary();
         let (tx, ctx) = (self.tx.clone(), self.ctx.clone());
@@ -462,6 +651,7 @@ impl Tasks {
             let _ = tx.send(Event::Game(id, event));
             ctx.request_repaint();
         })?;
+        drop(content);
         // Every stage finished and the process started. A failure above never sends 100%.
         let percent = tracker
             .lock()
@@ -475,7 +665,7 @@ impl Tasks {
                 ..ProgressSnapshot::default()
             },
         ));
-        Ok((game, log_file, java))
+        Ok(Some((game, log_file, java)))
     }
 
     pub fn login_device_code(&self, attempt: LoginAttempt, cancel: Arc<AtomicBool>) {
@@ -824,8 +1014,18 @@ impl Tasks {
     pub fn mod_gallery_image(&self, url: String) {
         self.run(move |t| {
             let result = mods::gallery_image(&url, &t.dirs.cache().join("gallery"))
+                .map(Arc::from)
                 .map_err(|e| e.to_string());
             t.send(Event::ModGalleryImage(url, result));
+        });
+    }
+
+    pub fn hub_banner(&self, project: String) {
+        self.run(move |t| {
+            let url = mods::project_detail(&project)
+                .ok()
+                .and_then(|detail| detail.banner_url().map(str::to_owned));
+            t.send(Event::HubBanner(project, url));
         });
     }
 

@@ -8,7 +8,8 @@ use crate::art::{brand_mark, glow};
 use crate::theme;
 use crate::widgets;
 use crate::{t, tf};
-const WEBSITE: &str = "https://arcticlauncher.com";
+pub(super) const WEBSITE: &str = "https://arcticlauncher.com";
+const FEATURES_URL: &str = "https://arcticlauncher.com/features";
 pub(crate) const DISCORD: &str = "https://discord.arcticlauncher.com";
 const SUPPORT_EMAIL: &str = "support@arcticlauncher.com";
 
@@ -29,6 +30,14 @@ impl ArcticApp {
                     ui.label(
                         RichText::new(tf!("nav.version", APP_VERSION = APP_VERSION)).color(p.muted),
                     );
+                    #[cfg(windows)]
+                    if self.build_signature.is_unsigned() {
+                        ui.label(
+                            RichText::new(t!("nav.unofficial_build"))
+                                .small()
+                                .color(p.muted),
+                        );
+                    }
                 });
             });
             ui.add_space(8.0);
@@ -68,15 +77,14 @@ impl ArcticApp {
                         "https://github.com/{GITHUB_REPO}"
                     )));
                 }
-                if widgets::button(
-                    ui,
-                    p,
-                    Some(Icon::Plus),
-                    t!("nav.suggest_a_feature_or_report_a_bug"),
-                    true,
-                )
-                .clicked()
-                {
+                let suggest = t!("nav.suggest_a_feature_or_report_a_bug");
+                let unread = self.reports.unread();
+                let label = if unread == 0 {
+                    suggest.to_owned()
+                } else {
+                    format!("{suggest} ({unread})")
+                };
+                if widgets::button(ui, p, Some(Icon::Plus), &label, true).clicked() {
                     self.open_suggest();
                 }
                 if widgets::button(ui, p, Some(Icon::External), t!("nav.email_support"), false)
@@ -85,6 +93,19 @@ impl ArcticApp {
                 {
                     ui.ctx()
                         .open_url(egui::OpenUrl::new_tab(format!("mailto:{SUPPORT_EMAIL}")));
+                }
+            });
+            crate::widgets::row(ui, |ui| {
+                if widgets::button(
+                    ui,
+                    p,
+                    Some(Icon::External),
+                    t!("nav.see_all_features"),
+                    false,
+                )
+                .clicked()
+                {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(FEATURES_URL));
                 }
             });
             ui.add_space(6.0);

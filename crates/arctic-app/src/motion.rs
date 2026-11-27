@@ -45,8 +45,11 @@ impl RateMeter {
 
     /// Seconds left for `remaining` bytes at the current rate.
     pub fn eta_secs(&self, remaining: u64) -> Option<f64> {
+        if remaining == 0 {
+            return None;
+        }
         let rate = self.bytes_per_sec().filter(|r| *r > 1.0)?;
-        Some(remaining as f64 / rate)
+        Some((remaining as f64 / rate).max(1.0))
     }
 }
 
@@ -83,6 +86,7 @@ mod tests {
         m.push(1.0, 1000);
         assert_eq!(m.bytes_per_sec(), Some(1000.0));
         assert_eq!(m.eta_secs(5000), Some(5.0));
+        assert_eq!(m.eta_secs(0), None);
         m.push(10.0, 2000); // old samples fall out of the window
         assert!(m.bytes_per_sec().is_none());
     }

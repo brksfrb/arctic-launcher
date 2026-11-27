@@ -1,5 +1,6 @@
 //! Installed mod lists and compatibility checks run away from the UI thread.
 
+use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -50,6 +51,7 @@ pub(crate) struct ModScan {
     key: Option<ScanKey>,
     pub data: Option<Arc<ModSnapshot>>,
     pub error: Option<String>,
+    tracked: Option<HashSet<String>>,
     request: Option<u64>,
     dirty: bool,
     checked_at: Option<Instant>,
@@ -59,15 +61,21 @@ impl ModScan {
     pub fn begin(&mut self, key: ScanKey, force: bool) -> Option<(u64, Option<u64>)> {
         if self.key.as_ref() != Some(&key) {
             *self = Self {
-                key: Some(key),
+                key: Some(key.clone()),
                 ..Self::default()
             };
         }
-        if self.request.is_some() {
+        let in_flight = self.request.is_some();
+        let throttled = !force && self.checked_at.is_some_and(|t| t.elapsed() < POLL_INTERVAL);
+        // The index is ready before the scan, including when an edit supersedes a running scan.
+        if force || (!in_flight && !throttled && self.data.is_none()) {
+            self.tracked = mods::tracked_projects(&key.mods_dir, &key.index).ok();
+        }
+        if in_flight {
             self.dirty |= force;
             return None;
         }
-        if !force && self.checked_at.is_some_and(|t| t.elapsed() < POLL_INTERVAL) {
+        if throttled {
             return None;
         }
         let request = NEXT_REQUEST.fetch_add(1, Ordering::Relaxed);
@@ -91,11 +99,25 @@ impl ModScan {
         }
         self.checked_at = Some(Instant::now());
         match result {
-            Ok(Some(data)) => self.data = Some(Arc::new(data)),
+            Ok(Some(data)) => {
+                self.data = Some(Arc::new(data));
+                self.tracked = None;
+            }
             Ok(None) => {}
             Err(error) => self.error = Some(error),
         }
         false
+    }
+
+    pub fn tracked_projects(&self) -> HashSet<String> {
+        if let Some(tracked) = &self.tracked {
+            return tracked.clone();
+        }
+        self.data
+            .iter()
+            .flat_map(|data| &data.files)
+            .filter_map(|file| file.tracked.as_ref().map(|m| m.project_id.clone()))
+            .collect()
     }
 }
 
@@ -177,6 +199,34 @@ mod tests {
             loader: Some(LoaderKind::Fabric),
             game: Some("1.21.11".into()),
         }
+    }
+
+    #[test]
+    fn installed_projects_are_visible_before_the_first_snapshot() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = key(dir.path());
+        let mut state = ModScan::default();
+        let (request, _) = state.begin(key.clone(), false).unwrap();
+        assert!(state.tracked_projects().is_empty());
+
+        std::fs::create_dir(&key.mods_dir).unwrap();
+        std::fs::write(key.mods_dir.join("iris.jar"), []).unwrap();
+        arctic_core::storage::save_json(
+            &key.index,
+            &serde_json::json!({
+                "mods": [
+                    {"project_id": "iris", "file_name": "iris.jar",
+                     "title": "Iris", "version_id": "v1", "version_number": "1.0"},
+                    {"project_id": "missing", "file_name": "missing.jar",
+                     "title": "Missing", "version_id": "v2", "version_number": "2.0"}
+                ]
+            }),
+        )
+        .unwrap();
+        assert!(state.begin(key, true).is_none());
+        assert!(state.data.is_none());
+        assert!(state.complete(request, Ok(None)));
+        assert_eq!(state.tracked_projects(), HashSet::from(["iris".into()]));
     }
 
     #[test]

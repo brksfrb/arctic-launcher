@@ -145,6 +145,11 @@ impl ArcticApp {
         {
             self.inst.page = InstancePage::Mods;
         }
+        if self.needs_restart(&instance.id) {
+            let p = self.palette();
+            ui.label(RichText::new(t!("instances.restart_to_apply_mod_changes")).color(p.warn));
+            ui.add_space(8.0);
+        }
         match (self.inst.page, modded) {
             (InstancePage::Mods, true) => self.mods_page(ui, &instance),
             (InstancePage::Browse, true) => self.browse_page(ui, &instance),
@@ -252,6 +257,26 @@ impl ArcticApp {
         self.performance_card(ui, instance);
         self.extras_card(ui, instance);
         self.settings_card(ui, instance);
+        ui.add_space(12.0);
+        theme::card(p).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            if widgets::button(ui, p, None, t!("instances.create_desktop_shortcut"), false)
+                .clicked()
+            {
+                match crate::desktop_shortcut::create_instance(instance) {
+                    Ok(path) => self.toasts.push(
+                        Kind::Success,
+                        t!("settings.desktop_shortcut_made"),
+                        path.display().to_string(),
+                    ),
+                    Err(error) => self.toasts.push(
+                        Kind::Error,
+                        t!("play.couldnt_make_the_desktop_shortcut"),
+                        error,
+                    ),
+                }
+            }
+        });
         if instance.is_default() {
             return;
         }
@@ -415,7 +440,8 @@ impl ArcticApp {
         });
     }
 
-    /// Toggle for Arctic's companion mod (Fabric and Quilt only).
+    /// Toggle for Arctic's companion mod (Fabric, Quilt and Forge 1.8.9). The Arctic instance
+    /// always has it and Vanilla ones never do, so they get a line saying so instead.
     fn arctic_mod_card(&mut self, ui: &mut egui::Ui, instance: &Instance) {
         use arctic_core::arctic_mod;
         use arctic_core::loaders::LoaderKind;
@@ -435,11 +461,43 @@ impl ArcticApp {
                 );
             });
         }
+        if !instance.has_arctic_switch() {
+            let (about, unsupported) = if instance.is_default() {
+                let supported = self
+                    .settings
+                    .last_version
+                    .as_deref()
+                    .is_none_or(arctic_mod::supports);
+                (
+                    t!("instances.the_arctic_instance_always_plays_with_the_client"),
+                    !supported,
+                )
+            } else {
+                (t!("instances.vanilla_stays_vanilla"), false)
+            };
+            ui.add_space(12.0);
+            theme::card(p).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label(
+                    RichText::new("Arctic Client")
+                        .size(17.0)
+                        .strong()
+                        .color(p.text),
+                );
+                ui.label(RichText::new(about).color(p.muted));
+                if unsupported {
+                    ui.label(
+                        RichText::new(t!("instances.not_available_for_this_minecraft_version_yet"))
+                            .color(p.muted),
+                    );
+                }
+            });
+            return;
+        }
         let fabric_like = matches!(
             instance.loader.kind(),
             Some(LoaderKind::Fabric | LoaderKind::Quilt)
         );
-        let vanilla = instance.loader.kind().is_none();
         // Forge has the Arctic mod too where there's a Forge build (1.8.9).
         let forge_like = matches!(instance.loader.kind(), Some(LoaderKind::Forge))
             && instance
@@ -447,7 +505,7 @@ impl ArcticApp {
                 .as_deref()
                 .or(self.settings.last_version.as_deref())
                 .is_some_and(arctic_mod::supports_forge);
-        if !fabric_like && !forge_like && !vanilla {
+        if !fabric_like && !forge_like {
             // NeoForge, and Forge versions without a build: say why there's no switch, instead of leaving it a mystery.
             ui.add_space(12.0);
             theme::card(p).show(ui, |ui| {
@@ -465,11 +523,7 @@ impl ArcticApp {
             });
             return;
         }
-        // The default instance follows the Play tab's version.
-        let version = instance
-            .version
-            .clone()
-            .or_else(|| self.settings.last_version.clone());
+        let version = instance.version.clone();
         let supported = version.as_deref().is_some_and(|v| {
             if forge_like {
                 arctic_mod::supports_forge(v)
@@ -477,19 +531,11 @@ impl ArcticApp {
                 arctic_mod::supports(v)
             }
         });
-        let (title, about, toggle) = if vanilla {
-            (
-                "Arctic Client",
-                t!("instances.arctics_menus_hud_and_looks_in_game"),
-                t!("instances.play_with_the_arctic_client"),
-            )
-        } else {
-            (
-                t!("instances.arctic_mod"),
-                t!("instances.shows_everyones_arctic_looks_skins_and_capes"),
-                t!("instances.install_the_arctic_mod"),
-            )
-        };
+        let (title, about, toggle) = (
+            t!("instances.arctic_mod"),
+            t!("instances.shows_everyones_arctic_looks_skins_and_capes"),
+            t!("instances.install_the_arctic_mod"),
+        );
         ui.add_space(12.0);
         theme::card(p).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -576,7 +622,7 @@ impl ArcticApp {
             ui.set_width(ui.available_width());
             ui.label(
                 RichText::new(if forge {
-                    t!("instances.adds_patcher_performance_and_bug_fixes_and")
+                    t!("instances.adds_entity_culling_for_higher_fps")
                 } else {
                     t!("instances.adds_sodium_lithium_ferritecore_2")
                 })
@@ -696,6 +742,7 @@ impl ArcticApp {
             return;
         };
         change(instance);
+        instance.normalize();
         if let Err(e) = instance.save(&dirs) {
             self.toasts.push(
                 Kind::Error,

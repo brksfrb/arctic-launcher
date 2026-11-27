@@ -1,0 +1,43 @@
+Arctic: game froze for 3.0s, mostly in java.base/jdk.internal.misc.Unsafe.park(Native Method) [not in a world (menu/loading) - may be normal]
+started: 2026-11-20 16:01:50.542
+duration: 3.00s (still frozen when written)
+context: window focused, no world (menu/loading screen), screen: net.minecraft.class_442
+samples: 1 client-thread stacks, one per ~500 ms; thread state at last sample TIMED_WAITING
+sampler: slowest getStackTrace 0 ms, largest gap between samples 0 ms
+heap: 3354 MB used of 11620 MB max at start
+
+== Blocked on ==
+  Client "Render thread" id=1 state=TIMED_WAITING
+  Waiting on java.lang.String@3c4e4871
+  Owner unavailable (unowned wait/park or JVM did not report one).
+  Deadlocks: none detected
+
+== Where the time went (frames present in the most samples) ==
+  100%  java.base/jdk.internal.misc.Unsafe.park(Native Method)
+  100%  java.base/java.util.concurrent.locks.LockSupport.parkNanos(LockSupport.java:269)
+  100%  knot//net.minecraft.class_1255.method_20813(class_1255.java:164)
+  100%  knot//net.minecraft.class_1255.method_18857(class_1255.java:154)
+  100%  knot//net.minecraft.class_525.method_64244(class_525.java:374)
+  100%  knot//net.minecraft.class_525.method_64368(class_525.java:318)
+  100%  knot//net.minecraft.class_525.method_31130(class_525.java:305)
+  100%  knot//net.minecraft.class_528.method_44678(class_528.java:173)
+  100%  knot//net.minecraft.class_528.<init>(class_528.java:126)
+  100%  knot//net.minecraft.class_528$class_11780.method_73460(class_528.java:742)
+  100%  knot//net.minecraft.class_526.method_25426(class_526.java:75)
+  100%  knot//net.minecraft.class_437.method_25423(class_437.java:326)
+
+== Distinct client-thread stacks (count of samples) ==
+
+[1x] stack 1
+    at java.base/jdk.internal.misc.Unsafe.park(Native Method)
+    at java.base/java.util.concurrent.locks.LockSupport.parkNanos(LockSupport.java:269)
+    at knot//net.minecraft.class_1255.method_20813(class_1255.java:164)
+    at knot//net.minecraft.class_1255.method_18857(class_1255.java:154)
+    at knot//net.minecraft.class_525.method_64244(class_525.java:374)
+    at knot//net.minecraft.class_525.method_64368(class_525.java:318)
+    at knot//net.minecraft.class_525.method_31130(class_525.java:305)
+    at knot//net.minecraft.class_528.method_44678(class_528.java:173)
+    at knot//net.minecraft.class_528.<init>(class_528.java:126)
+    at knot//net.minecraft.class_528$class_11780.method_73460(class_528.java:742)
+    at knot//net.minecraft.class_526.method_25426(class_526.java:75)
+    at knot//net.minecraft.class_437.method_25423(class_437.java:326)

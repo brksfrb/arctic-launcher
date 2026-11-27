@@ -39,13 +39,16 @@ try {
 	# Sign only what CI built. The draft's files must match the checksums CI wrote next to them, and the
 	# Windows files must be byte for byte the build job's own artifact: a replaced asset in the draft
 	# (or a replaced checksum file) would otherwise be signed with the real certificate and published.
+	# The CI provenance manifest is published separately and can gain Mac entries
+	# while signing is in progress. Leave it out of the refreshed download checksums.
+	$checksumFiles = @("SHA256SUMS.txt", "SHA256SUMS-unsigned.txt")
 	$expected = @{}
 	$sumsFile = Join-Path $work "SHA256SUMS.txt"
 	if (-not (Test-Path $sumsFile)) { throw "the release has no SHA256SUMS.txt from CI" }
 	foreach ($line in Get-Content $sumsFile) {
 		if ($line -match '^([0-9a-f]{64})\s+\*?(.+)$') { $expected[$Matches[2]] = $Matches[1] }
 	}
-	foreach ($file in Get-ChildItem $work -File | Where-Object Name -ne "SHA256SUMS.txt") {
+	foreach ($file in Get-ChildItem $work -File | Where-Object { $_.Name -notin $checksumFiles }) {
 		$have = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLower()
 		if ($expected[$file.Name] -ne $have) { throw "$($file.Name) is not what CI built (checksum differs or is missing)" }
 	}
@@ -73,7 +76,7 @@ try {
 
 	# Checksums of every download, as the workflow writes them (sha256sum format).
 	$sums = Join-Path $work "SHA256SUMS.txt"
-	$lines = Get-ChildItem $work -File | Where-Object Name -ne "SHA256SUMS.txt" | Sort-Object Name | ForEach-Object {
+	$lines = Get-ChildItem $work -File | Where-Object { $_.Name -notin $checksumFiles } | Sort-Object Name | ForEach-Object {
 		"{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
 	}
 	[IO.File]::WriteAllText($sums, ($lines -join "`n") + "`n")

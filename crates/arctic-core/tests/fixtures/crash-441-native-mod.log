@@ -1,0 +1,34 @@
+[08:21:49] [main/INFO] Loading 88 mods:
+	- owo 0.13.0+1.21.11
+	- super_resolution 0.9.2-alpha.2+opengl
+[08:21:53] [main/WARN] @Mixin target xyz.nucleoid.server.translations.impl.language.LanguageReader was not found owo.mixins.json:extension.json5.LanguageReaderMixin from mod owo
+[08:22:38] [Download-2/ERROR] Failed to fetch user properties
+    com.mojang.authlib.exceptions.InvalidCredentialsException: Status: 401
+    at knot//com.mojang.authlib.exceptions.MinecraftClientHttpException.toAuthenticationException(MinecraftClientHttpException.java:59)
+[08:22:49] [Render thread/ERROR] Error while loading the narrator
+    com.mojang.text2speech.Narrator$InitializeException: Failed to load library flite
+    at knot//com.mojang.text2speech.NarratorLinux$FliteLibrary.loadNative(NarratorLinux.java:81)
+[08:22:50] [Render thread/INFO]: Loading native dependency: ./config/super_resolution/libraries/libSuperResolution+linux64+release.so
+
+---- crash report ----
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  SIGILL (0x4) at pc=0x00007367321a4e12, pid=11989, tid=11993
+#
+# JRE version: OpenJDK Runtime Environment Microsoft-11369942 (21.0.7+6) (build 21.0.7+6-LTS)
+# Java VM: OpenJDK 64-Bit Server VM Microsoft-11369942 (21.0.7+6-LTS, mixed mode, tiered, compressed oops, compressed class ptrs, g1 gc, linux-amd64)
+# Problematic frame:
+# C  [libSuperResolution+linux64+release.so+0x7a4e12]
+#
+Host: Intel(R) Pentium(R) Silver N5000 CPU @ 1.10GHz, 4 cores, 7G, Ubuntu 26.04.1 LTS
+---------------  T H R E A D  ---------------
+Current thread (0x00007367e0030fb0):  JavaThread "Render thread"        [_thread_in_native, id=11993, stack(0x00007367e4bda000,0x00007367e4cda000) (1024K)]
+Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
+C  [libSuperResolution+linux64+release.so+0x7a4e12]
+Java frames: (J=compiled Java code, j=interpreted, Vv=VM code)
+j  io.homo.superresolution.thirdparty.nanovg.NanoVGContext.nCreateContextEx(II)J+0
+j  io.homo.superresolution.thirdparty.nanovg.NanoVGContext.<init>(ILio/homo/superresolution/thirdparty/nanovg/NanoVGBackendMode;)V+22
+j  io.homo.superresolution.common.SuperResolution.onClientStarted()V+86
+j  net.minecraft.class_310.handler$clp000$super_resolution$onClientStarted(Lnet/minecraft/class_542;Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;)V+0
+siginfo: si_signo: 4 (SIGILL), si_code: 2 (ILL_ILLOPN), si_addr: 0x00007367321a4e12

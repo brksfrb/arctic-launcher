@@ -100,7 +100,7 @@ These **53 HUD widgets** are part of the 128. Minimap, Cooldowns, Horse stats, S
 
 One switch, on by default, adds optimization mods from Modrinth for that Minecraft version: ModernFix, Sodium, Lithium, FerriteCore, ImmediatelyFast, EntityCulling, Particle Core and BadOptimizations. It applies to Vanilla (which runs on Fabric underneath) and to Fabric and Quilt instances, and it skips a mod you already have, or one that does the same job. A mod with no build for that version is skipped.
 
-The same switch installs **Polarium** where the launcher has a build: 1.8.9 on Fabric, and 26.1.2, 26.2 and 26.3. Polarium draws entities on the GPU and spreads their work across CPU cores, for servers with a lot of players. Forge 1.8.9 uses Patcher and EntityCulling instead. Wavey Capes is a separate optional mod, not part of this set.
+The same switch installs **Polarium** where the launcher has a build: 1.8.9 on Fabric, and 26.1.2, 26.2 and 26.3. Polarium draws entities on the GPU and spreads their work across CPU cores, for servers with a lot of players. Forge 1.8.9 gets EntityCulling instead (Patcher and OneConfig are no longer installed; copies an older launcher put there are removed at launch, ones you added yourself stay). Wavey Capes is a separate optional mod, not part of this set.
 
 ### Social
 
@@ -131,6 +131,8 @@ The skin gallery is skins other players shared. Search by name or creator, wear 
 2. Run it. There is no installer; put it wherever you like.
 
 Windows may show a SmartScreen prompt for new apps. Choose **More info → Run anyway**.
+
+To check which source commit built your download, see [Verify a download](VERIFY.md).
 
 ### macOS
 

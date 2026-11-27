@@ -106,7 +106,7 @@ fn supplies_main_class(library: &str, main_class: &str) -> bool {
 }
 
 /// Read only the ZIP directory and the main class, including its CRC, not the entire loader.
-fn jar_has_main_class(path: &Path, entry: &str) -> bool {
+pub(super) fn jar_has_main_class(path: &Path, entry: &str) -> bool {
     let Ok(file) = fs::File::open(path) else {
         return false;
     };
@@ -153,6 +153,39 @@ pub fn request_repair(dirs: &DataDirs) {
 pub(super) struct LibraryRepair {
     mark: PathBuf,
     request: Option<Vec<u8>>,
+    /// Where the checksums taken at earlier starts are kept ([`Checked`]).
+    checked: PathBuf,
+}
+
+/// Checksums of the loader's small libraries as they were found at an earlier start, by path:
+/// a file with the same size and modification time is not read and hashed again at every
+/// start. A repair asked for after a crash reads everything, and starts this record afresh.
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+struct Checked {
+    files: std::collections::BTreeMap<String, CheckedFile>,
+}
+
+#[derive(PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct CheckedFile {
+    size: u64,
+    /// Modification time, nanoseconds since 1970.
+    modified: String,
+    sha1: String,
+}
+
+impl CheckedFile {
+    fn of(meta: &fs::Metadata, sha1: &str) -> Option<Self> {
+        let modified = meta
+            .modified()
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?;
+        Some(Self {
+            size: meta.len(),
+            modified: modified.as_nanos().to_string(),
+            sha1: sha1.to_ascii_lowercase(),
+        })
+    }
 }
 
 impl LibraryRepair {
@@ -163,7 +196,12 @@ impl LibraryRepair {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
             Err(e) => return Err(Error::io(&mark, e)),
         };
-        Ok(Self { mark, request })
+        let checked = dirs.cache().join("library-checksums.json");
+        Ok(Self {
+            mark,
+            request,
+            checked,
+        })
     }
 
     pub(super) fn check(
@@ -179,13 +217,26 @@ impl LibraryRepair {
         } else {
             bootstrap
         };
-        let (mut checked, mut replaced) = (0, 0);
+        let (mut checked, mut replaced, mut unchanged) = (0, 0, 0);
+        let mut known = if self.request.is_some() {
+            // After a crash nothing is taken on trust.
+            let _ = fs::remove_file(&self.checked);
+            None
+        } else {
+            Some(
+                load_json::<Checked>(&self.checked)
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default(),
+            )
+        };
+        let mut learned = false;
         for job in selected {
             if job.url.is_empty() {
                 continue; // Locally generated Forge files cannot be downloaded again here.
             }
-            match fs::metadata(&job.dest) {
-                Ok(meta) if meta.is_file() => {}
+            let meta = match fs::metadata(&job.dest) {
+                Ok(meta) if meta.is_file() => meta,
                 Ok(_) => {
                     return Err(Error::Other(format!(
                         "A game file is blocked by a folder: {}",
@@ -194,11 +245,23 @@ impl LibraryRepair {
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(e) => return Err(Error::io(&job.dest, e)),
-            }
+            };
             if let Some(want) = &job.sha1 {
                 checked += 1;
+                let path = job.dest.to_string_lossy().into_owned();
+                let now = CheckedFile::of(&meta, want);
+                if let (Some(known), Some(now)) = (&known, &now)
+                    && known.files.get(&path) == Some(now)
+                {
+                    unchanged += 1;
+                    continue;
+                }
                 let have = crate::net::sha1_file(&job.dest)?;
                 if have.eq_ignore_ascii_case(want) {
+                    if let (Some(known), Some(now)) = (&mut known, now) {
+                        known.files.insert(path, now);
+                        learned = true;
+                    }
                     continue;
                 }
             } else if self.request.is_none()
@@ -214,8 +277,16 @@ impl LibraryRepair {
             fs::remove_file(&job.dest).at(&job.dest)?;
             replaced += 1;
         }
+        if learned
+            && let Some(known) = &known
+            && let Err(e) = crate::storage::save_json(&self.checked, known)
+        {
+            log::debug!("library check: couldn't keep the checksums: {e}");
+        }
         if !selected.is_empty() {
-            log::info!("library check: {checked} checksummed, {replaced} fetched again");
+            log::info!(
+                "library check: {checked} checksummed ({unchanged} unchanged since an earlier check), {replaced} fetched again"
+            );
         }
         Ok(())
     }
@@ -751,6 +822,67 @@ mod tests {
             .check(&jobs, &[], None)
             .unwrap();
         assert!(bad.is_file());
+    }
+
+    #[test]
+    fn a_loader_library_is_hashed_again_only_when_the_file_changed() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        let mixin = dir.path().join("sponge-mixin.jar");
+        std::fs::write(&mixin, b"right").unwrap();
+        let job = crate::net::DownloadJob {
+            url: "u".into(),
+            dest: mixin.clone(),
+            sha1: Some({
+                use sha1::Digest;
+                hex::encode(sha1::Sha1::digest(b"right"))
+            }),
+            size: Some(5),
+            lzma: None,
+            md5: None,
+        };
+        let check = || {
+            let repair = LibraryRepair::new(&dirs).unwrap();
+            repair.check(&[], std::slice::from_ref(&job), None).unwrap();
+            repair.finish();
+        };
+        let known = || {
+            load_json::<Checked>(&dirs.cache().join("library-checksums.json"))
+                .unwrap()
+                .unwrap_or_default()
+                .files
+                .len()
+        };
+        check();
+        assert_eq!(known(), 1);
+
+        // Written again (another time), with other contents of the same size: read and replaced.
+        std::fs::write(&mixin, b"wrong").unwrap();
+        let file = fs::File::options().write(true).open(&mixin).unwrap();
+        file.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(5))
+            .unwrap();
+        drop(file);
+        check();
+        assert!(!mixin.exists(), "fetched again");
+
+        // The limit of going by size and time: a change that keeps both is only found by the
+        // full check a crash asks for, which trusts nothing noted before.
+        std::fs::write(&mixin, b"right").unwrap();
+        check();
+        let time = fs::metadata(&mixin).unwrap().modified().unwrap();
+        std::fs::write(&mixin, b"wrong").unwrap();
+        let file = fs::File::options().write(true).open(&mixin).unwrap();
+        file.set_modified(time).unwrap();
+        drop(file);
+        check();
+        assert!(mixin.exists());
+        request_repair(&dirs);
+        let repair = LibraryRepair::new(&dirs).unwrap();
+        repair
+            .check(std::slice::from_ref(&job), std::slice::from_ref(&job), None)
+            .unwrap();
+        assert!(!mixin.exists(), "fetched again");
+        assert_eq!(known(), 0);
     }
 
     #[test]

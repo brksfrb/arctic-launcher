@@ -31,7 +31,7 @@ abstract class NameTagTextScaleMixin {
 
 	@ModifyExpressionValue(method = "buildGroup", at = @At(value = "INVOKE", target = "Ljava/util/Iterator;next()Ljava/lang/Object;"))
 	private Object arctic$tag(Object next) {
-		if (!TextDrawScale.on() || !(next instanceof NameTagFeatureRenderer.Submit tag)) {
+		if (!(next instanceof NameTagFeatureRenderer.Submit tag)) {
 			TextDrawScale.restore(0);
 			return next;
 		}

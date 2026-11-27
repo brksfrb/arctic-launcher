@@ -17,6 +17,7 @@ use crate::error::IoContext;
 use crate::game_defaults::Defaults;
 use crate::instances::{self, Instance};
 use crate::storage::DataDirs;
+use crate::storage::write_atomic as write;
 use crate::{Error, Result};
 
 /// Where the shared copies live, in the profile's folder.
@@ -384,7 +385,30 @@ pub(crate) fn save_copy(from: &Path, to: &Path, shared: SharedSettings) -> Resul
         && bytes.ends_with(b"\n")
         && Defaults::capture(from).is_ok_and(|options| !options.is_empty())
     {
-        write(&to.join(OPTIONS), &bytes)?;
+        let path = to.join(OPTIONS);
+        let current = match std::fs::read(&path) {
+            Ok(current) => current,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(e) => return Err(Error::io(&path, e)),
+        };
+        // Copies have their own pack directories and may run a different game
+        // version. The instance's pack selection and compatibility decisions
+        // belong to the primary directory.
+        let is_pack_option = |line: &[u8]| {
+            line.starts_with(b"resourcePacks:") || line.starts_with(b"incompatibleResourcePacks:")
+        };
+        let mut merged = Vec::with_capacity(bytes.len());
+        for line in bytes.split_inclusive(|&byte| byte == b'\n') {
+            if !is_pack_option(line) {
+                merged.extend_from_slice(line);
+            }
+        }
+        for line in current.split_inclusive(|&byte| byte == b'\n') {
+            if is_pack_option(line) {
+                merged.extend_from_slice(line);
+            }
+        }
+        write(&path, &merged)?;
         let projection = crate::storage::load_json::<Defaults>(&from.join(OPTIONS_PROJECTION))?
             .unwrap_or_default();
         crate::storage::save_json(&to.join(OPTIONS_PROJECTION), &projection)?;
@@ -398,17 +422,6 @@ pub(crate) fn save_copy(from: &Path, to: &Path, shared: SharedSettings) -> Resul
             write(&to.join(rel), &bytes)?;
         }
     }
-    Ok(())
-}
-
-fn write(path: &Path, bytes: &[u8]) -> Result<()> {
-    use std::io::Write;
-    let dir = path.parent().unwrap_or_else(|| Path::new("."));
-    std::fs::create_dir_all(dir).at(dir)?;
-    let mut tmp = tempfile::NamedTempFile::new_in(dir).at(dir)?;
-    tmp.write_all(bytes).at(tmp.path())?;
-    tmp.as_file().sync_all().at(tmp.path())?;
-    tmp.persist(path).map_err(|e| Error::io(path, e.error))?;
     Ok(())
 }
 
@@ -530,6 +543,24 @@ mod tests {
         assert!(text.contains("fov:0.5"), "{text}");
         // 1.8.9 stores keys as LWJGL 2 codes.
         assert!(text.contains("key_key.jump:57"), "{text}");
+    }
+
+    #[test]
+    fn sharing_game_options_keeps_each_instances_pack_lists() {
+        let (_tmp, dirs, a, b) = setup();
+        let target = b.game_dir(&dirs).join(OPTIONS);
+        let local = "resourcePacks:[\"local.zip\"]\nincompatibleResourcePacks:[\"local.zip\"]\n";
+        std::fs::write(&target, local).unwrap();
+        later();
+        std::fs::write(
+            a.game_dir(&dirs).join(OPTIONS),
+            "fov:0.5\nresourcePacks:[\"file/other.zip\"]\nincompatibleResourcePacks:[]\n",
+        )
+        .unwrap();
+        sync(&dirs, SharedSettings::default(), Some((&b, "1.8.9"))).unwrap();
+        let saved = std::fs::read_to_string(target).unwrap();
+        assert!(saved.contains(local), "{saved}");
+        assert!(saved.contains("fov:0.5"), "{saved}");
     }
 
     #[test]

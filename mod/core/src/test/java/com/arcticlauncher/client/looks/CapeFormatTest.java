@@ -8,6 +8,15 @@ import org.junit.jupiter.api.Test;
 
 class CapeFormatTest {
 	@Test
+	void a24FrameCapeAt16FpsLoopsEverySecondAndAHalf() {
+		assertEquals(0, Looks.capeFrameAt(62, 24, 16));
+		assertEquals(1, Looks.capeFrameAt(63, 24, 16));
+		assertEquals(16, Looks.capeFrameAt(1000, 24, 16));
+		assertEquals(23, Looks.capeFrameAt(1499, 24, 16));
+		assertEquals(0, Looks.capeFrameAt(1500, 24, 16));
+	}
+
+	@Test
 	void aCapeWithoutElytraArtGetsWingsFromItsFrontAndBack() {
 		BufferedImage cape = new BufferedImage(64, 32, BufferedImage.TYPE_INT_ARGB);
 		cape.setRGB(5, 8, 0xFFFF0000); // the cape's front face (1..11, 1..17)

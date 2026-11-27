@@ -114,7 +114,7 @@ pub fn profile_id(raw: &Value) -> Result<String> {
 }
 
 /// Ids become directory names; refuse anything that could escape `versions/`.
-fn is_safe_id(id: &str) -> bool {
+pub(super) fn is_safe_id(id: &str) -> bool {
     !id.is_empty()
         && !id.contains(['/', '\\', ':'])
         && id != "."

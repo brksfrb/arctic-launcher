@@ -301,8 +301,8 @@ final class WorldTest {
 					Compat.click(Compat.screen(), cx, cy); // a click adds the cell to its column
 					com.arcticlauncher.client.ui.Page page = ((PageScreen) Compat.screen()).page();
 					page.mouseClicked(cx + 50, cy, 0);
-					page.mouseDragged(cx + 90, cy + 30, 0);
-					page.mouseDragged(w - 90, h - 60, 0);
+					double[] cursor = ArcticClient.platform().cursor();
+					ArcticClient.platform().setCursor((w - 90) * cursor[2] / w, (h - 60) * cursor[3] / h);
 					TIMER.schedule(() -> run(() -> shot("editor-dragging")), 1, TimeUnit.SECONDS);
 					TIMER.schedule(() -> run(() -> {
 						page.mouseReleased(w - 90, h - 60, 0);

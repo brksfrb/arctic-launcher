@@ -68,6 +68,6 @@ final class HudLookForm {
 		f.toggle(Lang.t("mods.hide_while_tab_is_held"), Lang.t("mods.it_steps_aside_while_the_player_list_is_open"), () -> s.hideOnTab, on -> s.hideOnTab = on);
 		f.section(Lang.t("mods.size"));
 		f.stepper(Lang.t("mods.scale"), () -> s.scale, v -> s.scale = (float) v, 0.5, 2.5, 0.1, "%.1fx");
-		f.note(Lang.t("mods.drag_it_on_the_hud_screen_right_shift_to"));
+		f.note(Lang.t("mods.drag_it_on_the_hud_screen_right_shift_to", com.arcticlauncher.client.MenuKey.label()));
 	}
 }

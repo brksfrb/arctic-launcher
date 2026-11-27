@@ -1,16 +1,18 @@
 //! HTTP helpers and the parallel, checksum-verified downloader.
 
 mod download;
+mod download_transport;
 mod resolver;
 
 pub use download::{Compressed, DownloadJob, download_all, set_gentle, sha1_file};
 pub(crate) use download::{
-    Policy, body_timeout, download_all_with_replacements, download_single, fetch_text,
-    is_not_found, mirror_for, part_path,
+    DownloadAlternates, Policy, body_timeout, download_all_with_alternates,
+    download_all_with_replacements, download_before, download_single, fetch_text, forge_mirror_url,
+    is_not_found, part_path,
 };
 
 use std::sync::{PoisonError, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::de::DeserializeOwned;
 
@@ -101,22 +103,54 @@ fn build_agent(proxy: Option<ureq::Proxy>) -> ureq::Agent {
         .timeout_recv_body(Some(BODY_TIMEOUT))
         .user_agent(format!("{}/{}", crate::LAUNCHER_BRAND, crate::APP_VERSION))
         .build();
+    use ureq::unversioned::transport::{Connector, DefaultConnector};
     // Names the system cannot find are looked up over HTTPS instead (see `resolver`).
     ureq::Agent::with_parts(
         config,
-        ureq::unversioned::transport::DefaultConnector::default(),
+        DefaultConnector::default().chain(download_transport::DownloadIdleConnector),
         resolver::FallbackResolver::default(),
     )
 }
 
 /// GET a URL and deserialize its JSON body.
 pub fn get_json<T: DeserializeOwned>(url: &str) -> Result<T> {
-    let mut resp = agent().get(url).call()?;
-    Ok(resp
-        .body_mut()
+    let mut resp = agent().get(url).call().map_err(download::request_error)?;
+    resp.body_mut()
         .with_config()
         .limit(MAX_JSON_BYTES)
-        .read_json()?)
+        .read_json()
+        .map_err(download::request_error)
+}
+
+/// Try the official equivalent when a Java runtime document cannot be read.
+pub(crate) fn get_mojang_json<T: DeserializeOwned>(url: &str) -> Result<T> {
+    let fetch = |url: &str| {
+        download::with_download_idle(|| get_json(url))
+            .map_err(|e| download::metadata_error(url, e))
+            .inspect_err(|e| log::warn!("{e}"))
+    };
+    fetch(url).or_else(|primary| {
+        let Some(alternate) = download::mojang_alternate(url) else {
+            return Err(primary);
+        };
+        fetch(&alternate).map_err(|_| primary)
+    })
+}
+
+pub(crate) fn time_remaining(deadline: Instant) -> Result<Duration> {
+    deadline
+        .checked_duration_since(Instant::now())
+        .ok_or_else(|| crate::Error::Other("background download timed out".into()))
+}
+
+pub(crate) fn get_json_before<T: DeserializeOwned>(url: &str, deadline: Instant) -> Result<T> {
+    let mut resp = agent()
+        .get(url)
+        .config()
+        .timeout_global(Some(time_remaining(deadline)?))
+        .build()
+        .call()?;
+    read_json_any_status(&mut resp)
 }
 
 /// Read a JSON body regardless of HTTP status (used by OAuth/Xbox endpoints

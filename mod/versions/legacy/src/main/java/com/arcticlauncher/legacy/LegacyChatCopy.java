@@ -17,13 +17,17 @@ public final class LegacyChatCopy {
 	}
 
 	public static Text tag(Text message, String text, boolean target) {
+		return tag(message, new ChatCopy.Data(text, target));
+	}
+
+	public static Text tag(Text message, ChatCopy.Data data) {
 		Text copy = message.copy();
 		copy.getSiblings().clear();
 		Style style = message.getStyle().deepCopy();
-		((ChatCopy.Tagged) style).arctic$copyData(new ChatCopy.Data(text, target));
+		((ChatCopy.Tagged) style).arctic$copyData(data);
 		copy.setStyle(style);
 		for (Object child : message.getSiblings()) {
-			copy.append(tag((Text) child, text, target));
+			copy.append(tag((Text) child, data));
 		}
 		return copy;
 	}

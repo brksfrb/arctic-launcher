@@ -8,6 +8,7 @@ import com.arcticlauncher.client.hud.Hud;
 import com.arcticlauncher.client.looks.Looks;
 import com.arcticlauncher.client.menu.Menus;
 import com.arcticlauncher.client.menu.TitleMenu;
+import com.arcticlauncher.client.notice.Notices;
 import com.arcticlauncher.client.style.Style;
 import com.arcticlauncher.client.ui.Page;
 
@@ -95,7 +96,7 @@ public final class ArcticClient {
 		looks.start();
 		social = new com.arcticlauncher.client.social.Social(p, looks);
 		social.start();
-		accounts = new com.arcticlauncher.client.account.AccountSwitcher(p, session.bridgePort, session.bridgeSecret);
+		accounts = new com.arcticlauncher.client.account.AccountSwitcher(p, session.bridgePort, session.bridgeSecret, session.minecraftRefreshAt);
 		launcherSkins = new com.arcticlauncher.client.looks.LauncherSkins(p, session.bridgePort, session.bridgeSecret);
 		voice = new com.arcticlauncher.client.voice.VoiceLink(p, session.bridgePort, session.bridgeSecret);
 		voice.start();
@@ -226,6 +227,15 @@ public final class ArcticClient {
 
 	// ---- Hooks for adapters ----------------------------------------------------
 
+	private static final LauncherNotice LAUNCHER_NOTICE = new LauncherNotice(System.getProperty("arctic.launcher"));
+
+	/** Draw notices above the title screen's own artwork and buttons. */
+	public static void renderTitleNotices(Gfx g) {
+		com.arcticlauncher.client.gfx.Draw.fancy = config.fancy;
+		LAUNCHER_NOTICE.show(Notices::post);
+		Notices.render(g, style());
+	}
+
 	/** Draw the HUD over the game (skip while F1 or F3 is up). */
 	public static void renderHud(Gfx g) {
 		com.arcticlauncher.client.gfx.Draw.fancy = config.fancy;
@@ -256,6 +266,8 @@ public final class ArcticClient {
 			}
 		}
 		if (platform.inWorld()) {
+			// Quick Play can reach a world without drawing the title screen.
+			LAUNCHER_NOTICE.show(Notices::post);
 			if (!platform.hudHidden()) {
 				drawVoice(g);
 				PICKUPS.render(g, style());
@@ -403,6 +415,9 @@ public final class ArcticClient {
 	/** Each frame, before it's drawn (the game thread). */
 	public static void frame(boolean screenOpen) {
 		CrashDiagnostics.frame();
+		if (shaders != null) {
+			shaders.frame();
+		}
 		com.arcticlauncher.client.gfx.RenderWork.drain();
 		long now = System.nanoTime();
 		double seconds = lastFrame == 0 ? 0 : (now - lastFrame) / 1e9;
@@ -494,12 +509,12 @@ public final class ArcticClient {
 	/** A key went down with no screen open; true if Arctic used it. */
 	public static boolean keyPressed(int key) {
 		if (com.arcticlauncher.client.replay.Replays.watching()) {
-			if (key == Keys.RIGHT_SHIFT) {
+			if (key == Keys.MENU) {
 				return com.arcticlauncher.client.replay.Replays.key(Keys.ESCAPE);
 			}
 			return com.arcticlauncher.client.replay.Replays.key(key);
 		}
-		if (key == Keys.RIGHT_SHIFT && platform.inWorld()) {
+		if (key == Keys.MENU && platform.inWorld()) {
 			platform.openPage(Menus.home());
 			return true;
 		}
@@ -518,10 +533,10 @@ public final class ArcticClient {
 
 	/**
 	 * A key went down over one of Minecraft's own screens (not while typing);
-	 * true if Arctic used it. Right Shift opens the Arctic menu anywhere.
+	 * true if Arctic used it. The menu key opens the Arctic menu anywhere.
 	 */
 	public static boolean screenKeyPressed(int key) {
-		if (key == Keys.RIGHT_SHIFT) {
+		if (key == Keys.MENU) {
 			platform.openPage(Menus.home());
 			return true;
 		}
@@ -567,7 +582,7 @@ public final class ArcticClient {
 		return n > 0 ? Lang.t("mods.arctic") + (n > 9 ? "9+" : String.valueOf(n)) + ")" : "Arctic";
 	}
 
-	/** Right Shift: the HUD screen in a world, the Mods menu elsewhere. */
+	/** The menu key: the HUD screen in a world, the Mods menu elsewhere. */
 	public static Page arcticMenu() {
 		return Menus.home();
 	}

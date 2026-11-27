@@ -10,7 +10,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-mod fabric_like;
+pub(crate) mod fabric_like;
 pub use fabric_like::is_legacy_fabric;
 mod forge;
 mod forge_meta;
@@ -129,7 +129,7 @@ pub fn install_profile(
         LoaderKind::NeoForge => {
             check_neoforge_target(loader_version, &vanilla.id)?;
             let sources = [forge_meta::neoforge_installer(loader_version)];
-            forge::install(dirs, &sources, vanilla, java, progress)
+            forge::install(dirs, kind, &sources, vanilla, java, progress)
         }
         LoaderKind::Forge => {
             if !forge_meta::is_supported_forge_game(&vanilla.id) {
@@ -140,9 +140,15 @@ pub fn install_profile(
                 )));
             }
             let sources = forge_meta::forge_installers(&vanilla.id, loader_version);
-            forge::install(dirs, &sources, vanilla, java, progress)
+            forge::install(dirs, kind, &sources, vanilla, java, progress)
         }
     }
+}
+
+/// Whether [`install_profile`] for this loader is one small download that needs neither Java
+/// nor the vanilla client jar, so it can run while the vanilla files are still being fetched.
+pub fn profile_needs_no_game_files(kind: LoaderKind) -> bool {
+    matches!(kind, LoaderKind::Fabric | LoaderKind::Quilt)
 }
 
 /// Catch a NeoForge build picked for the wrong Minecraft version early,

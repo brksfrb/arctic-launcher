@@ -1,6 +1,7 @@
 package com.arcticlauncher.mod;
 
 import com.arcticlauncher.client.Keys;
+import com.arcticlauncher.client.MenuKey;
 
 /**
  * 26.3 reads input through SDL, so its mouse buttons (left = 1) and keys
@@ -25,13 +26,14 @@ public final class Input {
 	}
 
 	public static int key(int key) {
+		if (MenuKey.matches(Compat.keyName(key))) {
+			return Keys.MENU;
+		}
 		switch (key) {
 			case com.arcticlauncher.mod.compat.KeyCodes.ESCAPE:
 				return Keys.ESCAPE;
 			case com.arcticlauncher.mod.compat.KeyCodes.ENTER:
 				return Keys.ENTER;
-			case com.arcticlauncher.mod.compat.KeyCodes.RIGHT_SHIFT:
-				return Keys.RIGHT_SHIFT;
 			case com.arcticlauncher.mod.compat.KeyCodes.BACKSPACE:
 				return Keys.BACKSPACE;
 			case com.arcticlauncher.mod.compat.KeyCodes.TAB:

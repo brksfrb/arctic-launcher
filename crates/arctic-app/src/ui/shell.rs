@@ -72,6 +72,13 @@ impl ArcticApp {
             egui::Stroke::new(1.0, p.card_stroke),
         );
 
+        #[cfg(windows)]
+        if let Some(banner) = self.build_signature.banner() {
+            egui::Panel::top("build_signature_banner")
+                .frame(theme::strip(p))
+                .show(ui, |ui| self.build_signature_banner(ui, banner));
+        }
+
         if self.banner_visible() {
             egui::Panel::top("update_banner")
                 .frame(theme::strip(p))
@@ -149,6 +156,7 @@ impl ArcticApp {
         self.whats_new_dialog(&ctx);
         self.close_prompt_dialog(&ctx);
         self.join_confirm_dialog(&ctx);
+        self.mod_malware_dialog(&ctx);
         self.world_confirm_dialog(&ctx);
         self.mod_clash_dialog(&ctx);
         self.required_update_overlay(&ctx);
@@ -167,6 +175,29 @@ impl ArcticApp {
                 ToastAction::Fix { instance, fix } => self.apply_crash_fix(&instance, &fix),
             }
         }
+    }
+
+    #[cfg(windows)]
+    fn build_signature_banner(
+        &mut self,
+        ui: &mut egui::Ui,
+        banner: crate::build_signature::Banner,
+    ) {
+        use crate::build_signature::Banner;
+        let p = self.palette();
+        let (message, color) = match banner {
+            Banner::Unsigned => (t!("nav.unsigned_build_warning"), p.warn),
+            Banner::Untrusted => (t!("nav.untrusted_build_warning"), p.error),
+        };
+        ui.add(egui::Label::new(RichText::new(message).strong().color(color)).wrap());
+        widgets::row(ui, |ui| {
+            ui.hyperlink_to(t!("nav.download_official_build"), super::about::WEBSITE);
+            if banner == Banner::Unsigned
+                && widgets::button(ui, p, None, t!("nav.dismiss"), false).clicked()
+            {
+                self.build_signature.dismiss_unsigned();
+            }
+        });
     }
 
     fn banner_visible(&self) -> bool {

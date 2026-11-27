@@ -1,6 +1,7 @@
 package com.arcticlauncher.legacy;
 
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.servers.DisconnectedPage;
 import com.arcticlauncher.client.servers.ServersPage;
 import java.util.Collections;
 import java.util.Set;
@@ -15,6 +16,8 @@ public final class ServerMenus {
 	private static final Set<Screen> VANILLA = Collections.newSetFromMap(new WeakHashMap<Screen, Boolean>());
 	/** The player picked the game's own server list: its disconnect screen stays the game's too. */
 	private static boolean vanillaList;
+	private static Screen disconnectedScreen;
+	private static DisconnectedPage disconnectedPage;
 	private ServerMenus() {}
 
 	public static void tick() {
@@ -55,8 +58,12 @@ public final class ServerMenus {
 			MinecraftClient.getInstance().setScreen(original);
 		};
 		if (original instanceof DisconnectedScreen) {
-			String[] text = LegacyDisconnectText.read(original);
-			ArcticClient.platform().openPage(new com.arcticlauncher.client.servers.DisconnectedPage(text[0], text[1]));
+			if (disconnectedScreen != original) {
+				String[] text = LegacyDisconnectText.read(original);
+				disconnectedPage = new DisconnectedPage(text[0], text[1]);
+				disconnectedScreen = original;
+			}
+			ArcticClient.platform().openPage(disconnectedPage);
 		} else {
 			vanillaList = false;
 			ArcticClient.platform().openPage(new ServersPage(vanilla));

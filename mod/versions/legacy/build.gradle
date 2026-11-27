@@ -11,7 +11,7 @@ def mc = project.minecraft_version
 // The CTM development scene and its startup call are opt-in (-Pdevelopment_scenes=true).
 def developmentScenes = project.findProperty('development_scenes') == 'true'
 // -Pforge=true: the Forge 1.8.9 flavour (mod/forge/build_forge.py remaps it to Forge's names). Mixins that
-// use MixinExtras (not available to Forge's Mixin) are replaced by the ones in src/forge.
+// use Fabric-specific hooks are replaced by the ones in src/forge.
 def forge = project.findProperty('forge') == 'true'
 
 /** Minecraft version as numbers, for comparing (26.1.2 → [26, 1, 2]). */
@@ -110,7 +110,7 @@ def applyRenames = { String text ->
 	}
 }
 
-/** The mixins the Forge flavour replaces (MixinExtras, or vanilla calls Forge's RenderItem no longer has). */
+/** The mixins the Forge flavour replaces (Fabric hooks, or vanilla calls Forge's RenderItem no longer has). */
 def forgeReplaced = ['ClientConnectionProxyMixin.java', 'LoginSessionMixin.java', 'TitleScreenMixin.java', 'OldItemPositionMixin.java']
 /** Left out of the Forge flavour: Forge loads ClientBrandRetriever before Mixin can patch it (and says "forge" itself); Mixin 0.7 builds invalid bytecode for ServerAddressMixin's array return (VerifyError). */
 def forgeSkipped = ['ClientBrandMixin.java', 'ServerAddressMixin.java']

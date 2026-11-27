@@ -313,6 +313,9 @@ processResources {
 			teamViewEntity: !atLeast('1.17') && atLeast('1.13'),
 			tooltipPositioner: atLeast('1.19.3'),
 			tooltipScreen: !atLeast('1.19.3') && atLeast('1.13'),
+			enchantComponents: atLeast('1.20.5'),
+			enchantLegacyBook: !atLeast('1.14'),
+			armorRenderState: atLeast('1.21.2'),
 			// 1.13 draws the crosshair inline in Gui.render and its buttons have no alpha.
 			crosshairHook: atLeast('1.14'),
 			widgetAlpha: atLeast('1.14'),
@@ -322,6 +325,9 @@ processResources {
 			// Scaled-up smooth-font text drawn from letters rasterized near their size on screen (ScaledInter):
 			// needs 1.21.9+'s glyph API (baked glyphs that carry their metrics) and GUI text render states.
 			scaledFont: atLeast('1.21.9'),
+			chatStampFont: atLeast('1.16'),
+			chatStampFontSet: atLeast('1.16') && !atLeast('1.21.9'),
+			badgeGuiFilter: atLeast('1.21.11'),
 			textProjection: atLeast('1.21.6'),
 			worldTextScale: atLeast('26.2'),
 			// 26.2 only: name tags have their own feature renderer (26.3 folded them back into TextFeatureRenderer).
@@ -344,6 +350,8 @@ processResources {
 			glowText: atLeast('1.21.9') && !atLeast('26.1'),
 			// The smooth font's slightly heavier outline needs FreeType (1.20.5+).
 			fontWeight: atLeast('1.20.5'),
+			serverFontPackSource: !atLeast('1.20.5'),
+			legacyServerFontPackName: !atLeast('1.19.3'),
 			// Smooth letters' edges in the text's own color: the game's grayscale text shader (1.17+) darkens
 			// them; its source is changed as it's loaded (ShaderManager from 1.21.2, Program before).
 			textShader: atLeast('1.21.2'),
@@ -406,6 +414,8 @@ processResources {
 			// The player list's Arctic picture without a shadow before styles could say so (1.21.4): a font hook / a blank shadow glyph.
 			badgeShadow: atLeast('1.16') && !atLeast('1.21.4'),
 			badgeShadow13: !atLeast('1.16'),
+			badgeSnap: true,
+			badgeGlyphInstance: atLeast('1.21.4'),
 			// Pixel-sharp glyphs through STB (1.20.5 and newer use FreeType, see FontWeight).
 			fontSharpStb: atLeast('1.14') && !atLeast('1.20.5'),
 			// 1.21.9+ look players up by name off the game's thread (player heads): made safe.

@@ -2,6 +2,9 @@
 
 use crate::settings::MIN_MEMORY_MB;
 
+#[cfg(windows)]
+pub(crate) mod windows;
+
 /// Upper bound for the recommended game memory. More rarely helps and
 /// makes garbage collection pauses longer.
 const MAX_RECOMMENDED_MB: u32 = 8 * 1024;

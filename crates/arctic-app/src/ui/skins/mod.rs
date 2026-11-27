@@ -12,16 +12,21 @@ mod gallery;
 mod gpu;
 mod model;
 mod panels;
+mod sync;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
+use arctic_core::auth::Account;
 use arctic_core::cosmetics::{CapeChoice, NewLook, Texture};
 use arctic_core::skins::{self, Library, SkinEntry, Variant};
 use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
 
 use crate::app::ArcticApp;
-use crate::skin_tasks::{AccountSkin, ArcticState, SkinChange};
+use crate::skin_tasks::{
+    AccountSkin, ArcticState, CatalogState, CosmeticCatalog, SkinChange, merge_catalog,
+};
 use crate::tasks::Event;
 use crate::toasts::Kind;
 use crate::{t, tf};
@@ -94,6 +99,14 @@ impl SkinTexture {
     }
 }
 
+/// A converted GIF cape shown before it is worn: the same frames and speed players will see.
+struct CapePreview {
+    png: Vec<u8>,
+    /// Uploaded on first draw (needs the egui context).
+    texture: Option<SkinTexture>,
+    since: Instant,
+}
+
 /// Texture keys: `lib:<id>` library skin, `mc` Minecraft skin,
 /// `mccape:<id>` Minecraft cape, `askin:<hash>` Arctic skin,
 /// `acape:<hash>` Arctic cape, `acos:<hash>` Arctic cosmetic texture.
@@ -114,6 +127,8 @@ pub struct SkinsUi {
     shown_at: Option<std::time::Instant>,
     pub section: Section,
     pub trying: Trying,
+    /// A GIF cape converted to its strip, playing in a dialog until it is worn or dropped.
+    cape_preview: Option<CapePreview>,
     /// The newest look asked for (sent or queued): later clicks build on it.
     intended: Option<NewLook>,
     /// Asked for while a save was still going; sent when it finishes.
@@ -125,10 +140,11 @@ pub struct SkinsUi {
     /// Library skin id -> the hash the server would store it under.
     lib_hashes: HashMap<String, String>,
     /// The frame this tab was last drawn in (to notice it being reopened).
-    last_pass: u64,
+    last_pass: Option<u64>,
     /// Account id → Minecraft skin state (Microsoft accounts).
     pub account: HashMap<String, Result<AccountSkin, String>>,
     pub busy: bool,
+    skin_sync: sync::SkinSync,
     /// Account id → Arctic look.
     pub arctic: HashMap<String, Result<ArcticState, String>>,
     pub arctic_busy: bool,
@@ -136,8 +152,12 @@ pub struct SkinsUi {
     /// blip at startup doesn't leave the tab unable to wear anything for the rest of the session.
     arctic_asked_at: Option<std::time::Instant>,
     /// Public catalog shown before sign-in (or when account look loading fails).
-    pub public_catalog: Option<Result<ArcticState, String>>,
-    pub public_catalog_busy: bool,
+    public_catalog: Option<Result<ArcticState, String>>,
+    public_catalog_busy: bool,
+    /// 3D assets are shared across accounts and the signed-out collection.
+    cosmetic_catalog: CatalogState,
+    catalog_finished_at: Option<Instant>,
+    catalog_failures: usize,
     pub player_name: String,
     pub looking_up: bool,
     pub yaw: f32,
@@ -162,6 +182,12 @@ pub struct SkinsUi {
     pub zoom: f32,
     /// When the preview was last dragged (it turns by itself after a while).
     pub dragged_at: f64,
+}
+
+impl SkinsUi {
+    fn hover_skin(&mut self, key: &str, variant: Variant) {
+        self.hover = Some(Hover::Skin(key.to_owned(), variant));
+    }
 }
 
 impl ArcticApp {
@@ -284,22 +310,112 @@ impl ArcticApp {
         self.ensure_skin_library();
         // Opened again: start from what you're wearing, not half-done edits.
         let pass = ui.ctx().cumulative_pass_nr();
-        if pass > self.skins.last_pass + 1 {
+        let opened = self.skins.last_pass.is_none_or(|last| pass > last + 1);
+        if opened {
             self.skins.renaming = None;
         }
-        self.skins.last_pass = pass;
-        self.request_skin_state(false);
+        self.skins.last_pass = Some(pass);
+        let refresh = self.catalog_refresh_due(ui.ctx(), opened);
+        self.request_skin_state(refresh);
         self.skins_page(ui);
         self.accept_dropped_skins(ui.ctx());
+        self.cape_preview_dialog(ui.ctx());
     }
 
-    /// Fetch the active account's Arctic look (and Minecraft skin) once, or
-    /// again with `force`.
+    /// A chosen GIF, converted, playing at the speed and with the frames players will see (and
+    /// that the cape cards show) until you wear it or drop it.
+    fn cape_preview_dialog(&mut self, ctx: &egui::Context) {
+        let Some(preview) = self.skins.cape_preview.as_mut() else {
+            return;
+        };
+        if preview.texture.is_none() {
+            preview.texture = upload_cape(ctx, "cape-preview", &preview.png);
+            if preview.texture.is_none() {
+                self.skins.cape_preview = None;
+                self.toasts.push(
+                    Kind::Error,
+                    t!("skins.could_not_read_file"),
+                    t!("skins.gif_cape_preview_failed").to_owned(),
+                );
+                return;
+            }
+        }
+        let texture = preview.texture.as_ref().expect("uploaded above");
+        let id = texture.id_at(preview.since.elapsed().as_secs_f64());
+        if texture.animated() {
+            ctx.request_repaint_after(Duration::from_secs_f64(texture.frame_secs));
+        }
+        let (mut wear, mut cancel) = (false, false);
+        egui::Modal::new(egui::Id::new("gif_cape_preview")).show(ctx, |ui| {
+            ui.set_max_width(260.0);
+            ui.heading(t!("skins.gif_cape_preview_title"));
+            ui.add_space(8.0);
+            ui.label(t!("skins.gif_cape_preview_note"));
+            ui.add_space(8.0);
+            // The back of the cape is 10×16 of the 64×32 layout (it scales with HD capes).
+            let uv = egui::Rect::from_min_max(
+                egui::pos2(1.0 / 64.0, 1.0 / 32.0),
+                egui::pos2(11.0 / 64.0, 17.0 / 32.0),
+            );
+            ui.vertical_centered(|ui| {
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(160.0, 256.0), egui::Sense::hover());
+                ui.painter().image(id, rect, uv, egui::Color32::WHITE);
+            });
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                wear = ui.button(t!("skins.use_this_cape")).clicked();
+                cancel = ui.button(t!("skins.cancel")).clicked();
+            });
+        });
+        if wear {
+            if let Some(p) = self.skins.cape_preview.take() {
+                self.wear_cape_image(p.png);
+            }
+        } else if cancel || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.skins.cape_preview = None;
+        }
+    }
+
+    fn catalog_refresh_due(&self, ctx: &egui::Context, opened: bool) -> bool {
+        let Some(finished) = self.skins.catalog_finished_at else {
+            return false;
+        };
+        if self.skin_state_busy() {
+            return false;
+        }
+        if self.skins.cosmetic_catalog.error.is_some() {
+            let delay = RETRY_CATALOG_AFTER[self.skins.catalog_failures - 1];
+            let remaining = delay.saturating_sub(finished.elapsed());
+            if opened || remaining.is_zero() {
+                return true;
+            }
+            ctx.request_repaint_after(remaining);
+            return false;
+        }
+        opened && finished.elapsed() >= CATALOG_MAX_AGE
+    }
+
+    fn skin_state_busy(&self) -> bool {
+        self.skins.arctic_busy || self.skins.public_catalog_busy
+    }
+
+    fn request_arctic_look(&mut self, account: Account) {
+        self.skins.arctic_busy = true;
+        self.skins.arctic_asked_at = Some(Instant::now());
+        self.tasks.arctic_look(account);
+    }
+
+    fn request_public_catalog(&mut self) {
+        self.skins.public_catalog_busy = true;
+        self.tasks.arctic_catalog();
+    }
+
+    /// Fetch the active account's look and catalog, or the public collection when signed out.
     fn request_skin_state(&mut self, force: bool) {
         let Some(account) = self.accounts.active().cloned() else {
-            if (force || self.skins.public_catalog.is_none()) && !self.skins.public_catalog_busy {
-                self.skins.public_catalog_busy = true;
-                self.tasks.arctic_catalog();
+            if (force || self.skins.public_catalog.is_none()) && !self.skin_state_busy() {
+                self.request_public_catalog();
             }
             return;
         };
@@ -307,26 +423,18 @@ impl ArcticApp {
         // or timed-out sign-in means nothing can be worn until the launcher is restarted. The
         // sign-in itself keeps its own back-off (see `cosmetics::token_for`), so this costs little.
         let stale = matches!(self.skins.arctic.get(&account.id), Some(Err(_)))
+            && self.skins.cosmetic_catalog.error.is_none()
             && self
                 .skins
                 .arctic_asked_at
                 .is_none_or(|at| at.elapsed() >= RETRY_LOOK_AFTER);
         if (force || stale || !self.skins.arctic.contains_key(&account.id))
-            && !self.skins.arctic_busy
+            && !self.skin_state_busy()
         {
-            self.skins.arctic_busy = true;
-            self.skins.arctic_asked_at = Some(std::time::Instant::now());
-            self.tasks.arctic_look(account.clone(), None, None);
-        }
-        if matches!(self.skins.arctic.get(&account.id), Some(Err(_)))
-            && self.skins.public_catalog.is_none()
-            && !self.skins.public_catalog_busy
-        {
-            self.skins.public_catalog_busy = true;
-            self.tasks.arctic_catalog();
+            self.request_arctic_look(account.clone());
         }
         if account.is_microsoft()
-            && (force || !self.skins.account.contains_key(&account.id))
+            && !self.skins.account.contains_key(&account.id)
             && !self.skins.busy
         {
             self.skins.busy = true;
@@ -338,6 +446,10 @@ impl ArcticApp {
         let Some(account) = self.accounts.active().cloned() else {
             return;
         };
+        if matches!(change, SkinChange::Upload(..) | SkinChange::Reset) {
+            self.skins.skin_sync.cancel();
+            self.skins.skin_sync.dismiss_notice();
+        }
         self.skins.busy = true;
         self.tasks.skin_account(account, change);
     }
@@ -390,14 +502,14 @@ impl ArcticApp {
         }
     }
 
-    /// Read-only assets for the cards and preview; wearing still needs `arctic_state`.
+    /// Preset capes and their textures; wearing still needs `arctic_state`.
     pub(crate) fn catalog_state(&self) -> Option<&ArcticState> {
-        self.arctic_state().or_else(|| {
-            self.skins
-                .public_catalog
-                .as_ref()
-                .and_then(|result| result.as_ref().ok())
-        })
+        self.arctic_state()
+            .or_else(|| self.skins.public_catalog.as_ref()?.as_ref().ok())
+    }
+
+    fn cosmetic_catalog(&self) -> Option<&CosmeticCatalog> {
+        self.skins.cosmetic_catalog.catalog.as_ref()
     }
 
     /// Wear a change right away (`show` puts it in the preview) and save it:
@@ -422,7 +534,7 @@ impl ArcticApp {
             self.skins.queued = Some(look);
         } else {
             self.skins.arctic_busy = true;
-            self.tasks.arctic_look(account, Some(look), Some(state));
+            self.tasks.save_arctic_look(account, look, state);
         }
     }
 
@@ -431,15 +543,28 @@ impl ArcticApp {
             Ok(png) => {
                 let variant = entry.variant;
                 let key = format!("lib:{}", entry.id);
-                self.change_look(
-                    |l| l.skin = Some((Texture::Png(png), variant)),
-                    |t| t.skin = Some(Some((key, variant))),
-                );
+                self.wear_skin_png(key, png, variant);
             }
             Err(e) => self
                 .toasts
                 .push(Kind::Error, t!("skins.could_not_read_skin"), e.to_string()),
         }
+    }
+
+    fn wear_skin_png(&mut self, key: String, png: Vec<u8>, variant: Variant) {
+        self.skins.gallery.cancel_wear();
+        if self.arctic_state().is_none() {
+            return;
+        }
+        if let Some(account) = sync::sync_account(&self.settings, self.accounts.active()) {
+            self.skins
+                .skin_sync
+                .equip(&account.id, &png, variant, Instant::now());
+        }
+        self.change_look(
+            |l| l.skin = Some((Texture::Png(png), variant)),
+            |t| t.skin = Some(Some((key, variant))),
+        );
     }
 
     /// The game's skin picker chose a library skin (`None`: the Minecraft skin).
@@ -456,10 +581,9 @@ impl ArcticApp {
             // The look isn't loaded yet (the Cosmetics tab never opened): load
             // it, then wear this.
             if let Some(account) = self.accounts.active().cloned()
-                && !self.skins.arctic_busy
+                && !self.skin_state_busy()
             {
-                self.skins.arctic_busy = true;
-                self.tasks.arctic_look(account, None, None);
+                self.request_arctic_look(account);
             }
             self.skins.from_game = Some(Some(id));
             return;
@@ -479,6 +603,8 @@ impl ArcticApp {
 
     /// Back to the Minecraft skin (for Arctic players too).
     fn stop_wearing_skin(&mut self) {
+        self.skins.gallery.cancel_wear();
+        self.skins.skin_sync.cancel();
         self.change_look(|l| l.skin = None, |t| t.skin = Some(None));
     }
 
@@ -596,7 +722,7 @@ impl ArcticApp {
             if is_cape(key) {
                 self.skins
                     .decoder
-                    .request(ctx, key, png, CAPE_WIDTH, key.ends_with(STILL));
+                    .request(ctx, key, png, cape_width(key), key.ends_with(STILL));
                 return None;
             }
             let Some(mut texture) = upload(ctx, key, &png) else {
@@ -671,7 +797,7 @@ impl ArcticApp {
         if let Some(rest) = key.strip_prefix("amesh:") {
             let (hash, number) = rest.split_once(':')?;
             let (_, mesh) = self
-                .catalog_state()?
+                .cosmetic_catalog()?
                 .meshes
                 .iter()
                 .find(|(item, _)| item.mesh == hash)?;
@@ -691,10 +817,16 @@ impl ArcticApp {
                 .and_then(|r| r.as_ref().ok())
                 .and_then(|png| png.clone());
         }
+        if let Some(hash) = key.strip_prefix("acos:") {
+            return self
+                .cosmetic_catalog()?
+                .textures
+                .iter()
+                .find_map(|(h, png)| (h == hash).then(|| png.clone()));
+        }
         if let Some(hash) = key
             .strip_prefix("askin:")
             .or_else(|| key.strip_prefix("acape:"))
-            .or_else(|| key.strip_prefix("acos:"))
         {
             return self.catalog_state()?.png(hash).map(<[u8]>::to_vec);
         }
@@ -784,8 +916,6 @@ impl ArcticApp {
         }
     }
 
-    /// A load or save came back: show the server's look, or send the change
-    /// that was queued meanwhile.
     /// An offline account's avatar is the face of the skin it wears (Microsoft accounts get theirs
     /// from Mojang).
     fn update_offline_face(&mut self, account_id: &str, state: &ArcticState) {
@@ -809,7 +939,13 @@ impl ArcticApp {
         }
     }
 
-    fn on_look_saved(&mut self, account_id: String, result: Result<ArcticState, String>) {
+    /// Show the server's look and send any change queued while the request was in progress.
+    fn on_look_finished(
+        &mut self,
+        account_id: String,
+        result: Result<ArcticState, String>,
+        saving: bool,
+    ) {
         // Once, when the result is stored: the notice that shows it is drawn every frame.
         if let Err(e) = &result {
             log::info!("looks server: {e}");
@@ -821,41 +957,65 @@ impl ArcticApp {
             .arctic
             .get(&account_id)
             .is_some_and(Result::is_ok);
-        let queued = self.skins.queued.take();
+        let ok = result.is_ok();
         match result {
-            Err(e) if had_look => {
-                // A save failed: back to the look the server has.
-                self.skins.intended = None;
-                self.skins.trying = Trying::default();
+            Err(e) if had_look && saving => {
                 self.toasts
                     .push(Kind::Error, t!("skins.couldnt_save_your_look"), e);
             }
             result => {
-                let ok = result.is_ok();
                 if let Ok(state) = &result {
                     self.update_offline_face(&account_id, state);
+                    if saving {
+                        self.skins.skin_sync.saved(&account_id, &state.look);
+                    }
                 }
-                self.skins.arctic.insert(account_id.clone(), result);
-                let active = self.accounts.active().cloned();
-                let state = self.arctic_state().cloned();
-                match (queued, active, state) {
-                    (Some(next), Some(account), Some(state)) if ok && account.id == account_id => {
-                        self.skins.arctic_busy = true;
-                        self.tasks.arctic_look(account, Some(next), Some(state));
-                    }
-                    _ => {
-                        self.skins.intended = None;
-                        self.skins.trying = Trying::default();
-                        if ok && had_look {
-                            self.skins.saved_at = Some(now_secs_f64());
-                        }
-                        if ok && let Some(picked) = self.skins.from_game.take() {
-                            self.wear_skin_from_game(picked);
-                        }
-                    }
+                if ok || !had_look {
+                    self.skins.arctic.insert(account_id.clone(), result);
                 }
             }
         }
+        let queued = self.skins.queued.take();
+        let active = self.accounts.active().filter(|a| a.id == account_id);
+        let next_save = queued.zip(active).and_then(|(next, account)| {
+            self.arctic_state()
+                .map(|state| (next, account.clone(), state.clone()))
+        });
+        if saving && !ok {
+            self.skins
+                .skin_sync
+                .save_failed(&account_id, next_save.is_some());
+        }
+        if let Some((next, account, state)) = next_save {
+            // A queued look is a complete replacement. It can still be saved if
+            // the preceding request failed and we kept the last known state.
+            self.tasks.save_arctic_look(account, next, state);
+            self.skins.arctic_busy = true;
+            return;
+        }
+        self.skins.intended = None;
+        self.skins.trying = Trying::default();
+        if saving && ok {
+            self.skins.saved_at = Some(now_secs_f64());
+        }
+        if ok
+            && active.is_some()
+            && let Some(picked) = self.skins.from_game.take()
+        {
+            self.wear_skin_from_game(picked);
+        }
+    }
+
+    fn on_catalog_loaded(&mut self, result: Result<CosmeticCatalog, String>) {
+        self.skins.catalog_finished_at = Some(Instant::now());
+        self.skins.catalog_failures = if result.is_ok() {
+            0
+        } else {
+            (self.skins.catalog_failures + 1).min(RETRY_CATALOG_AFTER.len())
+        };
+        self.skins.cosmetic_catalog =
+            merge_catalog(self.skins.cosmetic_catalog.catalog.take(), result);
+        self.skins.failed.clear();
     }
 
     pub(crate) fn on_skins_event(&mut self, event: Event) {
@@ -873,13 +1033,49 @@ impl ArcticApp {
                 }
                 self.skins.account.insert(account_id, result);
             }
-            Event::ArcticLook(account_id, result) => self.on_look_saved(account_id, result),
+            Event::ArcticLook(account_id, result) => {
+                let result = result.map(|loaded| {
+                    self.on_catalog_loaded(loaded.catalog);
+                    loaded.look
+                });
+                if result.is_err() {
+                    self.request_public_catalog();
+                }
+                self.on_look_finished(account_id, result, false);
+            }
+            Event::MinecraftSkinSynced(root, account_id, result) => {
+                self.on_minecraft_skin_synced(root, account_id, result);
+            }
+            Event::ArcticLookSaved(account_id, result) => {
+                self.on_look_finished(account_id, result, true);
+            }
             Event::ArcticCatalog(result) => {
                 self.skins.public_catalog_busy = false;
-                if let Err(e) = &result {
-                    log::warn!("public looks catalog: {e}");
+                match result {
+                    Ok(loaded) => {
+                        self.on_catalog_loaded(loaded.catalog);
+                        self.skins.public_catalog = Some(Ok(loaded.look));
+                    }
+                    Err(e) => {
+                        log::warn!("public looks catalog: {e}");
+                        self.on_catalog_loaded(Err(e.clone()));
+                        if !self
+                            .skins
+                            .public_catalog
+                            .as_ref()
+                            .is_some_and(Result::is_ok)
+                        {
+                            self.skins.public_catalog = Some(Err(e));
+                        }
+                    }
                 }
-                self.skins.public_catalog = Some(result);
+                if self.skins.from_game.is_some()
+                    && !self.skin_state_busy()
+                    && let Some(account) = self.accounts.active().cloned()
+                    && !self.skins.arctic.contains_key(&account.id)
+                {
+                    self.request_arctic_look(account);
+                }
             }
             Event::PlayerSkin(name, result) => {
                 self.skins.looking_up = false;
@@ -893,6 +1089,13 @@ impl ArcticApp {
                         .push(Kind::Error, t!("skins.could_not_get_skin"), e),
                 }
             }
+            Event::SkinPngSaved(result) => match result {
+                Ok(Some(())) => self.toasts.push(Kind::Success, t!("skins.png_saved"), ""),
+                Ok(None) => {}
+                Err(e) => self
+                    .toasts
+                    .push(Kind::Error, t!("skins.png_save_failed"), e),
+            },
             Event::SkinFile(result) => match result {
                 Ok(Some((name, bytes))) => {
                     let _ = self.add_skin(&name, &bytes, None);
@@ -907,6 +1110,19 @@ impl ArcticApp {
             }
             Event::CapeFile(result) => match result {
                 Ok(Some(bytes)) => self.wear_cape_image(bytes),
+                Ok(None) => {}
+                Err(e) => self
+                    .toasts
+                    .push(Kind::Error, t!("skins.could_not_read_file"), e),
+            },
+            Event::CapeGif(result) => match result {
+                Ok(Some(png)) => {
+                    self.skins.cape_preview = Some(CapePreview {
+                        png,
+                        texture: None,
+                        since: Instant::now(),
+                    });
+                }
                 Ok(None) => {}
                 Err(e) => self
                     .toasts
@@ -1125,24 +1341,42 @@ fn upload_cape(ctx: &egui::Context, key: &str, png: &[u8]) -> Option<SkinTexture
 
 /// Appended to a cape key for its first frame alone: cards stand still until hovered.
 pub(super) const STILL: &str = "@still";
-/// Capes are kept at most this wide. A card shows the back ~110 px tall and the 3D preview
-/// about as big; a 512-wide cape's back is 128 pixels, and each frame is a quarter of a
-/// 1024-wide one's 2 MB.
+/// Appended to a cape key for the big 3D preview: the cape at its native resolution.
+pub(super) const HD: &str = "@hd";
+/// Cards keep capes at most this wide: a card shows the back ~110 px tall, and each frame is a
+/// quarter of a 1024-wide one's 2 MB. The 3D preview (`HD` keys) is never scaled down: it
+/// draws the cape several times larger than a card.
 const CAPE_WIDTH: u32 = 512;
+
+/// The widest a cape under `key` is kept: native for the preview, `CAPE_WIDTH` for cards.
+fn cape_width(key: &str) -> u32 {
+    if key.ends_with(HD) {
+        arctic_core::cosmetics::MAX_CAPE_WIDTH
+    } else {
+        CAPE_WIDTH
+    }
+}
 /// A cape texture not drawn for this long is let go.
 const UNUSED_TEXTURE: std::time::Duration = std::time::Duration::from_secs(20);
 /// The gallery's downloaded skins are let go this long after the last card showed one.
 const UNUSED_GALLERY: std::time::Duration = std::time::Duration::from_secs(60);
 /// A look that failed to load is asked for again this long after the last try.
 const RETRY_LOOK_AFTER: std::time::Duration = std::time::Duration::from_secs(30);
+const CATALOG_MAX_AGE: Duration = Duration::from_secs(5 * 60);
+const RETRY_CATALOG_AFTER: [Duration; 3] = [
+    Duration::from_secs(5),
+    Duration::from_secs(15),
+    Duration::from_secs(60),
+];
 
 fn is_cape(key: &str) -> bool {
     key.starts_with("mccape:") || key.starts_with("acape:") || key.starts_with("ofcape:")
 }
 
-/// The key without the still-frame suffix.
+/// The key without the still-frame or HD suffix.
 fn full_key(key: &str) -> &str {
-    key.strip_suffix(STILL).unwrap_or(key)
+    let key = key.strip_suffix(STILL).unwrap_or(key);
+    key.strip_suffix(HD).unwrap_or(key)
 }
 
 /// Decoded cape frames as textures (one per frame).

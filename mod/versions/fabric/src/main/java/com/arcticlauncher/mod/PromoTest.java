@@ -406,15 +406,14 @@ final class PromoTest {
 			double x = r[0] + r[2] / 2.0;
 			double y = r[1] + r[3] / 2.0;
 			editor.mouseClicked(x, y, 0);
-			editor.mouseDragged(x + 40, y + 30, 0);
-			editor.mouseDragged(x + 140, y + 70, 0);
+			moveCursor(x + 140, y + 70);
 		});
 		later(3, () -> WorldTest.shot("promo-hud-editor"));
 		// Over the bar: "Drop here to take it off".
 		later(4, () -> {
 			int[] bar = bar(editor);
 			if (bar != null) {
-				editor.mouseDragged(bar[0], bar[1], 0);
+				moveCursor(bar[0], bar[1]);
 			}
 		});
 		later(5, () -> WorldTest.shot("promo-hud-editor-remove"));
@@ -422,6 +421,12 @@ final class PromoTest {
 			ArcticMod.LOG.info("promotest: done");
 			Minecraft.getInstance().stop();
 		});
+	}
+
+	private static void moveCursor(double x, double y) {
+		net.minecraft.client.gui.screens.Screen screen = Compat.screen();
+		double[] cursor = ArcticClient.platform().cursor();
+		ArcticClient.platform().setCursor(x * cursor[2] / screen.width, y * cursor[3] / screen.height);
 	}
 
 	/** The middle of the editor's bar (GUI pixels), or null. */

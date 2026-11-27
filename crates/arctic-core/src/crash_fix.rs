@@ -80,6 +80,12 @@ fn update_loader(dirs: &DataDirs, instance: &mut Instance) -> Result<String> {
         .clone()
         .ok_or_else(|| Error::Other("This instance has no Minecraft version of its own.".into()))?;
     let newest = crate::loaders::default_loader_version(kind, &game)?;
+    if instance.loader.version() == Some(newest.as_str()) {
+        return Ok(format!(
+            "{} is already up to date ({newest}).",
+            kind.label()
+        ));
+    }
     instance.loader = Loader::new(Some(kind), newest.clone());
     instance.save(dirs)?;
     Ok(format!("{} updated to {newest}.", kind.label()))

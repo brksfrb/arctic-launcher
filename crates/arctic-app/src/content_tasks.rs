@@ -293,6 +293,7 @@ mod tests {
             game_versions: vec![game.into()],
             loaders: vec![loader.into()],
             file_name: Some("mod.jar".into()),
+            file_sha1: None,
         }
     }
 
@@ -310,6 +311,7 @@ mod tests {
                     downloads: 0,
                     follows: 0,
                     icon_url: None,
+                    featured_gallery: None,
                     categories: vec![],
                     game_versions: vec![],
                 })

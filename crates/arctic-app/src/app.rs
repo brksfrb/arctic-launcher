@@ -1,6 +1,7 @@
 //! Application state and event handling. Layout lives in `ui/`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
@@ -23,7 +24,7 @@ use eframe::egui;
 
 use crate::art::splash::Splash;
 use crate::session::ProfileData;
-use crate::startup::StartupOptions;
+use crate::startup::{LaunchRequest, StartupOptions};
 use crate::tasks::{Event, LaunchId, LoginAttempt, Tasks};
 use crate::theme::{self, Palette};
 use crate::toasts::{Kind, ToastAction, Toasts};
@@ -134,6 +135,8 @@ pub enum UpdateState {
 }
 
 pub struct ArcticApp {
+    #[cfg(windows)]
+    pub(crate) build_signature: crate::build_signature::BuildSignature,
     /// Launcher-wide layout (shared downloads, caches).
     pub(crate) root: DataDirs,
     pub(crate) profiles: ProfileStore,
@@ -168,6 +171,8 @@ pub struct ArcticApp {
     pub(crate) performance_off_confirm: Option<String>,
     /// Instance whose Arctic Client (or Arctic mod) is about to be turned off (asks first).
     pub(crate) client_off_confirm: Option<String>,
+    pub(crate) reports: crate::ui::suggest::Reports,
+    pub(crate) suggestion_sending: std::collections::HashSet<std::path::PathBuf>,
     /// The suggest-a-feature form, while it's open.
     pub(crate) suggest: Option<crate::ui::suggest::SuggestForm>,
     pub(crate) profile_dialog: ProfileDialog,
@@ -186,6 +191,7 @@ pub struct ArcticApp {
     pub(crate) runs: crate::runs::Runs,
     pub(crate) launcher_log: Vec<LogLine>,
     pub(crate) launcher_log_seen: u64,
+    pub(crate) launcher_archive: Option<(PathBuf, Vec<LogLine>)>,
     /// Filtered line indices for the Logs tab, and what they were built for.
     pub(crate) log_cache: Option<(crate::ui::LogViewKey, Vec<usize>)>,
     pub(crate) log_source: LogSource,
@@ -235,6 +241,7 @@ pub struct ArcticApp {
     pub(crate) close_prompt: bool,
     /// "Launch Minecraft to join this server?" is up for this address.
     pub(crate) join_confirm: Option<String>,
+    pub(crate) mod_malware_warnings: VecDeque<crate::tasks::ModMalwareWarning>,
     /// That dialog's "Don't show again" box.
     pub(crate) join_confirm_never: bool,
     /// "Play this world?" is up (a world never starts from one click).
@@ -246,7 +253,7 @@ pub struct ArcticApp {
     /// unreliable on Windows: wrong restore size, flicker).
     maximize_pending: bool,
     /// Launch requested on the command line, run once versions are loaded.
-    pending_launch: Option<String>,
+    pending_launch: Option<LaunchRequest>,
     login_attempts: LoginAttempt,
     /// When the world trash was last purged of worlds older than 14 days.
     pub(crate) world_purge_at: std::time::Instant,
@@ -281,6 +288,24 @@ impl ArcticApp {
         );
         bridge.set_voice(voice.clone());
         tasks.load_manifest();
+        // Use the instances already loaded for this profile. The cached manifest
+        // supplies the default only if Play has no saved selection yet.
+        let prefetch_dirs = dirs.clone();
+        let instances: Vec<_> = std::iter::once(&data.instance)
+            .chain(&data.custom_instances)
+            .cloned()
+            .collect();
+        let selected_game = data.settings.last_version.clone();
+        std::thread::spawn(move || {
+            let game = selected_game.or_else(|| {
+                VersionManifest::cached(&prefetch_dirs).map(|manifest| manifest.latest.release)
+            });
+            arctic_core::launch::prefetch_fabric_loaders(
+                &prefetch_dirs,
+                &instances,
+                game.as_deref(),
+            );
+        });
         // A game that crashed or was killed leaves its unfinished replay recording
         // behind: clear them (nothing the launcher started is running yet).
         let sweep_dirs = dirs.clone();
@@ -300,6 +325,8 @@ impl ArcticApp {
             };
         let intro = data.settings.intro && !startup.no_intro;
         let mut app = Self {
+            #[cfg(windows)]
+            build_signature: crate::build_signature::BuildSignature::start(&root, &cc.egui_ctx),
             splash: Splash::new(intro),
             applied_theme: None,
             theme_fade: None,
@@ -329,12 +356,13 @@ impl ArcticApp {
             open_flushed: std::time::Instant::now(),
             close_prompt: false,
             join_confirm: None,
+            mod_malware_warnings: VecDeque::new(),
             join_confirm_never: false,
             world_confirm: None,
             software_gl: false,
             gl_checked: false,
             maximize_pending: data.settings.start_maximized,
-            pending_launch: startup.launch.clone(),
+            pending_launch: startup.launch_request(),
             msa_configured: MsaConfig::load(&dirs).is_ok(),
             installed,
             custom_instances: Vec::new(),
@@ -356,12 +384,14 @@ impl ArcticApp {
             tab_history: Vec::new(),
             accounts: AccountStore::default(),
             faces: HashMap::new(),
-            instance: Instance::vanilla_default(),
+            instance: Instance::arctic_default(),
             manifest: ManifestState::Loading,
             add_account: AddAccount::Closed,
             remove_confirm: None,
             performance_off_confirm: None,
             client_off_confirm: None,
+            reports: Default::default(),
+            suggestion_sending: Default::default(),
             suggest: None,
             profile_dialog: ProfileDialog::Closed,
             inst: InstancesUi::default(),
@@ -374,6 +404,7 @@ impl ArcticApp {
             runs: crate::runs::Runs::default(),
             launcher_log: Vec::new(),
             launcher_log_seen: 0,
+            launcher_archive: None,
             log_cache: None,
             log_source: LogSource::Launcher,
             log_min_level: Level::Debug,
@@ -387,7 +418,7 @@ impl ArcticApp {
         };
         app.apply_profile_data(data);
         app.purge_world_trash();
-        app.maybe_start_onboarding(startup.launch.is_some());
+        app.maybe_start_onboarding(app.pending_launch.is_some());
         if let Some(query) = &startup.account {
             match app.accounts.find(query).map(|a| a.id.clone()) {
                 Some(id) => {
@@ -490,6 +521,7 @@ impl ArcticApp {
         self.bridge.update(&self.accounts, &self.tasks);
         self.runs.clear();
         self.log_cache = None;
+        self.load_suggestion_reports();
         // Instance pages and mod listings belong to the old profile.
         self.inst = InstancesUi::default();
         // Theme is per profile: force a re-apply on the next frame.
@@ -799,9 +831,10 @@ impl ArcticApp {
         let ManifestState::Ready(manifest) = &self.manifest else {
             return;
         };
-        // Vanilla follows the Play-tab version; custom instances pin theirs.
+        // Arctic follows the Play-tab version; custom instances pin theirs (one without, a
+        // pure-vanilla default kept from before Arctic with no version picked yet, follows it too).
         let instance = self.selected_instance().clone();
-        let version_id = if instance.is_default() {
+        let version_id = if instance.is_default() || instance.version.is_none() {
             self.settings.last_version.clone()
         } else {
             instance.version.clone()
@@ -947,9 +980,9 @@ impl ArcticApp {
             {
                 self.accounts.set_active(&id);
             }
-            if opts.launch.is_some() {
-                self.pending_launch = opts.launch;
-                self.run_pending_launch();
+            if let Some(request) = opts.launch_request() {
+                self.pending_launch = Some(request);
+                self.run_pending_launch(now);
             }
         }
     }
@@ -1038,11 +1071,47 @@ impl ArcticApp {
         }
     }
 
-    /// `--launch` from the command line: pick the version, then Play.
-    fn run_pending_launch(&mut self) {
-        let Some(query) = self.pending_launch.take() else {
+    /// Apply a cold or forwarded launch request once the manifest has finished loading.
+    fn run_pending_launch(&mut self, now: f64) {
+        if matches!(self.manifest, ManifestState::Loading) {
+            return;
+        }
+        let Some(request) = self.pending_launch.take() else {
             return;
         };
+        match request {
+            LaunchRequest::Instance(id) => {
+                let Some(instance) = self.instance_by_id(&id) else {
+                    self.toasts
+                        .push(Kind::Error, t!("instances.shortcut_instance_not_found"), id);
+                    return;
+                };
+                self.settings.last_instance = (!instance.is_default()).then_some(id);
+                self.set_tab(Tab::Play, now);
+            }
+            LaunchRequest::Version(query) => {
+                self.launch_requested_version(query);
+                return;
+            }
+        }
+        if let ManifestState::Failed(e) = &self.manifest {
+            self.toasts
+                .push(Kind::Error, tf!("play.could_not_load_versions", e = e), "");
+        } else if self.update_required() {
+            self.toasts.push(
+                Kind::Info,
+                t!("play.a_required_launcher_update_must_be_installed"),
+                "",
+            );
+        } else if self.accounts.active().is_none() {
+            self.toasts
+                .push(Kind::Info, t!("tasks.choose_an_account_to_play"), "");
+        } else {
+            self.launch_selected();
+        }
+    }
+
+    fn launch_requested_version(&mut self, query: String) {
         let ManifestState::Ready(manifest) = &self.manifest else {
             return;
         };
@@ -1075,18 +1144,38 @@ impl ArcticApp {
                     self.settings.last_version = Some(m.latest.release.clone());
                 }
                 self.manifest = ManifestState::Ready(m);
-                self.run_pending_launch();
+                self.run_pending_launch(now);
             }
-            Event::Manifest(Err(e)) => self.manifest = ManifestState::Failed(e),
+            Event::Manifest(Err(e)) => {
+                self.manifest = ManifestState::Failed(e);
+                if matches!(self.pending_launch, Some(LaunchRequest::Instance(_))) {
+                    self.run_pending_launch(now);
+                }
+            }
             Event::LaunchProgress(id, snapshot) => self.on_launch_progress(id, snapshot, now),
+            Event::ModMalwareWarning(warning) => {
+                crate::window::show();
+                self.mod_malware_warnings.push_back(warning);
+            }
+            Event::LaunchCancelled(id) => {
+                self.runs.cancel(id);
+                self.bridge.forget_launch(id);
+                if matches!(self.log_source, LogSource::Game(run) if run == id) {
+                    self.log_source = self
+                        .runs
+                        .latest()
+                        .map_or(LogSource::Launcher, |run| LogSource::Game(run.id));
+                }
+            }
             Event::UpdateProgress(p) => {
                 if let UpdateState::Installing { done, total, .. } = &mut self.update {
                     (*done, *total) = (p.bytes_done, p.bytes_total);
                 }
             }
-            Event::AccountRefreshed(account) => {
-                self.accounts.upsert(account);
-                self.save_accounts();
+            Event::AccountRefreshed { previous, fresh } => {
+                if self.accounts.replace_refreshed(&previous, fresh) {
+                    self.save_accounts();
+                }
             }
             Event::Launched(id, result) => {
                 let result = result.map(|(game, log_file, version, java)| {
@@ -1162,6 +1251,7 @@ impl ArcticApp {
             | Event::Retargeted(..)
             | Event::LoaderChecked(..)
             | Event::LoaderSwitched(..)
+            | Event::HubBanner(..)
             | Event::ModIcon(..)
             | Event::ModGalleryImage(..)) => self.on_instances_event(e, ctx),
             Event::Share(id, event) => self.on_share_event(id, event),
@@ -1197,6 +1287,7 @@ impl ArcticApp {
             Event::ChatSent(result) => self.on_chat_sent(result),
             Event::ChatImage(id, result) => self.on_chat_image(ctx, id, result),
             Event::ChatNew(after, result) => self.on_chat_new(after, result),
+            Event::PublicServerIcon(address, png) => self.on_public_server_icon(ctx, address, png),
             Event::PublicServers(list) => self.on_public_servers(list),
             Event::ServerSubmitted(result) => self.on_server_submitted(result),
             Event::Bedrock(e) => self.on_bedrock_event(e),
@@ -1239,11 +1330,15 @@ impl ArcticApp {
             Event::ShareImported(result) => self.on_share_imported(result, now),
             Event::ShareModsLookedUp(id, result) => self.on_share_mods_looked_up(&id, result),
             e @ (Event::SkinAccount(..)
+            | Event::MinecraftSkinSynced(..)
             | Event::PlayerSkin(..)
             | Event::SkinFile(..)
+            | Event::SkinPngSaved(..)
             | Event::ArcticLook(..)
+            | Event::ArcticLookSaved(..)
             | Event::ArcticCatalog(..)
             | Event::CapeFile(..)
+            | Event::CapeGif(..)
             | Event::OptifineCape(..)
             | Event::Gallery(..)
             | Event::GalleryTaken(..)
@@ -1258,7 +1353,10 @@ impl ArcticApp {
                     .toasts
                     .push(Kind::Error, t!("tasks.couldnt_send_the_report"), e),
             },
-            Event::SuggestionSent(result) => self.on_suggestion_sent(result),
+            Event::SuggestionSent(profile, result) => self.on_suggestion_sent(&profile, result),
+            Event::SuggestionReplies(request, updates, failed) => {
+                self.on_suggestion_replies(request, updates, failed);
+            }
             Event::LogSent(result) => self.on_log_sent(result, ctx),
             Event::UpdateChecked(result) => self.on_update_checked(result),
             Event::ProxyTested(proxy, result) => self.on_proxy_tested(proxy, result),
@@ -1391,6 +1489,7 @@ impl eframe::App for ArcticApp {
         if std::mem::take(&mut self.maximize_pending) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
         }
+        self.tick_minecraft_skin_sync(ctx);
         self.window_and_tray(ctx, frame);
         if self.world_purge_at.elapsed() >= WORLD_PURGE_EVERY {
             self.purge_world_trash();
@@ -1446,6 +1545,8 @@ impl eframe::App for ArcticApp {
         self.update_theme(&ctx, frame);
         crate::zoom::apply(&ctx, self.settings.interface_size);
         self.go_back(&ctx);
+        #[cfg(windows)]
+        self.build_signature.poll();
         self.shell(ui);
         self.splash.show(&ctx, self.palette());
         self.autosave_settings(&ctx);

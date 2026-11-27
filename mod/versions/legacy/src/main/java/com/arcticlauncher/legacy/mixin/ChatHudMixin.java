@@ -1,7 +1,17 @@
 package com.arcticlauncher.legacy.mixin;
 
 import com.arcticlauncher.legacy.LegacyHooks;
+import com.arcticlauncher.legacy.LegacyStampedLine;
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.feature.ChatCopy;
+import com.arcticlauncher.client.feature.ChatStampWidth;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import java.util.ArrayList;
+import java.util.List;
+import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.util.Texts;
+import net.minecraft.text.LiteralText;
 import net.minecraft.client.gui.hud.ChatHud;
 import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Final;
@@ -9,8 +19,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Constant;
-import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -19,7 +27,7 @@ import com.arcticlauncher.client.Lang;
 import com.arcticlauncher.client.feature.PersistentChat;
 /** Chat timestamps, repeated lines stacked, mentions of you marked, and Auto GG. */
 @Mixin(ChatHud.class)
-abstract class ChatHudMixin {
+abstract class ChatHudMixin implements PersistentChat.Hud {
 	/** Lines (and display lines) put into the chat from the saved log: the history limit does not count them. */
 	@Unique
 	private int arctic$loadedLines;
@@ -71,7 +79,7 @@ abstract class ChatHudMixin {
 	@Inject(method = "scroll", at = @At("RETURN"))
 	private void arctic$older(int amount, CallbackInfo ci) {
 		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
-		if (history == null || arctic$loading || history.restoring() || !history.hasOlder()
+		if (amount <= 0 || history == null || arctic$loading || history.restoring() || !history.hasOlder()
 				|| visibleMessages.size() - scrolledLines > getVisibleLineCount() * 3) {
 			return;
 		}
@@ -119,11 +127,33 @@ abstract class ChatHudMixin {
 
 	@Unique private boolean arctic$emojiWasOn = true;
 
-	/** Only the argument passed to wrapping changes; the stored message is untouched. */
-	@org.spongepowered.asm.mixin.injection.ModifyArg(method = "addMessage(Lnet/minecraft/text/Text;IIZ)V",
-			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/Texts;wrapLines(Lnet/minecraft/text/Text;ILnet/minecraft/client/font/TextRenderer;ZZ)Ljava/util/List;"), index = 0)
-	private Text arctic$emotes(Text message) {
-		return com.arcticlauncher.legacy.LegacyEmotes.layout(message);
+	@WrapOperation(method = "addMessage(Lnet/minecraft/text/Text;IIZ)V",
+			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/util/Texts;wrapLines(Lnet/minecraft/text/Text;ILnet/minecraft/client/font/TextRenderer;ZZ)Ljava/util/List;"))
+	private List<Text> arctic$layout(Text message, int width, TextRenderer font, boolean trimSpace, boolean colors,
+			Operation<List<Text>> wrap) {
+		List<Text> parts = message.getSiblings();
+		Text stamp = parts.isEmpty() ? null : parts.get(0);
+		ChatCopy.Data data = stamp == null ? null : ChatCopy.data(stamp.getStyle());
+		if (data == null || !data.stamp) {
+			return wrap.call(com.arcticlauncher.legacy.LegacyEmotes.layout(message), width, font, trimSpace, colors);
+		}
+		ChatStampWidth.Measure measure = text -> font.getStringWidth(Texts.getRenderChatMessage(text, colors));
+		int stampWidth = (int) measure.width(((LiteralText) stamp).getRawString());
+		int slot = Math.max(stampWidth, ChatStampWidth.slot(ArcticClient.config(), font, measure));
+		if (slot >= width) {
+			return wrap.call(com.arcticlauncher.legacy.LegacyEmotes.layout(message), width, font, trimSpace, colors);
+		}
+
+		Text body = new LiteralText("");
+		for (int i = 1; i < parts.size(); i++) body.append(parts.get(i).copy());
+		List<Text> wrapped = wrap.call(com.arcticlauncher.legacy.LegacyEmotes.layout(body), width - slot, font, trimSpace, colors);
+		List<Text> lines = new ArrayList<Text>(wrapped.size());
+		Text displayedStamp = new LiteralText(Texts.getRenderChatMessage(((LiteralText) stamp).getRawString(), colors))
+				.setStyle(stamp.getStyle().deepCopy());
+		for (int i = 0; i < wrapped.size(); i++) {
+			lines.add(new LegacyStampedLine(i == 0 ? displayedStamp : null, wrapped.get(i), slot, i == 0 ? stampWidth : 0));
+		}
+		return lines;
 	}
 
 	@Inject(method = "render", at = @At("HEAD"))
@@ -144,19 +174,11 @@ abstract class ChatHudMixin {
 	@Unique private float arctic$fontProbe;
 	@Unique private boolean arctic$fontSeen;
 
-	/** How many messages the chat keeps: the game's 100 become the player's setting. */
-	@ModifyConstant(method = "addMessage(Lnet/minecraft/text/Text;IIZ)V", constant = @Constant(intValue = 100))
-	private int arctic$history(int vanilla) {
+	@Override
+	public int arctic$historyLimit(int limit) {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
-		return PersistentChat.historyLimit(arctic$loading, c == null ? vanilla : c.chatHistory,
-				c == null ? 0 : arctic$loadedLines);
-	}
-
-	/** Keep a larger up-arrow history while chat is saved to disk. */
-	@ModifyConstant(method = "addToMessageHistory", constant = @Constant(intValue = 100), require = 0)
-	private int arctic$sentLimit(int vanilla) {
-		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
-		return c != null && c.chatPersistent ? PersistentChat.MAX_HUD_LINES : vanilla;
+		return c == null ? limit : PersistentChat.historyLimit(limit,
+				arctic$loading, c.chatHistory, arctic$loadedLines);
 	}
 
 	/** Hide the chat: none of its lines are drawn. */
@@ -175,10 +197,15 @@ abstract class ChatHudMixin {
 		com.arcticlauncher.client.config.ClientConfig c = com.arcticlauncher.client.ArcticClient.config();
 		if (c != null && c.chatKeep) {
 			ci.cancel();
-		} else if (ArcticClient.persistentChat() != null) {
-			// The lines are gone for good: the log is not scrolled back into an emptied chat.
-			arctic$loadedLines = 0;
-			ArcticClient.persistentChat().stopPaging();
+		}
+	}
+
+	@Inject(method = {"clear()V", "clear(Z)V"}, at = @At("RETURN"), require = 1)
+	private void arctic$resetHistoryAfterClear(CallbackInfo ci) {
+		arctic$loadedLines = 0;
+		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
+		if (history != null) {
+			history.resetAfterGameClear();
 		}
 	}
 

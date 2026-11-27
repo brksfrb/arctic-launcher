@@ -56,6 +56,34 @@ class BadgeLooksTest {
 	}
 
 	@Test
+	void publishedRolesAndTextMarkersAreAllowlisted() throws Exception {
+		Looks looks = new Looks(platform(), new ClientConfig(), "http://127.0.0.1:1", "fixture");
+		try {
+			for (String role : new String[] {"founder", "dev", "admin", "mod", "beta"}) {
+				Look look = looks.parseLook(new JsonParser().parse("{\"badge_role\":\"" + role + "\",\"badge_style\":2}"), 1);
+				assertEquals(role, look.badgeRole);
+				assertEquals(2, look.badgeStyle);
+				int index = Badge.roleIndex(role);
+				for (Badge.Style style : Badge.STYLES) {
+					for (boolean tab : new boolean[] {false, true}) {
+						String mark = Badge.mark(tab, style.id, role);
+						assertTrue(Badge.marked(mark));
+						assertEquals(style.id, Badge.markedStyle(mark));
+						assertEquals(role, Badge.markedRole(mark));
+						assertEquals(tab, Badge.markedTab(mark));
+						assertEquals("brksfrb2", Badge.unmark(mark + "brksfrb2"));
+						assertEquals(Badge.slot(style.id, index, tab), Badge.glyphSlot(Badge.glyph(style.id, index, tab)));
+					}
+				}
+			}
+			for (String json : new String[] {"{}", "{\"badge_role\":null}", "{\"badge_role\":\"owner\"}", "{\"badge_role\":12}"}) {
+				assertNull(looks.parseLook(new JsonParser().parse(json), 1).badgeRole);
+			}
+			assertEquals("", Badge.markedRole(Badge.mark(false, 0, "owner")));
+		} finally { close(looks); }
+	}
+
+	@Test
 	void aFailedLookupKeepsTheBadgeAlreadyShownAndRetriesSoon() throws Exception {
 		java.util.concurrent.atomic.AtomicInteger status = new java.util.concurrent.atomic.AtomicInteger(200);
 		HttpServer server = players(() -> "{\"" + Looks.compact(B) + "\":{\"badge_style\":1,\"arctic\":true}}", status::get);
@@ -102,6 +130,62 @@ class BadgeLooksTest {
 			lookUp(looks);
 			assertFalse(looks.isArctic(B));
 		} finally { close(looks); server.stop(0); }
+	}
+
+	@Test
+	void remoteLooksAndEmotesFollowTheBadgeThroughTheCheckInGraceWindow() throws Exception {
+		String hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+		JsonObject outfit = new JsonParser().parse("{\"skin\":\"" + hash + "\",\"cape\":\"" + hash
+				+ "\",\"cosmetics\":[\"hat\"]}").getAsJsonObject();
+		Looks looks = new Looks(platform(), new ClientConfig(), "", "fixture");
+		java.lang.reflect.Field players = Looks.class.getDeclaredField("players");
+		players.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		java.util.Map<UUID, Look> cache = (java.util.Map<UUID, Look>) players.get(looks);
+		java.lang.reflect.Method keepArctic = Looks.class.getDeclaredMethod("keepArctic", UUID.class, Look.class, long.class);
+		keepArctic.setAccessible(true);
+		try {
+			Cosmetics cosmetics = looks.cosmetics();
+			Cosmetics.Emote wave = new Cosmetics.Emote("wave", "Wave", "");
+			wave.animation = Animation.parse(new JsonParser().parse(
+					"{\"animations\":{\"wave\":{\"animation_length\":1,\"loop\":true,\"bones\":{}}}}"));
+			cosmetics.holdLocal(A, wave, 0);
+			// Keep an emote cached for B across look refreshes, as if a remote poll had just returned it.
+			cosmetics.holdLocal(B, wave, 0);
+			long now = System.currentTimeMillis();
+			Look offline = looks.parseLook(outfit, now);
+			cache.put(A, offline);
+			cache.put(B, offline);
+			assertFalse(looks.isArctic(B));
+			assertNull(looks.lookFor(B));
+			assertNull(cosmetics.playingFor(B));
+			Look own = looks.lookFor(A);
+			assertNotNull(own);
+			assertFalse(own.arctic);
+			assertEquals(java.util.Collections.singletonList("hat"), own.cosmetics);
+			assertNotNull(cosmetics.playingFor(A));
+
+			outfit.addProperty("arctic", true);
+			Look online = looks.parseLook(outfit, now);
+			cache.put(B, (Look) keepArctic.invoke(looks, B, online, now));
+			assertTrue(looks.isArctic(B));
+			Look remote = looks.lookFor(B);
+			assertNotNull(remote);
+			assertEquals(hash, remote.skin);
+			assertEquals(hash, remote.cape);
+			assertEquals(java.util.Collections.singletonList("hat"), remote.cosmetics);
+			assertNotNull(cosmetics.playingFor(B));
+
+			cache.put(B, (Look) keepArctic.invoke(looks, B, offline, now + 149_000L));
+			assertTrue(looks.isArctic(B));
+			assertEquals(remote.cosmetics, looks.lookFor(B).cosmetics);
+			assertNotNull(cosmetics.playingFor(B));
+
+			cache.put(B, (Look) keepArctic.invoke(looks, B, offline, now + 150_000L));
+			assertFalse(looks.isArctic(B));
+			assertNull(looks.lookFor(B));
+			assertNull(cosmetics.playingFor(B));
+		} finally { close(looks); }
 	}
 
 	@Test

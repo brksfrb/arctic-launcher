@@ -6,11 +6,12 @@ use std::path::{Path, PathBuf};
 use crate::t;
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
-    CoUninitialize, IPersistFile,
+    CoUninitialize, IPersistFile, STGM_READ,
 };
 use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
 use windows::core::{HSTRING, Interface};
 const NAME: &str = "Arctic Launcher";
+const INSTANCE_DESCRIPTION_PREFIX: &str = "Arctic Launcher — "; // i18n-ignore
 /// Which exe the shortcut was last made for (in the launcher's data folder).
 const MARKER: &str = "start-menu-shortcut.txt";
 
@@ -57,21 +58,71 @@ fn make(data_root: &Path) -> Result<(), String> {
 }
 
 pub(crate) fn write_link(exe: &Path, lnk: &Path) -> windows::core::Result<()> {
+    write_link_with_args(exe, lnk, "", NAME)
+}
+
+pub(crate) fn write_instance_link(
+    exe: &Path,
+    lnk: &Path,
+    args: &str,
+    title: &str,
+) -> windows::core::Result<()> {
+    write_link_with_args(
+        exe,
+        lnk,
+        args,
+        &format!("{INSTANCE_DESCRIPTION_PREFIX}{title}"),
+    )
+}
+
+fn write_link_with_args(
+    exe: &Path,
+    lnk: &Path,
+    args: &str,
+    description: &str,
+) -> windows::core::Result<()> {
+    with_shell_link(|link| unsafe {
+        let exe_h = HSTRING::from(exe.as_os_str());
+        link.SetPath(&exe_h)?;
+        if let Some(dir) = exe.parent() {
+            link.SetWorkingDirectory(&HSTRING::from(dir.as_os_str()))?;
+        }
+        if !args.is_empty() {
+            link.SetArguments(&HSTRING::from(args))?;
+        }
+        link.SetDescription(&HSTRING::from(description))?;
+        link.SetIconLocation(&exe_h, 0)?;
+        let file: IPersistFile = link.cast()?;
+        file.Save(&HSTRING::from(lnk.as_os_str()), true)
+    })
+}
+
+pub(crate) fn is_instance_link(lnk: &Path, args: &str) -> bool {
+    with_shell_link(|link| unsafe {
+        let file: IPersistFile = link.cast()?;
+        file.Load(&HSTRING::from(lnk.as_os_str()), STGM_READ)?;
+        let mut description = [0; 260];
+        let mut arguments = [0; 1024];
+        link.GetDescription(&mut description)?;
+        link.GetArguments(&mut arguments)?;
+        let read = |value: &[u16]| {
+            String::from_utf16_lossy(value.split(|&c| c == 0).next().unwrap_or_default())
+        };
+        Ok(read(&description).starts_with(INSTANCE_DESCRIPTION_PREFIX) && read(&arguments) == args)
+    })
+    .unwrap_or(false)
+}
+
+fn with_shell_link<T>(
+    use_link: impl FnOnce(IShellLinkW) -> windows::core::Result<T>,
+) -> windows::core::Result<T> {
     // SAFETY: COM is set up for this thread only and torn down below; the shell link object
     // and its IPersistFile view are used on this thread and dropped before CoUninitialize.
     unsafe {
         let init = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let result = (|| {
             let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
-            let exe_h = HSTRING::from(exe.as_os_str());
-            link.SetPath(&exe_h)?;
-            if let Some(dir) = exe.parent() {
-                link.SetWorkingDirectory(&HSTRING::from(dir.as_os_str()))?;
-            }
-            link.SetDescription(&HSTRING::from(NAME))?;
-            link.SetIconLocation(&exe_h, 0)?;
-            let file: IPersistFile = link.cast()?;
-            file.Save(&HSTRING::from(lnk.as_os_str()), true)
+            use_link(link)
         })();
         if init.is_ok() {
             CoUninitialize();
@@ -98,5 +149,16 @@ mod tests {
         let found = bytes.windows(name.len()).any(|w| w == name.as_bytes())
             || bytes.windows(wide.len()).any(|w| w == wide.as_slice());
         assert!(found, "the shortcut doesn't name {name}");
+    }
+
+    #[test]
+    fn instance_link_round_trips_arguments() {
+        let dir = tempfile::tempdir().unwrap();
+        let lnk = dir.path().join("My instance.lnk");
+        let exe = std::env::current_exe().unwrap();
+        let args = r#"--instance "my-instance" --no-intro"#;
+        write_instance_link(&exe, &lnk, args, "My instance").unwrap();
+        assert!(is_instance_link(&lnk, args));
+        assert!(!is_instance_link(&lnk, "--instance other"));
     }
 }

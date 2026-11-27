@@ -282,7 +282,7 @@ def check(version):
             targets += re.findall(r'"((?:net\.minecraft|com\.mojang)\.[\w.$]+)"', mixin[1])
             for cls in targets:
                 problems.extend(f"{f}: {p}" for p in callback_problems(jar, cls, src, imports, consts))
-        m = re.search(r"@Mixin\(([\w.]+)\.class\)", src)
+        m = re.search(r"@Mixin\(\s*(?:value\s*=\s*)?([\w.]+)\.class(?:,\s*priority\s*=\s*\d+)?\s*\)", src)
         if not m:
             continue
         cls = target_class(m.group(1), imports)

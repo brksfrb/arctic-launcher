@@ -251,7 +251,7 @@ fn migrate_legacy(dirs: &DataDirs, id: &str) -> Result<()> {
     Ok(())
 }
 
-/// Game logs move with the profile; `launcher.log` stays launcher-wide.
+/// Game logs move with the profile. Current and archived launcher logs stay launcher-wide.
 fn move_game_logs(from: &Path, to: &Path) -> Result<()> {
     let Ok(entries) = fs::read_dir(from) else {
         return Ok(());

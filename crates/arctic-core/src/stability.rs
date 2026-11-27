@@ -33,14 +33,18 @@ struct Entry {
     place: String,
 }
 
-/// Where a native crash happened, from the game log or crash text ("# Problematic frame:" and the
-/// line after it), without the numbers that change from run to run. None if it isn't a native crash.
-pub fn place(text: &str) -> Option<String> {
+pub(crate) fn problematic_frame(text: &str) -> Option<&str> {
     static FRAME: OnceLock<Regex> = OnceLock::new();
     let re = FRAME.get_or_init(|| {
         Regex::new(r"(?m)^#\s*Problematic frame:\s*\r?\n#\s*(.+?)\s*$").expect("valid pattern")
     });
-    let line = re.captures(text)?.get(1)?.as_str();
+    Some(re.captures(text)?.get(1)?.as_str())
+}
+
+/// Where a native crash happened, from the game log or crash text ("# Problematic frame:" and the
+/// line after it), without the numbers that change from run to run. None if it isn't a native crash.
+pub fn place(text: &str) -> Option<String> {
+    let line = problematic_frame(text)?;
     // "J 33896 c2 com.example.Class.method(...)V (410 bytes) @ 0x..." -> "J c2 com.example.Class.method"
     let line = line.split('(').next().unwrap_or(line);
     let words: Vec<&str> = line

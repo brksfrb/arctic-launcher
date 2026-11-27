@@ -64,6 +64,7 @@ final class Mod {
 	Supplier<MenuTab> page;
 	/** It has a key of its own that switches it (so its page doesn't get the generic Toggle key row). */
 	boolean ownToggleKey;
+	String toggleKeyLabel = "mods.toggle_key";
 	/** For HUD widgets: the widget (its page shows a live preview). */
 	HudWidget widget;
 	/** The HUD controls merged into this card, retaining their saved toggle binding. */

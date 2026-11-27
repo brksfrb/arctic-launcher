@@ -1,0 +1,43 @@
+---- first error ----
+java.lang.NullPointerException: KubeJS has not been initialized, this won't happen unless some OTHER mod failed to load first! Check your latest.log!
+
+---- first exceptions ----
+[09:44:47] [main/ERROR] The specified mixin 'com.brutalbosses.mixin.BasePressurePlateBlockMixin' was not found
+    org.spongepowered.asm.mixin.transformer.throwables.InvalidMixinException: The specified mixin 'com.brutalbosses.mixin.BasePressurePlateBlockMixin' was not found
+        at org.spongepowered.asm.mixin.transformer.MixinInfo.<init>(MixinInfo.java:864)
+    Caused by: java.lang.ClassNotFoundException: The specified mixin 'com.brutalbosses.mixin.BasePressurePlateBlockMixin' was not found
+        at org.spongepowered.asm.mixin.transformer.MixinInfo.loadMixinClass(MixinInfo.java:1313)
+[09:44:47] [main/ERROR] com.electronwill.nightconfig.core.io.ParsingException: Not enough data available
+    org.spongepowered.asm.mixin.transformer.throwables.InvalidMixinException: com.electronwill.nightconfig.core.io.ParsingException: Not enough data available
+        at org.spongepowered.asm.mixin.transformer.MixinInfo.<init>(MixinInfo.java:885)
+    Caused by: com.electronwill.nightconfig.core.io.ParsingException: Not enough data available
+        at com.electronwill.nightconfig.core.io.ParsingException.notEnoughData(ParsingException.java:22)
+        at com.electronwill.nightconfig.toml.TableParser.parseDottedKey(TableParser.java:145)
+        at com.electronwill.nightconfig.core.io.ConfigParser.parse(ConfigParser.java:113)
+        at com.electronwill.nightconfig.core.file.WriteSyncFileConfig.load(WriteSyncFileConfig.java:73)
+        at com.electronwill.nightconfig.core.file.AutosaveCommentedFileConfig.load(AutosaveCommentedFileConfig.java:85)
+        at com.performant.coremod.config.Configuration.loadConfig(Configuration.java:48)
+        at com.performant.coremod.config.Configuration.<init>(Configuration.java:29)
+        at com.performant.coremod.Performant.getConfig(Performant.java:58)
+        at com.performant.coremod.mixin.MixinConfig.lambda$onLoad$23(MixinConfig.java:51)
+        at com.performant.coremod.mixin.MixinConfig.shouldApplyMixin(MixinConfig.java:102)
+        at org.spongepowered.asm.mixin.transformer.PluginHandle.shouldApplyMixin(PluginHandle.java:132)
+
+---- initial output ----
+──── Launching Crazy Craft Updated (1.16.5) as ExamplePlayer ────
+(exit code -1 (0xFFFFFFFF; no known NTSTATUS name))
+
+---- crash report ----
+---- Minecraft Crash Report ----
+Time: 11/21/26 9:45 AM
+Description: Initializing game
+
+java.lang.NullPointerException: KubeJS has not been initialized, this won't happen unless some OTHER mod failed to load first! Check your latest.log!
+	at java.util.Objects.requireNonNull(Objects.java:228) ~[?:1.8.0_512] {}
+	at dev.latvian.kubejs.script.data.KubeJSResourcePack.<init>(KubeJSResourcePack.java:45) ~[kubejs:1605.3.19-build.299] {re:mixin,re:classloading}
+	at dev.latvian.kubejs.client.KubeJSClientResourcePack.inject(KubeJSClientResourcePack.java:20) ~[kubejs:1605.3.19-build.299] {re:mixin,re:classloading}
+	at net.minecraft.client.main.Main.main(Main.java:149) ~[1.16.5-forge-36.2.35.jar:?] {re:classloading,re:mixin,pl:runtimedistcleaner:A,pl:mixin:A,pl:runtimedistcleaner:A}
+
+	Mod List:
+		BetterDungeons-1.16.4-1.2.1.jar                   |YUNG's Better Dungeons        |betterdungeons                |1.16.4-1.2.1        |NONE      |Manifest: NOSIGNATURE
+		ftb-essentials-1605.1.5-build.32.jar              |FTB Essentials                |ftbessentials                 |1605.1.5-build.32   |NONE      |Manifest: NOSIGNATURE

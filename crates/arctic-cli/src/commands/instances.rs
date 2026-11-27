@@ -23,7 +23,7 @@ pub fn run(ctx: &Ctx, command: &InstancesCommand) -> Result<i32> {
         InstancesCommand::Remove { instance } => {
             let found = instances::find(&ctx.dirs, instance)?;
             if found.is_default() {
-                return Err(Error::Other("the Vanilla instance can't be removed".into()));
+                return Err(Error::Other("the Arctic instance can't be removed".into()));
             }
             instances::remove(&ctx.dirs, &found.id)?;
             ctx.out
@@ -41,8 +41,8 @@ fn list(ctx: &Ctx) -> Result<()> {
     for i in all {
         let version = i.version.clone().unwrap_or_else(|| "any".into());
         let loader = match i.loader.version() {
-            Some(v) => format!("{} {v}", i.loader.label()),
-            None => i.loader.label().to_owned(),
+            Some(v) => format!("{} {v}", i.kind_label()),
+            None => i.kind_label().to_owned(),
         };
         ctx.out.emit(
             json!({
@@ -51,6 +51,7 @@ fn list(ctx: &Ctx) -> Result<()> {
                 "version": i.version,
                 "loader": i.loader.label(),
                 "loader_version": i.loader.version(),
+                "builtin": i.is_default(),
             }),
             || format!("{:<24} {:<20} {version:<10} {loader}", i.id, i.name),
         );
@@ -128,7 +129,8 @@ fn show(ctx: &Ctx, i: &Instance) {
             "memory_mb": i.max_memory_mb,
             "icon": i.icon.style.label().to_lowercase(),
             "color": color,
-            "arctic_client": i.arctic_mod,
+            "arctic_client": i.arctic_client(),
+            "builtin": i.is_default(),
             "java": java,
             "jvm_args": i.jvm_args,
             "performance": i.performance,
@@ -145,7 +147,11 @@ fn show(ctx: &Ctx, i: &Instance) {
                 ),
                 format!(
                     "  loader         {} {}",
-                    i.loader.label(),
+                    if i.is_default() {
+                        "Arctic Client (Fabric)"
+                    } else {
+                        i.loader.label()
+                    },
                     i.loader.version().unwrap_or("")
                 ),
                 format!(
@@ -164,6 +170,9 @@ fn show(ctx: &Ctx, i: &Instance) {
                 format!("  jvm args       {}", i.jvm_args),
                 format!("  game folder    {}", i.game_dir(&ctx.dirs).display()),
             ];
+            if i.is_default() {
+                lines.push("  arctic client  always on".to_owned());
+            }
             if i.loader.kind().is_some() {
                 lines.push(format!("  arctic client  {}", on(i.arctic_mod)));
             } else {
@@ -189,7 +198,7 @@ fn edit(ctx: &Ctx, args: &InstanceEditArgs) -> Result<()> {
     if game_changes {
         if i.is_default() {
             return Err(Error::Other(
-                "the Vanilla instance follows the version picked to play; make another instance to pin one".into(),
+                "the Arctic instance follows the version picked to play; make another instance to pin one".into(),
             ));
         }
         let game = match &args.version {
@@ -233,6 +242,17 @@ fn edit(ctx: &Ctx, args: &InstanceEditArgs) -> Result<()> {
         };
     }
     if let Some(on) = args.arctic_client {
+        if i.is_default() {
+            return Err(Error::Other(
+                "the Arctic instance always plays with the Arctic Client".into(),
+            ));
+        }
+        if !i.has_arctic_switch() {
+            return Err(Error::Other(
+                "Vanilla instances stay vanilla: make a Fabric instance to play with the Arctic Client"
+                    .into(),
+            ));
+        }
         i.arctic_mod = on.on();
     }
     if let Some(java) = &args.java {

@@ -1,6 +1,8 @@
 package com.arcticlauncher.client.ctm;
 
 import java.awt.image.BufferedImage;
+import java.io.Closeable;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -23,6 +25,14 @@ public final class GlassPacks {
 		InputStream open(String name) throws IOException;
 		default String description() { return getClass().getName(); }
 	}
+
+	/** The owner closes the data stream and any companion metadata stream together. */
+	public static InputStream ownedStream(InputStream data, Closeable owner) {
+		return new FilterInputStream(data) {
+			@Override public void close() throws IOException { owner.close(); }
+		};
+	}
+
 	@FunctionalInterface
 	public interface Loader { GlassPacks load() throws IOException; }
 	private static final Logger LOGGER = Logger.getLogger(GlassPacks.class.getName());

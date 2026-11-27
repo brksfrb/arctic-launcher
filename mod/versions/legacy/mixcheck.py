@@ -90,7 +90,7 @@ def active(src):
 
 for f in sorted(glob.glob("*.java")):
     src = active(open(f, encoding="utf-8").read())
-    m = re.search(r"@Mixin\(([\w.]+)\.class\)", src)
+    m = re.search(r"@Mixin\(\s*(?:value\s*=\s*)?([\w.]+)\.class(?:,\s*priority\s*=\s*\d+)?\s*\)", src)
     if not m:
         print(f"({f}: not in {ver})")
         continue
@@ -155,7 +155,7 @@ def body(cls, method):
 
 for f in sorted(glob.glob("*.java")):
     src = active(open(f, encoding="utf-8").read())
-    m = re.search(r"@Mixin\(([\w.]+)\.class\)", src)
+    m = re.search(r"@Mixin\(\s*(?:value\s*=\s*)?([\w.]+)\.class(?:,\s*priority\s*=\s*\d+)?\s*\)", src)
     if not m:
         continue
     imports = dict((i.group(2), i.group(1) + "." + i.group(2)) for i in re.finditer(r"import ((?:net\.minecraft|com\.mojang)[\w.]*)\.(\w+);", src))

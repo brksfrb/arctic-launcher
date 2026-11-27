@@ -26,7 +26,12 @@ use crate::storage::{load_json, save_json};
 const STASH: &str = "mods-full-api";
 /// What was done, so it can be undone (inside the mods folder; loaders ignore it).
 const STATE: &str = ".arctic-slim-api.json";
-const CACHE: &str = ".arctic-slim-api-cache.json";
+/// Before 0.6.7: the kept modules for one exact set of jars. No longer read.
+const OLD_CACHE: &str = ".arctic-slim-api-cache.json";
+/// What each jar was found to use ([`Uses`]).
+const USES: &str = ".arctic-slim-api-uses.json";
+/// Jars remembered in [`USES`]: a few game versions' worth of performance mods.
+const MAX_USES: usize = 64;
 const STUB: &str = "fabric-api-stub.jar";
 const CLASS_PREFIX: &[u8] = b"net/fabricmc/fabric/";
 
@@ -51,7 +56,7 @@ fn state_path(mods_dir: &Path) -> PathBuf {
     mods_dir.join(STATE)
 }
 
-fn stash_dir(mods_dir: &Path) -> PathBuf {
+pub(super) fn stash_dir(mods_dir: &Path) -> PathBuf {
     mods_dir.parent().unwrap_or(mods_dir).join(STASH)
 }
 
@@ -309,36 +314,122 @@ fn signature(mods_dir: &Path, skip: &[&str]) -> String {
     parts.join("|")
 }
 
+/// What one jar asks of Fabric API: found by reading every class in it (and in the jars inside
+/// it), which for a set of performance mods is a quarter of a second, so it is kept per jar.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct JarUse {
+    /// Name, size and modification time: another file is read again.
+    key: String,
+    /// Every `net/fabricmc/fabric/...` class name its classes mention.
+    classes: BTreeSet<String>,
+    /// The mod ids it requires.
+    requires: BTreeSet<String>,
+}
+
+#[derive(Default, PartialEq, Eq, Serialize, Deserialize)]
+struct Uses {
+    /// How the jars were read ([`USES_FORMAT`]): entries of another one are not used.
+    #[serde(default)]
+    format: u32,
+    jars: Vec<JarUse>,
+}
+
+/// Bump when [`read_use`] finds other things in the same jar.
+const USES_FORMAT: u32 = 1;
+
+fn jar_key(name: &str, meta: &fs::Metadata) -> Option<String> {
+    let time = meta
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_nanos();
+    Some(format!("{name}:{}:{time}", meta.len()))
+}
+
+/// `opened`: the jar could be read (one that couldn't, held by another program for a moment,
+/// is not remembered as using nothing).
+fn read_use(path: &Path, key: String) -> (JarUse, bool) {
+    let mut classes = BTreeSet::new();
+    let file = fs::File::open(path);
+    let opened = file.is_ok();
+    if let Ok(file) = file {
+        referenced_classes(file, &mut classes);
+    }
+    let (_, requires) = deps::fabric_ids(path, LoaderKind::Fabric);
+    let jar = JarUse {
+        key,
+        classes,
+        requires: requires.into_iter().collect(),
+    };
+    (jar, opened)
+}
+
 /// The modules (ids) to keep: those the other jars refer to or declare, and what those need.
 fn keep(mods_dir: &Path, umbrella: &str, modules: &[Module]) -> BTreeSet<String> {
     let owner: HashMap<&str, &str> = modules
         .iter()
         .flat_map(|m| m.classes.iter().map(|c| (c.as_str(), m.id.as_str())))
         .collect();
-    let mut wanted: BTreeSet<String> = BTreeSet::new();
-    let mut referenced = BTreeSet::new();
+    let uses_file = mods_dir.join(USES);
+    let mut known: Uses = fs::read_to_string(&uses_file)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .filter(|known: &Uses| known.format == USES_FORMAT)
+        .unwrap_or_default();
+    known.format = USES_FORMAT;
+    let mut used: Vec<JarUse> = Vec::new();
+    let mut learned = false;
     for entry in fs::read_dir(mods_dir).into_iter().flatten().flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
         if !name.ends_with(".jar") || name == umbrella || name == STUB {
             continue;
         }
-        let Ok(file) = fs::File::open(entry.path()) else {
-            continue;
-        };
-        referenced_classes(file, &mut referenced);
-        let (_, required) = deps::fabric_ids(&entry.path(), LoaderKind::Fabric);
-        wanted.extend(
-            required
-                .into_iter()
-                .filter(|id| modules.iter().any(|m| &m.id == id)),
-        );
+        let key = entry.metadata().ok().and_then(|meta| jar_key(&name, &meta));
+        let found = key
+            .as_ref()
+            .and_then(|key| known.jars.iter().find(|jar| &jar.key == key));
+        match (found, key) {
+            (Some(jar), _) => used.push(jar.clone()),
+            (None, key) => {
+                // A file whose size or time can't be told is read every time.
+                let (jar, opened) = read_use(&entry.path(), key.clone().unwrap_or_default());
+                if key.is_some() && opened {
+                    known.jars.push(jar.clone());
+                    learned = true;
+                }
+                used.push(jar);
+            }
+        }
     }
-    for class in &referenced {
-        let id = owner
-            .get(class.as_str())
-            .or_else(|| owner.get(class.split('$').next().unwrap_or(class)));
-        if let Some(id) = id {
-            wanted.insert((*id).to_owned());
+    if learned {
+        // Over the limit, the oldest entries that aren't this folder's jars go first.
+        let mut spare = known.jars.len().saturating_sub(MAX_USES);
+        known.jars.retain(|jar| {
+            let drop = spare > 0 && !used.iter().any(|u| u.key == jar.key);
+            spare -= usize::from(drop);
+            !drop
+        });
+        if let Ok(text) = serde_json::to_string(&known) {
+            let _ = fs::write(&uses_file, text);
+        }
+        let _ = fs::remove_file(mods_dir.join(OLD_CACHE));
+    }
+    let mut wanted: BTreeSet<String> = BTreeSet::new();
+    for jar in &used {
+        wanted.extend(
+            jar.requires
+                .iter()
+                .filter(|id| modules.iter().any(|m| &m.id == *id))
+                .cloned(),
+        );
+        for class in &jar.classes {
+            let id = owner
+                .get(class.as_str())
+                .or_else(|| owner.get(class.split('$').next().unwrap_or(class)));
+            if let Some(id) = id {
+                wanted.insert((*id).to_owned());
+            }
         }
     }
     // What the kept modules need themselves.
@@ -353,28 +444,6 @@ fn keep(mods_dir: &Path, umbrella: &str, modules: &[Module]) -> BTreeSet<String>
         }
     }
     wanted
-}
-
-#[derive(Serialize, Deserialize)]
-struct Cache {
-    signature: String,
-    keep: BTreeSet<String>,
-}
-
-fn cached(mods_dir: &Path, sig: &str) -> Option<BTreeSet<String>> {
-    let text = fs::read_to_string(mods_dir.join(CACHE)).ok()?;
-    let cache: Cache = serde_json::from_str(&text).ok()?;
-    (cache.signature == sig).then_some(cache.keep)
-}
-
-fn store(mods_dir: &Path, sig: &str, keep: &BTreeSet<String>) {
-    let cache = Cache {
-        signature: sig.to_owned(),
-        keep: keep.clone(),
-    };
-    if let Ok(text) = serde_json::to_string(&cache) {
-        let _ = fs::write(mods_dir.join(CACHE), text);
-    }
 }
 
 /// The big jar's file name while it is put aside (so that "is everything there" checks can count it).
@@ -426,15 +495,7 @@ pub fn apply(mods_dir: &Path) -> Result<bool> {
         return Ok(false);
     }
     let sig = signature(mods_dir, &[umbrella.as_str()]);
-    let cache_key = format!("{STUB_VERSION}:{umbrella}:{sig}");
-    let wanted = match cached(mods_dir, &cache_key) {
-        Some(ids) => ids,
-        None => {
-            let ids = keep(mods_dir, &umbrella, &modules);
-            store(mods_dir, &cache_key, &ids);
-            ids
-        }
-    };
+    let wanted = keep(mods_dir, &umbrella, &modules);
     // Nothing to gain when nearly everything is used.
     if wanted.len() + 8 > modules.len() {
         return Ok(false);
@@ -606,6 +667,64 @@ mod tests {
             .collect();
         back.sort();
         assert_eq!(back, ["fabric-api-0.1.0.jar", "user.jar"]);
+    }
+
+    #[test]
+    fn a_jar_is_read_once_for_as_long_as_it_is_the_same_file() {
+        let dir = tempfile::tempdir().unwrap();
+        setup(dir.path());
+        let mods = dir.path().join("mods");
+        let (modules, ..) = read_modules(&mods.join("fabric-api-0.1.0.jar")).unwrap();
+        let kept = keep(&mods, "fabric-api-0.1.0.jar", &modules);
+        assert_eq!(
+            kept.iter().map(String::as_str).collect::<Vec<_>>(),
+            ["m1", "m3"]
+        );
+        let uses = fs::read(mods.join(USES)).unwrap();
+
+        // The same name, size and time: what was read from it is used (not these bytes).
+        let user = mods.join("user.jar");
+        let (len, time) = {
+            let meta = fs::metadata(&user).unwrap();
+            (meta.len() as usize, meta.modified().unwrap())
+        };
+        fs::write(&user, vec![0u8; len]).unwrap();
+        let file = fs::File::options().write(true).open(&user).unwrap();
+        file.set_modified(time).unwrap();
+        drop(file);
+        assert_eq!(keep(&mods, "fabric-api-0.1.0.jar", &modules), kept);
+        assert_eq!(
+            fs::read(mods.join(USES)).unwrap(),
+            uses,
+            "nothing was written"
+        );
+
+        // Written again (another time): read again.
+        let later = time + std::time::Duration::from_secs(2);
+        let file = fs::File::options().write(true).open(&user).unwrap();
+        file.set_modified(later).unwrap();
+        drop(file);
+        assert!(keep(&mods, "fabric-api-0.1.0.jar", &modules).is_empty());
+
+        // Jars long gone make room; this folder's stay.
+        let mut known: Uses = serde_json::from_slice(&fs::read(mods.join(USES)).unwrap()).unwrap();
+        for i in 0..MAX_USES {
+            let mut gone = known.jars[0].clone();
+            gone.key = format!("gone-{i}.jar:1:1");
+            known.jars.insert(0, gone);
+        }
+        fs::write(mods.join(USES), serde_json::to_string(&known).unwrap()).unwrap();
+        fs::write(mods.join("new.jar"), b"not a jar").unwrap();
+        keep(&mods, "fabric-api-0.1.0.jar", &modules);
+        let known: Uses = serde_json::from_slice(&fs::read(mods.join(USES)).unwrap()).unwrap();
+        assert_eq!(known.jars.len(), MAX_USES);
+        assert!(
+            known
+                .jars
+                .iter()
+                .any(|jar| jar.key.starts_with("user.jar:"))
+        );
+        assert!(known.jars.iter().any(|jar| jar.key.starts_with("new.jar:")));
     }
 
     #[test]

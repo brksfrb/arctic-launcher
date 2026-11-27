@@ -108,6 +108,7 @@ public final class Cosmetics {
 
 	private final Platform platform;
 	private final String baseUrl;
+	private final java.util.function.Predicate<UUID> canShowEmote;
 	/**
 	 * The catalog, cosmetic files and emotes load here, not on the looks thread: a slow download must not hold up
 	 * every player's skin and cape lookups (and two at a time keep one hung request from stopping the rest).
@@ -123,9 +124,10 @@ public final class Cosmetics {
 	/** How stale a player's "on screen" time may get before it's refreshed. */
 	private static final long WATCH_REFRESH_MS = 1000;
 
-	Cosmetics(Platform platform, String baseUrl) {
+	Cosmetics(Platform platform, String baseUrl, java.util.function.Predicate<UUID> canShowEmote) {
 		this.platform = platform;
 		this.baseUrl = baseUrl;
+		this.canShowEmote = canShowEmote;
 	}
 
 	private static ScheduledThreadPoolExecutor newDownloads() {
@@ -288,7 +290,7 @@ public final class Cosmetics {
 			playing.remove(player, p);
 			return null;
 		}
-		return p;
+		return canShowEmote.test(player) ? p : null;
 	}
 
 	/**

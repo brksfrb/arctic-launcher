@@ -87,8 +87,10 @@ arctic instances remove <INSTANCE>
 ```
 
 `edit` changes only what's given. Changing the version or loader picks the newest stable
-loader build unless `--loader-version` says otherwise. The Vanilla instance follows the
-version picked to play, so its version and loader can't be pinned (make another instance).
+loader build unless `--loader-version` says otherwise. The built-in Arctic instance follows
+the version picked to play, so its version and loader can't be pinned (make another instance).
+It always plays with the Arctic Client; `--arctic-client` is for Fabric, Quilt and Forge
+instances (Vanilla instances stay vanilla).
 
 `--loader` is `vanilla` (default), `fabric`, `quilt`, `neoforge` or `forge`. Without
 `--loader-version`, the newest stable loader build for that Minecraft version is used.
