@@ -88,7 +88,7 @@ public final class TitleCompatTest {
 		});
 		steps.add(() -> {
 			assertVanilla(); // Explicit selection must survive ticks and keep the actual modded screen.
-			ArcticClient.screenKeyPressed(Keys.RIGHT_SHIFT);
+			ArcticClient.screenKeyPressed(Keys.MENU);
 			pageKey(Keys.ESCAPE);
 			assertVanilla();
 			clickNativeButton("Arctic servers");
@@ -161,7 +161,7 @@ public final class TitleCompatTest {
 	}
 
 	private static void roundTripArcticMenu() {
-		pageKey(Keys.RIGHT_SHIFT);
+		pageKey(Keys.MENU);
 		if (!(Compat.screen() instanceof PageScreen) || ((PageScreen) Compat.screen()).page() instanceof ServersPage)
 			throw new IllegalStateException("Right Shift did not open the Arctic menu");
 		pageKey(Keys.ESCAPE);

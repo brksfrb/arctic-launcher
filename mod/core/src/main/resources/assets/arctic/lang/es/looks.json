@@ -96,6 +96,7 @@
   "looks.turn_off": "Desactivar",
   "looks.turn_on": "Activar",
   "looks.turn_packs_on_and_off_or_find_new_ones_on": "Activa y desactiva packs, o encuentra nuevos en Modrinth.",
+  "looks.shader_packs_can_take_a_while": "Los paquetes de shaders pueden tardar en cargar.",
   "looks.turning_shaders_off": "Desactivando shaders…",
   "looks.undo": "Deshacer",
   "looks.what_this_game_knows_about_looks_and_when_it": "Lo que este juego sabe de los looks y cuándo se sincronizó por última vez.",

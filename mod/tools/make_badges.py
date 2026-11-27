@@ -12,7 +12,6 @@ import json
 from pathlib import Path
 import cairosvg
 from PIL import Image
-from badge_tab import tab_art
 from brand_mark import native
 
 MOD = Path(__file__).resolve().parents[1]
@@ -26,7 +25,6 @@ for name, style in STYLES:
         return Image.open(io.BytesIO(cairosvg.svg2png(bytestring=source.encode(), output_width=1024, output_height=1024))).convert('RGBA')
     if style == 0:
         im = native(256)
-        small_art = native(1024)
         im.save(ROOT / (name + '.png'))
     else:
         im = raster(svg)
@@ -35,22 +33,26 @@ for name, style in STYLES:
     for tab, height, ascent in [(False, 8, 7), (True, 9, 8)]:
         font = name + ('_tab' if tab else '')
         size = height * 8
-        # The logo's player list picture is pre-filtered onto a coarse grid (see badge_tab.py).
         if style == 0:
-            small = tab_art(small_art) if tab else native(size)
+            small = native(size)
         else:
             small = small_art.resize((size, size), Image.Resampling.LANCZOS)
-        small.save(ROOT / 'textures/font' / (font + '.png'))
         small.save(ROOT / (name + ('_tab' if tab else '_tag') + '.png'))
+        if style == 0 and tab:
+            # The compatibility bitmap provider infers advance from the rightmost occupied texel.
+            small.putpixel((size - 1, size // 2), (14, 165, 233, 1))
+        small.save(ROOT / 'textures/font' / (font + '.png'))
         bitmap = dict(type='bitmap', file='arctic:font/' + font + '.png', height=height, ascent=ascent, chars=['\uE000'])
-        contents = [bitmap, dict(type='space', advances={' ': 1})]
+        # Default and the five allowlisted role spacers share the same advance.
+        advances = {' ': 1, **{chr(0xE002 + role): height + 2 for role in range(6)}}
+        contents = [bitmap, dict(type='space', advances=advances)]
         if name == 'badge' and not tab:
             contents.insert(1, dict(type='bitmap', file='arctic:font/speaker.png', height=8, ascent=7, chars=['\uE001']))
         (ROOT / 'font' / (font + '.json')).write_text(json.dumps(dict(providers=contents), indent=2) + '\n')
         providers.append(dict(bitmap, chars=[chr(0xE0A0 + style + (0x10 if tab else 0))]))
 # Versions before 1.16 draw the player list's picture as a default-font character, and a text's shadow with the
-# picture's own width but nothing in it (BadgeShadow13Mixin): the tab picture is 9 wide plus one advance.
-providers.append(dict(type='space', advances={'\uE0AF': 1, '\uE0C0': 10}))
+# picture's own advance but nothing in it (BadgeShadow13Mixin): nine pixels plus the two-pixel gap.
+providers.append(dict(type='space', advances={'\uE0AF': 1, '\uE0C0': 11}))
 (ASSETS / 'minecraft/font/default.json').write_text(json.dumps(dict(providers=providers), indent=2) + '\n')
 for old in ['badge1', 'badge2', 'badge3', 'badge_shield', 'badge_shield_tab', 'badge_shield_tag']:
     for path in [ROOT / (old+'.png'), ROOT / 'font' / (old+'.json'), ROOT / 'textures/font' / (old+'.png')]:

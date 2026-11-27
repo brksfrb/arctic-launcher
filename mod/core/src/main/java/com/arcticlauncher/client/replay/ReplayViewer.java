@@ -20,6 +20,8 @@ public final class ReplayViewer {
 	private static final double MAX_FRAME_MS = 250;
 	/** While joining: packets handed over per frame at most. */
 	private static final int JOIN_BATCH = 4000;
+	/** An export waits this long (real ms) on the terrain screen before recorded packets are let through. */
+	private static final double LOADING_GRACE_MS = 1000;
 	static final int MAX_PACKET_FAILURES = 16;
 	/** Arrow keys jump this far (ms); with Ctrl, further. */
 	static final int SHORT_JUMP = 5_000;
@@ -68,6 +70,10 @@ public final class ReplayViewer {
 	private int lastSelf = -1;
 	/** A jump asked for, done at the start of the next frame (so "Jumping…" shows first). */
 	private double pendingSeek = -1;
+	/** Replay time packets are fed up to while an export waits for the terrain screen (-1: not waiting). */
+	private double loadingClock = -1;
+	/** Real time an export has spent behind the terrain screen (ms). */
+	private double loadingWait;
 	/** Some game versions render recursively from a packet handler. Never advance half a seek. */
 	private boolean seeking;
 	private String status;
@@ -156,7 +162,10 @@ public final class ReplayViewer {
 			return;
 		}
 		if (pendingSeek >= 0) {
-			double target = pendingSeek;
+			// A jump asked for before the world showed (an export started together with the replay) was
+			// clamped to a timeline start nobody knew yet. Before the first packet there is nothing to
+			// rebuild the world from: the restart left the login unapplied and the terrain screen up.
+			double target = Math.max(start, pendingSeek);
 			pendingSeek = -1;
 			seekNow(target);
 			if (failure != null) return;
@@ -180,9 +189,32 @@ public final class ReplayViewer {
 			ReplayClock.scale(paused && export == null ? 0 : SPEEDS[speed]);
 		}
 		feed(time, false);
+		feedWhileLoading(realMs);
 		if (failure != null) return;
 		self();
 		camera(realMs / 1000.0);
+	}
+
+	/**
+	 * The terrain screen can depend on recorded packets: the first position after a login or respawn
+	 * arrives a moment after it and is what closes the screen. An export holds the clock at its frame
+	 * until the world is ready, so it never reached that packet and the screen stayed up forever. Once
+	 * the screen has outlasted {@link #LOADING_GRACE_MS} (it normally closes by itself well within that),
+	 * packets arrive at their recorded pace until it closes; the export clock catches up with them.
+	 */
+	private void feedWhileLoading(double realMs) {
+		if (export == null || !backend.loading()) {
+			loadingWait = 0;
+			loadingClock = -1;
+			return;
+		}
+		loadingWait += realMs;
+		if (loadingWait < LOADING_GRACE_MS) return;
+		if (loadingClock < 0) {
+			loadingClock = cursor > 0 ? Math.max(time, data.time(cursor - 1)) : time;
+		}
+		loadingClock += realMs;
+		feed(loadingClock, false);
 	}
 
 	/** After the frame is on screen: exporting grabs it. */

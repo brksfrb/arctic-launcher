@@ -12,10 +12,11 @@ mod exact;
 mod files;
 mod identify;
 mod index;
+pub mod malware;
 pub mod modpack;
 mod modrinth;
-mod oneconfig;
 pub mod pack_groups;
+pub mod pack_index;
 pub mod pack_preview;
 pub mod packs;
 pub mod performance;
@@ -60,7 +61,7 @@ pub enum SortBy {
 }
 
 /// What kind of Modrinth project to search for.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum ProjectType {
     #[default]
     Mod,
@@ -128,6 +129,7 @@ pub struct ProjectHit {
     pub downloads: u64,
     pub follows: u64,
     pub icon_url: Option<String>,
+    pub featured_gallery: Option<String>,
     pub categories: Vec<String>,
     /// Minecraft versions tagged on the project's files.
     pub game_versions: Vec<String>,
@@ -179,6 +181,17 @@ pub struct ProjectDetail {
     pub gallery: Vec<GalleryImage>,
 }
 
+impl ProjectDetail {
+    /// The featured gallery thumbnail, or the first gallery thumbnail if none is featured.
+    pub fn banner_url(&self) -> Option<&str> {
+        self.gallery
+            .iter()
+            .find(|image| image.featured)
+            .or_else(|| self.gallery.first())
+            .map(|image| image.url.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct GalleryImage {
     pub url: String,
@@ -207,9 +220,9 @@ pub fn project_detail(id: &str) -> Result<ProjectDetail> {
     Ok(project)
 }
 
-/// Gallery images share the URL-keyed disk cache, with a larger download limit.
+/// Gallery images use a URL-keyed disk cache with a larger download limit and a total size cap.
 pub fn gallery_image(url: &str, cache_dir: &Path) -> Result<Vec<u8>> {
-    files::cached_image(url, cache_dir, 20 * 1024 * 1024)
+    files::cached_image(url, cache_dir, 20 * 1024 * 1024, Some(256 * 1024 * 1024))
 }
 
 /// A Modrinth mod installed into an instance (from `mods.json`).
@@ -540,6 +553,11 @@ pub fn icon(url: &str, cache_dir: &Path) -> Result<Vec<u8>> {
 /// Path of an instance's mod index.
 pub fn index_path(instance_dir: &Path) -> PathBuf {
     instance_dir.join("mods.json")
+}
+
+/// Read the tracked projects without inspecting any JAR contents.
+pub fn tracked_projects(mods_dir: &Path, index: &Path) -> Result<HashSet<String>> {
+    Ok(installed_projects(&ModIndex::load(index)?, mods_dir))
 }
 
 // ---------------------------------------------------------------- helpers

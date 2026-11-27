@@ -1,0 +1,43 @@
+[Arctic diagnostics] runtime: agent=true; executable=branded Arctic Client; high_performance_gpu=true; GPU registry preference for spawned exe: Ok(Some("GpuPreference=2;")); display adapters=2 [AMD Radeon HD 5450 (driver 15.201.2401.0, 11-4-2015), AMD Radeon HD 5450 (driver 15.201.2401.0, 11-4-2015)] (display devices, not a physical GPU inventory)
+
+[19:43:10] [Render thread/ERROR] Reported exception thrown!
+    net.minecraft.ReportedException: Render Frame
+    	at knot//net.minecraft.client.Minecraft.runTick(Minecraft.java:1274)
+    	at knot//net.minecraft.client.Minecraft.mixinextras$bridge$runTick$391(Minecraft.java)
+    	at knot//net.minecraft.client.Minecraft.wrapOperation$emm000$polarium$runTick(Minecraft.java:26142)
+    	at knot//net.minecraft.client.Minecraft.run(Minecraft.java:959)
+    	at java.base/java.lang.Thread.run(Thread.java:1474)
+    Caused by: java.lang.IllegalStateException: Failed to wait for frame completion
+    	at knot//com.mojang.blaze3d.opengl.GlCommandEncoder.submit(GlCommandEncoder.java:94)
+    	at knot//com.mojang.blaze3d.systems.CommandEncoder.submit(CommandEncoder.java:40)
+    	at knot//net.minecraft.client.Minecraft.mixinextras$bridge$submit$402(Minecraft.java)
+    	at knot//net.minecraft.client.Minecraft.wrapOperation$emm000$polarium$submit(Minecraft.java:26221)
+    	at knot//net.minecraft.client.Minecraft.renderFrame$mixinextras$wrapped$410(Minecraft.java:1397)
+    	at knot//net.minecraft.client.Minecraft.mixinextras$bridge$renderFrame$mixinextras$wrapped$410$411(Minecraft.java)
+    	at knot//net.minecraft.client.Minecraft.wrapMethod$bbe000$dynamic_fps_common$renderFrame(Minecraft.java:11668)
+    	at knot//net.minecraft.client.Minecraft.renderFrame(Minecraft.java)
+    	at knot//net.minecraft.client.Minecraft.mixinextras$bridge$renderFrame$392(Minecraft.java)
+    	at knot//net.minecraft.client.Minecraft.wrapOperation$emm000$polarium$renderFrame(Minecraft.java:26149)
+    	at knot//net.minecraft.client.Minecraft.runTick(Minecraft.java:1269)
+    	... 4 more
+---- Minecraft Crash Report ----
+// Hey, that tickles! Hehehe!
+Time: 2026-11-24 19:43:10
+Description: Render Frame
+java.lang.IllegalStateException: Failed to wait for frame completion
+	at knot//com.mojang.blaze3d.opengl.GlCommandEncoder.submit(GlCommandEncoder.java:94)
+	at knot//com.mojang.blaze3d.systems.CommandEncoder.submit(CommandEncoder.java:40)
+	at knot//net.minecraft.client.Minecraft.mixinextras$bridge$submit$402(Minecraft.java)
+	at knot//net.minecraft.client.Minecraft.wrapOperation$emm000$polarium$submit(Minecraft.java:26221)
+	at knot//net.minecraft.client.Minecraft.renderFrame$mixinextras$wrapped$410(Minecraft.java:1397)
+	at knot//net.minecraft.client.Minecraft.mixinextras$bridge$renderFrame$mixinextras$wrapped$410$411(Minecraft.java)
+	at knot//net.minecraft.client.Minecraft.wrapMethod$bbe000$dynamic_fps_common$renderFrame(Minecraft.java:11668)
+	at knot//net.minecraft.client.Minecraft.renderFrame(Minecraft.java)
+	at knot//net.minecraft.client.Minecraft.mixinextras$bridge$renderFrame$392(Minecraft.java)
+	at knot//net.minecraft.client.Minecraft.wrapOperation$emm000$polarium$renderFrame(Minecraft.java:26149)
+	at knot//net.minecraft.client.Minecraft.runTick(Minecraft.java:1269)
+	at knot//net.minecraft.client.Minecraft.mixinextras$bridge$runTick$391(Minecraft.java)
+	at knot//net.minecraft.client.Minecraft.wrapOperation$emm000$polarium$runTick(Minecraft.java:26142)
+	at knot//net.minecraft.client.Minecraft.run(Minecraft.java:959)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+A detailed walkthrough of the error, its code path and all known details is as follows:

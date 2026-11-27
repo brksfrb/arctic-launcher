@@ -97,6 +97,7 @@
   "looks.turn_on": "Turn on",
   "looks.turn_packs_on_and_off_or_find_new_ones_on": "Turn packs on and off, or find new ones on Modrinth.",
   "looks.turning_shaders_off": "Turning shaders off…",
+  "looks.shader_packs_can_take_a_while": "Shader packs can take a while to load.",
   "looks.undo": "Undo",
   "looks.what_this_game_knows_about_looks_and_when_it": "What this game knows about looks, and when it last checked in.",
   "looks.windows_root": "Windows-ROOT"

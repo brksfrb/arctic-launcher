@@ -177,7 +177,7 @@ impl bridge::Accounts for AppAccounts {
             .collect()
     }
 
-    fn session(&self, id: &str) -> arctic_core::Result<SessionGrant> {
+    fn session(&self, id: &str, force: bool) -> arctic_core::Result<SessionGrant> {
         let (account, tasks) = {
             let shared = self.0.lock().unwrap_or_else(PoisonError::into_inner);
             let account = shared
@@ -189,12 +189,18 @@ impl bridge::Accounts for AppAccounts {
             (account, shared.tasks.clone())
         };
         self.require_approval(&account, &tasks)?;
-        let fresh = tasks.fresh_account(account)?;
-        let arctic_token = cosmetics::token_for(tasks.dirs(), &cosmetics::base_url(), &fresh)
-            .inspect_err(|e| log::info!("Arctic session for the switch: {e}"))
-            .ok();
+        let fresh = tasks.refresh_account(account, force)?;
+        // Renewing the Minecraft session for the same player keeps their Arctic session.
+        let arctic_token = if force {
+            None
+        } else {
+            cosmetics::token_for(tasks.dirs(), &cosmetics::base_url(), &fresh)
+                .inspect_err(|_| log::info!("Arctic session unavailable for the switch"))
+                .ok()
+        };
         Ok(SessionGrant {
             identity: fresh.identity(),
+            minecraft_refresh_at: fresh.minecraft_refresh_at(),
             arctic_token,
         })
     }

@@ -9,7 +9,8 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 
-use crate::crash::Diagnosis;
+use crate::crash::{Diagnosis, secondary_mod_failure, secondary_stack};
+use crate::crash_conflicts::InstalledMod;
 
 /// Name shown for the Arctic mod's own frames.
 const ARCTIC_NAME: &str = "Arctic Client";
@@ -216,18 +217,42 @@ fn read_known(jar: &Path) -> Option<Known> {
 }
 
 /// One stack frame, reduced to what identifies its owner.
-struct Frame {
-    class: String,
-    method: String,
+pub(crate) struct Frame {
+    pub(crate) class: String,
+    pub(crate) method: String,
     /// Module/mod id written into the frame (`TRANSFORMER/modid@1.0/...`).
     module: Option<String>,
     /// Jar named at the end of the frame (`~[file.jar:?]`).
     jar: Option<String>,
 }
 
-fn frame(line: &str) -> Option<Frame> {
+pub(crate) fn frame(line: &str) -> Option<Frame> {
+    parse_frame(line.trim_start().strip_prefix("at ")?)
+}
+
+impl Frame {
+    pub(crate) fn is_platform(&self) -> bool {
+        NOT_MODS.iter().any(|p| self.class.starts_with(p))
+    }
+
+    pub(crate) fn config_owner<'a>(&self, mods: &'a [InstalledMod]) -> Option<&'a InstalledMod> {
+        if let Some(owner) = mods.iter().find(|m| {
+            self.module.as_ref().is_some_and(|id| id == &m.id)
+                || self.jar.as_ref().is_some_and(|jar| jar == &m.file)
+        }) {
+            return Some(owner);
+        }
+        let (package, _) = self.class.rsplit_once('.')?;
+        package.rsplit('.').find_map(|part| {
+            let part = norm(part);
+            mods.iter()
+                .find(|m| part == norm(&m.id) || part == norm(&m.name))
+        })
+    }
+}
+
+fn parse_frame(rest: &str) -> Option<Frame> {
     static JAR: OnceLock<Regex> = OnceLock::new();
-    let rest = line.trim_start().strip_prefix("at ")?;
     let (token, tail) = rest.split_once('(')?;
     let mut parts: Vec<&str> = token.split('/').collect();
     let call = parts.pop()?;
@@ -259,7 +284,7 @@ fn mixin_owner(method: &str) -> Option<&str> {
 
 /// The stack of the exception that ended the game, split into its chain, deepest cause first.
 /// `None` unless the text shows the exception was fatal (not just logged).
-fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
+pub(crate) fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
     let region = if let Some(stack) = crate::crash::crash_exception(text) {
         stack
     } else {
@@ -273,17 +298,28 @@ fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
         let head = HEAD.get_or_init(|| {
             Regex::new(r#"^(?:Exception in thread "[^"]*" )?[\w$]+(?:\.[\w$]+)+(?::.*)?$"#).unwrap()
         });
-        // The last unindented exception line that is followed by stack frames.
+        // Prefer the stack introduced by the fatal marker (Fabric can indent the whole trace).
+        // Otherwise use the last exception head followed by stack frames.
         let mut start = None;
         let mut pos = 0;
+        let mut after_reported = false;
         let mut lines = text.split_inclusive('\n').peekable();
         while let Some(line) = lines.next() {
             let next_is_frame = lines
                 .peek()
                 .is_some_and(|n| n.trim_start().starts_with("at "));
-            if next_is_frame && head.is_match(line.trim_end()) {
+            let header = if after_reported {
+                line.trim()
+            } else {
+                line.trim_end()
+            };
+            if next_is_frame && head.is_match(header) && !secondary_mod_failure(line) {
                 start = Some(pos);
+                if after_reported {
+                    break;
+                }
             }
+            after_reported = line.trim_end().ends_with("Reported exception thrown!");
             pos += line.len();
         }
         let start = start?;
@@ -305,11 +341,14 @@ fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
         }
         &rest[..end]
     };
+    let secondary = secondary_stack(region);
+    let indent = |line: &str| line.len() - line.trim_start().len();
+    let root_indent = indent(region.lines().next()?);
     let mut chain: Vec<Vec<&str>> = vec![Vec::new()];
     for (i, line) in region.lines().enumerate() {
         if i > 0
             && line.trim_start().starts_with("Caused by:")
-            && !line.starts_with(char::is_whitespace)
+            && (indent(line) <= root_indent || secondary)
         {
             chain.push(Vec::new());
         }
@@ -318,6 +357,13 @@ fn fatal_chain(text: &str) -> Option<Vec<Vec<&str>>> {
         }
     }
     chain.reverse();
+    if let Some(secondary) = chain.iter().position(|block| {
+        block
+            .first()
+            .is_some_and(|line| secondary_mod_failure(line))
+    }) {
+        chain.truncate(secondary);
+    }
     Some(chain)
 }
 
@@ -386,8 +432,378 @@ fn arctic(id: &str) -> Suspect {
     }
 }
 
+pub(crate) struct HangCulprit<'a> {
+    pub mod_info: Suspect,
+    pub class: String,
+    pub method: String,
+    pub percent: u8,
+    pub sample: &'a str,
+}
+
+/// Find the one mod whose code appears in most of the frozen client-thread samples.
+pub(crate) fn hang_culprit<'a>(text: &'a str, mods_dir: Option<&Path>) -> Option<HangCulprit<'a>> {
+    let snapshot = crate::crash::latest_freeze_snapshot(text);
+    // A finished freeze can establish a hang with the Windows exit code, but its
+    // samples may be from an earlier, recovered stall.
+    if snapshot.len() < text.len()
+        && snapshot
+            .lines()
+            .find(|l| l.starts_with("duration: "))
+            .is_some_and(|l| !l.ends_with(" (still frozen when written)"))
+    {
+        return None;
+    }
+    let mut frames = crate::crash::freeze_hot_frames(snapshot)
+        .filter_map(|(percent, entry, line)| {
+            if !(60..=100).contains(&percent) {
+                return None;
+            }
+            let frame = parse_frame(entry)?;
+            if NOT_MODS.iter().any(|p| frame.class.starts_with(p))
+                || frame.class.starts_with("net.fabricmc.fabric.")
+            {
+                return None;
+            }
+            Some((frame, percent, line))
+        })
+        .peekable();
+    frames.peek()?;
+    let mods = mods_dir.map(scan).unwrap_or_default();
+    let index = Index::new(&mods);
+    let startup = crate::crash::compact_mod_inventory(text, "");
+    let inventory: HashMap<_, _> = startup
+        .lines()
+        .chain(uploaded_mod_inventory(text).lines())
+        .filter_map(|line| line.split_once(' ').map(|(id, _)| (norm(id), id)))
+        .collect();
+    let mut culprit: Option<HangCulprit<'_>> = None;
+    for (frame, percent, sample) in frames {
+        let Some((package, _)) = frame.class.rsplit_once('.') else {
+            continue;
+        };
+        let mod_info = if frame.class.starts_with(POLARIUM_PACKAGE) {
+            arctic("polarium")
+        } else if frame.class.starts_with(ARCTIC_PACKAGE) {
+            arctic("arctic")
+        } else if let Some(i) = index.owner(&frame) {
+            let m = &mods[i];
+            if BASE_IDS.contains(&m.id.as_str()) {
+                continue;
+            }
+            Suspect {
+                id: m.id.clone(),
+                name: m.name.clone(),
+                ours: is_arctic_id(&m.id),
+            }
+        } else {
+            // Match a complete package component to an installed id, falling back to the package.
+            let id = package
+                .rsplit('.')
+                .find_map(|p| inventory.get(&norm(p)).copied())
+                .unwrap_or(package);
+            Suspect {
+                id: id.to_owned(),
+                name: id.to_owned(),
+                ours: is_arctic_id(id),
+            }
+        };
+        if let Some(best) = &culprit {
+            // Each number is a share of stacks containing the frame. The shares can overlap.
+            if best.mod_info.id != mod_info.id {
+                return None;
+            }
+            if percent <= best.percent {
+                continue;
+            }
+        }
+        culprit = Some(HangCulprit {
+            mod_info,
+            class: frame.class,
+            method: frame.method,
+            percent,
+            sample,
+        });
+    }
+    culprit
+}
+
+fn uploaded_mod_inventory(text: &str) -> &str {
+    text.split_once("---- full mod list (id version) ----")
+        .and_then(|(_, list)| list.split_once('\n'))
+        .map_or("", |(_, list)| list.split("\n---- ").next().unwrap_or(list))
+}
+
+pub(crate) const THREADING_TITLE: &str = "A mod used the world's random/data from another thread";
+
+/// ThreadingDetector prints each thread's name with a colon, followed by its Java frames.
+fn threading_worker_frame(report: &str) -> Option<Frame> {
+    use crate::crash::minecraft_report_section;
+
+    let lines = report
+        .lines()
+        .skip_while(|line| minecraft_report_section(line) != Some("Thread dumps"))
+        .skip(1)
+        .map(str::trim)
+        .take_while(|line| {
+            minecraft_report_section(line).is_none()
+                && *line != "Stacktrace:"
+                && !line.starts_with("Mixins in Stack")
+                && !line.starts_with("Suspected Mod")
+        });
+    let mut worker = false;
+    for line in lines {
+        if line.is_empty() || line == "Details:" {
+            continue;
+        }
+        if let Some(frame) = frame(line) {
+            if worker
+                && frame.class.contains('.')
+                && !frame.is_platform()
+                && !frame.class.starts_with("net.fabricmc.fabric.")
+            {
+                return Some(frame);
+            }
+        } else {
+            let name = line.strip_prefix("Thread dumps:").unwrap_or(line).trim();
+            worker = name.strip_suffix(':').is_some_and(|name| {
+                let name = name.trim().trim_matches('"');
+                ![
+                    "main",
+                    "main thread",
+                    "render thread",
+                    "client thread",
+                    "server thread",
+                ]
+                .iter()
+                .any(|main| name.eq_ignore_ascii_case(main))
+            });
+        }
+    }
+    None
+}
+
+pub(crate) fn diagnose_threading<'a>(
+    text: &'a str,
+    mods_dir: Option<&Path>,
+    installed: &[InstalledMod],
+) -> Option<(Diagnosis, &'a str)> {
+    if !text.contains(" from multiple threads") {
+        return None;
+    }
+    static EXCEPTION: OnceLock<Regex> = OnceLock::new();
+    let exception = EXCEPTION.get_or_init(|| {
+        Regex::new(r#"^(?:Caused by: |Exception in thread "[^"]+" |(?:\[[^\]]+\] )?\[[^\]]+/(?:ERROR|FATAL)\]:? )?java\.lang\.IllegalStateException: Accessing .+ from multiple threads$"#).unwrap()
+    });
+    let report = text.rsplit_once("---- Minecraft Crash Report ----");
+    let crash = report.map_or(text, |(_, report)| report);
+    let preamble = crash.lines().take_while(|line| {
+        crate::crash::minecraft_report_section(line).is_none()
+            && !line.starts_with("A detailed walkthrough of the error")
+    });
+    let error = preamble
+        .clone()
+        .map(str::trim)
+        .find(|line| exception.is_match(line))
+        .or_else(|| {
+            preamble.map(str::trim).find(|line| {
+                line.strip_prefix("Description: ")
+                    .unwrap_or(line)
+                    .strip_prefix("Accessing ")
+                    .and_then(|name| name.strip_suffix(" from multiple threads"))
+                    .is_some_and(|name| !name.is_empty())
+            })
+        })?;
+
+    let Some(frame) = threading_worker_frame(crash) else {
+        return Some((
+            Diagnosis::new(
+                THREADING_TITLE,
+                "The culprit is unknown. This usually happens when a content or particle mod uses world.random off-thread. Disable half of those mods at a time and retest to narrow it down, then update or remove the mod you identify.",
+                Vec::new(),
+            ),
+            error,
+        ));
+    };
+    let known = mods_dir.map(scan).unwrap_or_default();
+    let index = Index::new(&known);
+    let reported = crate::crash_conflicts::from_crash_report(text);
+    let (package, _) = frame.class.rsplit_once('.')?;
+    let inventory = crate::crash::compact_mod_inventory(text, "");
+    let ids: HashMap<_, _> = inventory
+        .lines()
+        .chain(uploaded_mod_inventory(text).lines())
+        .filter_map(|line| line.split_once(' ').map(|(id, _)| (norm(id), id)))
+        .collect();
+    let (id, name) = if let Some(i) = index.owner(&frame) {
+        (known[i].id.as_str(), known[i].name.as_str())
+    } else if let Some(owner) = frame
+        .config_owner(installed)
+        .or_else(|| frame.config_owner(&reported))
+    {
+        (owner.id.as_str(), owner.name.as_str())
+    } else {
+        let id = package
+            .rsplit('.')
+            .find_map(|part| ids.get(&norm(part)).copied())
+            .unwrap_or(package);
+        (id, id)
+    };
+    Some((
+        Diagnosis::new(
+            THREADING_TITLE,
+            format!("{name} appears in the worker-thread stack. Update or remove that mod."),
+            vec![id.to_owned()],
+        ),
+        error,
+    ))
+}
+
+pub(crate) const UNASSIGNED_ENTITY_TITLE: &str =
+    "A mod created an entity without an ID (26.2+ change)";
+
+fn unassigned_entity_failure(text: &str) -> Option<(&str, impl Iterator<Item = &str>)> {
+    const EXCEPTION: &str =
+        "java.lang.IllegalStateException: Tried to access entity ID before ID assignment";
+    let mut lines = crate::crash::crash_exception(text).unwrap_or(text).lines();
+    let error = lines.find(|line| {
+        line.trim().strip_suffix(EXCEPTION).is_some_and(|prefix| {
+            prefix.is_empty()
+                || prefix == "Caused by: "
+                || prefix.starts_with("Exception in thread \"")
+                || prefix.ends_with("/ERROR] ")
+                || prefix.ends_with("/ERROR]: ")
+        })
+    })?;
+    Some((
+        error.trim(),
+        lines.take_while(|line| line.trim_start().starts_with("at ")),
+    ))
+}
+
+fn unassigned_entity_culprit<'a>(
+    text: &str,
+    frames: impl Iterator<Item = &'a str>,
+    known: &[Known],
+    installed: &[InstalledMod],
+) -> Option<Suspect> {
+    const RENDERERS: &[&str] = &[
+        "iris",
+        "sodium",
+        "sodiumextra",
+        "polarium",
+        "oculus",
+        "embeddium",
+        "rubidium",
+        "indium",
+        "vulkanmod",
+        "optifine",
+    ];
+    let screen = crate::crash::latest_freeze_snapshot(text)
+        .lines()
+        .rev()
+        .filter_map(|line| {
+            let line = line
+                .trim()
+                .strip_prefix("[Arctic diagnostics] ")
+                .unwrap_or(line.trim());
+            line.strip_prefix("screen: ").or_else(|| {
+                let (_, class) = line.strip_prefix("context: ")?.rsplit_once(", screen: ")?;
+                Some(class)
+            })
+        })
+        .next()
+        .filter(|class| class.contains('.') && !class.contains(char::is_whitespace))
+        .map(|class| Frame {
+            class: class.to_owned(),
+            method: String::new(),
+            module: None,
+            jar: None,
+        });
+    let index = Index::new(known);
+    let reported = crate::crash_conflicts::from_crash_report(text);
+    let inventory = crate::crash::compact_mod_inventory(text, "");
+    let ids: HashMap<_, _> = inventory
+        .lines()
+        .chain(uploaded_mod_inventory(text).lines())
+        .filter_map(|line| line.split_once(' ').map(|(id, _)| (norm(id), id)))
+        .collect();
+
+    screen
+        .into_iter()
+        .chain(frames.filter_map(frame))
+        .find_map(|f| {
+            if f.is_platform() || f.class.starts_with("net.fabricmc.fabric.") {
+                return None;
+            }
+            let (package, _) = f.class.rsplit_once('.')?;
+            if package
+                .rsplit('.')
+                .any(|part| RENDERERS.contains(&norm(part).as_str()))
+            {
+                return None;
+            }
+            let (id, name) = if let Some(i) = index.owner(&f) {
+                let m = &known[i];
+                if m.library {
+                    return None;
+                }
+                (m.id.as_str(), m.name.as_str())
+            } else if let Some(m) = f
+                .config_owner(installed)
+                .or_else(|| f.config_owner(&reported))
+            {
+                (m.id.as_str(), m.name.as_str())
+            } else if package.split('.').any(|part| part == "randomcutscene") {
+                ("randomcutscene", "Random Cutscene")
+            } else {
+                let id = package
+                    .rsplit('.')
+                    .find_map(|part| ids.get(&norm(part)).copied())
+                    .unwrap_or(package);
+                (id, id)
+            };
+            if BASE_IDS.contains(&id)
+                || is_library(id, false)
+                || RENDERERS.contains(&norm(id).as_str())
+            {
+                return None;
+            }
+            Some(Suspect {
+                id: id.to_owned(),
+                name: name.to_owned(),
+                ours: is_arctic_id(id),
+            })
+        })
+}
+
+pub(crate) fn diagnose_unassigned_entity<'a>(
+    text: &'a str,
+    mods_dir: Option<&Path>,
+    mods: &[InstalledMod],
+) -> Option<(Diagnosis, &'a str)> {
+    let (error, frames) = unassigned_entity_failure(text)?;
+    let known = mods_dir.map(scan).unwrap_or_default();
+    let (detail, names) = match unassigned_entity_culprit(text, frames, &known, mods) {
+        Some(culprit) => (
+            format!("{} appears to have created the entity. Update it for this Minecraft version or remove it.", culprit.name),
+            vec![culprit.name],
+        ),
+        None => (
+            "The log doesn't identify which mod created the entity. Check for updates to mods that spawn fake players, such as cutscene, replay, or NPC mods, or try disabling them one at a time.".to_owned(),
+            Vec::new(),
+        ),
+    };
+    Some((
+        Diagnosis::new(UNASSIGNED_ENTITY_TITLE, detail, names),
+        error,
+    ))
+}
+
 /// The mod to blame for the crash in `text`, if the evidence is clear.
 pub fn suspect(text: &str, mods: &[Known]) -> Option<Suspect> {
+    if let Some((_, frames)) = unassigned_entity_failure(text) {
+        return unassigned_entity_culprit(text, frames, mods, &[]);
+    }
     let index = Index::new(mods);
     let named = |i: usize| {
         let m = &mods[i];
@@ -397,7 +813,13 @@ pub fn suspect(text: &str, mods: &[Known]) -> Option<Suspect> {
             ours: is_arctic_id(&m.id),
         }
     };
-    let by_game = suspected_line(text);
+    let report_stack = crate::crash::crash_exception(text);
+    let secondary_report = report_stack.is_some_and(secondary_stack);
+    let by_game = if secondary_report {
+        Vec::new()
+    } else {
+        suspected_line(text)
+    };
     let mut game_library = None;
     for (id, name) in &by_game {
         let known = index.by_id(id);
@@ -417,36 +839,56 @@ pub fn suspect(text: &str, mods: &[Known]) -> Option<Suspect> {
             return Some(s);
         }
     }
-    if let Some(chain) = fatal_chain(text) {
-        for block in &chain {
-            for line in block {
-                let Some(f) = frame(line) else {
+    let captured = if report_stack.is_none() {
+        crate::crash::captured_vanilla_crash(text)
+    } else {
+        None
+    };
+    let chain = captured
+        .as_deref()
+        .and_then(fatal_chain)
+        .or_else(|| fatal_chain(text));
+    let earlier = text
+        .rsplit_once("---- Minecraft Crash Report ----")
+        .filter(|_| secondary_report)
+        .and_then(|(earlier, _)| fatal_chain(earlier));
+    for (depth, block) in chain
+        .iter()
+        .chain(&earlier)
+        .flat_map(|chain| chain.iter().enumerate())
+    {
+        for (position, f) in block.iter().filter_map(|line| frame(line)).enumerate() {
+            if let Some(owner) = mixin_owner(&f.method) {
+                // Wrappers can relay exceptions from the original call. Attribute them only
+                // when the wrapper itself is the throwing frame of the deepest cause.
+                if (depth != 0 || position != 0)
+                    && (f.method.starts_with("wrapOperation$")
+                        || f.method.starts_with("wrapMethod$"))
+                {
                     continue;
-                };
-                if let Some(owner) = mixin_owner(&f.method) {
-                    if is_arctic_id(owner) {
-                        return Some(arctic(owner));
-                    }
-                    match index.by_id(owner) {
-                        Some(i) if !mods[i].library => return Some(named(i)),
-                        _ => continue,
-                    }
                 }
-                if f.class.starts_with(POLARIUM_PACKAGE) {
-                    return Some(arctic("polarium"));
+                if is_arctic_id(owner) {
+                    return Some(arctic(owner));
                 }
-                if f.class.starts_with(ARCTIC_PACKAGE) {
-                    return Some(arctic("arctic"));
+                match index.by_id(owner) {
+                    Some(i) if !mods[i].library => return Some(named(i)),
+                    _ => continue,
                 }
-                if NOT_MODS.iter().any(|p| f.class.starts_with(p)) {
-                    continue;
-                }
-                match index.owner(&f) {
-                    Some(i) if BASE_IDS.contains(&mods[i].id.as_str()) => {}
-                    Some(i) if mods[i].library => {}
-                    Some(i) => return Some(named(i)),
-                    None => {}
-                }
+            }
+            if f.class.starts_with(POLARIUM_PACKAGE) {
+                return Some(arctic("polarium"));
+            }
+            if f.class.starts_with(ARCTIC_PACKAGE) {
+                return Some(arctic("arctic"));
+            }
+            if f.is_platform() {
+                continue;
+            }
+            match index.owner(&f) {
+                Some(i) if BASE_IDS.contains(&mods[i].id.as_str()) => {}
+                Some(i) if mods[i].library => {}
+                Some(i) => return Some(named(i)),
+                None => {}
             }
         }
     }
@@ -518,6 +960,66 @@ mod tests {
     use crate::crash_conflicts::{diagnose_exit_in, diagnose_in};
     use std::io::Write;
 
+    const REPORT_458: &str = include_str!("../tests/fixtures/crash-458-threading-detector.log");
+    const THREADING_REPORT: &str =
+        include_str!("../tests/fixtures/threading-detector-with-worker.log");
+
+    #[test]
+    fn report_458_explains_the_threading_crash_without_a_culprit() {
+        let dir = tempfile::tempdir().unwrap();
+        let diagnosis = diagnose_exit_in(REPORT_458, -1, dir.path()).unwrap();
+        assert_eq!(diagnosis.title, THREADING_TITLE);
+        assert!(diagnosis.mods.is_empty());
+        assert!(diagnosis.detail.contains("The culprit is unknown"));
+        assert!(diagnosis.detail.contains("world.random off-thread"));
+        assert!(diagnosis.detail.contains("Disable half"));
+
+        let (log, report) = REPORT_458.split_once("---- crash report ----\n").unwrap();
+        assert_eq!(crate::crash::diagnose(log), Some(diagnosis.clone()));
+        let upload = crate::crash::Report::build(
+            "1.20.1",
+            "Fabric",
+            "Game exited with code -1 (0xFFFFFFFF)",
+            &[log],
+            &[],
+            Some(report),
+            None,
+        );
+        assert_eq!(upload.title, diagnosis.title);
+        assert!(upload.log.contains("matched: java.lang.IllegalStateException: Accessing LegacyRandomSource from multiple threads"));
+    }
+
+    #[test]
+    fn threading_detector_uses_the_first_worker_mod_frame() {
+        let dir = tempfile::tempdir().unwrap();
+        jar(
+            dir.path(),
+            "example.jar",
+            "different_mod_id",
+            "Spark Particles",
+            &["com.example.sparkparticles.async"],
+            "",
+        );
+        let diagnosis = diagnose_exit_in(THREADING_REPORT, -1, dir.path()).unwrap();
+        assert_eq!(diagnosis.title, THREADING_TITLE);
+        assert_eq!(diagnosis.mods, ["different_mod_id"]);
+        assert!(diagnosis.detail.contains("Spark Particles"));
+        assert!(diagnosis.detail.contains("Update or remove that mod"));
+
+        let uploaded = crate::crash::diagnose(THREADING_REPORT).unwrap();
+        assert_eq!(uploaded.mods, ["spark_particles"]);
+
+        let (main, worker) = THREADING_REPORT
+            .split_once("Particle worker #1:\n")
+            .unwrap();
+        let (_, rest) = worker.split_once("Stacktrace:\n").unwrap();
+        let render_only = format!("{main}Stacktrace:\n{rest}");
+        let diagnosis = diagnose_exit_in(&render_only, -1, dir.path()).unwrap();
+        assert_eq!(diagnosis.title, THREADING_TITLE);
+        assert!(diagnosis.mods.is_empty());
+        assert!(diagnosis.detail.contains("The culprit is unknown"));
+    }
+
     /// A mod jar with a fabric.mod.json and empty class files in the given packages.
     fn jar(dir: &Path, file: &str, id: &str, name: &str, packages: &[&str], extra: &str) {
         let mut zip = zip::ZipWriter::new(std::fs::File::create(dir.join(file)).unwrap());
@@ -534,6 +1036,42 @@ mod tests {
             zip.write_all(b"\xca\xfe\xba\xbe").unwrap();
         }
         zip.finish().unwrap();
+    }
+
+    #[test]
+    fn unassigned_entity_uses_a_mod_caller_and_skips_renderer_frames() {
+        let dir = tempfile::tempdir().unwrap();
+        jar(
+            dir.path(),
+            "fake-players.jar",
+            "fake_players",
+            "Fake Players",
+            &["example.cinematic"],
+            "",
+        );
+        let text = "---- Minecraft Crash Report ----\n\
+            java.lang.RuntimeException: Ticking entity\n\
+            Caused by: java.lang.IllegalStateException: Tried to access entity ID before ID assignment\n\
+            \tat knot//net.minecraft.world.entity.Entity.getId(Entity.java:446)\n\
+            \tat knot//net.minecraft.client.renderer.entity.EntityRenderDispatcher.handler$abc000$sodium$render(EntityRenderDispatcher.java:10)\n\
+            \tat knot//net.irisshaders.iris.render.EntityTracker.add(EntityTracker.java:10)\n\
+            \tat knot//net.minecraft.client.multiplayer.ClientLevel.addEntity(ClientLevel.java:11)\n\
+            \tat knot//example.cinematic.PlayerSpawner.spawn(PlayerSpawner.java:12)\n\n\
+            Suspected Mods: Sodium (sodium)";
+        let d = diagnose_exit_in(text, 1, dir.path()).unwrap();
+        assert_eq!(d.title, UNASSIGNED_ENTITY_TITLE);
+        assert_eq!(d.mods, ["Fake Players"]);
+        assert_eq!(suspect(text, &scan(dir.path())).unwrap().id, "fake_players");
+
+        let text = text.replace(
+            "\tat knot//example.cinematic.PlayerSpawner.spawn(PlayerSpawner.java:12)\n",
+            "",
+        );
+        let d = diagnose_exit_in(&text, 1, dir.path()).unwrap();
+        assert_eq!(d.title, UNASSIGNED_ENTITY_TITLE);
+        assert!(d.mods.is_empty());
+        assert!(d.detail.contains("mods that spawn fake players"));
+        assert!(suspect(&text, &scan(dir.path())).is_none());
     }
 
     fn pack() -> tempfile::TempDir {
@@ -586,6 +1124,22 @@ mod tests {
         dir
     }
 
+    #[test]
+    fn a_secondary_report_skips_its_frames_and_suspected_mods() {
+        let dir = pack();
+        let report = "---- Minecraft Crash Report ----\n\n\
+            java.lang.IllegalStateException: Another mod has failed to load\n\
+            \tat me.jellysquid.mods.sodium.client.render.Renderer.start(Renderer.java:12)\n\n\
+            Suspected Mods: Sodium (sodium)";
+        assert!(diagnose_in(report, dir.path()).is_none());
+
+        let earlier = "Exception in thread \"main\" java.lang.IllegalStateException: Startup failed\n\
+            \tat me.jellysquid.mods.lithium.common.Startup.init(Startup.java:25)";
+        let log = format!("{earlier}\n\n{report}");
+        let d = diagnose_in(&log, dir.path()).unwrap();
+        assert_eq!(d.title, "Lithium crashed the game");
+    }
+
     const EBE: &str = "---- Minecraft Crash Report ----\n\
 // Don't do that.\n\n\
 Time: 2026-11-17 20:11:03\n\
@@ -611,6 +1165,71 @@ Details:\n\
         assert_eq!(named(&d), Some(("Enhanced Block Entities", false)));
         // The same text without an exit code reaches the same answer.
         assert_eq!(diagnose_in(EBE, dir.path()).unwrap(), d);
+    }
+
+    #[test]
+    fn crash_509_names_entityculling_over_a_startup_class_probe() {
+        let dir = tempfile::tempdir().unwrap();
+        jar(
+            dir.path(),
+            "entityculling-fabric-1.12.2-mc1.21.1.jar",
+            "entityculling",
+            "EntityCulling",
+            &["dev.tr7zw.entityculling"],
+            "",
+        );
+        let warning = "[23:29:47] [main/WARN]: Error loading class: me/jellysquid/mods/sodium/client/render/chunk/compile/pipeline/BlockRenderer (java.lang.ClassNotFoundException: me/jellysquid/mods/sodium/client/render/chunk/compile/pipeline/BlockRenderer)";
+        let stack = "java.lang.NullPointerException: Cannot invoke \"String.indexOf(int)\" because \"$$0\" is null\n\
+            \tat knot//net.minecraft.class_2960.method_12838(class_2960.java:77)\n\
+            \tat knot//dev.tr7zw.transition.mc.GeneralUtil.getResourceLocation(GeneralUtil.java:30)\n\
+            \tat knot//dev.tr7zw.entityculling.EntityCullingModBase.clientTick(EntityCullingModBase.java:96)\n\
+            \tat knot//net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.lambda$static$0(ClientTickEvents.java:34)";
+        let report = format!(
+            "---- Minecraft Crash Report ----\nDescription: Unexpected error\n\n{stack}\n\n"
+        );
+        let captured = stack
+            .lines()
+            .map(|line| format!("[Arctic diagnostics] vanilla crash trace {line}\n"))
+            .collect::<String>();
+        let log = format!(
+            "{warning}\n[23:30:17] [Render thread/INFO]: Reloading ResourceManager\n[Arctic diagnostics] vanilla crash: Unexpected error\n{captured}"
+        );
+        for text in [&log, &format!("{log}\n{report}{warning}")] {
+            let d = diagnose_exit_in(text, -1, dir.path()).unwrap();
+            assert_eq!(d.title, "EntityCulling crashed the game");
+            assert_eq!(d.mods, ["EntityCulling"]);
+            assert_eq!(diagnose_in(text, dir.path()), Some(d));
+        }
+        let upload = crate::crash::Report::build(
+            "1.21.1",
+            "Fabric",
+            "EntityCulling crashed the game",
+            &[&log],
+            &[warning],
+            Some(&report),
+            None,
+        );
+        assert_eq!(upload.title, "EntityCulling crashed the game");
+        assert!(
+            upload
+                .log
+                .contains("---- first error ----\njava.lang.NullPointerException")
+        );
+        assert!(!upload.log.contains("A mod is for a different version"));
+
+        for error in ["ClassNotFoundException", "NoClassDefFoundError"] {
+            let cause = format!("Caused by: java.lang.{error}: example.mod.ClientTickHook");
+            for text in [
+                format!("{log}[Arctic diagnostics] vanilla crash trace {cause}\n"),
+                format!("{log}\n{}\n{cause}", report.trim_end()),
+                format!(
+                    "{warning}\n[main/ERROR]: Uncaught exception in thread \"main\"\njava.lang.{error}: example.mod.ClientTickHook\n\tat example.OtherMod.onInitialize(OtherMod.java:31)"
+                ),
+            ] {
+                let d = diagnose_exit_in(&text, -1, dir.path()).unwrap();
+                assert_eq!(d.title, "A mod is for a different version", "{text}");
+            }
+        }
     }
 
     #[test]
@@ -665,6 +1284,48 @@ Details:\n\
         // Unknown or library owners are not blamed.
         let lib = text.replace("sodium", "fabric-rendering-v1");
         assert!(diagnose_exit_in(&lib, 1, dir.path()).is_none_or(|d| d.mods.is_empty()));
+    }
+
+    #[test]
+    fn report_s978w2_attributes_only_wrappers_that_throw() {
+        let log = include_str!("../tests/fixtures/crash-S978W2-gl-frame-wait.log");
+        let (console, report) = log.split_once("---- Minecraft Crash Report ----").unwrap();
+        let dir = pack();
+        let mods = scan(dir.path());
+        assert!(suspect(log, &mods).is_none());
+        assert!(suspect(console, &mods).is_none());
+
+        let header = "---- Minecraft Crash Report ----\n\njava.lang.IllegalStateException: boom\n";
+        let vanilla = report
+            .lines()
+            .find(|line| line.contains("GlCommandEncoder.submit"))
+            .unwrap();
+        let polarium = report
+            .lines()
+            .find(|line| line.contains("polarium$submit"))
+            .unwrap();
+        let lithium = report
+            .lines()
+            .find(|line| line.contains("wrapMethod$"))
+            .unwrap()
+            .replace("dynamic_fps_common", "lithium");
+        for (wrapper, owner) in [(polarium, "polarium"), (&lithium, "lithium")] {
+            assert_eq!(
+                suspect(&format!("{header}{wrapper}\n{vanilla}"), &mods)
+                    .unwrap()
+                    .id,
+                owner
+            );
+            assert!(suspect(&format!("{header}{vanilla}\n{wrapper}"), &mods).is_none());
+            let handler =
+                "\tat net.minecraft.class_761.handler$zbh000$sodium$onRender(class_761.java:12)";
+            assert_eq!(
+                suspect(&format!("{header}{handler}\n{wrapper}"), &mods)
+                    .unwrap()
+                    .id,
+                "sodium"
+            );
+        }
     }
 
     #[test]

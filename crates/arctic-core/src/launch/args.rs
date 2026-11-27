@@ -24,6 +24,27 @@ pub type Placeholders = HashMap<&'static str, String>;
 
 pub(crate) const CUSTOM_MAX_HEAP_SOURCE: &str = " (maximum heap set by custom JVM arguments)";
 
+/// Disable the Base64 decode intrinsic affected by Java4Shell (CVE-2026-114938).
+pub(crate) fn java4shell_flags(
+    major: Option<u32>,
+    native_x86_64: bool,
+    existing: &[String],
+) -> &'static [&'static str] {
+    if native_x86_64
+        && major.is_some_and(|version| version >= 17)
+        && !existing.iter().any(|arg| {
+            matches!(
+                arg.as_str(),
+                "-XX:+UseBASE64Intrinsics" | "-XX:-UseBASE64Intrinsics"
+            )
+        })
+    {
+        &["-XX:+UnlockDiagnosticVMOptions", "-XX:-UseBASE64Intrinsics"]
+    } else {
+        &[]
+    }
+}
+
 /// A Java heap size in MiB. Java interprets an unsuffixed size as bytes.
 pub(crate) fn heap_size_mb(size: &str) -> Option<u32> {
     let end = size
@@ -228,6 +249,48 @@ mod tests {
             max_memory_mb: 2048,
             resolution: (800, 600),
             ..JvmOptions::default()
+        }
+    }
+
+    #[test]
+    fn java4shell_flags_precede_custom_jvm_args() {
+        let version: VersionJson =
+            serde_json::from_str(r#"{"id":"1.21","mainClass":"M"}"#).unwrap();
+        let user_args = split_jvm_args("-Xmx4G -XX:+UseG1GC");
+        for major in [17, 21, 25, 27] {
+            let mut options = opts();
+            options.extra = java4shell_flags(Some(major), true, &user_args)
+                .iter()
+                .map(|&arg| arg.to_owned())
+                .chain(user_args.iter().cloned())
+                .collect();
+            let args = build(&version, &windows_env(), &vars(), &options);
+            assert_eq!(
+                &args[..5],
+                [
+                    "-Xms512M",
+                    "-XX:+UnlockDiagnosticVMOptions",
+                    "-XX:-UseBASE64Intrinsics",
+                    "-Xmx4G",
+                    "-XX:+UseG1GC",
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn java4shell_flags_skip_older_or_unknown_java_and_non_native_x86_64() {
+        for major in [Some(8), Some(11), None] {
+            assert!(java4shell_flags(major, true, &[]).is_empty());
+        }
+        // Both native ARM64 and Rosetta pass false.
+        assert!(java4shell_flags(Some(21), false, &[]).is_empty());
+    }
+
+    #[test]
+    fn java4shell_flags_respect_explicit_intrinsic_settings() {
+        for arg in ["-XX:+UseBASE64Intrinsics", "-XX:-UseBASE64Intrinsics"] {
+            assert!(java4shell_flags(Some(21), true, &[arg.into()]).is_empty());
         }
     }
 

@@ -2,6 +2,7 @@ package com.arcticlauncher.legacy.mixin;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.account.AccountSwitcher;
+import com.arcticlauncher.client.account.InvalidSession;
 import com.arcticlauncher.client.together.OfflineJoin;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -43,13 +44,19 @@ abstract class LoginSessionMixin {
 		if (OfflineJoin.skipJoinAuth(MinecraftClient.getInstance().getSession().getAccessToken(), loopback)) {
 			return;
 		}
+		AccountSwitcher accounts = ArcticClient.accounts();
+		if (accounts != null && accounts.refreshBeforeJoin()) {
+			Session session = MinecraftClient.getInstance().getSession();
+			profile = session.getProfile();
+			token = session.getAccessToken();
+		}
 		try {
 			original.call(service, profile, token, serverId);
 		} catch (RuntimeException e) {
 			throw e;
 		} catch (Exception e) {
-			AccountSwitcher accounts = ArcticClient.accounts();
-			if (!(e instanceof InvalidCredentialsException) || accounts == null || !accounts.renewSession()) {
+			if (accounts == null || (!(e instanceof InvalidCredentialsException) && !InvalidSession.matches(e.getMessage()))
+					|| !accounts.renewSession()) {
 				throw LoginSessionMixin.<RuntimeException>sneaky(e);
 			}
 			Session session = MinecraftClient.getInstance().getSession();

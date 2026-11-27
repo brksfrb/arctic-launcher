@@ -62,13 +62,14 @@ pub fn sources(dirs: &DataDirs, exclude: &Path) -> Vec<Source> {
 /// The default instance and the custom ones of the profile `dirs` is scoped to.
 fn profile_instances(dirs: &DataDirs, current: &DataDirs) -> Vec<instances::Instance> {
     let mut all = instances::list_custom(dirs).unwrap_or_default();
-    let has_default = dirs
-        .instance_dir(instances::VANILLA_ID)
-        .join("instance.json")
-        .is_file();
-    // The profile in use makes its default when missing; another profile is only read.
-    if (has_default || dirs.profile_root() == current.profile_root())
-        && let Ok(default) = instances::load_default(dirs)
+    // The profile in use makes (or moves over to) its Arctic instance; another profile is only read.
+    let default = if dirs.profile_root() == current.profile_root() {
+        instances::load_default(dirs).ok()
+    } else {
+        instances::peek_default(dirs)
+    };
+    if let Some(default) = default
+        && !all.iter().any(|i| i.id == default.id)
     {
         all.insert(0, default);
     }

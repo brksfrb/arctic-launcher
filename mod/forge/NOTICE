@@ -1,0 +1,11 @@
+Arctic Client for Forge 1.8.9 bundles the following components:
+
+SpongePowered Mixin 0.8.7, built with Essential's LaunchWrapper compatibility patches
+https://github.com/SpongePowered/Mixin/tree/0.8.7
+https://github.com/SparkUniverse/EssentialLoader/tree/mixin/v0.2.0/mixin
+
+Google Guava 21.0, repackaged in a private namespace by Essential
+https://github.com/google/guava/tree/v21.0
+
+MixinExtras 0.3.5
+https://github.com/LlamaLad7/MixinExtras/tree/0.3.5

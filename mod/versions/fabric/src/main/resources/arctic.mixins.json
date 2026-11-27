@@ -1,9 +1,14 @@
 {
 	"required": true,
 	"package": "com.arcticlauncher.mod.mixin",
+	"plugin": "com.arcticlauncher.mod.GlassRenderMixinPlugin",
 	"compatibilityLevel": "JAVA_${java}",
 	"client": [
-		"ScreenshotMixin",<% if (restyleWidgets) { %>
+<% if (resolver) { %>		"MojangBlocklistMixin",
+<% } else { %>		"LegacyMojangBlocklistMixin",
+<% } %>
+		"ScreenshotMixin",
+		"OptionsKeyMixin",<% if (restyleWidgets) { %>
 		"AbstractButtonMixin",
 		"AbstractSliderButtonMixin",
 		"ButtonMixin",
@@ -11,7 +16,11 @@
 		"EditBoxMixin",<% } %>
 <% if (widgets13) { %>		"ScreenButtonsAccess",
 <% } %>		"AbstractClientPlayerMixin",
-		"FontMaskMixin",<% if (badgeShadow) { %>
+		"FontMaskMixin",
+		"ServerFontDefinitionMixin",
+		"ServerFontFileMixin",<% if (serverFontPackSource) { %>
+		"ServerFontPackSourceMixin",<% } %><% if (legacyServerFontPackName) { %>
+		"LegacyServerFontPackNameMixin",<% } %><% if (badgeShadow) { %>
 		"BadgeShadowMixin",<% } %><% if (badgeShadow13) { %>
 		"BadgeShadow13Mixin",<% } %>
 <% if (emoteOldGlyph) { %>		"EmoteGlyphMixin",
@@ -45,6 +54,7 @@
 <% } %>		"LightmapRefreshMixin",
 <% if (framerateTracker) { %>		"FramerateTrackerMixin",
 <% } %>		"ParticleEngineMixin",
+		"LivingEntityPotionParticlesMixin",
 		"HeldItemMixin",
 <% if (recipeBookPeek) { %>		"RecipeBookScreenMixin",
 		"ContainerHoverAccess",
@@ -92,14 +102,23 @@
 		"SmoothFontManagerMixin",<% } %><% if (glowText) { %>
 		"GlowTextMixin",<% } %><% if (scaledFont) { %>
 		"FontTextureMixin",
-		"ScaledGlyphMixin",<% } %><% if (!worldTextScale) { %>
+		"ScaledGlyphMixin",<% } %><% if (chatStampFont) { %>
+		"ChatStampGlyphMixin",<% } %><% if (chatStampFontSet) { %>
+		"ChatStampFontSetMixin",<% } %><% if (badgeGuiFilter) { %>
+		"BadgeGuiFilterMixin",<% } %><% if (!worldTextScale) { %>
 		"FontDrawScaleMixin",<% } %><% if (textProjection) { %>
 		"ScaledTextStateMixin",
 		"TextProjectionMixin",
 		"TextProjectionBufferMixin",<% } %><% if (worldTextScale) { %>
 		"WorldTextScaleMixin",<% } %><% if (nameTagTextScale) { %>
 		"NameTagTextScaleMixin",<% } %><% if (oldScaledFont) { %>
-		"ScaledFontSetMixin",<% } %><% if (oldScaledTexture) { %>
+		"ScaledFontSetMixin",
+		"BadgeQuadMixin",<% } %><% if (badgeSnap) { %>
+		"BadgeSnapMixin",
+		"BadgeFontAccess",
+		"BadgeGlyphBoundsAccess",
+		"BadgeTextureLifecycleMixin",<% } %><% if (badgeGlyphInstance) { %>
+		"BadgeGlyphInstanceAccess",<% } %><% if (oldScaledTexture) { %>
 		"ScaledFontTextureMixin",<% } %><% if (gpuFontTexture && !scaledFont) { %>
 		"FontTextureMixin",<% } %><% if (textShader) { %>
 		"TextShaderMixin",<% } %><% if (textShaderOld) { %>
@@ -119,6 +138,15 @@
 <% if (fogHook) { %>		"FogMixin",
 <% } %><% if (fogBuffer) { %>		"FogBufferMixin",
 <% } %>		"TooltipWheelMixin",
+		"EnchantTooltipContextMixin",
+<% if (enchantComponents) { %>		"EnchantTooltipComponentsMixin",
+<% } else { %>		"EnchantTooltipNbtMixin",
+<% } %><% if (enchantLegacyBook) { %>		"EnchantTooltipBookMixin",
+<% } %>		"ArmorHiderMixin",
+		"ArmorInventoryMixin",
+<% if (armorRenderState) { %>		"ArmorRenderStateMixin",
+		"ArmorStateExtractionMixin",
+<% } %>
 		"ShinyPotsMixin",
 <% if (chunkOwn13) { %>		"ChunkBorders13Mixin",
 <% } %><% if (lightOverlay) { %>		"LightOverlayMixin",
@@ -131,6 +159,7 @@
 <% } %>
 		"LightmapMixin",
 		"ChatComponentMixin",
+		"ChatHistoryLimitMixin",
 <% if (emoteLayout) { %>		"ChatEmoteLayoutMixin",
 <% } %>
 		"ChatCopyStyleMixin",

@@ -146,6 +146,7 @@ fn smoke_instance(kind: LoaderKind, game: &str, loader_version: String) -> Insta
         extras: Vec::new(),
         own_settings: true,
         game_folder: None,
+        builtin: false,
     }
 }
 

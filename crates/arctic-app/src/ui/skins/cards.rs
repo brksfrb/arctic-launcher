@@ -160,20 +160,23 @@ impl ArcticApp {
             } else {
                 current.skin_key.clone()
             };
-            let key = mc_key.unwrap_or_else(|| super::MANNEQUIN.to_owned());
+            let key = mc_key.as_deref().unwrap_or(super::MANNEQUIN);
             if self.matches_search(t!("skins.minecraft_skin")) {
                 let tile = self.skin_tile(
                     ui,
-                    &key,
+                    key,
                     t!("skins.minecraft_skin"),
                     None,
                     !current.arctic_skin,
                 );
-                if tile
-                    .on_hover_text(t!("skins.your_own_minecraft_skin_for_arctic_players"))
-                    .clicked()
-                    && current.arctic_skin
-                {
+                let tile =
+                    tile.on_hover_text(t!("skins.your_own_minecraft_skin_for_arctic_players"));
+                if mc_key.is_some() {
+                    card_menu(ui, p, &tile, |ui| {
+                        self.skin_download_item(ui, key, t!("skins.minecraft_skin"));
+                    });
+                }
+                if tile.clicked() && current.arctic_skin {
                     if can_wear {
                         stop = true;
                     } else {
@@ -200,7 +203,7 @@ impl ArcticApp {
                         blocked = true;
                     }
                 }
-                tile.context_menu(|ui| self.skin_menu(ui, e));
+                card_menu(ui, p, &tile, |ui| self.skin_menu(ui, e));
             }
         });
         if stop {
@@ -213,12 +216,13 @@ impl ArcticApp {
             self.explain_wear_blocked();
         }
         ui.add_space(8.0);
-        let hint = if self.skins.library.skins.is_empty() {
-            t!("skins.drop_png_skin_files_here_add_one_with_the")
-        } else {
-            t!("skins.right_click_a_skin_to_rename_share_or_delete")
-        };
-        ui.label(RichText::new(hint).small().color(p.muted));
+        if self.skins.library.skins.is_empty() {
+            ui.label(
+                RichText::new(t!("skins.drop_png_skin_files_here_add_one_with_the"))
+                    .small()
+                    .color(p.muted),
+            );
+        }
     }
 
     /// Renaming a library skin (started from its right-click menu).
@@ -285,9 +289,21 @@ impl ArcticApp {
         if self.share_button(ui, entry) {
             ui.close();
         }
+        self.skin_download_item(ui, &format!("lib:{id}"), &entry.name);
         ui.separator();
         if ui.button(t!("skins.delete")).clicked() {
             self.remove_skin(&id);
+            ui.close();
+        }
+    }
+
+    pub(super) fn skin_download_item(&self, ui: &mut egui::Ui, key: &str, name: &str) {
+        if ui.button(t!("skins.download_as_png")).clicked() {
+            self.tasks.save_skin_png(
+                name.to_owned(),
+                self.skin_png(key),
+                key.strip_prefix("gal:").map(str::to_owned),
+            );
             ui.close();
         }
     }
@@ -334,7 +350,7 @@ impl ArcticApp {
                 },
             );
             if response.hovered() {
-                self.skins.hover = Some(Hover::Skin(key.to_owned(), variant));
+                self.skins.hover_skin(key, variant);
                 ctx.request_repaint();
             }
         }
@@ -531,8 +547,7 @@ impl ArcticApp {
                     &tf!("skins.your_cape", i = own.len() - i),
                     None,
                     active,
-                )
-                .on_hover_text(t!("skins.right_click_to_take_it_off_this_list"));
+                );
                 if r.hovered() {
                     self.skins.hover = Some(Hover::Cape(Some(key.clone())));
                     hovered_card = Some(key.clone());
@@ -544,7 +559,7 @@ impl ArcticApp {
                         blocked = true;
                     }
                 }
-                r.context_menu(|ui| {
+                card_menu(ui, p, &r, |ui| {
                     if ui.button(t!("skins.remove_from_my_capes")).clicked() {
                         forget_own = Some(hash.clone());
                         ui.close();
@@ -680,7 +695,7 @@ impl ArcticApp {
         if ids.is_empty() {
             return WornModels::default();
         }
-        let Some(entries) = self.catalog_state().map(|state| {
+        let Some(entries) = self.cosmetic_catalog().map(|state| {
             cosmetic_entries_matching(state, |id| ids.iter().any(|wanted| wanted == id))
         }) else {
             return WornModels::default();
@@ -743,8 +758,10 @@ impl ArcticApp {
 
     pub(super) fn cosmetics_body(&mut self, ui: &mut egui::Ui, slot: &'static str) {
         let p = self.palette();
-        let Some(entries) = self.catalog_state().map(cosmetic_entries) else {
-            ui.label(RichText::new(t!("skins.cosmetics_are_loading")).color(p.muted));
+        let Some(entries) = self.cosmetic_catalog().map(cosmetic_entries) else {
+            if self.skins.cosmetic_catalog.error.is_none() {
+                ui.label(RichText::new(t!("skins.cosmetics_are_loading")).color(p.muted));
+            }
             return;
         };
         let can_wear = self.arctic_state().is_some();
@@ -885,6 +902,57 @@ impl ArcticApp {
 }
 
 // ---- Card pieces -------------------------------------------------------------------
+
+/// Keep the menu button above the card in egui's hit test so only one handles the click.
+pub(super) fn card_menu(
+    ui: &egui::Ui,
+    p: &Palette,
+    card: &egui::Response,
+    menu: impl FnOnce(&mut egui::Ui),
+) {
+    let rect = Rect::from_min_size(card.rect.right_top() + vec2(-36.0, 4.0), vec2(32.0, 32.0));
+    let label = t!("skins.card_options");
+    let button = ui
+        .interact(rect, card.id.with("options"), Sense::click())
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(label);
+    button.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, button.enabled(), label)
+    });
+
+    let active = button.hovered() || button.has_focus();
+    if active {
+        ui.painter().rect_filled(rect, 8.0, p.surface_hover);
+    }
+    let color = if active || card.hovered() {
+        p.text
+    } else {
+        p.muted
+    };
+    for y in [-5.0, 0.0, 5.0] {
+        ui.painter()
+            .circle_filled(rect.center() + vec2(0.0, y), 1.5, color);
+    }
+
+    let secondary_clicked = card.secondary_clicked() || button.secondary_clicked();
+    let open = if secondary_clicked {
+        Some(egui::SetOpenCommand::Bool(true))
+    } else if button.clicked() {
+        Some(egui::SetOpenCommand::Toggle)
+    } else if card.clicked() {
+        Some(egui::SetOpenCommand::Bool(false))
+    } else {
+        None
+    };
+    let popup_id = egui::Popup::default_response_id(&button);
+    let popup = egui::Popup::menu(&button).open_memory(open);
+    let popup = if secondary_clicked || egui::Popup::position_of_id(ui.ctx(), popup_id).is_some() {
+        popup.at_pointer_fixed()
+    } else {
+        popup
+    };
+    popup.show(menu);
+}
 
 /// A card's background; returns how hovered it is (0..1, animated).
 fn card_back(ui: &egui::Ui, p: &Palette, rect: Rect, response: &egui::Response) -> f32 {
@@ -1095,12 +1163,12 @@ pub(super) enum Shape3d {
     },
 }
 
-pub(super) fn cosmetic_entries(state: &crate::skin_tasks::ArcticState) -> Vec<Entry3d> {
+pub(super) fn cosmetic_entries(state: &crate::skin_tasks::CosmeticCatalog) -> Vec<Entry3d> {
     cosmetic_entries_matching(state, |_| true)
 }
 
 fn cosmetic_entries_matching(
-    state: &crate::skin_tasks::ArcticState,
+    state: &crate::skin_tasks::CosmeticCatalog,
     include: impl Fn(&str) -> bool,
 ) -> Vec<Entry3d> {
     let mut out: Vec<Entry3d> = state
@@ -1210,4 +1278,81 @@ fn cosmetic_card(
     );
     worn_frame(ui, p, rect, worn);
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui::{Event, Modifiers, PointerButton, RawInput};
+
+    #[test]
+    fn card_options_open_without_clicking_the_card() {
+        for palette in [
+            &crate::theme::LIGHT,
+            &crate::theme::DARK,
+            &crate::theme::DEFAULT,
+        ] {
+            for size in [SKIN_CARD, CAPE_CARD] {
+                for (button, on_options, opens_menu) in [
+                    (PointerButton::Primary, true, true),
+                    (PointerButton::Secondary, false, true),
+                    (PointerButton::Secondary, true, true),
+                    (PointerButton::Primary, false, false),
+                ] {
+                    let ctx = egui::Context::default();
+                    crate::theme::apply(&ctx, palette);
+                    let mut rect = Rect::ZERO;
+                    let mut card_clicked = false;
+                    let mut menu_open = false;
+                    let mut frame = |events| {
+                        let raw = RawInput {
+                            screen_rect: Some(Rect::from_min_size(
+                                pos2(0.0, 0.0),
+                                vec2(640.0, 480.0),
+                            )),
+                            events,
+                            ..Default::default()
+                        };
+                        let mut output = ctx.run_ui(raw, |ui| {
+                            let (card_rect, card) =
+                                ui.allocate_exact_size(size.into(), Sense::click());
+                            card_clicked |= card.clicked();
+                            card_menu(ui, palette, &card, |ui| {
+                                menu_open = true;
+                                let _ = ui.button("Menu item");
+                            });
+                            rect = card_rect;
+                        });
+                        output.textures_delta.clear();
+                        rect
+                    };
+                    frame(vec![]);
+                    let rect = frame(vec![]);
+                    let pos = if on_options {
+                        rect.right_top() + vec2(-20.0, 20.0)
+                    } else {
+                        rect.center()
+                    };
+                    frame(vec![Event::PointerMoved(pos)]);
+                    for pressed in [true, false] {
+                        frame(vec![Event::PointerButton {
+                            pos,
+                            button,
+                            pressed,
+                            modifiers: Modifiers::NONE,
+                        }]);
+                    }
+                    frame(vec![]);
+                    assert_eq!(
+                        menu_open, opens_menu,
+                        "button {button:?}, options {on_options}"
+                    );
+                    assert_eq!(
+                        card_clicked,
+                        button == PointerButton::Primary && !on_options
+                    );
+                }
+            }
+        }
+    }
 }

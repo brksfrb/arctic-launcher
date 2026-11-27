@@ -6,6 +6,14 @@ pub enum Error {
     #[error("network error: {0}")]
     Http(String),
 
+    #[error("network error: {0}")]
+    DownloadInterrupted(String),
+
+    #[error(
+        "The download connection keeps dropping or timing out. Check your network or try a VPN, then retry."
+    )]
+    DownloadConnectionDropping,
+
     #[error("I/O error at {path}: {source}")]
     Io {
         path: PathBuf,
@@ -31,6 +39,9 @@ pub enum Error {
 
     #[error("{0}")]
     NotConfigured(String),
+
+    #[error("offline accounts have no session to refresh")]
+    OfflineSessionRefresh,
 
     #[error("Selected version is incompatible with this instance")]
     IncompatibleContentVersion,

@@ -203,15 +203,14 @@ impl ArcticApp {
     fn apply_clash_fix(&mut self, instance: &Instance, fix: &Fix) {
         let mods_dir = instance.game_dir(&self.dirs).join("mods");
         match fix {
-            Fix::TurnOff { file, .. } => {
-                if let Err(e) = mods::set_enabled(&mods_dir, file, false) {
-                    self.toasts.push(
-                        Kind::Error,
-                        t!("instances.could_not_turn_the_mod_off"),
-                        e.to_string(),
-                    );
-                }
-            }
+            Fix::TurnOff { file, .. } => match mods::set_enabled(&mods_dir, file, false) {
+                Ok(()) => self.note_mod_change(&instance.id),
+                Err(e) => self.toasts.push(
+                    Kind::Error,
+                    t!("instances.could_not_turn_the_mod_off"),
+                    e.to_string(),
+                ),
+            },
             Fix::Get {
                 project, replacing, ..
             } => {

@@ -17,8 +17,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Constant;
-import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -26,7 +24,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.arcticlauncher.client.Lang;
 /** Chat timestamps, repeated lines stacked as "(x3)", mentions of you marked, and a longer history. */
 @Mixin(ChatComponent.class)
-abstract class ChatComponentMixin {
+abstract class ChatComponentMixin implements PersistentChat.Hud {
 	/** Text width in GUI pixels, fractions included where the game keeps them (a proportional font's digits are not whole pixels). */
 	@Unique
 	private static com.arcticlauncher.client.feature.ChatStampWidth.Measure arctic$measure(net.minecraft.client.gui.Font font) {
@@ -98,9 +96,13 @@ abstract class ChatComponentMixin {
 
 	/** Scrolled near the top of what is loaded: read the next older page from the log and put it above. */
 	@Inject(method = "scrollChat", at = @At("RETURN"))
-	private void arctic$older(CallbackInfo ci) {
+	//#if MC >= 1.18
+	private void arctic$older(int amount, CallbackInfo ci) {
+	//#else
+	private void arctic$older(double amount, CallbackInfo ci) {
+	//#endif
 		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
-		if (history == null || arctic$loading || history.restoring() || !history.hasOlder()
+		if (amount <= 0 || history == null || arctic$loading || history.restoring() || !history.hasOlder()
 				|| trimmedMessages.size() - chatScrollbarPos > getLinesPerPage() * 3) {
 			return;
 		}
@@ -189,20 +191,11 @@ abstract class ChatComponentMixin {
 		//#endif
 	}
 
-	/** How many messages the chat keeps: the game's 100 become the player's setting. */
-	@ModifyConstant(
-			//#if MC >= 1.20.6
-			method = {"addMessageToDisplayQueue", "addMessageToQueue"},
-			//#elif MC >= 1.19
-			method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;ILnet/minecraft/client/GuiMessageTag;Z)V",
-			//#else
-			method = "addMessage(Lnet/minecraft/network/chat/Component;IIZ)V",
-			//#endif
-			constant = @Constant(intValue = 100))
-	private int arctic$history(int vanilla) {
+	@Override
+	public int arctic$historyLimit(int limit) {
 		ClientConfig c = ArcticClient.config();
-		return PersistentChat.historyLimit(arctic$loading, c == null ? vanilla : c.chatHistory,
-				c == null ? 0 : arctic$loadedLines);
+		return c == null ? limit : PersistentChat.historyLimit(limit,
+				arctic$loading, c.chatHistory, arctic$loadedLines);
 	}
 
 	@Shadow
@@ -237,18 +230,18 @@ abstract class ChatComponentMixin {
 		ClientConfig c = ArcticClient.config();
 		if (c != null && c.chatKeep) {
 			ci.cancel();
-		} else if (ArcticClient.persistentChat() != null) {
-			// The lines are gone for good: the log is not scrolled back into an emptied chat.
-			arctic$loadedLines = 0;
-			ArcticClient.persistentChat().stopPaging();
 		}
 	}
 
-	/** Keep a larger up-arrow history while chat is saved to disk. */
-	@ModifyConstant(method = "addRecentChat", constant = @Constant(intValue = 100), require = 0)
-	private int arctic$sentLimit(int vanilla) {
-		ClientConfig c = ArcticClient.config();
-		return c != null && c.chatPersistent ? PersistentChat.MAX_HUD_LINES : vanilla;
+	@Inject(method = "clearMessages", at = @At("RETURN"))
+	private void arctic$resetHistoryAfterClear(CallbackInfo ci) {
+		arctic$loadedLines = 0;
+		com.arcticlauncher.client.feature.PersistentChat history = ArcticClient.persistentChat();
+		if (history != null) {
+			history.resetAfterGameClear();
+			// A stale scroll offset lets incoming messages trigger vanilla's scroll adjustment.
+			((ChatComponent) (Object) this).resetChatScroll();
+		}
 	}
 
 	/** Muted players and hidden words: the line never reaches the chat. */
@@ -367,13 +360,8 @@ abstract class ChatComponentMixin {
 			if (c.chatStampItalic) {
 				stamp = stamp.withStyle(ChatFormatting.ITALIC);
 			}
-			// The slot padding sits beside the tagged stamp, so the hover/click target is only the time.
-			net.minecraft.client.gui.Font font = net.minecraft.client.Minecraft.getInstance().font;
-			String shown = com.arcticlauncher.client.feature.ChatStamp.text(c, when);
-			Component pad = com.arcticlauncher.mod.ChatHistoryText.decode(com.arcticlauncher.client.feature.ChatStampWidth.padding(c, font, arctic$measure(font), shown));
-			out = com.arcticlauncher.client.feature.ChatStampWidth.right()
-					? com.arcticlauncher.mod.Compat.empty().append(pad).append(com.arcticlauncher.mod.ChatCopyComponents.tag(stamp, text, true)).append(out)
-					: com.arcticlauncher.mod.Compat.empty().append(com.arcticlauncher.mod.ChatCopyComponents.tag(stamp, text, true)).append(pad).append(out);
+			out = com.arcticlauncher.mod.Compat.empty().append(com.arcticlauncher.mod.ChatCopyComponents.tag(
+					stamp, new com.arcticlauncher.client.feature.ChatCopy.Data(text, true, true))).append(out);
 		} else if (c.chatCopy) {
 			out = com.arcticlauncher.mod.Compat.empty()
 					.append(com.arcticlauncher.mod.ChatCopyComponents.tag(

@@ -184,10 +184,18 @@ fn newest(project_id: &str, target: Target, source: &dyn VersionSource) -> Resul
         .cloned()
         .ok_or_else(|| {
             Error::Other(format!(
-                "{project_id} has no version for {} {}",
+                "{project_id}{NO_VERSION}{} {}",
                 target.loader_name, target.game_version
             ))
         })
+}
+
+const NO_VERSION: &str = " has no version for ";
+
+/// Whether `e` is Modrinth's answer that a project has no build for the game version and
+/// loader asked for (and not that it could not be asked, or not be understood).
+pub(crate) fn is_no_version(e: &Error) -> bool {
+    matches!(e, Error::Other(text) if text.contains(NO_VERSION))
 }
 
 #[cfg(test)]

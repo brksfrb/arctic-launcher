@@ -13,6 +13,7 @@ ASSETS = MOD / 'core/src/main/resources'
 def check(path):
     with zipfile.ZipFile(path) as jar:
         names = jar.namelist()
+        assert not any(Path(n).name.startswith("badge") and n.endswith("_pixel.png") for n in names), path
         for retired in ['badge1', 'badge2', 'badge3', 'badge_shield', 'badge_shield_tab', 'badge_shield_tag']:
             assert not any(Path(n).stem == retired for n in names), (path, retired)
         assert not any(Path(n).stem.split('$')[0] in {'BadgeTest', 'LegacyBadgeTest'} for n in names), path

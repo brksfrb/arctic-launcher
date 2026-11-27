@@ -225,6 +225,8 @@ public final class ClientConfig {
 	public boolean tabGlowSelf;
 	/** Playing with a game controller. */
 	public com.arcticlauncher.client.controller.Controller.Settings controller = new com.arcticlauncher.client.controller.Controller.Settings();
+	/** Ignore Mojang's server address blocklist when connecting or pinging. */
+	public volatile boolean ignoreMojangServerBlocklist = true;
 	/** SOCKS5 proxy for server connections and Arctic's web requests. */
 	public ProxyConfig proxy = new ProxyConfig();
 	/** When the launcher's proxy choice was last applied (its timestamp). */
@@ -347,6 +349,8 @@ public final class ClientConfig {
 	/** Particle Control: keep only this share (percent) of the particles. */
 	public boolean particleControl;
 	public int particleAmount = 50;
+	public boolean hideOwnPotionParticles;
+	public boolean hideOtherPlayersPotionParticles;
 	/** Particle kinds switched off (bit per {@code ParticleKinds.LABELS} entry). */
 	public int particleOff;
 	/** Ctrl+K opens the command palette (mods, servers, friends). */
@@ -373,6 +377,17 @@ public final class ClientConfig {
 	public boolean fog;
 	/** Scrollable Tooltips: a tooltip taller than the screen moves with the mouse wheel. */
 	public boolean tooltipScroll;
+	public boolean enchantDescriptions;
+	public int enchantDescriptionStyle;
+	public boolean enchantDescriptionsShiftOnly;
+	public boolean enchantDescriptionsAllItems;
+	public boolean armorHider;
+	public boolean hideHelmet = true;
+	public boolean hideChestplate = true;
+	public boolean hideLeggings = true;
+	public boolean hideBoots = true;
+	public boolean showArmorWhenHit = true;
+	public double showArmorSeconds = 2.0;
 	/** Glint Colorizer: the enchant shimmer color (0 = the game's purple). */
 	public int glintColor;
 	public int glintColorOff;

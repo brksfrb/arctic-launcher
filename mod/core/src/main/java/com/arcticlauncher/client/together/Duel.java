@@ -129,7 +129,7 @@ public final class Duel {
 			case READY:
 				link.refresh();
 				if (link.guests() > lastGuests) {
-					Notices.post(Lang.t("social.your_friend_joined"), Lang.t("social.right_shift_friends_new_round_to_start"));
+					Notices.post(Lang.t("social.your_friend_joined"), Lang.t("social.right_shift_friends_new_round_to_start", com.arcticlauncher.client.MenuKey.label()));
 					newRound();
 				}
 				lastGuests = link.guests();

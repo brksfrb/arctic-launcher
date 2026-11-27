@@ -3,6 +3,8 @@ package com.arcticlauncher.mod.mixin;
 //#if MC >= 1.13
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.client.player.AbstractClientPlayer;
 //#if MC >= 1.20.5
 import net.minecraft.core.Holder;
@@ -15,7 +17,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
  * Dynamic FOV: the view's change with speed and with a drawn bow, each switched off on its own. The game's number
@@ -25,25 +26,25 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 @Mixin(AbstractClientPlayer.class)
 abstract class DynamicFovMixin {
 	//#if MC >= 1.20.5
-	@Redirect(method = "getFieldOfViewModifier", at = @At(value = "INVOKE",
+	@WrapOperation(method = "getFieldOfViewModifier", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/player/AbstractClientPlayer;getAttributeValue(Lnet/minecraft/core/Holder;)D"), require = 0)
-	private double arctic$speed(AbstractClientPlayer self, Holder<?> attribute) {
+	private double arctic$speed(AbstractClientPlayer self, Holder<?> attribute, Operation<Double> original) {
 		ClientConfig c = ArcticClient.config();
-		return c != null && c.fovNoSpeed ? com.arcticlauncher.mod.Compat.walkingSpeed(self) : self.getAttributeValue((Holder) attribute);
+		return c != null && c.fovNoSpeed ? com.arcticlauncher.mod.Compat.walkingSpeed(self) : original.call(self, attribute);
 	}
 	//#elif MC >= 1.16
-	@Redirect(method = "getFieldOfViewModifier", at = @At(value = "INVOKE",
+	@WrapOperation(method = "getFieldOfViewModifier", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/player/AbstractClientPlayer;getAttributeValue(Lnet/minecraft/world/entity/ai/attributes/Attribute;)D"), require = 0)
-	private double arctic$speed(AbstractClientPlayer self, Attribute attribute) {
+	private double arctic$speed(AbstractClientPlayer self, Attribute attribute, Operation<Double> original) {
 		ClientConfig c = ArcticClient.config();
-		return c != null && c.fovNoSpeed ? com.arcticlauncher.mod.Compat.walkingSpeed(self) : self.getAttributeValue(attribute);
+		return c != null && c.fovNoSpeed ? com.arcticlauncher.mod.Compat.walkingSpeed(self) : original.call(self, attribute);
 	}
 	//#else
-	@Redirect(method = "getFieldOfViewModifier", at = @At(value = "INVOKE",
+	@WrapOperation(method = "getFieldOfViewModifier", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/world/entity/ai/attributes/AttributeInstance;getValue()D"), require = 0)
-	private double arctic$speed(AttributeInstance attribute) {
+	private double arctic$speed(AttributeInstance attribute, Operation<Double> original) {
 		ClientConfig c = ArcticClient.config();
-		return c != null && c.fovNoSpeed ? com.arcticlauncher.mod.Compat.walkingSpeed((AbstractClientPlayer) (Object) this) : attribute.getValue();
+		return c != null && c.fovNoSpeed ? com.arcticlauncher.mod.Compat.walkingSpeed((AbstractClientPlayer) (Object) this) : original.call(attribute);
 	}
 	//#endif
 

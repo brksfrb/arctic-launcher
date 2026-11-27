@@ -360,18 +360,20 @@ mod tests {
 
     #[test]
     fn steps_follow_the_instance() {
-        let vanilla = Instance::vanilla_default();
+        let vanilla = Instance::arctic_default();
         let steps = LaunchSteps::from_instance(&vanilla);
         assert!(steps.loader && steps.mods && !steps.forge);
 
-        let mut pure = Instance::vanilla_default();
+        let mut pure = Instance::arctic_default();
+        pure.builtin = false;
         pure.arctic_mod = false;
         pure.performance = false;
         pure.shaders = false;
         let steps = LaunchSteps::from_instance(&pure);
         assert!(!steps.loader && !steps.mods && !steps.forge);
 
-        let mut forge = Instance::vanilla_default();
+        let mut forge = Instance::arctic_default();
+        forge.builtin = false;
         forge.loader = Loader::Forge {
             version: "47.4.0".into(),
         };

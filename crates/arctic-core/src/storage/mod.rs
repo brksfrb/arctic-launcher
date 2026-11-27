@@ -16,7 +16,8 @@
 //! │   ├── libraries/…             maven layout
 //! │   └── assets/{indexes,objects,virtual,log_configs}
 //! ├── runtimes/<component>/       managed Java runtimes
-//! ├── logs/launcher.log           launcher log
+//! ├── logs/launcher.log           current launcher run
+//! ├── logs/launcher-*.log         retained previous launcher runs
 //! └── cache/                      avatars, downloaded updates
 //! ```
 //!
@@ -176,7 +177,7 @@ impl DataDirs {
     pub fn logs(&self) -> PathBuf {
         self.profile_root.join("logs")
     }
-    /// Launcher-wide logs (`launcher.log`).
+    /// Launcher-wide logs (`launcher.log` and timestamped previous runs).
     pub fn launcher_logs(&self) -> PathBuf {
         self.root.join("logs")
     }
@@ -215,6 +216,17 @@ pub fn load_json<T: DeserializeOwned>(path: &Path) -> Result<Option<T>> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(Error::io(path, e)),
     }
+}
+
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(dir).at(dir)?;
+    let mut tmp = tempfile::NamedTempFile::new_in(dir).at(dir)?;
+    tmp.write_all(bytes).at(tmp.path())?;
+    tmp.as_file().sync_all().at(tmp.path())?;
+    tmp.persist(path).map_err(|e| Error::io(path, e.error))?;
+    Ok(())
 }
 
 /// Write JSON atomically (temp file + rename) so a crash never leaves a truncated settings/accounts

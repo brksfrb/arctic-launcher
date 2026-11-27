@@ -25,6 +25,8 @@ public final class Recorder {
 	static final String THUMB_ENTRY = "arctic/thumb.png";
 	private static final int BUFFER = 1 << 18;
 	private static final long MAX_PENDING_BYTES = 64L << 20;
+	/** Longest a bulk producer waits for the writer before queueing anyway. */
+	private static final long BULK_WAIT_NANOS = 10_000_000_000L;
 	/** These limits count compressed bytes on disk, not inflated network traffic. */
 	static final long MAX_RECORDING_BYTES = 512L << 20;
 	static final long MIN_FREE_BYTES = 512L << 20;
@@ -190,7 +192,7 @@ public final class Recorder {
 			final int t = time();
 			pending += data.length;
 			tasks.add(() -> {
-				synchronized (Take.this) { pending -= data.length; }
+				synchronized (Take.this) { pending -= data.length; Take.this.notifyAll(); }
 				if (ring == null || failed) return;
 				try {
 					ring.active().packet(t, data);
@@ -199,6 +201,29 @@ public final class Recorder {
 					maintain(t);
 				} catch (IOException | RuntimeException e) { fail(e.toString()); }
 			});
+		}
+
+		/**
+		 * A packet from a producer that can wait (a snapshot of the whole world, written in one go):
+		 * waits for the writer to catch up rather than running into the pending limit, which is meant
+		 * for a network that outruns the disk and would end the buffer. Not for the network thread.
+		 */
+		public void packetWhenRoom(final byte[] data) {
+			if (data == null) return;
+			synchronized (this) {
+				long deadline = System.nanoTime() + BULK_WAIT_NANOS;
+				while (!ended && !failed && pending > 0 && pending + data.length > MAX_PENDING_BYTES / 2) {
+					long left = deadline - System.nanoTime();
+					if (left <= 0) break;
+					try {
+						wait(Math.max(1, left / 1_000_000L));
+					} catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
+						break;
+					}
+				}
+			}
+			packet(data);
 		}
 
 		public synchronized void sample(final SelfSample sample) {

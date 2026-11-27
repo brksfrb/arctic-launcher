@@ -1,6 +1,7 @@
 package com.arcticlauncher.mod.mixin;
 
 import com.arcticlauncher.mod.ArcticButton;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -45,7 +46,9 @@ abstract class PauseScreenMixin extends Screen {
 		//#else
 		if (showPauseMenu) {
 		//#endif
-			addRenderableWidget(ArcticButton.create());
+			Button button = ArcticButton.create();
+			button.visible = false;
+			addRenderableWidget(button);
 		}
 	}
 }

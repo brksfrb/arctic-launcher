@@ -69,12 +69,13 @@ fn missing(mods_dir: &Path, index: &ModIndex, loader: LoaderKind) -> BTreeMap<St
         .collect()
 }
 
+/// `Ok(true)`: nothing was missing (nothing was fetched or taken out).
 pub(super) fn check(
     game_dir: &Path,
     game_version: &str,
     loader: LoaderKind,
     progress: Progress,
-) -> Result<()> {
+) -> Result<bool> {
     let index_file = index_path(game_dir);
     let mods_dir = game_dir.join("mods");
     reconcile(&mods_dir, &index_file, game_version, loader, |id| {
@@ -88,10 +89,10 @@ fn reconcile(
     game_version: &str,
     loader: LoaderKind,
     mut fetch: impl FnMut(&str) -> Result<()>,
-) -> Result<()> {
+) -> Result<bool> {
     let mut index = ModIndex::load(index_file)?;
     if index.mods.is_empty() || missing(mods_dir, &index, loader).is_empty() {
-        return Ok(());
+        return Ok(true);
     }
 
     // Check the full API before fetching or changing anything. The launch path
@@ -101,7 +102,7 @@ fn reconcile(
     loop {
         let absent = missing(mods_dir, &index, loader);
         if absent.is_empty() {
-            return Ok(());
+            return Ok(false);
         }
 
         let mut installed = false;

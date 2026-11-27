@@ -113,10 +113,12 @@ pub struct VersionInfo {
     pub game_versions: Vec<String>,
     pub loaders: Vec<String>,
     pub file_name: Option<String>,
+    pub file_sha1: Option<String>,
 }
 
 impl From<&Version> for VersionInfo {
     fn from(v: &Version) -> Self {
+        let file = v.primary_file();
         Self {
             id: v.id.clone(),
             number: v.version_number.clone(),
@@ -126,7 +128,8 @@ impl From<&Version> for VersionInfo {
             downloads: v.downloads,
             game_versions: v.game_versions.clone(),
             loaders: v.loaders.clone(),
-            file_name: v.primary_file().map(|file| file.filename.clone()),
+            file_name: file.map(|file| file.filename.clone()),
+            file_sha1: file.and_then(|file| file.hashes.sha1.clone()),
         }
     }
 }
@@ -270,6 +273,7 @@ mod tests {
             game_versions: game.iter().map(|s| s.to_string()).collect(),
             loaders: loaders.iter().map(|s| s.to_string()).collect(),
             file_name: Some("content.zip".into()),
+            file_sha1: None,
         }
     }
 

@@ -455,6 +455,12 @@ final class ModCatalog {
 								() -> (c.particleOff & bit) == 0, on -> c.particleOff = on ? c.particleOff & ~bit : c.particleOff | bit);
 					}
 				}));
+		out.add(new Mod("hideownpotionparticles", Lang.t("mods.hide_my_potion_particles"), Lang.t("mods.hide_my_potion_particles_description"), "particles",
+				Category.VISUAL, "self local player potion effect swirl beacon particles")
+				.toggle(() -> c.hideOwnPotionParticles, on -> c.hideOwnPotionParticles = on));
+		out.add(new Mod("hideotherplayerspotionparticles", Lang.t("mods.hide_other_players_potion_particles"), Lang.t("mods.hide_other_players_potion_particles_description"), "particles",
+				Category.VISUAL, "remote other players potion effect swirl beacon particles")
+				.toggle(() -> c.hideOtherPlayersPotionParticles, on -> c.hideOtherPlayersPotionParticles = on));
 		out.add(new Mod("helditem", Lang.t("mods.held_item"), Lang.t("mods.move_and_resize_your_hands_and_the_item_you"), "helditem",
 				Category.VISUAL, "hand item position size view model offset")
 				.toggle(() -> c.heldItem, on -> c.heldItem = on)
@@ -666,6 +672,31 @@ final class ModCatalog {
 						}
 					}));
 		}
+		out.add(new Mod("enchantdescriptions", Lang.t("mods.enchant_descriptions"),
+				Lang.t("mods.enchant_descriptions_help"), "tooltips", Category.GAMEPLAY, "enchant book tooltip")
+				.toggle(() -> c.enchantDescriptions, on -> c.enchantDescriptions = on)
+				.settings((host, f) -> {
+					f.cycle(Lang.t("mods.style"), Lang.all("mods.enchant_dark_gray", "mods.enchant_italic",
+							"mods.enchant_compact"), () -> c.enchantDescriptionStyle, i -> c.enchantDescriptionStyle = i);
+					f.cycle(Lang.t("mods.enchant_show"), Lang.all("mods.enchant_always", "mods.enchant_shift"),
+							() -> c.enchantDescriptionsShiftOnly ? 1 : 0, i -> c.enchantDescriptionsShiftOnly = i == 1);
+					f.cycle(Lang.t("mods.enchant_apply_to"), Lang.all("mods.enchant_books", "mods.enchant_all_items"),
+							() -> c.enchantDescriptionsAllItems ? 1 : 0, i -> c.enchantDescriptionsAllItems = i == 1);
+				}));
+		Mod armorHider = new Mod("armorhider", Lang.t("mods.armor_hider"), Lang.t("mods.armor_hider_help"),
+				"items", Category.VISUAL, "armor hide helmet chestplate leggings boots")
+				.toggle(() -> c.armorHider, on -> c.armorHider = on)
+				.settings((host, f) -> {
+					f.toggle(Lang.t("mods.hide_helmet"), "", () -> c.hideHelmet, on -> c.hideHelmet = on);
+					f.toggle(Lang.t("mods.hide_chestplate"), "", () -> c.hideChestplate, on -> c.hideChestplate = on);
+					f.toggle(Lang.t("mods.hide_leggings"), "", () -> c.hideLeggings, on -> c.hideLeggings = on);
+					f.toggle(Lang.t("mods.hide_boots"), "", () -> c.hideBoots, on -> c.hideBoots = on);
+					f.toggle(Lang.t("mods.show_armor_on_hit"), "", () -> c.showArmorWhenHit, on -> c.showArmorWhenHit = on);
+					f.slider(Lang.t("mods.duration"), () -> c.showArmorSeconds, v -> c.showArmorSeconds = v,
+							0.5, 5.0, 0.1, "%.1f s");
+				});
+		armorHider.toggleKeyLabel = "mods.toggle_armor_hider";
+		out.add(armorHider);
 		if (p.tooltipScrollWorks()) {
 			out.add(new Mod("tooltipscroll", Lang.t("mods.scrollable_tooltips"), Lang.t("mods.a_tooltip_too_tall_for_the_screen_long_item"), "tooltips",
 					Category.GAMEPLAY, "tooltip lore scroll long item wheel skyblock")
@@ -834,11 +865,22 @@ final class ModCatalog {
 	private static void social(List<Mod> out, ClientConfig c) {
 		out.add(new Mod("friends", Lang.t("mods.friends"), Lang.t("mods.whos_online_chat_screenshots_voice"), "friends", Category.SOCIAL, "voice duel invite")
 				.page(FriendsPage::new));
+		out.add(new Mod("mojangblocklist", Lang.t("mods.ignore_mojang_server_blocklist"),
+				Lang.t("mods.allow_connections_to_servers_blocked_by_mojang"), "quickplay", Category.CLIENT,
+				"Mojang server blocklist multiplayer") // i18n-ignore
+				.toggle(() -> c.ignoreMojangServerBlocklist, on -> c.ignoreMojangServerBlocklist = on));
 		out.add(new Mod("account", Lang.t("mods.account"), Lang.t("mods.switch_accounts_or_use_a_proxy"), "account", Category.CLIENT, "proxy login") // i18n-ignore
 				.page(AccountPage::new));
 		out.add(new Mod("lookscheck", Lang.t("mods.cosmetics_check"), Lang.t("mods.why_cant_others_see_my_look_what_this_game"), "looks", Category.CLIENT,
 				"cosmetics skin cape check-in debug missing invisible") // i18n-ignore
 				.page(LooksCheckTab::new));
+		out.add(new Mod("menukey", Lang.t("mods.menu_key"), Lang.t("mods.which_key_opens_and_closes_the_arctic_menu"), "keystrokes", Category.CLIENT,
+				"menu key rebind keybind open close right shift controls") // i18n-ignore
+				.settings((host, f) -> {
+					f.section(Lang.t("mods.key"));
+					f.key(Lang.t("mods.menu_key"), Lang.t("mods.also_in_minecrafts_controls_under_arctic_esc_restores"),
+							Form.key(com.arcticlauncher.client.MenuKey::current, com.arcticlauncher.client.MenuKey::set));
+				}));
 		out.add(new Mod("style", Lang.t("mods.menu_style"), Lang.t("mods.how_the_menus_look_smooth_font"), "style", Category.CLIENT, "theme font fancy")
 				.page(StyleTab::new));
 	}

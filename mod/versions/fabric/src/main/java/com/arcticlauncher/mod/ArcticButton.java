@@ -1,8 +1,10 @@
 package com.arcticlauncher.mod;
 
 import com.arcticlauncher.client.ArcticClient;
+import com.arcticlauncher.client.menu.PauseMenuLayout;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.gui.screens.PauseScreen;
 
 import com.arcticlauncher.client.Lang;
 /** The "Arctic" button on the pause screen and the Vanilla title screen. */
@@ -45,7 +47,8 @@ public final class ArcticButton {
 			add.accept(create(Lang.t("platform.arctic_servers"), () -> ServerMenus.open(screen)));
 		} else if (screen instanceof net.minecraft.client.gui.screens.DisconnectedScreen) {
 			add.accept(create(Lang.t("platform.arctic_disconnect"), () -> ServerMenus.open(screen)));
-			com.arcticlauncher.client.servers.DisconnectedPage reconnect = new com.arcticlauncher.client.servers.DisconnectedPage("", "");
+			com.arcticlauncher.client.servers.DisconnectedPage reconnect = new com.arcticlauncher.client.servers.DisconnectedPage(
+					"", DisconnectText.reason(screen), () -> Compat.screen() == screen);
 			if (reconnect.canReconnect()) {
 				Button join = create(Lang.t("platform.reconnect"), reconnect::reconnect); add.accept(join);
 				Button cancel = create(Lang.t("platform.cancel_auto"), reconnect::cancelReconnect); add.accept(cancel);
@@ -73,6 +76,10 @@ public final class ArcticButton {
 				placed.add((net.minecraft.client.gui.components.AbstractWidget) child);
 		}
 		for (Button button : ours) {
+			if (screen instanceof PauseScreen && MAIN.contains(button)) {
+				layoutPauseAction(screen, button, placed);
+				continue;
+			}
 			if (!button.visible) continue;
 			if (ArcticClient.restyles() && screen instanceof net.minecraft.client.gui.screens.TitleScreen
 					&& MAIN.contains(button) && centerTitleAction(screen, button, placed)) {
@@ -97,6 +104,39 @@ public final class ArcticButton {
 				}
 			}
 		}
+	}
+
+	private static final java.util.List<String> PAUSE_KEYS = java.util.Arrays.asList(
+			"menu.returnToGame", "menu.returnToMenu", "menu.disconnect");
+
+	private static void layoutPauseAction(net.minecraft.client.gui.screens.Screen screen, Button arctic,
+			java.util.List<AbstractWidget> placed) {
+		AbstractWidget back = null, leave = null;
+		for (AbstractWidget widget : placed) {
+			if (!(widget instanceof Button)) continue;
+			String key = Compat.labelKey(widget, PAUSE_KEYS);
+			if ("menu.returnToGame".equals(key)) back = widget;
+			if ("menu.returnToMenu".equals(key) || "menu.disconnect".equals(key)) leave = widget;
+		}
+		if (back == null) back = leave;
+		if (back == null) {
+			arctic.visible = false;
+			return;
+		}
+		if (leave == null) leave = back;
+		int x = Math.max(0, Compat.widgetX(back));
+		int width = Math.min(screen.width, Compat.widgetX(back) + Compat.widgetWidth(back)) - x;
+		PauseMenuLayout layout = new PauseMenuLayout(x, width, Compat.widgetHeight(arctic), screen.height);
+		//#if MC < 1.20
+		// These versions draw the Game Menu heading directly at y=40.
+		layout.avoid(x, 40, width, 9);
+		//#endif
+		for (AbstractWidget widget : placed) {
+			layout.avoid(Compat.widgetX(widget), Compat.widgetY(widget), Compat.widgetWidth(widget), Compat.widgetHeight(widget));
+		}
+		int y = layout.findY(Compat.widgetY(back), Compat.widgetY(leave) + Compat.widgetHeight(leave));
+		arctic.visible = width > 0 && y >= 0;
+		if (arctic.visible) bounds(arctic, x, y, width);
 	}
 
 	/** Resize the two vanilla actions in place; their callbacks and third-party widgets stay intact. */

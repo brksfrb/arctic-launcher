@@ -5,15 +5,22 @@ import java.util.Date;
 
 import com.arcticlauncher.client.ArcticClient;
 import com.arcticlauncher.client.config.ClientConfig;
+import com.arcticlauncher.client.feature.ArmorHider;
+import com.arcticlauncher.client.feature.Badge;
 import com.arcticlauncher.client.feature.Features;
 import com.arcticlauncher.client.feature.Mentions;
 import com.arcticlauncher.client.feature.Streamer;
+import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.BufferBuilder;
+import net.minecraft.client.render.Tessellator;
+import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.util.DefaultSkinHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.text.LiteralText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
+import org.lwjgl.opengl.GL11;
 
 import com.arcticlauncher.client.Lang;
 /** What the 1.8.9 hooks call: small, so each mixin stays a one-liner. */
@@ -31,6 +38,8 @@ public final class LegacyHooks {
 
 	/** The held-item layer of players and mobs is drawing an item (see OldHeldLayerMixin). */
 	public static volatile boolean heldLayerActive;
+
+	private static final float[] BADGE_SNAP = new float[2];
 
 	private LegacyHooks() {}
 
@@ -233,10 +242,40 @@ public final class LegacyHooks {
 		syncHitboxes();
 		syncChunkBorders();
 		com.arcticlauncher.legacy.replay.LegacyReplayRecording.tick();
+		com.arcticlauncher.client.feature.ArmorHider.tick(MinecraftClient.getInstance().player,
+				MinecraftClient.getInstance().player == null ? 0 : MinecraftClient.getInstance().player.hurtTime);
 		ArcticClient.tick(screenOpen);
+		LegacyTextures.reapBadges();
 		// Features can reassert bindings (e.g. toggled sneak); release after those updates.
 		// Keep ticking in-world as well, so window events recover keys even without chat.
 		cursorGuard(screenOpen || MinecraftClient.getInstance().currentScreen != null, resized);
+	}
+
+	public static void drawArmorCheckboxes() {
+		ClientConfig config = ArcticClient.config();
+		if (config == null || !config.armorHider) return;
+		boolean lighting = GL11.glIsEnabled(GL11.GL_LIGHTING);
+		GlStateManager.disableLighting();
+		GlStateManager.pushMatrix();
+		try {
+			// The item renderer adds its own depth to both the slot and floating item offsets.
+			GlStateManager.translate(0, 0, 300);
+			ArmorHider.drawCheckboxes(new LegacyGfx(), 0, 0);
+		} finally {
+			GlStateManager.popMatrix();
+			if (lighting) GlStateManager.enableLighting();
+		}
+	}
+
+	public static boolean drawArmorTooltip(int x, int y, int mouseX, int mouseY) {
+		if (ArmorHider.hoveredPiece(x, y, mouseX, mouseY) == null) return false;
+		boolean lighting = GL11.glIsEnabled(GL11.GL_LIGHTING);
+		GlStateManager.disableLighting();
+		try {
+			return ArmorHider.drawTooltip(new LegacyGfx(), x, y, mouseX, mouseY);
+		} finally {
+			if (lighting) GlStateManager.enableLighting();
+		}
 	}
 
 	/** Over the game, after Minecraft's own HUD. */
@@ -317,33 +356,47 @@ public final class LegacyHooks {
 		com.arcticlauncher.client.feature.ContainerPeek.hover(new LegacyGfx(), mouseX, mouseY, slot.getStack());
 	}
 
-	/**
-	 * The Arctic badge of the chosen style at ({@code x}, {@code y}), the top left of a text line: always
-	 * {@code Badge.SIZE} square from the line's top (the font's glyphs are 8 high from there), as the
-	 * newer versions' font picture, with the text's own transparency and, with a shadow, its shadow.
-	 */
-	public static void drawBadge(float x, float y, int argb, boolean shadow, int style, boolean tab) {
-		net.minecraft.util.Identifier texture = LegacyTextures.resolve("asset:" + com.arcticlauncher.client.feature.Badge.name(style) + (tab ? "_tab" : "_tag"));
+	/** Draw the Arctic badge at the top left of the text line, using the text opacity. */
+	public static void drawBadge(float x, float y, int argb, boolean shadow, int style, int role, boolean tab, boolean unicode) {
+		float capCenter = tab ? LegacySmoothFont.tabCapCenter(unicode) : 0f;
+		float pixelsPerUnit = LegacySmoothFont.badgePixels(x, y);
+		if (pixelsPerUnit <= 0) return;
+		int resolution = Badge.rasterSize(tab, pixelsPerUnit);
+		float side = Badge.quadSide(tab, pixelsPerUnit);
+		if (tab) y += capCenter - side / 2f;
+		if (LegacySmoothFont.snapOrigin(x, y, BADGE_SNAP)) {
+			x = BADGE_SNAP[0];
+			y = BADGE_SNAP[1];
+		}
+		Identifier texture = LegacyTextures.badge(style, resolution, role);
 		if (texture == null) {
 			return;
 		}
-		int side = com.arcticlauncher.client.feature.Badge.size(tab);
-		int resolution = side * 8;
-		y -= tab ? 1 : 0;
 		int alpha = argb >>> 24;
 		// Text with no alpha is opaque, as the game draws it.
 		float a = alpha == 0 ? 1f : alpha / 255f;
 		MinecraftClient.getInstance().getTextureManager().bindTexture(texture);
 		com.mojang.blaze3d.platform.GlStateManager.enableBlend();
-		com.mojang.blaze3d.platform.GlStateManager.blendFuncSeparate(org.lwjgl.opengl.GL11.GL_SRC_ALPHA,
-				org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA, org.lwjgl.opengl.GL11.GL_ONE, org.lwjgl.opengl.GL11.GL_ZERO);
-		// The player list's picture has no shadow, its names do.
-		if (shadow && !tab) {
+		com.mojang.blaze3d.platform.GlStateManager.blendFuncSeparate(GL11.GL_SRC_ALPHA,
+				GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
+		// The badge picture has no drop shadow; the name text keeps its own.
+		if (Badge.drawShadow(tab, shadow)) {
 			com.mojang.blaze3d.platform.GlStateManager.color(0.25f, 0.25f, 0.25f, a);
-			net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x) + 1, Math.round(y) + 1, 0f, 0f, resolution, resolution, side, side, resolution, resolution);
+			badgeQuad(x + 1, y + 1, side);
 		}
 		com.mojang.blaze3d.platform.GlStateManager.color(1f, 1f, 1f, a);
-		net.minecraft.client.gui.DrawableHelper.drawTexture(Math.round(x), Math.round(y), 0f, 0f, resolution, resolution, side, side, resolution, resolution);
+		badgeQuad(x, y, side);
+	}
+
+	private static void badgeQuad(float x, float y, float side) {
+		Tessellator tessellator = Tessellator.getInstance();
+		BufferBuilder buffer = tessellator.getBuffer();
+		buffer.begin(GL11.GL_QUADS, VertexFormats.POSITION_TEXTURE);
+		buffer.vertex(x, y + side, 0).texture(0, 1).next();
+		buffer.vertex(x + side, y + side, 0).texture(1, 1).next();
+		buffer.vertex(x + side, y, 0).texture(1, 0).next();
+		buffer.vertex(x, y, 0).texture(0, 0).next();
+		tessellator.draw();
 	}
 
 	/** RGBA chat glyph, using the same one-texture path as the badge. */
@@ -367,7 +420,8 @@ public final class LegacyHooks {
 	/** Pop-ups on the screens that cover the game; in the game the HUD shows them. */
 	public static void drawScreenNotices(net.minecraft.client.gui.screen.Screen screen) {
 		ClientConfig c = ArcticClient.config();
-		if (c == null || ArcticClient.platform() == null || screen instanceof LegacyPageScreen) {
+		if (c == null || ArcticClient.platform() == null || screen instanceof LegacyPageScreen
+				|| screen instanceof net.minecraft.client.gui.screen.TitleScreen) {
 			return;
 		}
 		String name = screen.getClass().getSimpleName().toLowerCase(java.util.Locale.ROOT);
@@ -429,14 +483,9 @@ public final class LegacyHooks {
 		ClientConfig c = ArcticClient.config();
 		if (c.chatTimestamps) {
 			String shown = com.arcticlauncher.client.feature.ChatStamp.text(c, when);
-			net.minecraft.client.font.TextRenderer font = MinecraftClient.getInstance().textRenderer;
-			// The slot padding sits beside the tagged stamp, so the hover/click target is only the time.
-			Text pad = new LiteralText("§8" + com.arcticlauncher.client.feature.ChatStampWidth.padding(c, font, font::getStringWidth, shown));
 			Text stamp = LegacyChatCopy.tag(new LiteralText("§8" + (c.chatStampBold ? "§l" : "") + (c.chatStampItalic ? "§o" : "")
-					+ shown + "§r"), source, true);
-			out = com.arcticlauncher.client.feature.ChatStampWidth.right()
-					? new LiteralText("").append(pad).append(stamp).append(out)
-					: new LiteralText("").append(stamp).append(pad).append(out);
+					+ shown + "§r"), new com.arcticlauncher.client.feature.ChatCopy.Data(source, true, true));
+			out = new LiteralText("").append(stamp).append(out);
 		} else if (c.chatCopy) {
 			out = new LiteralText("").append(LegacyChatCopy.tag(new LiteralText("§8[Copy] §r"), source, true)).append(out);
 		}

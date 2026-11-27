@@ -1,5 +1,5 @@
 //! Copy an instance from another launcher into Arctic: a new instance (or
-//! Arctic's Vanilla one), then its files by category. Other launchers'
+//! Arctic's built-in Arctic one), then its files by category. Other launchers'
 //! own files, caches and anything account-related are never copied, and
 //! nothing already in Arctic is overwritten.
 

@@ -56,20 +56,9 @@ impl GameSession {
             if crate::sharing::client::in_use(&game_dir) {
                 continue;
             }
-            let path = game_dir.join(LOCK);
-            fs::create_dir_all(&game_dir).at(&game_dir)?;
-            let reservation = File::options()
-                .read(true)
-                .write(true)
-                .create(true)
-                .truncate(false)
-                .open(&path)
-                .at(&path)?;
-            match reservation.try_lock() {
-                Ok(()) => {}
-                Err(TryLockError::WouldBlock) => continue,
-                Err(TryLockError::Error(e)) => return Err(crate::Error::io(&path, e)),
-            }
+            let Some(reservation) = try_reserve_dir(&game_dir)? else {
+                continue;
+            };
             if copy != 0 {
                 snapshot(&primary, &game_dir)?;
             }
@@ -101,17 +90,34 @@ impl GameSession {
     }
 
     /// A running primary will save its own options later. Once it has exited,
-    /// each finishing copy can safely publish its options in close order.
+    /// each finishing copy can safely publish its settings in close order.
     pub(super) fn finish(self) -> Result<()> {
         let _sync = shared::lock(&self.dirs)?;
         if self.game_dir != self.primary
-            && !in_use(&self.primary)
+            && let Some(_primary_reservation) = try_reserve_dir(&self.primary)?
             && !crate::sharing::client::in_use(&self.primary)
         {
             shared::save_copy(&self.game_dir, &self.primary, self.shared)?;
         }
         drop(self.reservation);
         shared::sync_locked(&self.dirs, self.shared, None)
+    }
+}
+
+pub(crate) fn try_reserve_dir(game_dir: &Path) -> Result<Option<File>> {
+    let path = game_dir.join(LOCK);
+    fs::create_dir_all(game_dir).at(game_dir)?;
+    let reservation = File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .at(&path)?;
+    match reservation.try_lock() {
+        Ok(()) => Ok(Some(reservation)),
+        Err(TryLockError::WouldBlock) => Ok(None),
+        Err(TryLockError::Error(e)) => Err(crate::Error::io(&path, e)),
     }
 }
 
@@ -249,5 +255,32 @@ mod tests {
         primary.finish().unwrap();
         copy.finish().unwrap();
         assert_eq!(fs::read(&options).unwrap(), original);
+    }
+
+    #[test]
+    fn finished_copy_keeps_the_primary_pack_selection() {
+        let temp = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(temp.path());
+        let instance = crate::instances::load_default(&dirs).unwrap();
+        let shared = SharedSettings::default();
+        let (primary, _) = GameSession::reserve(&dirs, &instance, shared, 0).unwrap();
+        let (copy, _) = GameSession::reserve(&dirs, &instance, shared, 1).unwrap();
+        let options = primary.game_dir().join("options.txt");
+        fs::write(
+            &options,
+            "resourcePacks:[\"vanilla\",\"file/primary.zip\"]\nincompatibleResourcePacks:[\"file/primary.zip\"]\nsoundCategory_master:0.5\n",
+        )
+        .unwrap();
+        fs::write(
+            copy.game_dir().join("options.txt"),
+            "resourcePacks:[\"only-in-copy.zip\"]\nincompatibleResourcePacks:[]\nsoundCategory_master:0.2\n",
+        )
+        .unwrap();
+        primary.finish().unwrap();
+        copy.finish().unwrap();
+        assert_eq!(
+            fs::read_to_string(options).unwrap(),
+            "soundCategory_master:0.2\nresourcePacks:[\"vanilla\",\"file/primary.zip\"]\nincompatibleResourcePacks:[\"file/primary.zip\"]\n"
+        );
     }
 }

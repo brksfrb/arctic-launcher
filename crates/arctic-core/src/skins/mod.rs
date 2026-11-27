@@ -3,6 +3,7 @@
 
 pub mod api;
 pub mod capes;
+pub mod gif_cape;
 pub mod optifine;
 
 use std::fs;

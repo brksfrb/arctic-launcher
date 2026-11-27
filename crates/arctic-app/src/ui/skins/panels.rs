@@ -74,13 +74,34 @@ pub(super) struct CurrentLook {
 impl ArcticApp {
     pub(super) fn skins_page(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
-        widgets::page_header(
+        widgets::page_header_with_action(
             ui,
             p,
             t!("skins.cosmetics"),
             t!("skins.skins_capes_and_cosmetics_every_arctic"),
+            |ui| {
+                if self.skin_state_busy() {
+                    ui.add_sized([28.0, 28.0], egui::Spinner::new());
+                } else if widgets::icon_button(ui, p, Icon::Refresh, t!("skins.refresh")).clicked()
+                {
+                    self.request_skin_state(true);
+                }
+            },
         );
         self.account_notice(ui, p);
+        self.minecraft_skin_sync_controls(ui);
+        if self.skins.cosmetic_catalog.error.is_some() {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(t!("skins.couldnt_load_cosmetics")).color(p.muted));
+                if ui
+                    .add_enabled(!self.skin_state_busy(), egui::Link::new(t!("skins.retry")))
+                    .clicked()
+                {
+                    self.request_skin_state(true);
+                }
+            });
+            ui.add_space(6.0);
+        }
         // What was pointed at last frame is tried on in the preview now.
         let hover = self.skins.hover.take();
         ui.horizontal_top(|ui| {
@@ -136,15 +157,6 @@ impl ArcticApp {
                 RichText::new(t!("skins.explore_the_collection_below_add_an_account"))
                     .color(p.muted),
             );
-            if self
-                .skins
-                .public_catalog
-                .as_ref()
-                .is_some_and(Result::is_err)
-                && ui.link(t!("skins.collection_unavailable_retry")).clicked()
-            {
-                self.request_skin_state(true);
-            }
             ui.add_space(6.0);
             return;
         };
@@ -339,10 +351,19 @@ impl ArcticApp {
             .skin_key
             .clone()
             .unwrap_or_else(|| super::MANNEQUIN.to_owned());
-        let cape = current
-            .cape_key
-            .as_deref()
-            .and_then(|k| self.skin_texture(&ctx, k).map(|t| t.id_at(now)));
+        let cape = current.cape_key.as_deref().and_then(|k| {
+            // The big preview gets the cape at native resolution (cards use a smaller copy).
+            let hd = format!("{k}{}", super::HD);
+            if let Some(t) = self.skin_texture(&ctx, &hd) {
+                return Some(t.id_at(now));
+            }
+            // Until it has decoded, whatever card copy is already loaded (no gap).
+            let cards = [k.to_owned(), format!("{k}{}", super::STILL)];
+            cards
+                .iter()
+                .find_map(|c| self.skins.textures.get(c))
+                .map(|t| t.id_at(now))
+        });
         let pose = Pose {
             yaw: self.skins.yaw,
             pitch: self.skins.pitch,
@@ -489,7 +510,7 @@ impl ArcticApp {
             }
         }
         let worn = self.worn_ids();
-        let names: Vec<(String, String, String)> = match self.arctic_state() {
+        let names: Vec<(String, String, String)> = match self.cosmetic_catalog() {
             Some(state) => {
                 let entries = super::cards::cosmetic_entries(state);
                 worn.iter()
@@ -586,7 +607,7 @@ impl ArcticApp {
 
     /// "Saving…" while a change is on its way, "Saved" for a moment after.
     fn save_note(&self, ui: &mut egui::Ui, p: &Palette) {
-        if self.skins.arctic_busy && self.arctic_state().is_some() {
+        if self.skins.arctic_busy && self.skins.intended.is_some() {
             ui.spinner();
             ui.label(RichText::new(t!("skins.saving")).small().color(p.muted));
             return;
@@ -606,7 +627,9 @@ impl ArcticApp {
     fn category_rail(&mut self, ui: &mut egui::Ui) {
         let p = self.palette();
         let mut counts = [0; SLOTS.len()];
-        if let Some(state) = self.catalog_state() {
+        let catalog = self.cosmetic_catalog();
+        let has_catalog = catalog.is_some();
+        if let Some(state) = catalog {
             let mut seen = HashSet::new();
             for (id, slot) in state
                 .meshes
@@ -668,7 +691,7 @@ impl ArcticApp {
                 ui,
                 p,
                 slot_name(slot),
-                Some(n),
+                has_catalog.then_some(n),
                 self.skins.section == Section::Slot(slot),
             ) {
                 pick = Some(Section::Slot(slot));

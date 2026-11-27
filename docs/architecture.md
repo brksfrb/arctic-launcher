@@ -63,7 +63,11 @@ events because of the official logging config; these are collapsed into
 `[thread/LEVEL] message` lines, with stack traces kept. Parsing runs on the tee threads,
 which stream `GameEvent::Output` to the UI (capped at 20k lines). The launcher's own
 `log` output goes to stderr, `logs/launcher.log` and an in-memory ring buffer
-(`arctic-app/src/logbook.rs`). Both are shown on the Logs tab.
+(`arctic-app/src/logbook.rs`). Previous launcher runs are archived as
+`logs/launcher-YYYYMMDD-HHMMSS.log` using UTC, with a suffix for timestamps that
+collide. Archives expire after 14 days and the oldest are removed first to keep
+launcher logs within 50 MB. The current run is always kept. The Logs tab shows
+live game and launcher output and lets users open retained launcher runs.
 
 ## UI notes
 
@@ -158,8 +162,10 @@ picked in the launcher) so cape changes made in game publish as that player.
 
 ## The Arctic Client (`mod/`)
 
-Vanilla instances run the Arctic Client on supported versions: Fabric plus the Arctic mod,
-installed quietly (`launch::effective_loader`); Fabric and Quilt instances get the mod too.
+The built-in Arctic instance (`instances::builtin`; every profile has one, and older
+profiles' "Vanilla" default is moved over to it once) runs the Arctic Client on supported
+versions: Fabric plus the Arctic mod, installed quietly (`launch::effective_loader`). Fabric
+and Quilt instances get the mod too when their switch is on; plain Vanilla instances never do.
 The launcher embeds `mod/dist/arctic-client.pack`: every target's jar, with each file
 stored once and LZMA-compressed together (about 1 MB for all versions, against about 24 MB
 of jars; most files are the same in every version). Before launch it rebuilds the jar the

@@ -43,7 +43,7 @@ public final class PersistentChat {
 	/** Sent messages restored into the up-arrow history at startup. */
 	public static final int SENT_START_PAGE = 200;
 	/**
-	 * Most saved lines paged into the chat in one run. They live in game memory (about 2 KB each once wrapped:
+	 * Most saved lines paged into the current chat view. They live in game memory (about 2 KB each once wrapped:
 	 * a million overflowed an 1800 MB heap), so older lines stay on disk past this.
 	 */
 	public static final int MAX_LOADED = 100_000;
@@ -97,14 +97,22 @@ public final class PersistentChat {
 		void sent(String text);
 	}
 
+	public interface Hud {
+		int arctic$historyLimit(int gameLimit);
+	}
+
 	public PersistentChat(File instanceConfig) {
 		root = new File(instanceConfig, "chat-history");
 		legacy = new File(instanceConfig, LEGACY_NAME);
 	}
 
-	public static int historyLimit(boolean loading, int history, int loadedLines) {
+	public static int historyLimit(int gameLimit, boolean loading, int history, int loadedLines) {
 		if (loading) {
-			return MAX_HUD_LINES;
+			return Math.max(gameLimit, MAX_HUD_LINES);
+		}
+		if (gameLimit != 100) {
+			// Reserve room for restored lines without reducing the other mod's live message limit.
+			return (int) Math.max(gameLimit, Math.min(MAX_HUD_LINES, (long) gameLimit + loadedLines));
 		}
 		return (int) Math.max(1L, Math.min(MAX_HUD_LINES, (long) history + loadedLines));
 	}
@@ -275,20 +283,16 @@ public final class PersistentChat {
 	}
 
 	/**
-	 * The game cleared the chat (not kept on leaving): what is on disk is not scrolled back into it. The sent
-	 * history is cleared too, but the up-arrow may reload it from the log, this session's messages included.
+	 * After a game clear, restart chat and sent paging at the newest saved entries, including this session.
+	 * Saved chat returns to the HUD on demand when the player scrolls up.
 	 */
-	public synchronized void stopPaging() {
-		chatCursor.stop();
-		oldestDay = null;
-		loaded = 0;
+	public synchronized void resetAfterGameClear() {
 		if (restored) {
 			writer.drain();
-			try {
-				sentCursor.open(root);
-			} catch (IOException e) {
-				sentCursor.stop();
-			}
+			chatCursor.open(root);
+			sentCursor.open(root);
+			oldestDay = null;
+			loaded = 0;
 		}
 	}
 
@@ -491,7 +495,7 @@ public final class PersistentChat {
 			this.kind = kind;
 		}
 
-		void open(File root) throws IOException {
+		void open(File root) {
 			opened = true;
 			final String prefix = kind + "-";
 			File[] found = root.listFiles();
