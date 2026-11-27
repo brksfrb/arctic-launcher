@@ -390,7 +390,7 @@ pub(super) fn spawn_with_session(
                 diagnostics.check_dlls(&source, &exe, |path| {
                     let mut probe = Command::new(path);
                     probe
-                        .current_dir(game_cwd(&game_dir))
+                        .current_dir(&game_dir)
                         .envs(crate::gpu_preference::env(high_performance_gpu));
                     probe
                 });
