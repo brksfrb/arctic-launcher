@@ -256,6 +256,9 @@ public final class ArcticClient {
 			if (config.saturationBar) {
 				com.arcticlauncher.client.hud.SaturationBar.render(g, platform);
 			}
+			if (config.keepBarsWhileRiding) {
+				com.arcticlauncher.client.hud.RideableHud.render(g, platform, config.saturationBar);
+			}
 			if (features != null) {
 				features.combatFx().render(g, config, platform);
 			}

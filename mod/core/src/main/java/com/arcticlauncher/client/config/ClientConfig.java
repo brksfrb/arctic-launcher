@@ -357,6 +357,8 @@ public final class ClientConfig {
 	public boolean commandPalette = true;
 	/** Saturation (the hidden part of hunger) drawn on the hunger bar. */
 	public boolean saturationBar;
+	/** Rideable HUD: keep your hunger (and, on jumping mounts, XP) bars on screen, above the mount's health, while riding. Off by default. */
+	public boolean keepBarsWhileRiding;
 	/** Every entity's hitbox box drawn (like F3+B), from one switch. */
 	public boolean hitboxes;
 	/** Chunk Borders: the chunk edges as lines, like F3+G in one click. */

@@ -66,15 +66,22 @@ public final class SaturationBar {
 	private SaturationBar() {}
 
 	public static void render(Gfx g, Platform platform) {
+		if (!platform.hungerBarShown()) {
+			return;
+		}
+		renderAt(g, platform, g.height() - ABOVE_BOTTOM);
+	}
+
+	/** The glow on a hunger bar whose icons start {@code top} pixels from the screen's top (the game's own, or Rideable HUD's). */
+	static void renderAt(Gfx g, Platform platform, int top) {
 		float[] food = platform.food();
-		if (food == null || food.length < 2 || !platform.hungerBarShown()) {
+		if (food == null || food.length < 2) {
 			return;
 		}
 		float level = Math.max(0f, Math.min(20f, food[0]));
 		float saturation = Math.max(0f, Math.min(food[1], level));
 		float[] held = platform.heldFood();
 		int right = g.width() / 2 + RIGHT;
-		int top = g.height() - ABOVE_BOTTOM;
 		for (int i = 0; i < 10; i++) {
 			int left = right - i * STEP - ICON;
 			// Each icon stands for two hunger points; icon 0 is the rightmost.

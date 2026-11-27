@@ -1067,6 +1067,28 @@ public final class LegacyPlatform implements Platform {
 	}
 
 	@Override
+	public float[] mountedBars() {
+		MinecraftClient mc = mc();
+		if (mc.player == null || mc.interactionManager == null || !mc.interactionManager.hasStatusBars()) {
+			return null;
+		}
+		//#if MC >= 1.9
+		Entity mount = mc.player.getVehicle();
+		//#else
+		Entity mount = mc.player.vehicle;
+		//#endif
+		if (!(mount instanceof LivingEntity)) {
+			return null;
+		}
+		//#if MC >= 1.11
+		boolean jumps = mount instanceof net.minecraft.entity.AbstractHorseEntity;
+		//#else
+		boolean jumps = mount instanceof net.minecraft.entity.passive.HorseBaseEntity;
+		//#endif
+		return new float[] {((LivingEntity) mount).getMaxHealth(), jumps ? 1f : 0f, mc.player.experienceProgress, mc.player.experienceLevel};
+	}
+
+	@Override
 	public float[] food() {
 		ClientPlayerEntity p = mc().player;
 		return p == null ? null : new float[] {p.getHungerManager().getFoodLevel(), p.getHungerManager().getSaturationLevel()};
