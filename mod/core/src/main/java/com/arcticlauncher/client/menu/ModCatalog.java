@@ -9,6 +9,7 @@ import com.arcticlauncher.client.config.ClientConfig;
 import com.arcticlauncher.client.config.HudSlot;
 import com.arcticlauncher.client.feature.CombatFx;
 import com.arcticlauncher.client.feature.DebugStyle;
+import com.arcticlauncher.client.feature.DurabilityWatch;
 import com.arcticlauncher.client.feature.QuickMessages;
 import com.arcticlauncher.client.hud.HudWidget;
 import com.arcticlauncher.client.menu.Mod.Category;
@@ -384,7 +385,19 @@ final class ModCatalog {
 				.toggle(() -> c.saturationBar, on -> c.saturationBar = on));
 		out.add(new Mod("durability", Lang.t("mods.low_durability"), Lang.t("mods.a_pop_up_when_armor_or_your_tool_is_about_to"), "durability",
 				Category.GAMEPLAY, "armor tool break warning")
-				.toggle(() -> c.durabilityWarning, on -> c.durabilityWarning = on));
+				.toggle(() -> c.durabilityWarning, on -> c.durabilityWarning = on)
+				.settings((host, f) -> {
+					f.stepper(Lang.t("mods.warn_at"), () -> c.durabilityPercent, v -> c.durabilityPercent = DurabilityWatch.clampPercent((int) v),
+							DurabilityWatch.MIN_PERCENT, DurabilityWatch.MAX_PERCENT, 1, "%.0f%%");
+					f.toggle(Lang.t("mods.block_using_low_items"), Lang.t("mods.cancels_mining_attacking_and_using_the_item_in"),
+							() -> c.durabilityBlockUse, on -> c.durabilityBlockUse = on);
+					final boolean netherite = p.hasNetherite();
+					f.toggle(Lang.t(netherite ? "mods.diamond_netherite_only" : "mods.diamond_only"),
+							Lang.t(netherite ? "mods.only_diamond_and_netherite_gear_counts_for_the_pop" : "mods.only_diamond_gear_counts_for_the_pop_up_and_the"),
+							() -> c.durabilityDiamondOnly, on -> c.durabilityDiamondOnly = on);
+					f.note(Lang.t("mods.the_pop_up_shows_once_per_item_until_its_repaired"));
+					f.note(Lang.t("mods.blocked_swings_and_clicks_are_cancelled_on_your"));
+				}));
 		out.add(new Mod("combatfx", Lang.t("mods.combat_feedback"), Lang.t("mods.a_hit_marker_hit_and_kill_sounds_and_a_low"), "combatfx",
 				Category.GAMEPLAY, "hitmarker kill sound ding low health warning pvp")
 				.toggle(() -> Boolean.TRUE.equals(c.combatFeedback), on -> c.combatFeedback = on)

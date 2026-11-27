@@ -351,9 +351,17 @@ public interface Platform extends com.arcticlauncher.client.controller.GamepadHo
 		return false;
 	}
 
-	/** Worn armor and held items that wear out: {name, left, max, slot}. */
+	/**
+	 * Worn armor and held items that wear out: {name, left, max, slot, tier}. The slot is "mainhand" for
+	 * the item in hand; the tier is "diamond", "netherite" or "other" (a version's own tool/armor material).
+	 */
 	default java.util.List<Object[]> durability() {
 		return java.util.Collections.emptyList();
+	}
+
+	/** This version has netherite (1.16+), so "diamond / netherite only" means both there and only diamond elsewhere. */
+	default boolean hasNetherite() {
+		return false;
 	}
 
 	/** A short, quiet ping (someone mentioned you). */
