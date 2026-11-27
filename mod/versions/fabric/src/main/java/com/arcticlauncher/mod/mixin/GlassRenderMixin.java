@@ -5,26 +5,23 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 //#if MC >= 26.1
 import net.minecraft.client.renderer.block.BlockAndTintGetter;
-import net.minecraft.client.renderer.block.BlockQuadOutput;
 //#elif MC >= 1.15
 import net.minecraft.world.level.BlockAndTintGetter;
 //#else
 import net.minecraft.world.level.BlockAndBiomeGetter;
 //#endif
-//#if MC >= 1.21.5 && MC < 26.1
-import java.util.List;
-import net.minecraft.client.renderer.block.model.BlockModelPart;
-//#elif MC < 1.21.5
-import net.minecraft.client.resources.model.BakedModel;
-//#endif
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+//#if MC >= 1.19
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+//#else
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+//#endif
 @Mixin(ModelBlockRenderer.class)
 abstract class GlassRenderMixin {
-	@Inject(method = "tesselateBlock", at = @At("HEAD"))
+	// Minecraft 1.19 changed tesselateBlock's return type from boolean to void.
+	@Inject(method = "tesselateBlock", at = @At("HEAD"), require = 0)
 	//#if MC >= 1.19
 	private void arctic$begin(CallbackInfo ci,
 	//#else
@@ -39,7 +36,7 @@ abstract class GlassRenderMixin {
 			@com.llamalad7.mixinextras.sugar.Local(argsOnly = true) BlockPos pos) {
 		GlassCtm.begin(world, state, pos);
 	}
-	@Inject(method = "tesselateBlock", at = @At("RETURN"))
+	@Inject(method = "tesselateBlock", at = @At("RETURN"), require = 0)
 	//#if MC >= 1.19
 	private void arctic$end(CallbackInfo ci) { GlassCtm.end(); }
 	//#else
