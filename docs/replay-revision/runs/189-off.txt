@@ -1,0 +1,14 @@
+== off: 40.0 s
+   frames 1603 (40.1/s)  frame ms mean 25.0 p50 24.8 p99 28.8 max 32  render-thread CPU ms/frame 15.27  CPU ms/s 612
+   CPU ms/s by thread: Client thread 614, Chunk Batcher 15, auditagent-sampler 6, Netty Epoll Client IO 6, Thread 1
+   GC 28 ms (0.7 ms/s), heap 196-573 MB
+   render-thread samples 7744, inside replay code 1 (0.0%)
+        0.0%  replay.Replays.tick <- replay.Replays.tick
+      leaf   0.0%  java.lang.Character.toUpperCaseEx
+== open: 60.3 s
+   frames 1808 (30.0/s)  frame ms mean 33.3 p50 33.1 p99 36.0 max 39  render-thread CPU ms/frame 2.24  CPU ms/s 67
+   CPU ms/s by thread: Client thread 67, auditagent-sampler 5, arctic-looks-lookup 0
+   GC 0 ms (0.0 ms/s), heap 210-316 MB
+   render-thread samples 11736, inside replay code 1 (0.0%)
+        0.0%  replay.ReplayData.close <- replay.Replays.frame
+      leaf   0.0%  java.io.UnixFileSystem.delete0

@@ -1,0 +1,10 @@
+== off: 40.0 s
+   frames 1015 (25.4/s)  frame ms mean 39.4 p50 39.0 p99 57.7 max 72  render-thread CPU ms/frame 33.99  CPU ms/s 862
+   CPU ms/s by thread: Render thread 864, Polarium Worker 40, Chunk Render Task Executor 32, CullThread 14, Sodium Async Cull Thread 13, auditagent-sampler 8, Netty Epoll IO 6, arctic-social 0
+   GC 252 ms (6.3 ms/s), heap 556-1800 MB
+   render-thread samples 7748, inside replay code 4 (0.1%)
+        0.0%  replay.Replays.tick <- replay.Replays.tick
+        0.0%  replay.Replays.afterFrame <- replay.Replays.afterFrame
+      leaf   0.0%  org.lwjgl.system.JNI.invokePP
+      leaf   0.0%  java.util.HashMap.hash
+      leaf   0.0%  com.arcticlauncher.client.replay.Replays.afterFrame

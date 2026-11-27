@@ -1,0 +1,154 @@
+== buffer: 180.0 s
+   frames 4931 (27.4/s)  frame ms mean 36.5 p50 36.1 p99 48.7 max 60  render-thread CPU ms/frame 22.74  CPU ms/s 623
+   CPU ms/s by thread: Client thread 624, arctic-replay-compact 39, auditagent-sampler 16, Netty Epoll Client IO 13, Chunk Batcher 9, arctic-replay-writer 5, Thread 1, arctic-cosmetics 0
+   GC 110 ms (0.6 ms/s), heap 189-785 MB
+   render-thread samples 33608, inside replay code 12 (0.0%)
+        0.0%  replay.Recorder$Take.sample <- replay.LegacyReplayRecording.tick
+        0.0%  replay.Replays.tick <- replay.Replays.tick
+        0.0%  replay.SoundCapture.begin <- replay.SoundCapture.begin
+        0.0%  replay.Replays.recording <- replay.Replays.recording
+        0.0%  replay.Recorder$Take.paused <- replay.LegacyReplayRecording.tick
+      leaf   0.0%  sun.misc.Unsafe.unpark
+      leaf   0.0%  com.arcticlauncher.client.replay.SoundCapture.begin
+      leaf   0.0%  com.arcticlauncher.client.replay.Replays.recording
+      leaf   0.0%  com.arcticlauncher.client.replay.Recorder$Take.sample
+      leaf   0.0%  java.util.HashMap.getNode
+   arctic-replay-compact: 1155 runnable samples in replay code (~32 ms/s): replay.Recorder$Snapshot$1.read 830, replay.Recorder.copyRange 311, replay.Recorder$Stream.flush 6, replay.SeekPlan.plan 3
+   Netty Epoll Client IO: 98 runnable samples in replay code (~3 ms/s): replay.Recorder$Take.packet 97, replay.LegacyReplayRecording.record 1
+   arctic-replay-writer: 76 runnable samples in replay code (~2 ms/s): replay.Recorder.lambda$new$2 38, replay.Recorder$Stream.packet 22, replay.Recorder$Stream.flush 8, replay.Recorder$Stream.delete 4
+== manual: 180.0 s
+   frames 5198 (28.9/s)  frame ms mean 34.7 p50 34.0 p99 45.9 max 201  render-thread CPU ms/frame 20.93  CPU ms/s 604
+   CPU ms/s by thread: Client thread 602, arctic-replay-compact 65, auditagent-sampler 14, Netty Epoll Client IO 12, arctic-replay-writer 10, Chunk Batcher 1, Thread 1, arctic-replay-save 0
+   GC 42 ms (0.2 ms/s), heap 207-794 MB
+   render-thread samples 33616, inside replay code 35 (0.1%)
+        0.0%  replay.Replays.clock <- replay.Replays.recordingStatus
+        0.0%  replay.Recorder$Take.sample <- replay.LegacyReplayRecording.tick
+        0.0%  replay.Replays.bufferStatus <- replay.Replays.recordingStatus
+        0.0%  replay.Thumbnail.png <- replay.Replays.saveMoment
+        0.0%  replay.LegacyReplayRecording.tick <- replay.LegacyReplayRecording.tick
+        0.0%  replay.Thumbnail.average <- replay.Replays.saveMoment
+      leaf   0.0%  sun.misc.Unsafe.unpark
+      leaf   0.0%  sun.misc.FloatingDecimal$BinaryToASCIIBuffer.access$100
+      leaf   0.0%  java.util.zip.Deflater.deflateBytes
+      leaf   0.0%  com.arcticlauncher.client.replay.Replays.clock
+      leaf   0.0%  java.util.Formatter$FormatSpecifier.<init>
+   arctic-replay-compact: 1886 runnable samples in replay code (~52 ms/s): replay.Recorder$Snapshot$1.read 1455, replay.Recorder.copyRange 407, replay.Recorder$Stream.flush 10, replay.SeekPlan$LongSet.contains 3
+   arctic-replay-writer: 204 runnable samples in replay code (~6 ms/s): replay.Recorder$Snapshot$1.read 76, replay.Recorder$Stream.packet 53, replay.Recorder.lambda$new$2 37, replay.Recorder.copyRange 17
+   Netty Epoll Client IO: 93 runnable samples in replay code (~3 ms/s): replay.Recorder$Take.packet 88, replay.LegacyReplayCodec.encode 4, replay.LegacyReplayRecording.record 1
+   arctic-replay-save: 8 runnable samples in replay code (~0 ms/s): replay.Recorder$Snapshot$1.read 4, replay.Recorder.copyRange 3, replay.Recorder$Take.save 1
+== open: 0.4 s
+   frames 7 (16.6/s)  frame ms mean 64.1 p50 33.2 p99 247.8 max 248  render-thread CPU ms/frame 36.06  CPU ms/s 598
+   CPU ms/s by thread: 
+   render-thread samples 78, inside replay code 43 (55.1%)
+       26.9%  replay.ReplayData.packet <- replay.Replays.frame
+       23.1%  replay.LegacyReplayPlayback.apply <- replay.Replays.frame
+        2.6%  replay.ReplayHud.render <- replay.ReplayHud.render
+        1.3%  replay.ReplayViewer$Mode.<clinit> <- replay.Replays$$Lambda$259/1775466166.run
+        1.3%  replay.ReplayHud.bar <- replay.ReplayHud.render
+      leaf  21.8%  sun.nio.ch.FileDispatcherImpl.pread0
+      leaf   9.0%  net.minecraft.class_835.method_2321
+      leaf   3.8%  net.minecraft.class_1196.method_3895
+      leaf   3.8%  sun.misc.Unsafe.getObjectVolatile
+      leaf   3.8%  sun.nio.ch.NativeThread.current
+== playback: 40.0 s
+   frames 1303 (32.6/s)  frame ms mean 30.7 p50 30.4 p99 39.0 max 44  render-thread CPU ms/frame 21.09  CPU ms/s 687
+   CPU ms/s by thread: Client thread 686, auditagent-sampler 17, Chunk Batcher 14, Thread 1, arctic-tiers 0, arctic-optifine-capes 0, arctic-looks-lookup 0
+   GC 38 ms (0.9 ms/s), heap 240-397 MB
+   render-thread samples 7412, inside replay code 35 (0.5%)
+        0.2%  replay.ReplayData.packet <- replay.Replays.frame
+        0.0%  replay.ReplayHud.render <- replay.ReplayHud.render
+        0.0%  replay.ReplayViewer.frame <- replay.Replays.frame
+        0.0%  replay.ReplayViewer.screenOpen <- replay.Replays.tick
+        0.0%  replay.LegacyReplayPlayback.showSelf <- replay.Replays.frame
+        0.0%  replay.LegacyReplayPlayback.apply <- replay.Replays.frame
+        0.0%  replay.LegacyReplayCodec.name <- replay.Replays.frame
+        0.0%  replay.ReplayHud.track <- replay.ReplayHud.render
+      leaf   0.1%  sun.nio.ch.NativeThread.current
+      leaf   0.1%  sun.nio.ch.FileDispatcherImpl.pread0
+      leaf   0.0%  org.lwjgl.opengl.GL11.nglEnable
+      leaf   0.0%  java.lang.System.nanoTime
+      leaf   0.0%  com.arcticlauncher.client.replay.ReplayViewer.screenOpen
+== seek 0.9: 0.3 s
+   frames 6 (21.6/s)  frame ms mean 63.5 p50 32.0 p99 224.6 max 225  render-thread CPU ms/frame 37.77  CPU ms/s 815
+   CPU ms/s by thread: 
+   render-thread samples 49, inside replay code 16 (32.7%)
+       26.5%  replay.ReplayData.packet <- replay.Replays.frame
+        6.1%  replay.LegacyReplayPlayback.apply <- replay.Replays.frame
+      leaf  20.4%  sun.nio.ch.FileDispatcherImpl.pread0
+      leaf   6.1%  sun.nio.ch.NativeThread.current
+      leaf   4.1%  sun.misc.Unsafe.getObjectVolatile
+      leaf   2.0%  net.minecraft.class_833.method_2303
+== seek 0.0: 0.3 s
+   frames 4 (15.8/s)  frame ms mean 62.9 p50 23.3 p99 203.9 max 204  render-thread CPU ms/frame 50.73  CPU ms/s 802
+   CPU ms/s by thread: Client thread 2875, auditagent-sampler 47, Thread 4
+   render-thread samples 47, inside replay code 35 (74.5%)
+       46.8%  replay.ReplayData.packet <- replay.Replays.frame
+       23.4%  replay.LegacyReplayPlayback.apply <- replay.Replays.frame
+        2.1%  replay.LegacyReplayPlayback.connect <- replay.Replays.frame
+        2.1%  replay.LegacyReplayCodec.decode <- replay.Replays.frame
+      leaf  40.4%  sun.nio.ch.FileDispatcherImpl.pread0
+      leaf   6.4%  net.minecraft.class_1196.method_3895
+      leaf   6.4%  sun.nio.ch.NativeThread.current
+      leaf   4.3%  net.minecraft.class_835.method_2321
+      leaf   4.3%  sun.misc.Unsafe.getObjectVolatile
+== seek 0.5: 0.3 s
+   frames 6 (22.8/s)  frame ms mean 43.8 p50 34.1 p99 98.9 max 99  render-thread CPU ms/frame 34.27  CPU ms/s 782
+   CPU ms/s by thread: 
+   render-thread samples 51, inside replay code 13 (25.5%)
+       23.5%  replay.ReplayData.packet <- replay.Replays.frame
+        2.0%  replay.SeekPlan$LongSet.add <- replay.Replays.frame
+      leaf  15.7%  sun.nio.ch.FileDispatcherImpl.pread0
+      leaf   7.8%  sun.nio.ch.NativeThread.current
+      leaf   2.0%  com.arcticlauncher.client.replay.SeekPlan$LongSet.add
+== seek 0.1: 0.3 s
+   frames 5 (19.8/s)  frame ms mean 50.5 p50 12.4 p99 203.9 max 204  render-thread CPU ms/frame 39.94  CPU ms/s 789
+   CPU ms/s by thread: 
+   render-thread samples 46, inside replay code 35 (76.1%)
+       52.2%  replay.ReplayData.packet <- replay.Replays.frame
+       21.7%  replay.LegacyReplayPlayback.apply <- replay.Replays.frame
+        2.2%  replay.LegacyReplayCodec.decode <- replay.Replays.frame
+      leaf  41.3%  sun.nio.ch.FileDispatcherImpl.pread0
+      leaf   8.7%  sun.misc.Unsafe.getObjectVolatile
+      leaf   8.7%  sun.nio.ch.NativeThread.current
+      leaf   4.3%  org.lwjgl.opengl.GL11.nglGenLists
+      leaf   4.3%  net.minecraft.class_835.method_2321
+== seek 0.95: 0.3 s
+   frames 6 (21.4/s)  frame ms mean 46.7 p50 30.4 p99 128.8 max 129  render-thread CPU ms/frame 35.70  CPU ms/s 762
+   CPU ms/s by thread: 
+   render-thread samples 49, inside replay code 19 (38.8%)
+       30.6%  replay.ReplayData.packet <- replay.Replays.frame
+        4.1%  replay.SeekPlan.plan <- replay.Replays.frame
+        2.0%  replay.LegacyReplayPlayback.apply <- replay.Replays.frame
+        2.0%  replay.ReplayViewer.seekWorld <- replay.Replays.frame
+      leaf  16.3%  sun.nio.ch.FileDispatcherImpl.pread0
+      leaf  14.3%  sun.nio.ch.NativeThread.current
+      leaf   2.0%  com.arcticlauncher.client.replay.SeekPlan.plan
+      leaf   2.0%  java.util.Arrays.copyOf
+      leaf   2.0%  sun.misc.Unsafe.getObjectVolatile
+== seek 0.0: 0.3 s
+   frames 9 (34.9/s)  frame ms mean 28.6 p50 9.8 p99 178.6 max 179  render-thread CPU ms/frame 21.60  CPU ms/s 753
+   CPU ms/s by thread: Client thread 2821, auditagent-sampler 42, Thread 4
+   render-thread samples 49, inside replay code 31 (63.3%)
+       44.9%  replay.ReplayData.packet <- replay.Replays.frame
+       14.3%  replay.LegacyReplayPlayback.apply <- replay.Replays.frame
+        4.1%  replay.LegacyReplayCodec.decode <- replay.Replays.frame
+      leaf  34.7%  sun.nio.ch.FileDispatcherImpl.pread0
+      leaf  10.2%  sun.nio.ch.NativeThread.current
+      leaf   4.1%  sun.misc.Unsafe.getObjectVolatile
+      leaf   2.0%  org.lwjgl.opengl.GL11.nglDeleteLists
+      leaf   2.0%  org.lwjgl.opengl.GL11.nglGenLists
+== paused: 10.0 s
+   frames 423 (42.2/s)  frame ms mean 23.7 p50 23.4 p99 26.8 max 29  render-thread CPU ms/frame 16.80  CPU ms/s 710
+   CPU ms/s by thread: Client thread 709, auditagent-sampler 8, Thread 1, Chunk Batcher 1
+   GC 0 ms (0.0 ms/s), heap 279-328 MB
+   render-thread samples 1938, inside replay code 15 (0.8%)
+        0.5%  replay.ReplayHud.bar <- replay.ReplayHud.render
+        0.1%  replay.Replays.clock <- replay.ReplayHud.render
+        0.1%  replay.ReplayHud.render <- replay.ReplayHud.render
+        0.1%  replay.LegacyReplayPlayback.showSelf <- replay.Replays.frame
+        0.1%  replay.ReplayHud.track <- replay.ReplayHud.render
+      leaf   0.3%  org.lwjgl.opengl.GL11.nglColor4f
+      leaf   0.2%  org.lwjgl.opengl.GL11.nglEnable
+      leaf   0.1%  java.lang.Long.toString
+      leaf   0.1%  org.lwjgl.opengl.GL11.nglBindTexture
+      leaf   0.1%  net.minecraft.class_878.method_2693
