@@ -160,7 +160,7 @@ public final class Looks {
 		this.baseUrl = baseUrl;
 		this.token = token;
 		this.waitingForLauncher = token == null;
-		this.cosmetics = new Cosmetics(platform, baseUrl);
+		this.cosmetics = new Cosmetics(platform, baseUrl, player -> isMe(player) || knownArctic(player));
 	}
 
 	public Cosmetics cosmetics() {
@@ -458,7 +458,7 @@ public final class Looks {
 		}
 	}
 
-	/** The player's Arctic look, or null. Queues lookups as needed. */
+	/** The local player's look, or a remote player's look while on Arctic. Queues lookups as needed. */
 	public Look lookFor(UUID player) {
 		// Asked for every player every frame: the UUID's text only when someone is hidden.
 		if (!config.showCosmetics || !config.hiddenPlayers.isEmpty() && config.hiddenPlayers.contains(player.toString())) {
@@ -492,7 +492,7 @@ public final class Looks {
 					java.util.Collections.<String>emptyList(), true, now)
 					: new Look(look.skin, look.slim, capeTrying, look.cosmetics, look.arctic, look.fetched, look.fits, look.badgeStyle, look.badgeRole);
 		}
-		return look == null || look.isEmpty() ? null : look;
+		return look == null || (!mine && !look.arctic) || look.isEmpty() ? null : look;
 	}
 
 	/**
